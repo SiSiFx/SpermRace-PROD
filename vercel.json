@@ -1,0 +1,35 @@
+{
+  "installCommand": "corepack enable && corepack prepare pnpm@10.18.2 --activate && pnpm install --frozen-lockfile",
+  "buildCommand": "pnpm --filter shared build && pnpm --filter client build",
+  "outputDirectory": "packages/client/dist",
+  "framework": "vite",
+  "headers": [
+    {
+      "source": "/",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    },
+    {
+      "source": "/index.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    },
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    }
+  ]
+}

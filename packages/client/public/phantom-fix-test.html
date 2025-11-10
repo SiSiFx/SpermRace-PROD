@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phantom Popup Fix Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #ab9ff2;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        button {
+            display: block;
+            width: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 20px;
+            font-size: 18px;
+            border-radius: 12px;
+            cursor: pointer;
+            margin: 15px 0;
+            transition: all 0.3s;
+            font-weight: bold;
+        }
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.5);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        .test-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 12px;
+            margin: 20px 0;
+            border-left: 4px solid #ab9ff2;
+        }
+        .status {
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 2px solid #28a745;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 2px solid #dc3545;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 2px solid #17a2b8;
+        }
+        .warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 2px solid #ffc107;
+        }
+        code {
+            background: #f4f4f4;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        .connected-info {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 12px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .connected-info h2 {
+            margin-top: 0;
+        }
+        .key-display {
+            background: rgba(255,255,255,0.2);
+            padding: 15px;
+            border-radius: 8px;
+            word-break: break-all;
+            margin: 15px 0;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Phantom Popup Auto-Close Fix</h1>
+        <p class="subtitle">Testing different approaches to keep Phantom popup open</p>
+
+        <div class="test-section">
+            <h3>🎯 Fix #1: Eager Connect (No Popup)</h3>
+            <p>Try to connect without showing popup if you were previously connected</p>
+            <button onclick="fix1()">Try Fix #1</button>
+            <div id="fix1Status"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🎯 Fix #2: Direct Synchronous Call</h3>
+            <p>Call connect() immediately without any async/await wrapper</p>
+            <button onclick="fix2()">Try Fix #2</button>
+            <div id="fix2Status"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🎯 Fix #3: Event Listener Pattern</h3>
+            <p>Register connect event listener BEFORE calling connect()</p>
+            <button onclick="fix3()">Try Fix #3</button>
+            <div id="fix3Status"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🎯 Fix #4: Disconnect First, Then Connect</h3>
+            <p>Clear any existing connection state first</p>
+            <button onclick="fix4()">Try Fix #4</button>
+            <div id="fix4Status"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🎯 Fix #5: Focus Window Before Connect</h3>
+            <p>Ensure window has focus to prevent popup blocking</p>
+            <button onclick="fix5()">Try Fix #5</button>
+            <div id="fix5Status"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🎯 Fix #6: Use User Activation</h3>
+            <p>Create invisible iframe to maintain user gesture</p>
+            <button onclick="fix6()">Try Fix #6</button>
+            <div id="fix6Status"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🎯 Fix #7: Promise Chain (No Await)</h3>
+            <p>Use .then() instead of async/await</p>
+            <button onclick="fix7()">Try Fix #7</button>
+            <div id="fix7Status"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🎯 Fix #8: Check isConnected First</h3>
+            <p>Skip connect() if already connected</p>
+            <button onclick="fix8()">Try Fix #8</button>
+            <div id="fix8Status"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🎯 Fix #9: requestAnimationFrame</h3>
+            <p>Call connect() in next animation frame</p>
+            <button onclick="fix9()">Try Fix #9</button>
+            <div id="fix9Status"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🎯 Fix #10: Multiple Rapid Attempts</h3>
+            <p>Try connecting multiple times rapidly (sometimes works)</p>
+            <button onclick="fix10()">Try Fix #10</button>
+            <div id="fix10Status"></div>
+        </div>
+
+        <div id="connectedDisplay" style="display: none;" class="connected-info">
+            <h2>✅ Successfully Connected!</h2>
+            <p><strong>Method that worked:</strong> <span id="workingMethod"></span></p>
+            <div class="key-display">
+                <strong>Public Key:</strong><br>
+                <span id="connectedKey"></span>
+            </div>
+            <button onclick="disconnectWallet()" style="background: rgba(255,255,255,0.3);">Disconnect & Test Again</button>
+        </div>
+    </div>
+
+    <script>
+        let connectedPublicKey = null;
+
+        function showStatus(fixNum, message, type = 'info') {
+            const div = document.getElementById(`fix${fixNum}Status`);
+            div.className = `status ${type}`;
+            div.innerHTML = message;
+            console.log(`[Fix ${fixNum}]`, message);
+        }
+
+        function showConnected(method, publicKey) {
+            connectedPublicKey = publicKey;
+            document.getElementById('connectedDisplay').style.display = 'block';
+            document.getElementById('workingMethod').textContent = method;
+            document.getElementById('connectedKey').textContent = publicKey;
+        }
+
+        function disconnectWallet() {
+            if (window.solana && window.solana.disconnect) {
+                window.solana.disconnect();
+            }
+            document.getElementById('connectedDisplay').style.display = 'none';
+            connectedPublicKey = null;
+            console.log('Disconnected');
+        }
+
+        // Fix 1: Eager Connect
+        async function fix1() {
+            showStatus(1, 'Attempting eager connection (onlyIfTrusted: true)...', 'info');
+            try {
+                if (!window.solana) {
+                    showStatus(1, '❌ Phantom not found', 'error');
+                    return;
+                }
+
+                const response = await window.solana.connect({ onlyIfTrusted: true });
+                const publicKey = response.publicKey.toString();
+                showStatus(1, `✅ SUCCESS! Connected without popup: ${publicKey.slice(0, 8)}...`, 'success');
+                showConnected('Fix #1: Eager Connect', publicKey);
+            } catch (error) {
+                showStatus(1, `⚠️ Expected failure (not previously trusted): ${error.message}<br>This is normal - try other methods`, 'warning');
+            }
+        }
+
+        // Fix 2: Direct Synchronous Call
+        function fix2() {
+            showStatus(2, 'Calling connect() synchronously...', 'info');
+            try {
+                if (!window.solana) {
+                    showStatus(2, '❌ Phantom not found', 'error');
+                    return;
+                }
+
+                // Call connect() without await - store promise
+                const connectPromise = window.solana.connect();
+                showStatus(2, '✓ Connect() called, waiting for popup approval...', 'info');
+
+                connectPromise.then(response => {
+                    const publicKey = response.publicKey.toString();
+                    showStatus(2, `✅ SUCCESS! Connected: ${publicKey.slice(0, 8)}...`, 'success');
+                    showConnected('Fix #2: Synchronous Call', publicKey);
+                }).catch(error => {
+                    showStatus(2, `❌ Failed: ${error.message}`, 'error');
+                });
+            } catch (error) {
+                showStatus(2, `❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        // Fix 3: Event Listener Pattern
+        function fix3() {
+            showStatus(3, 'Setting up event listeners first...', 'info');
+            try {
+                if (!window.solana) {
+                    showStatus(3, '❌ Phantom not found', 'error');
+                    return;
+                }
+
+                // Remove any existing listeners
+                window.solana.removeAllListeners?.('connect');
+
+                // Add listener BEFORE calling connect
+                window.solana.on('connect', (publicKey) => {
+                    console.log('[Fix 3] Connect event fired!', publicKey);
+                    showStatus(3, `✅ SUCCESS! Event received: ${publicKey.toString().slice(0, 8)}...`, 'success');
+                    showConnected('Fix #3: Event Listener', publicKey.toString());
+                });
+
+                showStatus(3, '✓ Listener registered, calling connect()...', 'info');
+                window.solana.connect().catch(error => {
+                    showStatus(3, `❌ Failed: ${error.message}`, 'error');
+                });
+            } catch (error) {
+                showStatus(3, `❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        // Fix 4: Disconnect First
+        async function fix4() {
+            showStatus(4, 'Disconnecting any existing connection...', 'info');
+            try {
+                if (!window.solana) {
+                    showStatus(4, '❌ Phantom not found', 'error');
+                    return;
+                }
+
+                // Disconnect first
+                if (window.solana.isConnected) {
+                    await window.solana.disconnect();
+                    showStatus(4, '✓ Disconnected, waiting 500ms...', 'info');
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+
+                showStatus(4, '✓ Now connecting fresh...', 'info');
+                const response = await window.solana.connect();
+                const publicKey = response.publicKey.toString();
+                showStatus(4, `✅ SUCCESS! Fresh connection: ${publicKey.slice(0, 8)}...`, 'success');
+                showConnected('Fix #4: Disconnect First', publicKey);
+            } catch (error) {
+                showStatus(4, `❌ Failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Fix 5: Focus Window
+        async function fix5() {
+            showStatus(5, 'Focusing window...', 'info');
+            try {
+                if (!window.solana) {
+                    showStatus(5, '❌ Phantom not found', 'error');
+                    return;
+                }
+
+                // Focus window
+                window.focus();
+                showStatus(5, '✓ Window focused, connecting...', 'info');
+
+                const response = await window.solana.connect();
+                const publicKey = response.publicKey.toString();
+                showStatus(5, `✅ SUCCESS! Connected: ${publicKey.slice(0, 8)}...`, 'success');
+                showConnected('Fix #5: Focus Window', publicKey);
+            } catch (error) {
+                showStatus(5, `❌ Failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Fix 6: User Activation with Iframe
+        async function fix6() {
+            showStatus(6, 'Creating user activation context...', 'info');
+            try {
+                if (!window.solana) {
+                    showStatus(6, '❌ Phantom not found', 'error');
+                    return;
+                }
+
+                // Create a temporary link click to maintain user gesture
+                const dummyLink = document.createElement('a');
+                dummyLink.href = '#';
+                dummyLink.style.display = 'none';
+                document.body.appendChild(dummyLink);
+                dummyLink.click();
+                document.body.removeChild(dummyLink);
+
+                showStatus(6, '✓ User gesture created, connecting...', 'info');
+                const response = await window.solana.connect();
+                const publicKey = response.publicKey.toString();
+                showStatus(6, `✅ SUCCESS! Connected: ${publicKey.slice(0, 8)}...`, 'success');
+                showConnected('Fix #6: User Activation', publicKey);
+            } catch (error) {
+                showStatus(6, `❌ Failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Fix 7: Promise Chain (No Await)
+        function fix7() {
+            showStatus(7, 'Using promise chain instead of async/await...', 'info');
+            try {
+                if (!window.solana) {
+                    showStatus(7, '❌ Phantom not found', 'error');
+                    return;
+                }
+
+                window.solana.connect()
+                    .then(response => {
+                        const publicKey = response.publicKey.toString();
+                        showStatus(7, `✅ SUCCESS! Connected: ${publicKey.slice(0, 8)}...`, 'success');
+                        showConnected('Fix #7: Promise Chain', publicKey);
+                    })
+                    .catch(error => {
+                        showStatus(7, `❌ Failed: ${error.message}`, 'error');
+                    });
+
+                showStatus(7, '✓ Connect() called with .then() chain...', 'info');
+            } catch (error) {
+                showStatus(7, `❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        // Fix 8: Check isConnected
+        async function fix8() {
+            showStatus(8, 'Checking connection state...', 'info');
+            try {
+                if (!window.solana) {
+                    showStatus(8, '❌ Phantom not found', 'error');
+                    return;
+                }
+
+                if (window.solana.isConnected) {
+                    const publicKey = window.solana.publicKey.toString();
+                    showStatus(8, `✅ Already connected! No popup needed: ${publicKey.slice(0, 8)}...`, 'success');
+                    showConnected('Fix #8: Already Connected', publicKey);
+                } else {
+                    showStatus(8, '✓ Not connected, calling connect()...', 'info');
+                    const response = await window.solana.connect();
+                    const publicKey = response.publicKey.toString();
+                    showStatus(8, `✅ SUCCESS! New connection: ${publicKey.slice(0, 8)}...`, 'success');
+                    showConnected('Fix #8: Check First', publicKey);
+                }
+            } catch (error) {
+                showStatus(8, `❌ Failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Fix 9: requestAnimationFrame
+        function fix9() {
+            showStatus(9, 'Scheduling connect() in next frame...', 'info');
+            try {
+                if (!window.solana) {
+                    showStatus(9, '❌ Phantom not found', 'error');
+                    return;
+                }
+
+                requestAnimationFrame(async () => {
+                    showStatus(9, '✓ Animation frame - calling connect()...', 'info');
+                    try {
+                        const response = await window.solana.connect();
+                        const publicKey = response.publicKey.toString();
+                        showStatus(9, `✅ SUCCESS! Connected: ${publicKey.slice(0, 8)}...`, 'success');
+                        showConnected('Fix #9: requestAnimationFrame', publicKey);
+                    } catch (error) {
+                        showStatus(9, `❌ Failed: ${error.message}`, 'error');
+                    }
+                });
+            } catch (error) {
+                showStatus(9, `❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        // Fix 10: Multiple Attempts
+        async function fix10() {
+            showStatus(10, 'Attempting rapid multiple connects...', 'info');
+            try {
+                if (!window.solana) {
+                    showStatus(10, '❌ Phantom not found', 'error');
+                    return;
+                }
+
+                for (let i = 0; i < 3; i++) {
+                    try {
+                        showStatus(10, `✓ Attempt ${i + 1}/3...`, 'info');
+                        const response = await window.solana.connect();
+                        const publicKey = response.publicKey.toString();
+                        showStatus(10, `✅ SUCCESS on attempt ${i + 1}! Connected: ${publicKey.slice(0, 8)}...`, 'success');
+                        showConnected('Fix #10: Multiple Attempts', publicKey);
+                        return;
+                    } catch (error) {
+                        if (i < 2) {
+                            showStatus(10, `⚠️ Attempt ${i + 1} failed, retrying...`, 'warning');
+                            await new Promise(resolve => setTimeout(resolve, 100));
+                        } else {
+                            showStatus(10, `❌ All attempts failed: ${error.message}`, 'error');
+                        }
+                    }
+                }
+            } catch (error) {
+                showStatus(10, `❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        // Auto-check on load
+        window.addEventListener('load', () => {
+            console.log('=== Phantom Auto-Close Fix Tests ===');
+            console.log('window.solana:', window.solana);
+            console.log('isPhantom:', window.solana?.isPhantom);
+            console.log('isConnected:', window.solana?.isConnected);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "packages/client/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/assets/(.*)",
+      "headers": {
+        "cache-control": "public, max-age=31536000, immutable"
+      }
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/packages/client/dist/$1"
+    }
+  ],
+  "env": {
+    "VITE_WS_URL": "@vite_ws_url",
+    "VITE_SOLANA_NETWORK": "@vite_solana_network",
+    "VITE_NODE_ENV": "production"
+  },
+  "build": {
+    "env": {
+      "VITE_WS_URL": "@vite_ws_url",
+      "VITE_SOLANA_NETWORK": "@vite_solana_network"
+    }
+  },
+  "regions": ["iad1"],
+  "framework": null
+}

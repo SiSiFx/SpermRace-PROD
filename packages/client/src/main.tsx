@@ -1,0 +1,73 @@
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+console.log('[BUILD] SpermRace wallet refactor bundle loaded');
+import { Buffer } from 'buffer';
+import { isMobileDevice } from './deviceDetection';
+import '/style.css';
+
+// Ensure Buffer is available for Solana/web3 dependencies running in the browser.
+if (typeof globalThis !== 'undefined' && !(globalThis as any).Buffer) {
+  (globalThis as any).Buffer = Buffer;
+}
+
+// Lightweight client error ingestion to backend analytics (no third-party)
+// Only enable if API endpoint is configured
+const API_BASE = (import.meta as any).env?.VITE_API_BASE;
+if ((import.meta as any).env?.PROD === true && API_BASE) {
+  try {
+    const send = (type: string, payload: any) => {
+      try {
+        fetch(`${API_BASE}/analytics`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type, payload })
+        });
+      } catch {}
+    };
+    window.addEventListener('error', (e) => {
+      const msg = e?.message || 'unknown';
+      const src = (e as any)?.filename || '';
+      const ln = (e as any)?.lineno || 0;
+      send('client_error', { msg, src, ln });
+    });
+    window.addEventListener('unhandledrejection', (e: any) => {
+      const reason = e?.reason?.message || String(e?.reason || 'unknown');
+      send('client_unhandled_rejection', { reason });
+    });
+  } catch {}
+} else if ((import.meta as any).env?.PROD === true && !API_BASE) {
+  console.log('[Analytics] Disabled - VITE_API_BASE not configured');
+}
+
+// Detect device type and load appropriate UI
+const isMobile = isMobileDevice();
+
+// Log which version is loading
+console.log(`🎮 Loading ${isMobile ? 'MOBILE' : 'PC'} optimized UI`);
+
+// Dynamically import the appropriate App component and styles
+const loadApp = async () => {
+  const rootEl = document.getElementById('root');
+  if (!rootEl) return;
+
+  const root = createRoot(rootEl);
+  
+  if (isMobile) {
+    // Load mobile-specific styles and component
+    await import('./mobile-game-fixes.css');
+    await import('./styles-mobile.css');
+    await import('./mobile-controls.css');
+    const { default: AppMobile } = await import('./AppMobile');
+    console.log('📱 Mobile app loaded');
+    root.render(<AppMobile />);
+  } else {
+    // Load PC-specific styles and component
+    await import('./styles-pc.css');
+    const { default: AppPC } = await import('./AppPC');
+    console.log('🖥️ PC app loaded');
+    root.render(<AppPC />);
+  }
+};
+
+loadApp();
+

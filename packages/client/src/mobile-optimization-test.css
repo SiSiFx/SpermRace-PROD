@@ -1,0 +1,277 @@
+/* =================================================================
+   MOBILE OPTIMIZATION TEST - Verification & Debug Styles
+   ================================================================= */
+
+/* Test viewport indicators */
+.mobile-test-indicator {
+  position: fixed;
+  top: 0;
+  left: 0;
+  background: rgba(255, 0, 0, 0.8);
+  color: white;
+  padding: 4px 8px;
+  font-size: 10px;
+  font-family: monospace;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.mobile-test-indicator.bottom-right {
+  top: auto;
+  bottom: 0;
+  left: auto;
+  right: 0;
+  background: rgba(0, 255, 0, 0.8);
+}
+
+/* Test safe area visualization */
+@media (supports (padding: env(safe-area-inset-top)) {
+  .safe-area-test {
+    position: fixed;
+    inset: 0;
+    border: 4px solid red;
+    pointer-events: none;
+    z-index: 9998;
+    opacity: 0.5;
+  }
+  
+  .safe-area-test::before {
+    content: '';
+    position: absolute;
+    inset: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    border: 4px solid green;
+    pointer-events: none;
+  }
+}
+
+/* Test touch target visualization */
+.mobile-touch-test {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  width: 44px;
+  height: 44px;
+  background: rgba(255, 255, 0, 0.5);
+  border: 2px solid yellow;
+  border-radius: 50%;
+  z-index: 9997;
+  pointer-events: none;
+}
+
+.mobile-touch-test.boost {
+  bottom: 20px;
+  right: 20px;
+  left: auto;
+  background: rgba(255, 165, 0, 0.5);
+  border-color: orange;
+}
+
+/* Test canvas fill visualization */
+.canvas-test-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 255, 0.1);
+  border: 2px solid blue;
+  pointer-events: none;
+  z-index: 9996;
+  opacity: 0.3;
+}
+
+/* Test responsive breakpoints */
+.breakpoint-indicator {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: rgba(128, 0, 128, 0.8);
+  color: white;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-family: monospace;
+  border-radius: 4px;
+  z-index: 9995;
+  pointer-events: none;
+}
+
+/* Show different colors for different orientations */
+@media (orientation: portrait) {
+  .breakpoint-indicator {
+    background: rgba(0, 128, 0, 0.8);
+  }
+  
+  .breakpoint-indicator::after {
+    content: ' 📱';
+  }
+}
+
+@media (orientation: landscape) {
+  .breakpoint-indicator {
+    background: rgba(128, 0, 0, 0.8);
+  }
+  
+  .breakpoint-indicator::after {
+    content: ' 🖥️';
+  }
+}
+
+/* Test font scaling */
+.font-test {
+  position: fixed;
+  top: 60px;
+  left: 20px;
+  color: white;
+  font-family: system-ui;
+  z-index: 9994;
+  pointer-events: none;
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+}
+
+.font-test .small {
+  font-size: clamp(10px, 2vw, 14px);
+}
+
+.font-test .medium {
+  font-size: clamp(14px, 3vw, 18px);
+}
+
+.font-test .large {
+  font-size: clamp(18px, 4vw, 24px);
+}
+
+/* Test button touch targets */
+.button-test {
+  position: fixed;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 44px;
+  min-height: 44px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 2px solid white;
+  color: white;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-size: 16px;
+  z-index: 9993;
+}
+
+/* Test scroll behavior */
+.scroll-test {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(45deg, 
+    rgba(255, 0, 0, 0.1) 25%, 
+    transparent 25%, 
+    transparent 75%, 
+    rgba(255, 0, 0, 0.1) 75%, 
+    rgba(255, 0, 0, 0.1)),
+    linear-gradient(45deg, 
+    rgba(255, 0, 0, 0.1) 25%, 
+    transparent 25%, 
+    transparent 75%, 
+    rgba(255, 0, 0, 0.1) 75%, 
+    rgba(255, 0, 0, 0.1));
+  background-size: 20px 20px;
+  background-position: 0 0, 10px 10px;
+  pointer-events: none;
+  z-index: 9992;
+  opacity: 0.1;
+}
+
+/* Performance test - show FPS */
+.fps-counter {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #0f0;
+  padding: 4px 8px;
+  font-family: monospace;
+  font-size: 12px;
+  border-radius: 4px;
+  z-index: 9991;
+  pointer-events: none;
+}
+
+/* Memory usage indicator */
+.memory-indicator {
+  position: fixed;
+  top: 40px;
+  left: 20px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #ff0;
+  padding: 4px 8px;
+  font-family: monospace;
+  font-size: 10px;
+  border-radius: 4px;
+  z-index: 9990;
+  pointer-events: none;
+}
+
+/* Network status indicator */
+.network-indicator {
+  position: fixed;
+  top: 60px;
+  left: 20px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #0ff;
+  padding: 4px 8px;
+  font-family: monospace;
+  font-size: 10px;
+  border-radius: 4px;
+  z-index: 9989;
+  pointer-events: none;
+}
+
+/* Device info indicator */
+.device-info {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 8px 12px;
+  font-family: monospace;
+  font-size: 10px;
+  border-radius: 8px;
+  z-index: 9988;
+  pointer-events: none;
+  text-align: center;
+  max-width: 90%;
+}
+
+/* Enable test mode with URL parameter */
+body[data-mobile-test="true"] .mobile-test-indicator,
+body[data-mobile-test="true"] .safe-area-test,
+body[data-mobile-test="true"] .mobile-touch-test,
+body[data-mobile-test="true"] .canvas-test-overlay,
+body[data-mobile-test="true"] .breakpoint-indicator,
+body[data-mobile-test="true"] .font-test,
+body[data-mobile-test="true"] .button-test,
+body[data-mobile-test="true"] .scroll-test,
+body[data-mobile-test="true"] .fps-counter,
+body[data-mobile-test="true"] .memory-indicator,
+body[data-mobile-test="true"] .network-indicator,
+body[data-mobile-test="true"] .device-info {
+  display: block;
+}
+
+/* Hide test elements by default */
+.mobile-test-indicator,
+.safe-area-test,
+.mobile-touch-test,
+.canvas-test-overlay,
+.breakpoint-indicator,
+.font-test,
+.button-test,
+.scroll-test,
+.fps-counter,
+.memory-indicator,
+.network-indicator,
+.device-info {
+  display: none;
+}
+

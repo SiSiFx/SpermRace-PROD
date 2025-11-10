@@ -1,0 +1,19 @@
+# 🎯 WORKSPACE PRINCIPAL
+# =====================
+
+Ce répertoire est le workspace principal pour le projet SpermRace.io
+
+## Structure:
+- /opt/spermrace/packages/client  - Frontend (React + PixiJS)
+- /opt/spermrace/packages/server  - Backend (Node.js + WebSocket)
+- /opt/spermrace/packages/shared  - Code partagé
+- /opt/spermrace/.vercel          - Configuration Vercel
+
+## Workflow:
+1. Modifier les fichiers ici
+2. Build: npm run build (dans packages/client)
+3. Deploy: vercel --prod (depuis /opt/spermrace)
+
+## Important:
+⚠️  NE PAS travailler dans /root/packages
+⚠️  Toujours démarrer Droid dans /opt/spermrace

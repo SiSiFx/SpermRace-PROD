@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solana Wallet Connection Methods Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .method-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            border-left: 4px solid #667eea;
+        }
+        .method-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        .method-description {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 15px;
+        }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        .status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 13px;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .wallet-info {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e7f3ff;
+            border-radius: 8px;
+            border: 2px solid #2196F3;
+        }
+        .wallet-info h3 {
+            margin-top: 0;
+            color: #1976D2;
+        }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 Solana Wallet Connection Test Suite</h1>
+        <p style="text-align: center; color: #666; margin-bottom: 30px;">
+            Test different wallet connection methods to find which one works best
+        </p>
+
+        <div id="walletInfo" style="display: none;" class="wallet-info">
+            <h3>✅ Wallet Connected!</h3>
+            <p><strong>Public Key:</strong> <code id="publicKeyDisplay"></code></p>
+            <p><strong>Method Used:</strong> <span id="methodUsed"></span></p>
+            <button onclick="disconnect()">Disconnect</button>
+        </div>
+
+        <!-- Method 1: Direct window.solana -->
+        <div class="method-section">
+            <div class="method-title">Method 1: Direct window.solana.connect()</div>
+            <div class="method-description">
+                Directly call window.solana.connect() - simplest approach for Phantom/Solflare
+            </div>
+            <button onclick="method1()">Test Method 1</button>
+            <div id="status1"></div>
+        </div>
+
+        <!-- Method 2: window.phantom.solana -->
+        <div class="method-section">
+            <div class="method-title">Method 2: window.phantom.solana.connect()</div>
+            <div class="method-description">
+                Access Phantom specifically via window.phantom namespace
+            </div>
+            <button onclick="method2()">Test Method 2</button>
+            <div id="status2"></div>
+        </div>
+
+        <!-- Method 3: Standard Wallet Adapter Pattern -->
+        <div class="method-section">
+            <div class="method-title">Method 3: Standard Wallet Adapter (with event listeners)</div>
+            <div class="method-description">
+                Use wallet adapter with proper event listeners for connect/disconnect
+            </div>
+            <button onclick="method3()">Test Method 3</button>
+            <div id="status3"></div>
+        </div>
+
+        <!-- Method 4: Request Permissions First -->
+        <div class="method-section">
+            <div class="method-title">Method 4: Request Permissions Then Connect</div>
+            <div class="method-description">
+                Call window.solana.request({ method: 'connect' }) for explicit permission
+            </div>
+            <button onclick="method4()">Test Method 4</button>
+            <div id="status4"></div>
+        </div>
+
+        <!-- Method 5: Check readyState First -->
+        <div class="method-section">
+            <div class="method-title">Method 5: Check Wallet Ready State</div>
+            <div class="method-description">
+                Wait for wallet to be in ready state before connecting
+            </div>
+            <button onclick="method5()">Test Method 5</button>
+            <div id="status5"></div>
+        </div>
+
+        <!-- Method 6: Solflare Specific -->
+        <div class="method-section">
+            <div class="method-title">Method 6: Solflare Wallet (window.solflare)</div>
+            <div class="method-description">
+                Connect specifically to Solflare wallet
+            </div>
+            <button onclick="method6()">Test Method 6</button>
+            <div id="status6"></div>
+        </div>
+
+        <!-- Method 7: Backpack Specific -->
+        <div class="method-section">
+            <div class="method-title">Method 7: Backpack Wallet (window.backpack)</div>
+            <div class="method-description">
+                Connect specifically to Backpack wallet
+            </div>
+            <button onclick="method7()">Test Method 7</button>
+            <div id="status7"></div>
+        </div>
+
+        <!-- Method 8: Click-triggered with User Gesture -->
+        <div class="method-section">
+            <div class="method-title">Method 8: User Gesture Triggered (double security)</div>
+            <div class="method-description">
+                Ensure popup isn't blocked by using immediate user gesture
+            </div>
+            <button onclick="method8()">Test Method 8</button>
+            <div id="status8"></div>
+        </div>
+
+        <!-- Method 9: Eager Connection -->
+        <div class="method-section">
+            <div class="method-title">Method 9: Eager Connect (onlyIfTrusted: true)</div>
+            <div class="method-description">
+                Connect without popup if wallet was previously connected
+            </div>
+            <button onclick="method9()">Test Method 9</button>
+            <div id="status9"></div>
+        </div>
+
+        <!-- Method 10: All Wallets Discovery -->
+        <div class="method-section">
+            <div class="method-title">Method 10: Discover All Available Wallets</div>
+            <div class="method-description">
+                Find all available Solana wallets and let user choose
+            </div>
+            <button onclick="method10()">Test Method 10</button>
+            <div id="status10"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentProvider = null;
+        let currentPublicKey = null;
+
+        function showStatus(methodNum, message, type = 'info') {
+            const statusDiv = document.getElementById(`status${methodNum}`);
+            statusDiv.className = `status ${type}`;
+            statusDiv.innerHTML = message;
+            console.log(`[Method ${methodNum}] ${message}`);
+        }
+
+        function showWalletInfo(method, publicKey) {
+            document.getElementById('walletInfo').style.display = 'block';
+            document.getElementById('publicKeyDisplay').textContent = publicKey;
+            document.getElementById('methodUsed').textContent = method;
+            currentPublicKey = publicKey;
+        }
+
+        function disconnect() {
+            if (currentProvider && currentProvider.disconnect) {
+                currentProvider.disconnect();
+            }
+            document.getElementById('walletInfo').style.display = 'none';
+            currentProvider = null;
+            currentPublicKey = null;
+            console.log('Disconnected');
+        }
+
+        // Method 1: Direct window.solana
+        async function method1() {
+            showStatus(1, 'Checking for window.solana...', 'info');
+            try {
+                if (!window.solana) {
+                    showStatus(1, '❌ window.solana not found - install Phantom or Solflare', 'error');
+                    return;
+                }
+
+                showStatus(1, '✓ Found window.solana, connecting...', 'info');
+                const resp = await window.solana.connect();
+                const publicKey = resp.publicKey.toString();
+
+                showStatus(1, `✅ SUCCESS! Connected: ${publicKey.slice(0, 8)}...`, 'success');
+                showWalletInfo('Method 1: Direct window.solana', publicKey);
+                currentProvider = window.solana;
+            } catch (error) {
+                showStatus(1, `❌ ERROR: ${error.message}`, 'error');
+            }
+        }
+
+        // Method 2: window.phantom.solana
+        async function method2() {
+            showStatus(2, 'Checking for window.phantom.solana...', 'info');
+            try {
+                if (!window.phantom?.solana) {
+                    showStatus(2, '❌ window.phantom.solana not found - install Phantom', 'error');
+                    return;
+                }
+
+                showStatus(2, '✓ Found Phantom, connecting...', 'info');
+                const resp = await window.phantom.solana.connect();
+                const publicKey = resp.publicKey.toString();
+
+                showStatus(2, `✅ SUCCESS! Connected: ${publicKey.slice(0, 8)}...`, 'success');
+                showWalletInfo('Method 2: window.phantom.solana', publicKey);
+                currentProvider = window.phantom.solana;
+            } catch (error) {
+                showStatus(2, `❌ ERROR: ${error.message}`, 'error');
+            }
+        }
+
+        // Method 3: Standard Wallet Adapter with Events
+        async function method3() {
+            showStatus(3, 'Setting up event listeners...', 'info');
+            try {
+                const provider = window.solana || window.phantom?.solana;
+                if (!provider) {
+                    showStatus(3, '❌ No wallet found', 'error');
+                    return;
+                }
+
+                provider.on('connect', (publicKey) => {
+                    console.log('[Method 3] Connect event fired:', publicKey.toString());
+                    showStatus(3, `✅ SUCCESS! Event-based connection: ${publicKey.toString().slice(0, 8)}...`, 'success');
+                    showWalletInfo('Method 3: Event-based', publicKey.toString());
+                });
+
+                provider.on('disconnect', () => {
+                    console.log('[Method 3] Disconnect event fired');
+                });
+
+                showStatus(3, '✓ Events registered, connecting...', 'info');
+                await provider.connect();
+            } catch (error) {
+                showStatus(3, `❌ ERROR: ${error.message}`, 'error');
+            }
+        }
+
+        // Method 4: Request Permissions
+        async function method4() {
+            showStatus(4, 'Requesting explicit permissions...', 'info');
+            try {
+                const provider = window.solana || window.phantom?.solana;
+                if (!provider) {
+                    showStatus(4, '❌ No wallet found', 'error');
+                    return;
+                }
+
+                if (provider.request) {
+                    const result = await provider.request({ method: 'connect' });
+                    const publicKey = result.publicKey.toString();
+                    showStatus(4, `✅ SUCCESS! Permission granted: ${publicKey.slice(0, 8)}...`, 'success');
+                    showWalletInfo('Method 4: Request permissions', publicKey);
+                    currentProvider = provider;
+                } else {
+                    showStatus(4, '❌ provider.request() not available', 'error');
+                }
+            } catch (error) {
+                showStatus(4, `❌ ERROR: ${error.message}`, 'error');
+            }
+        }
+
+        // Method 5: Check Ready State
+        async function method5() {
+            showStatus(5, 'Checking wallet ready state...', 'info');
+            try {
+                const provider = window.solana || window.phantom?.solana;
+                if (!provider) {
+                    showStatus(5, '❌ No wallet found', 'error');
+                    return;
+                }
+
+                showStatus(5, `isPhantom: ${provider.isPhantom}, isConnected: ${provider.isConnected}`, 'info');
+
+                if (provider.isConnected) {
+                    showStatus(5, '✓ Already connected, getting public key...', 'info');
+                    const publicKey = provider.publicKey.toString();
+                    showStatus(5, `✅ SUCCESS! Already connected: ${publicKey.slice(0, 8)}...`, 'success');
+                    showWalletInfo('Method 5: Ready state check', publicKey);
+                    currentProvider = provider;
+                } else {
+                    showStatus(5, '✓ Not connected, connecting now...', 'info');
+                    const resp = await provider.connect();
+                    const publicKey = resp.publicKey.toString();
+                    showStatus(5, `✅ SUCCESS! Connected: ${publicKey.slice(0, 8)}...`, 'success');
+                    showWalletInfo('Method 5: Ready state check', publicKey);
+                    currentProvider = provider;
+                }
+            } catch (error) {
+                showStatus(5, `❌ ERROR: ${error.message}`, 'error');
+            }
+        }
+
+        // Method 6: Solflare
+        async function method6() {
+            showStatus(6, 'Checking for Solflare...', 'info');
+            try {
+                if (!window.solflare) {
+                    showStatus(6, '❌ window.solflare not found - install Solflare', 'error');
+                    return;
+                }
+
+                showStatus(6, '✓ Found Solflare, connecting...', 'info');
+                const resp = await window.solflare.connect();
+                const publicKey = resp.publicKey.toString();
+
+                showStatus(6, `✅ SUCCESS! Connected: ${publicKey.slice(0, 8)}...`, 'success');
+                showWalletInfo('Method 6: Solflare', publicKey);
+                currentProvider = window.solflare;
+            } catch (error) {
+                showStatus(6, `❌ ERROR: ${error.message}`, 'error');
+            }
+        }
+
+        // Method 7: Backpack
+        async function method7() {
+            showStatus(7, 'Checking for Backpack...', 'info');
+            try {
+                if (!window.backpack) {
+                    showStatus(7, '❌ window.backpack not found - install Backpack', 'error');
+                    return;
+                }
+
+                showStatus(7, '✓ Found Backpack, connecting...', 'info');
+                const resp = await window.backpack.connect();
+                const publicKey = resp.publicKey.toString();
+
+                showStatus(7, `✅ SUCCESS! Connected: ${publicKey.slice(0, 8)}...`, 'success');
+                showWalletInfo('Method 7: Backpack', publicKey);
+                currentProvider = window.backpack;
+            } catch (error) {
+                showStatus(7, `❌ ERROR: ${error.message}`, 'error');
+            }
+        }
+
+        // Method 8: User Gesture
+        async function method8() {
+            showStatus(8, 'Using immediate user gesture...', 'info');
+            try {
+                const provider = window.solana || window.phantom?.solana;
+                if (!provider) {
+                    showStatus(8, '❌ No wallet found', 'error');
+                    return;
+                }
+
+                // Immediate call within user gesture - no await or timeout
+                const connectPromise = provider.connect();
+                showStatus(8, '✓ Connection popup should appear immediately...', 'info');
+
+                const resp = await connectPromise;
+                const publicKey = resp.publicKey.toString();
+
+                showStatus(8, `✅ SUCCESS! Connected: ${publicKey.slice(0, 8)}...`, 'success');
+                showWalletInfo('Method 8: User gesture', publicKey);
+                currentProvider = provider;
+            } catch (error) {
+                showStatus(8, `❌ ERROR: ${error.message}`, 'error');
+            }
+        }
+
+        // Method 9: Eager Connection
+        async function method9() {
+            showStatus(9, 'Attempting eager connection...', 'info');
+            try {
+                const provider = window.solana || window.phantom?.solana;
+                if (!provider) {
+                    showStatus(9, '❌ No wallet found', 'error');
+                    return;
+                }
+
+                showStatus(9, '✓ Trying to connect without popup (onlyIfTrusted)...', 'info');
+                const resp = await provider.connect({ onlyIfTrusted: true });
+                const publicKey = resp.publicKey.toString();
+
+                showStatus(9, `✅ SUCCESS! Eager connected: ${publicKey.slice(0, 8)}...`, 'success');
+                showWalletInfo('Method 9: Eager connect', publicKey);
+                currentProvider = provider;
+            } catch (error) {
+                showStatus(9, `⚠️ Eager connect failed (expected if not previously connected): ${error.message}`, 'error');
+            }
+        }
+
+        // Method 10: Discover All Wallets
+        async function method10() {
+            showStatus(10, 'Discovering all available wallets...', 'info');
+            try {
+                const wallets = [];
+
+                if (window.solana) wallets.push({ name: 'window.solana', provider: window.solana, isPhantom: window.solana.isPhantom });
+                if (window.phantom?.solana) wallets.push({ name: 'Phantom', provider: window.phantom.solana, isPhantom: true });
+                if (window.solflare) wallets.push({ name: 'Solflare', provider: window.solflare, isPhantom: false });
+                if (window.backpack) wallets.push({ name: 'Backpack', provider: window.backpack, isPhantom: false });
+                if (window.glow) wallets.push({ name: 'Glow', provider: window.glow, isPhantom: false });
+                if (window.coin98?.sol) wallets.push({ name: 'Coin98', provider: window.coin98.sol, isPhantom: false });
+
+                if (wallets.length === 0) {
+                    showStatus(10, '❌ No wallets found - install Phantom, Solflare, or Backpack', 'error');
+                    return;
+                }
+
+                let html = `✅ Found ${wallets.length} wallet(s):<br><br>`;
+                wallets.forEach((w, i) => {
+                    html += `<strong>${i + 1}. ${w.name}</strong> ${w.isPhantom ? '(Phantom)' : ''}<br>`;
+                    html += `<button onclick="connectWallet(${i})">Connect to ${w.name}</button><br><br>`;
+                });
+
+                showStatus(10, html, 'success');
+                window.discoveredWallets = wallets;
+            } catch (error) {
+                showStatus(10, `❌ ERROR: ${error.message}`, 'error');
+            }
+        }
+
+        async function connectWallet(index) {
+            try {
+                const wallet = window.discoveredWallets[index];
+                showStatus(10, `Connecting to ${wallet.name}...`, 'info');
+
+                const resp = await wallet.provider.connect();
+                const publicKey = resp.publicKey.toString();
+
+                showStatus(10, `✅ SUCCESS! Connected to ${wallet.name}: ${publicKey.slice(0, 8)}...`, 'success');
+                showWalletInfo(`Method 10: ${wallet.name}`, publicKey);
+                currentProvider = wallet.provider;
+            } catch (error) {
+                showStatus(10, `❌ ERROR connecting to wallet: ${error.message}`, 'error');
+            }
+        }
+
+        // Auto-detect on page load
+        window.addEventListener('load', () => {
+            console.log('=== Wallet Detection ===');
+            console.log('window.solana:', !!window.solana);
+            console.log('window.phantom:', !!window.phantom);
+            console.log('window.solflare:', !!window.solflare);
+            console.log('window.backpack:', !!window.backpack);
+            console.log('======================');
+        });
+    </script>
+</body>
+</html>

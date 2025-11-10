@@ -1,0 +1,25 @@
+{
+  "$schema": "https://svelte.dev/schemas/mcpconfig-v1.json",
+  "version": 1,
+  "metadata": {
+    "name": "spermrace-mcp",
+    "description": "Model Context Protocol configuration for the SpermRace.io monorepo."
+  },
+  "servers": {
+    "svelte": {
+      "command": "pnpm",
+      "args": [
+        "dlx",
+        "@sveltejs/mcp",
+        "serve",
+        "--project",
+        ".",
+        "--include",
+        "packages/client/src,packages/server/src,packages/shared"
+      ],
+      "env": {
+        "SVELTE_MCP_DISABLE_ANALYTICS": "1"
+      }
+    }
+  }
+}

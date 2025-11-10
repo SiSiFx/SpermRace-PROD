@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phantom Ultimate Debug</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 20px auto;
+            padding: 20px;
+            background: #1a1a2e;
+            color: white;
+        }
+        .container {
+            background: #16213e;
+            padding: 30px;
+            border-radius: 16px;
+            border: 2px solid #ab9ff2;
+        }
+        h1 {
+            color: #ab9ff2;
+            text-align: center;
+        }
+        .big-button {
+            width: 100%;
+            padding: 30px;
+            font-size: 24px;
+            background: linear-gradient(135deg, #ab9ff2 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            margin: 20px 0;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        .big-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 30px rgba(171, 159, 242, 0.5);
+        }
+        .log {
+            background: #0f3460;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            font-family: monospace;
+            font-size: 14px;
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ab9ff2;
+        }
+        .log-entry {
+            padding: 5px 0;
+            border-bottom: 1px solid #1a1a2e;
+        }
+        .timestamp {
+            color: #888;
+            font-size: 12px;
+        }
+        .success {
+            color: #4ade80;
+            font-weight: bold;
+        }
+        .error {
+            color: #f87171;
+            font-weight: bold;
+        }
+        .warning {
+            color: #fbbf24;
+        }
+        .info {
+            color: #60a5fa;
+        }
+        .instructions {
+            background: #2a2a3e;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 4px solid #fbbf24;
+        }
+        .instructions h3 {
+            margin-top: 0;
+            color: #fbbf24;
+        }
+        .status-bar {
+            background: #0f3460;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .status-item {
+            text-align: center;
+        }
+        .status-label {
+            font-size: 12px;
+            color: #888;
+        }
+        .status-value {
+            font-size: 20px;
+            font-weight: bold;
+            color: #ab9ff2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Phantom Ultimate Debugger</h1>
+        <p style="text-align: center; color: #888;">Real-time logging to see exactly what's happening</p>
+
+        <div class="status-bar">
+            <div class="status-item">
+                <div class="status-label">Phantom Detected</div>
+                <div class="status-value" id="detectedStatus">❌</div>
+            </div>
+            <div class="status-item">
+                <div class="status-label">Is Connected</div>
+                <div class="status-value" id="connectedStatus">❌</div>
+            </div>
+            <div class="status-item">
+                <div class="status-label">Public Key</div>
+                <div class="status-value" id="keyStatus">None</div>
+            </div>
+        </div>
+
+        <div class="instructions">
+            <h3>⚠️ IMPORTANT: Read This First!</h3>
+            <p><strong>When you click the button below:</strong></p>
+            <ol>
+                <li>A Phantom popup window will try to open</li>
+                <li>It might open BEHIND this window - <strong>check your taskbar!</strong></li>
+                <li>It might be minimized or on another monitor</li>
+                <li>Look for a new small window titled "Phantom Wallet"</li>
+                <li>If you see it, click "Connect" or "Approve" quickly</li>
+            </ol>
+            <p style="color: #fbbf24; font-weight: bold;">
+                💡 TIP: After clicking the button, press Alt+Tab (Windows) or Cmd+Tab (Mac)
+                to see all open windows - the Phantom popup might be hidden!
+            </p>
+        </div>
+
+        <button class="big-button" onclick="testConnection()">
+            🚀 CONNECT TO PHANTOM<br>
+            <span style="font-size: 14px; font-weight: normal;">(Watch the logs below and check for popup window)</span>
+        </button>
+
+        <div class="log" id="logContainer">
+            <div class="log-entry info">
+                <span class="timestamp">[Ready]</span> Waiting for user action...
+            </div>
+        </div>
+
+        <button onclick="clearLogs()" style="padding: 10px 20px; background: #0f3460; color: white; border: 1px solid #ab9ff2; border-radius: 6px; cursor: pointer;">
+            Clear Logs
+        </button>
+        <button onclick="checkStatus()" style="padding: 10px 20px; background: #0f3460; color: white; border: 1px solid #ab9ff2; border-radius: 6px; cursor: pointer; margin-left: 10px;">
+            Refresh Status
+        </button>
+    </div>
+
+    <script>
+        let logCount = 0;
+        const MAX_LOGS = 100;
+
+        function log(message, type = 'info') {
+            const logContainer = document.getElementById('logContainer');
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.innerHTML = `<span class="timestamp">[${timestamp}]</span> ${message}`;
+            logContainer.insertBefore(entry, logContainer.firstChild);
+
+            logCount++;
+            if (logCount > MAX_LOGS) {
+                logContainer.removeChild(logContainer.lastChild);
+            }
+
+            console.log(`[${timestamp}] ${message}`);
+        }
+
+        function updateStatus() {
+            const detected = window.solana?.isPhantom;
+            const connected = window.solana?.isConnected;
+            const publicKey = window.solana?.publicKey?.toString();
+
+            document.getElementById('detectedStatus').textContent = detected ? '✅' : '❌';
+            document.getElementById('connectedStatus').textContent = connected ? '✅' : '❌';
+            document.getElementById('keyStatus').textContent = publicKey ? publicKey.slice(0, 8) + '...' : 'None';
+        }
+
+        function clearLogs() {
+            document.getElementById('logContainer').innerHTML = '<div class="log-entry info"><span class="timestamp">[Cleared]</span> Logs cleared</div>';
+            logCount = 1;
+        }
+
+        function checkStatus() {
+            log('🔄 Checking status...', 'info');
+            updateStatus();
+            log(`Phantom detected: ${window.solana?.isPhantom}`, 'info');
+            log(`Is connected: ${window.solana?.isConnected}`, 'info');
+            log(`Public key: ${window.solana?.publicKey || 'null'}`, 'info');
+        }
+
+        async function testConnection() {
+            log('🎯 CONNECTION TEST STARTED', 'info');
+            log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+
+            try {
+                // Step 1: Check if Phantom exists
+                log('Step 1: Checking for Phantom...', 'info');
+                if (!window.solana) {
+                    log('❌ ERROR: window.solana is undefined!', 'error');
+                    log('🔧 Install Phantom from https://phantom.app', 'warning');
+                    return;
+                }
+                log('✅ Phantom detected via window.solana', 'success');
+
+                // Step 2: Check if already connected
+                log('Step 2: Checking existing connection...', 'info');
+                if (window.solana.isConnected) {
+                    log('⚡ Already connected! No popup needed.', 'success');
+                    const pk = window.solana.publicKey.toString();
+                    log(`✅ Public Key: ${pk}`, 'success');
+                    updateStatus();
+                    return;
+                }
+                log('Not connected yet - will request connection', 'info');
+
+                // Step 3: Setup event listeners
+                log('Step 3: Setting up event listeners...', 'info');
+
+                window.solana.on('connect', (publicKey) => {
+                    log('🎉 EVENT: connect fired!', 'success');
+                    log(`✅ Public Key from event: ${publicKey.toString()}`, 'success');
+                    updateStatus();
+                });
+
+                window.solana.on('disconnect', () => {
+                    log('⚠️ EVENT: disconnect fired', 'warning');
+                    updateStatus();
+                });
+
+                log('✅ Event listeners registered', 'success');
+
+                // Step 4: Call connect
+                log('Step 4: Calling window.solana.connect()...', 'info');
+                log('⏳ LOOK FOR PHANTOM POPUP NOW!', 'warning');
+                log('💡 Check taskbar, Alt+Tab, or other monitor!', 'warning');
+                log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+
+                // Add a timeout warning
+                const warningTimer = setTimeout(() => {
+                    log('⚠️ Still waiting after 5 seconds...', 'warning');
+                    log('🔍 The popup might be hidden or blocked', 'warning');
+                    log('🔍 Press Alt+Tab to find it', 'warning');
+                }, 5000);
+
+                const response = await window.solana.connect();
+
+                clearTimeout(warningTimer);
+
+                // Success!
+                log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+                log('🎊 CONNECTION SUCCESSFUL! 🎊', 'success');
+                log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+
+                const publicKey = response.publicKey.toString();
+                log(`✅ Public Key: ${publicKey}`, 'success');
+                log(`✅ Full key: ${publicKey}`, 'info');
+
+                updateStatus();
+
+                log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+                log('🎉 YOU CAN NOW USE THIS WALLET IN THE APP!', 'success');
+                log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+
+            } catch (error) {
+                log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'error');
+                log('❌ CONNECTION FAILED', 'error');
+                log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'error');
+                log(`Error name: ${error.name}`, 'error');
+                log(`Error message: ${error.message}`, 'error');
+                log(`Error code: ${error.code || 'N/A'}`, 'error');
+
+                if (error.message.includes('User rejected')) {
+                    log('', 'info');
+                    log('🔍 DIAGNOSIS: You clicked "Cancel" in Phantom', 'warning');
+                    log('💡 TRY AGAIN and click "Connect" this time', 'warning');
+                } else if (error.message.includes('popup')) {
+                    log('', 'info');
+                    log('🔍 DIAGNOSIS: Popup was blocked', 'warning');
+                    log('💡 Check address bar for blocked popup icon', 'warning');
+                } else if (error.message.includes('timeout') || error.message.includes('time out')) {
+                    log('', 'info');
+                    log('🔍 DIAGNOSIS: Connection timed out', 'warning');
+                    log('💡 Popup might have opened but you didn\'t respond', 'warning');
+                    log('💡 Or Phantom extension might be frozen', 'warning');
+                } else {
+                    log('', 'info');
+                    log('🔍 UNKNOWN ERROR - See details above', 'error');
+                }
+
+                log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'error');
+            }
+        }
+
+        // Initialize
+        window.addEventListener('load', () => {
+            log('🚀 Page loaded and ready', 'success');
+            updateStatus();
+
+            if (window.solana) {
+                log(`✅ Phantom extension detected`, 'success');
+                log(`   isPhantom: ${window.solana.isPhantom}`, 'info');
+                log(`   isConnected: ${window.solana.isConnected}`, 'info');
+            } else {
+                log('❌ Phantom not detected - install from phantom.app', 'error');
+            }
+
+            log('', 'info');
+            log('Click the button above when ready to test', 'info');
+        });
+
+        // Auto-update status every 2 seconds
+        setInterval(updateStatus, 2000);
+    </script>
+</body>
+</html>

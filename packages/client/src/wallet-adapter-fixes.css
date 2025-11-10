@@ -1,0 +1,10 @@
+/* Force wallet-adapter modal to center and overlay above app UI */
+.wallet-adapter-modal { position: fixed !important; inset: 0 !important; display: flex !important; align-items: center !important; justify-content: center !important; z-index: 99999 !important; }
+.wallet-adapter-modal-wrapper { display: flex !important; align-items: center !important; justify-content: center !important; }
+.wallet-adapter-modal-container { margin: 0 !important; }
+.wallet-adapter-modal-overlay { position: fixed !important; inset: 0 !important; }
+
+/* Guard against parent transforms causing misplacement */
+html, body, #root { transform: none !important; }
+
+

@@ -1,0 +1,45 @@
+{
+	"name": "spermrace.io",
+	"version": "1.0.0",
+	"description": "Spermatozoide battle royale multiplayer game with crypto integration",
+	"scripts": {
+		"dev": "concurrently --kill-others-on-fail --names \"server,client\" --prefix-colors \"blue,cyan\" \"pnpm --filter server dev\" \"pnpm --filter client dev\"",
+		"dev:devnet": "concurrently --kill-others-on-fail --names \"server,client\" --prefix-colors \"blue,cyan\" \"pnpm --filter server dev:devnet\" \"pnpm --filter client dev\"",
+		"dev:devnet:paid": "concurrently --kill-others-on-fail --names \"server,client\" --prefix-colors \"blue,cyan\" \"pnpm --filter server dev:devnet:paid\" \"pnpm --filter client dev\"",
+		"dev:server": "pnpm --filter server dev",
+		"dev:client": "pnpm --filter client dev",
+		"start:server": "pnpm --filter server start",
+		"start:client": "pnpm --filter client preview",
+		"demo": "concurrently --kill-others-on-fail --names \"demo-back,demo-client\" --prefix-colors \"green,yellow\" \"pnpm --filter server demo\" \"pnpm --filter @skidr/env-demo dev:client\"",
+		"prod": "concurrently --kill-others-on-fail --names \"prod-back,prod-front\" --prefix-colors \"magenta,purple\" \"pnpm --filter @skidr/env-production dev:server\" \"pnpm --filter @skidr/frontend-production dev\"",
+		"smart:dev": "node smart-start.js dev",
+		"smart:demo": "node smart-start.js demo",
+		"smart:prod": "node smart-start.js prod",
+		"cleanup": "powershell -ExecutionPolicy Bypass -File scripts/cleanup-ports.ps1",
+		"dev:backend": "pnpm --filter @skidr/env-development dev:server",
+		"demo:backend": "pnpm --filter @skidr/env-demo dev:server",
+		"prod:backend": "pnpm --filter @skidr/env-production dev:server",
+		"dev:frontend": "pnpm --filter @skidr/frontend-development dev",
+		"demo:frontend": "pnpm --filter client demo",
+		"prod:frontend": "pnpm --filter @skidr/frontend-production dev",
+		"all": "concurrently --kill-others-on-fail --names \"dev,demo,prod\" --prefix-colors \"cyan,green,magenta\" \"pnpm dev\" \"pnpm demo\" \"pnpm prod\"",
+		"build": "pnpm --filter shared build && pnpm --filter server build && pnpm --filter client build",
+		"build:server": "pnpm --filter server build",
+		"build:client": "pnpm --filter client build",
+		"start:prod": "pm2 start ops/pm2/ecosystem.config.js && pm2 save",
+		"test": "node test-integration.js",
+		"diagnose": "node frontend-diagnostic.js",
+		"menu": "node interactive-menu.js",
+		"install-all": "pnpm install && pnpm --filter @skidr/core install && pnpm --filter @skidr/shared install && pnpm --filter @skidr/env-development install && pnpm --filter @skidr/env-demo install && pnpm --filter @skidr/env-production install && pnpm --filter @skidr/frontend-development install && pnpm --filter @skidr/frontend-demo install && pnpm --filter @skidr/frontend-production install",
+		"mcp:svelte": "pnpm dlx @sveltejs/mcp --config mcp.config.json"
+	},
+	"devDependencies": {
+		"concurrently": "^8.2.2",
+		"cross-env": "^7.0.3",
+		"@sveltejs/mcp": "^0.1.0"
+	},
+	"dependencies": {
+		"pnpm": "^10.13.1"
+	},
+	"packageManager": "pnpm@9.15.9+sha512.68046141893c66fad01c079231128e9afb89ef87e2691d69e4d40eee228988295fd4682181bae55b58418c3a253bde65a505ec7c5f9403ece5cc3cd37dcf2531"
+}

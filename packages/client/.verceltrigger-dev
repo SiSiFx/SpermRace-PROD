@@ -1,0 +1,8 @@
+ trigger dev deploy
+ trigger dev deploy 2
+ manual dev trigger
+ dev redeploy (settings test)
+ dev redeploy (ui cleanup)
+ dev redeploy (redo)
+ rectangle fix redeploy (dev)
+ dev redeploy (final trigger)

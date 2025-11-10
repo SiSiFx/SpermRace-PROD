@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SpermRace.io - Swim, Compete, Fertilize the Egg!</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- Animated Background -->
+  <div id="bg-particles">
+
+  </div>
+  
+
+
+  <!-- Main Landing Screen -->
+  <div id="landing-screen" class="screen active">
+    <div class="racing-grid-overlay"></div>
+    <div class="tire-marks"></div>
+    
+    <div class="landing-container">
+      <div class="brand-section">
+        <div class="egg-halo"></div>
+        <div class="egg-core"></div>
+        <div class="brand-badge">DEVNET</div>
+        
+        <h1 class="brand-title">
+          <span class="text-gradient">SPERM</span><span class="text-accent">RACE</span><span class="text-gradient">.IO</span>
+        </h1>
+
+        <p class="brand-punchline">Battle Royale starts at birth <span class="boom">💥</span></p>
+
+        
+
+        <div class="brand-features">
+          <div class="feature-chip">Skill-based swimming</div>
+          <div class="feature-chip">2-5 minute races</div>
+          <div class="feature-chip">Instant SOL payouts</div>
+        </div>
+        
+        <div class="game-stats">
+          <div class="stat-item">
+            <div class="stat-number">64</div>
+            <div class="stat-label">Players</div>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <div class="stat-number">85%</div>
+            <div class="stat-label">To Winner</div>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <div class="stat-number">$1-100</div>
+            <div class="stat-label">Entry Fees</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="cta-section">
+        <!-- Punchy hero CTA kept tight under headline -->
+        <button id="play-cta" class="cta-primary">
+          <span class="cta-text">PLAY NOW</span>
+          <div class="cta-glow"></div>
+        </button>
+        <p class="cta-description">
+          Connect wallet to start playing
+        </p>
+        <div class="live-sol-price">
+          <span class="price-label">SOL Price:</span>
+          <span class="price-value">$<span id="landing-sol-price">--</span> USD</span>
+          <span class="price-updated">Updated <span id="landing-price-age">--</span>s ago</span>
+        </div>
+      </div>
+    </div>
+    
+    <div class="landing-footer">
+      <div class="footer-links">
+        <a href="#" class="footer-link">How to Play</a>
+        <a href="#" class="footer-link">Discord</a>
+        <a href="#" class="footer-link">Twitter</a>
+      </div>
+      <div class="footer-info">
+        Powered by Solana
+      </div>
+    </div>
+  </div>
+
+  <!-- Wallet Connection Screen -->
+  <div id="wallet-screen" class="screen">
+    <div class="modal-container">
+      <div class="modal-header">
+        <h2 class="modal-title">Connect Wallet</h2>
+        <p class="modal-subtitle">Sign in with Solana to continue</p>
+      </div>
+      
+      <div class="wallet-connect-section">
+        <button id="connect-wallet" class="wallet-connect-btn">
+          <div class="wallet-icon">🔗</div>
+          <div class="wallet-text">
+            <div class="wallet-title">Connect Wallet</div>
+            <div class="wallet-subtitle">Connect any Solana wallet to continue</div>
+          </div>
+        </button>
+      </div>
+      
+      <div id="wallet-warning" class="warning-message" style="display: none;">
+        <div class="warning-icon">⚠️</div>
+        <div class="warning-text">
+          No Solana wallet detected. Install a wallet like 
+          <a href="https://phantom.app/" target="_blank" class="warning-link">Phantom</a>, 
+          <a href="https://backpack.app/" target="_blank" class="warning-link">Backpack</a>, 
+          <a href="https://solflare.com/" target="_blank" class="warning-link">Solflare</a>, or 
+          <a href="https://slope.finance/" target="_blank" class="warning-link">Slope</a> 
+          then refresh the page.
+        </div>
+      </div>
+      
+      <button id="wallet-back" class="btn-secondary">Back</button>
+    </div>
+  </div>
+
+  <!-- Wallet Address Display -->
+  <div id="wallet-display" class="wallet-display" style="display:none;">
+    <span id="wallet-address"></span>
+  </div>
+
+  <!-- Game Mode Selection -->
+  <div id="mode-screen" class="screen">
+    <div class="modal-container wide">
+      <div class="modal-header">
+        <h2 class="modal-title">Enter Sperm Race</h2>
+        <p class="modal-subtitle">Select your entry tier to compete for the egg!</p>
+      </div>
+      
+      <div class="tournament-grid">
+        <!-- Micro Race -->
+        <div class="tournament-card bronze" data-tier="1">
+          <div class="tournament-header">
+            <div class="tournament-icon">🧬</div>
+            <h3 class="tournament-title">Micro Race</h3>
+            <div class="tournament-badge">Beginner</div>
+          </div>
+          <div class="tournament-details">
+            <div class="entry-fee">
+              <span class="fee-usd">$1.00 USD</span>
+              <span class="fee-sol">(≈ <span class="sol-amount" data-tier="1">0.00</span> SOL)</span>
+            </div>
+            <div class="tournament-specs">
+              <div class="spec-item">
+                <span class="spec-label">Sperm:</span>
+                <span class="spec-value">16 max</span>
+              </div>
+              <div class="spec-item">
+                <span class="spec-label">Winner Prize:</span>
+                <span class="spec-value">$13.60</span>
+              </div>
+              <div class="spec-item">
+                <span class="spec-label">Duration:</span>
+                <span class="spec-value">2-3 minutes</span>
+              </div>
+            </div>
+          </div>
+          <button class="tournament-join-btn bronze-btn" data-tier="1">Join Micro</button>
+        </div>
+
+        <!-- Nano Race -->
+        <div class="tournament-card silver" data-tier="5">
+          <div class="tournament-header">
+            <div class="tournament-icon">🔬</div>
+            <h3 class="tournament-title">Nano Race</h3>
+            <div class="tournament-badge">Intermediate</div>
+          </div>
+          <div class="tournament-details">
+            <div class="entry-fee">
+              <span class="fee-usd">$5.00 USD</span>
+              <span class="fee-sol">(≈ <span class="sol-amount" data-tier="5">0.00</span> SOL)</span>
+            </div>
+            <div class="tournament-specs">
+              <div class="spec-item">
+                <span class="spec-label">Sperm:</span>
+                <span class="spec-value">32 max</span>
+              </div>
+              <div class="spec-item">
+                <span class="spec-label">Winner Prize:</span>
+                <span class="spec-value">$136.00</span>
+              </div>
+              <div class="spec-item">
+                <span class="spec-label">Duration:</span>
+                <span class="spec-value">3-4 minutes</span>
+              </div>
+            </div>
+          </div>
+          <button class="tournament-join-btn silver-btn" data-tier="5">Join Nano</button>
+        </div>
+
+        <!-- Mega Race -->
+        <div class="tournament-card gold" data-tier="25">
+          <div class="tournament-header">
+            <div class="tournament-icon">🏆</div>
+            <h3 class="tournament-title">Mega Race</h3>
+            <div class="tournament-badge">Advanced</div>
+          </div>
+          <div class="tournament-details">
+            <div class="entry-fee">
+              <span class="fee-usd">$25.00 USD</span>
+              <span class="fee-sol">(≈ <span class="sol-amount" data-tier="25">0.00</span> SOL)</span>
+            </div>
+            <div class="tournament-specs">
+              <div class="spec-item">
+                <span class="spec-label">Sperm:</span>
+                <span class="spec-value">32 max</span>
+              </div>
+              <div class="spec-item">
+                <span class="spec-label">Winner Prize:</span>
+                <span class="spec-value">$680.00</span>
+              </div>
+              <div class="spec-item">
+                <span class="spec-label">Duration:</span>
+                <span class="spec-value">4-6 minutes</span>
+              </div>
+            </div>
+          </div>
+          <button class="tournament-join-btn gold-btn" data-tier="25">Join Mega</button>
+        </div>
+
+        <!-- Championship Race -->
+        <div class="tournament-card diamond" data-tier="100">
+          <div class="tournament-header">
+            <div class="tournament-icon">👑</div>
+            <h3 class="tournament-title">Championship</h3>
+            <div class="tournament-badge">Elite</div>
+          </div>
+          <div class="tournament-details">
+            <div class="entry-fee">
+              <span class="fee-usd">$100.00 USD</span>
+              <span class="fee-sol">(≈ <span class="sol-amount" data-tier="100">0.00</span> SOL)</span>
+            </div>
+            <div class="tournament-specs">
+              <div class="spec-item">
+                <span class="spec-label">Sperm:</span>
+                <span class="spec-value">16 max</span>
+              </div>
+              <div class="spec-item">
+                <span class="spec-label">Winner Prize:</span>
+                <span class="spec-value">$1,360.00</span>
+              </div>
+              <div class="spec-item">
+                <span class="spec-label">Duration:</span>
+                <span class="spec-value">5-8 minutes</span>
+              </div>
+            </div>
+          </div>
+          <button class="tournament-join-btn diamond-btn" data-tier="100">Join Championship</button>
+        </div>
+      </div>
+
+      <div class="tournament-info">
+        <div class="pricing-note">
+          <span class="pricing-icon">🥚</span>
+          <span>Winner fertilizes the egg! • Real-time SOL conversion • Instant payouts</span>
+        </div>
+        <div class="exchange-rate">
+          Exchange Rate: 1 SOL = $<span id="sol-price">213.45</span> USD
+          <span class="rate-updated">Last updated: <span id="rate-timestamp">30</span>s ago</span>
+        </div>
+      </div>
+
+              <div class="practice-hint">
+          Want to practice swimming? <button id="go-practice" class="link-btn">Practice Mode (free)</button>
+        </div>
+      
+      <div class="mode-footer">
+        <button id="mode-back" class="btn-secondary">Back</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lobby Screen -->
+  <div id="lobby-screen" class="screen">
+    <div class="lobby-container">
+      <div class="lobby-header">
+        <h2 class="lobby-title">Sperm Lobby</h2>
+        <div class="lobby-status">
+          <span id="lobby-count">1</span>/<span id="lobby-max">64</span> sperm
+        </div>
+      </div>
+      
+      <div class="lobby-content">
+        <div class="queue-bar">
+          <div class="queue-left">
+            <span class="queue-dot"></span>
+            <span>Queue</span>
+          </div>
+          <div class="queue-center">
+            <span id="queue-current">1</span>
+            <span>/</span>
+            <span id="queue-target">16</span>
+          </div>
+          <div class="queue-right">
+            <span class="queue-eta-label">ETA</span>
+            <span id="queue-eta">--s</span>
+          </div>
+        </div>
+        <div class="lobby-main">
+          <div class="lobby-players">
+            <div class="players-header">
+              <h3>Competitors</h3>
+              <div class="players-count"><span id="players-online">1</span> swimming</div>
+            </div>
+            <div id="players-list" class="players-list"></div>
+          </div>
+          
+          <div class="lobby-info">
+            <div class="game-rules">
+              <h3>How to Swim</h3>
+              <ul class="rules-list">
+                <li>Use your mouse to swim your sperm</li>
+                <li>Leave trails that block other sperm</li>
+                <li>Avoid hitting trails and walls</li>
+                <li>First sperm to fertilize the egg wins!</li>
+                <li>Use SPACE for speed boost (limited)</li>
+              </ul>
+            </div>
+            
+            <div class="match-info">
+              <h3>Match Details</h3>
+              <div class="match-details">
+                <div class="detail-row">
+                  <span class="detail-label">Mode:</span>
+                  <span id="match-mode" class="detail-value">Tournament</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Entry Fee:</span>
+                  <span id="match-fee" class="detail-value">$5 (≈0.05 SOL)</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Prize Pool:</span>
+                  <span id="match-prize" class="detail-value">$320</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Arena:</span>
+                  <span class="detail-value">Fallopian Tube (shrinking)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div id="lobby-countdown" class="lobby-countdown" style="display: none;">
+          <div class="countdown-text">Starting in</div>
+          <div id="countdown-timer" class="countdown-timer">10</div>
+        </div>
+      </div>
+      
+      <div class="lobby-footer">
+        <button id="lobby-leave" class="btn-secondary">Leave Lobby</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Game Screen -->
+  <div id="game-screen" class="screen">
+    <canvas id="game-canvas"></canvas>
+    
+    <!-- Game HUD -->
+    <div id="game-hud" class="game-hud">
+      <div class="hud-top">
+        <div class="hud-players">
+          <div class="hud-label">Swimming</div>
+          <div id="alive-count" class="hud-value">32</div>
+        </div>
+        
+        <div class="hud-timer">
+          <div id="round-timer" class="timer-value">2:45</div>
+        </div>
+        
+        <div class="hud-boost">
+          <div class="boost-icon">⚡</div>
+          <div id="boost-cooldown" class="boost-bar">
+            <div class="boost-fill"></div>
+          </div>
+        </div>
+
+        <div id="overtime-badge" class="overtime-badge" style="display:none;">Overtime</div>
+      </div>
+      
+      <div class="hud-minimap">
+        <canvas id="minimap" width="160" height="120"></canvas>
+        <div class="minimap-label">Fallopian Tube</div>
+      </div>
+      <div id="leaderboard" class="leaderboard"></div>
+    </div>
+    
+    
+
+  <!-- Game Countdown -->
+  <div id="game-countdown" class="game-countdown" style="display: none;">
+    <div id="countdown-number" class="countdown-number">3</div>
+  </div>
+    <!-- Kill Feed -->
+    <div id="kill-feed" class="kill-feed"></div>
+    
+    <!-- Round End Modal -->
+    <div id="round-end" class="modal-overlay" style="display: none;">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h2 id="round-result" class="round-result">Fertilization!</h2>
+          <p id="round-description" class="round-description">You outswam all other sperm!</p>
+        </div>
+        
+        <div class="round-stats">
+          <div class="stat-item">
+            <div class="stat-label">Placement</div>
+            <div id="final-placement" class="stat-value">#1</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Sperm Eliminated</div>
+            <div id="eliminations" class="stat-value">7</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Survival Time</div>
+            <div id="survival-time" class="stat-value">4:32</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Winnings</div>
+            <div id="winnings" class="stat-value">0.85 SOL</div>
+          </div>
+          <div class="stat-item" id="payout-link-row" style="display:none;">
+            <div class="stat-label">Payout Tx</div>
+            <div class="stat-value"><a id="payout-link" href="#" target="_blank">View on Solscan</a></div>
+          </div>
+        </div>
+        
+        <div class="round-actions">
+          <button id="play-again" class="btn-primary">Play Again</button>
+          <button id="return-lobby" class="btn-secondary">Return to Lobby</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading States -->
+  <div id="loading-overlay" class="loading-overlay" style="display: none;">
+    <div class="loading-spinner"></div>
+    <div id="loading-text" class="loading-text">Connecting...</div>
+  </div>
+
+  <!-- Status overlay (transient banners) -->
+  <div id="status-overlay" class="status-overlay" style="display:none;"></div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
+

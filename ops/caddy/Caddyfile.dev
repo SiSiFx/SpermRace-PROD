@@ -1,0 +1,22 @@
+# Development Caddyfile with HTTPS for wallet testing
+# Access via: https://93.180.133.94
+
+# HTTPS on port 443 (self-signed cert for dev)
+https://93.180.133.94 {
+    # Allow self-signed cert for dev
+    tls internal
+
+    # Reverse proxy to Vite dev server
+    reverse_proxy localhost:5174 {
+        # WebSocket support
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+
+# Redirect HTTP to HTTPS
+http://93.180.133.94 {
+    redir https://93.180.133.94{uri} permanent
+}
