@@ -23,6 +23,8 @@ const SOLANA_CLUSTER: 'devnet' | 'mainnet' = (() => {
 import { WalletProvider, useWallet } from './WalletProvider';
 import { WsProvider, useWs } from './WsProvider';
 import NewGameView from './NewGameView';
+import { Leaderboard } from './Leaderboard';
+import './leaderboard.css';
 
 type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
 
@@ -46,6 +48,7 @@ function AppInner() {
     setToast(msg);
     window.setTimeout(() => setToast(null), duration);
   };
+  const [showLeaderboard, setShowLeaderboard] = useState<boolean>(false);
   // Loading progress for overlay (indefinite fill)
   const [loadProg, setLoadProg] = useState<number>(0);
   const overlayActive = (wsState.phase === 'connecting' || wsState.phase === 'authenticating' || wsState.entryFee.pending);
@@ -230,6 +233,7 @@ function AppInner() {
           solPrice={solPrice}
           onPractice={onPractice}
           onTournament={onTournament}
+          onLeaderboard={() => setShowLeaderboard(true)}
         />
       )}
       {screen === 'practice' && (
@@ -256,6 +260,16 @@ function AppInner() {
           {toast}
         </div>
       )}
+
+      {/* Leaderboard Modal */}
+      {showLeaderboard && (
+        <Leaderboard
+          onClose={() => setShowLeaderboard(false)}
+          apiBase={API_BASE}
+          myWallet={publicKey || null}
+          isMobile={false}
+        />
+      )}
     </div>
   );
 }
@@ -278,7 +292,7 @@ function HeaderWallet({ screen }: { screen: string }) {
   return null;
 }
 
-function Landing({ solPrice, onPractice, onTournament }: { solPrice: number | null; onPractice: () => void; onTournament: () => void; }) {
+function Landing({ solPrice, onPractice, onTournament, onLeaderboard }: { solPrice: number | null; onPractice: () => void; onTournament: () => void; onLeaderboard?: () => void; }) {
   const { publicKey, isConnecting } = useWallet();
   const sendAnalytic = async (type: string, payload: any) => { try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, payload }) }); } catch {} };
   const handleTournament = async () => {
@@ -364,6 +378,7 @@ function Landing({ solPrice, onPractice, onTournament }: { solPrice: number | nu
         <div className="cta-section">
           <button className="cta-primary" onClick={handleTournament} disabled={isConnecting}><span className="cta-text">{isConnecting ? 'Opening wallet…' : 'Enter Tournament'}</span><div className="cta-glow"/></button>
           <button className="btn-secondary btn-small" onClick={onPractice}>Practice (Free)</button>
+          {onLeaderboard && <button className="btn-secondary btn-small" onClick={onLeaderboard} style={{ marginTop: '8px' }}>🏆 Leaderboard</button>}
           <div className="live-sol-price"><span className="price-label">SOL</span><span className="price-value">${solPrice?.toFixed(2) ?? '--'}</span></div>
         </div>
       </div>

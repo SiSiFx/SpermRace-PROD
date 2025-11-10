@@ -27,6 +27,8 @@ import { getWalletDeepLink, isMobileDevice } from './walletUtils';
 import { useWallet as useAdapterWallet } from '@solana/wallet-adapter-react';
 import { WsProvider, useWs } from './WsProvider';
 import NewGameView from './NewGameView';
+import { Leaderboard } from './Leaderboard';
+import './leaderboard.css';
 
 type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
 
@@ -52,6 +54,7 @@ function AppInner() {
   const wallet = useWallet();
   const { publicKey } = wallet;
   const [showHelp, setShowHelp] = useState<boolean>(false);
+  const [showLeaderboard, setShowLeaderboard] = useState<boolean>(false);
   
   // Loading progress for overlay
   const [loadProg, setLoadProg] = useState<number>(0);
@@ -200,6 +203,7 @@ function AppInner() {
           solPrice={solPrice}
           onPractice={onPractice}
           onTournament={onTournament}
+          onLeaderboard={() => setShowLeaderboard(true)}
         />
       )}
       {screen === 'practice' && (
@@ -230,6 +234,16 @@ function AppInner() {
           {toast}
         </div>
       )}
+
+      {/* Leaderboard Modal */}
+      {showLeaderboard && (
+        <Leaderboard
+          onClose={() => setShowLeaderboard(false)}
+          apiBase={API_BASE}
+          myWallet={publicKey || null}
+          isMobile={true}
+        />
+      )}
     </div>
   );
 }
@@ -252,7 +266,7 @@ function HeaderWallet({ screen }: { screen: string }) {
   return null;
 }
 
-function Landing({ solPrice, onPractice, onTournament }: { solPrice: number | null; onPractice: () => void; onTournament: () => void; }) {
+function Landing({ solPrice, onPractice, onTournament, onLeaderboard }: { solPrice: number | null; onPractice: () => void; onTournament: () => void; onLeaderboard?: () => void; }) {
   const { publicKey, isConnecting } = useWallet();
   const sendAnalytic = async (type: string, payload: any) => { try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, payload }) }); } catch {} };
   
@@ -318,6 +332,13 @@ function Landing({ solPrice, onPractice, onTournament }: { solPrice: number | nu
             <span className="icon">🎮</span>
             <span className="text">Practice (Free)</span>
           </button>
+
+          {onLeaderboard && (
+            <button className="mobile-btn-secondary" onClick={onLeaderboard} style={{ marginTop: '12px' }}>
+              <span className="icon">🏆</span>
+              <span className="text">Leaderboard</span>
+            </button>
+          )}
           
           <div className="mobile-sol-price">
             <span className="label">SOL</span>
