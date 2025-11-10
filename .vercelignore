@@ -1,0 +1,7 @@
+.git
+node_modules
+packages/server
+packages/shared
+*.md
+scripts
+docs

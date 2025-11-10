@@ -40,3 +40,4 @@ pids/
 # Temporary files
 *.tmp
 .cache/
+.vercel

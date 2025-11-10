@@ -1,5 +1,6 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "echo 'Using pre-built dist'",
+  "outputDirectory": "dist",
   "rewrites": [
     { "source": "/api/(.*)", "destination": "https://spermrace.io/api/$1" },
     { "source": "/ws", "destination": "https://spermrace.io/ws" }

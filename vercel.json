@@ -1,35 +1,23 @@
 {
-  "installCommand": "corepack enable && corepack prepare pnpm@10.18.2 --activate && pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm --filter shared build && pnpm --filter client build",
-  "outputDirectory": "packages/client/dist",
-  "framework": "vite",
-  "headers": [
+  "version": 2,
+  "builds": [
     {
-      "source": "/",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-store"
-        }
-      ]
+      "src": "packages/client/dist/**",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "https://spermrace.io/api/$1"
     },
     {
-      "source": "/index.html",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-store"
-        }
-      ]
+      "src": "/ws",
+      "dest": "https://spermrace.io/ws"
     },
     {
-      "source": "/assets/(.*)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=31536000, immutable"
-        }
-      ]
+      "src": "/(.*)",
+      "dest": "/packages/client/dist/$1"
     }
   ]
 }

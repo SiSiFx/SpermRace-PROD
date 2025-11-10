@@ -126,7 +126,13 @@ class SpermRaceGame {
     // Portrait mobile: Zoom out more to see the narrow arena better
     const isPortraitMobile = typeof window !== 'undefined' && window.innerHeight > window.innerWidth && window.innerWidth < 768;
     const defaultZoom = isPortraitMobile ? 0.6 : 0.8;
-    return { x: 0, y: 0, zoom: defaultZoom, targetZoom: defaultZoom, minZoom: 0.2, maxZoom: 1.5 };
+    return { 
+      x: 0, y: 0, 
+      zoom: defaultZoom, targetZoom: defaultZoom, 
+      minZoom: 0.2, maxZoom: 1.5,
+      // Screen shake for juicy feedback
+      shakeX: 0, shakeY: 0, shakeDecay: 0.85
+    };
   })();
   public cameraSmoothing: number = 0.10;
   // removed unused camSmooth
@@ -165,6 +171,16 @@ class SpermRaceGame {
   public killStreak: number = 0;
   public lastKillTime: number = 0;
   public killStreakNotifications: Array<{ text: string; time: number; x: number; y: number }> = [];
+  
+  // Combo system for addictive gameplay
+  public comboMultiplier: number = 1;
+  public comboKills: number = 0;
+  public lastComboTime: number = 0;
+  public comboWindowMs: number = 5000; // 5s window to maintain combo
+  
+  // Near-miss detection for skill rewards
+  public nearMisses: Array<{ text: string; time: number; x: number; y: number }> = [];
+  
   private easeOutBack(t: number): number { const c1 = 1.70158; const c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); }
   public overviewCanvas: HTMLCanvasElement | null = null;
   public overviewCtx: CanvasRenderingContext2D | null = null;
@@ -245,6 +261,61 @@ class SpermRaceGame {
   private sliceIndex: number = 0;
   private daySeed: number = 0;
   private slicePattern: Array<'left'|'right'|'top'|'bottom'> = [];
+
+  // JUICE METHODS - Make game feel amazing!
+  private screenShake(intensity: number = 1) {
+    // Shake intensity: 1 = normal, 2 = strong, 3 = mega
+    this.camera.shakeX = (Math.random() - 0.5) * 20 * intensity;
+    this.camera.shakeY = (Math.random() - 0.5) * 20 * intensity;
+  }
+
+  private hapticFeedback(pattern: 'light' | 'medium' | 'heavy' | 'success' | 'warning') {
+    try {
+      if (!navigator.vibrate) return;
+      
+      switch (pattern) {
+        case 'light':
+          navigator.vibrate(10);
+          break;
+        case 'medium':
+          navigator.vibrate(30);
+          break;
+        case 'heavy':
+          navigator.vibrate([50, 30, 50]);
+          break;
+        case 'success':
+          navigator.vibrate([30, 20, 50]);
+          break;
+        case 'warning':
+          navigator.vibrate([20, 10, 20, 10, 20]);
+          break;
+      }
+    } catch {}
+  }
+
+  private showComboNotification(x: number, y: number, combo: number) {
+    const texts = [
+      '', // 0
+      '', // 1
+      '🔥 DOUBLE KILL', // 2
+      '💥 TRIPLE KILL', // 3
+      '⚡ MEGA KILL', // 4
+      '🌟 ULTRA KILL', // 5
+      '👑 RAMPAGE', // 6+
+    ];
+    const text = combo >= texts.length ? `👑 ${combo}x RAMPAGE!` : texts[combo];
+    if (text) {
+      this.killStreakNotifications.push({ text, time: Date.now(), x, y });
+      this.screenShake(combo >= 3 ? 2 : 1);
+      this.hapticFeedback(combo >= 5 ? 'heavy' : 'success');
+    }
+  }
+
+  private showNearMiss(x: number, y: number, distance: number) {
+    const texts = distance < 15 ? '😱 INSANE DODGE!' : distance < 25 ? '🎯 CLOSE CALL' : '+DODGED';
+    this.nearMisses.push({ text: texts, time: Date.now(), x, y });
+    this.hapticFeedback('light');
+  }
 
   private computeDaySeed(): number {
     try {
@@ -336,9 +407,11 @@ class SpermRaceGame {
     
     // High-quality rendering settings
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const pixelRatio = window.devicePixelRatio || 1;
+    const rawPixelRatio = window.devicePixelRatio || 1;
+    // Cap at 2x on mobile to prevent 3x (9x pixels) on high-end phones - massive performance boost
+    const pixelRatio = isMobile ? Math.min(rawPixelRatio, 2) : rawPixelRatio;
     
-    console.log('[RENDERER] Resolution:', pixelRatio, 'Device:', isMobile ? 'Mobile' : 'Desktop');
+    console.log('[RENDERER] Resolution:', pixelRatio, 'Device:', isMobile ? 'Mobile' : 'Desktop', 'Raw DPR:', rawPixelRatio);
     
     this.app = new PIXI.Application();
     await this.app.init({
@@ -346,7 +419,7 @@ class SpermRaceGame {
       height,
       backgroundColor: 0x1a1a1a,
       antialias: true,
-      resolution: pixelRatio, // Use full device pixel ratio (2x on Retina, 3x on some phones)
+      resolution: pixelRatio, // Capped at 2x on mobile (was causing 9x pixels on 3x devices)
       autoDensity: true, // Auto-adjust CSS to match resolution
       powerPreference: 'high-performance' // Use better GPU
     });
@@ -367,11 +440,12 @@ class SpermRaceGame {
     if (canvas) {
       try { (canvas as any).tabIndex = 0; } catch {}
       try { (canvas as any).style.outline = 'none'; } catch {}
+      try { (canvas as any).style.touchAction = 'none'; } catch {} // Prevent browser gestures (pinch, zoom, pull-to-refresh)
       try { if (!this.container.contains(canvas)) this.container.appendChild(canvas); } catch {}
     } else {
       // Fallback: create a canvas to avoid null deref; Pixi will still render to its internal view
       const fallback = document.createElement('canvas');
-      try { fallback.width = width; fallback.height = height; fallback.style.outline = 'none'; } catch {}
+      try { fallback.width = width; fallback.height = height; fallback.style.outline = 'none'; fallback.style.touchAction = 'none'; } catch {}
       try { this.container.appendChild(fallback); } catch {}
     }
     
@@ -814,9 +888,9 @@ class SpermRaceGame {
       this.touch.active = false;
     };
     
-    this.app.canvas.addEventListener('touchstart', onTouchStart);
-    this.app.canvas.addEventListener('touchmove', onTouchMove);
-    this.app.canvas.addEventListener('touchend', onTouchEnd);
+    this.app.canvas.addEventListener('touchstart', onTouchStart, { passive: false });
+    this.app.canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+    this.app.canvas.addEventListener('touchend', onTouchEnd, { passive: false });
     this.cleanupFunctions.push(() => {
       this.app!.canvas.removeEventListener('touchstart', onTouchStart);
       this.app!.canvas.removeEventListener('touchmove', onTouchMove);
@@ -1273,8 +1347,9 @@ class SpermRaceGame {
       this.camera.zoom = zoom;
       this.camera.x = -this.player.x * zoom + viewW / 2;
       this.camera.y = -this.player.y * zoom + viewH / 2;
-      this.worldContainer.x = Math.round(this.camera.x);
-      this.worldContainer.y = Math.round(this.camera.y);
+      // Apply screen shake to camera
+      this.worldContainer.x = Math.round(this.camera.x + this.camera.shakeX);
+      this.worldContainer.y = Math.round(this.camera.y + this.camera.shakeY);
       this.worldContainer.scale.set(this.camera.zoom);
       try { this.drawBorderOverlay(); } catch {}
     } catch {}
@@ -1494,11 +1569,19 @@ class SpermRaceGame {
       this.player.isBoosting = true;
       this.player.targetSpeed = this.player.boostSpeed;
       
-      // Remove screen flash - causes big square glitch on mobile
-      // Visual feedback is handled by boost bar animation instead
-      
-      // Skip particle effect on mobile - causes visual glitches
+      // Enhanced boost feedback for mobile
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      
+      // Haptic feedback - makes boost feel punchy
+      this.hapticFeedback('medium');
+      
+      // Subtle camera zoom for speed sensation (FOV effect)
+      this.camera.targetZoom = Math.min(this.camera.zoom * 1.05, this.camera.maxZoom);
+      
+      // Light screen shake on boost start
+      this.screenShake(0.5);
+      
+      // Skip heavy particle effect on mobile - causes visual glitches
       if (!isMobile) {
         this.createBoostEffect(this.player.x, this.player.y);
       }
@@ -1662,12 +1745,19 @@ class SpermRaceGame {
     const followSmooth = this.preStart ? 1.0 : baseSmoothness;
     this.camera.x += (targetCamX - this.camera.x) * followSmooth;
     this.camera.y += (targetCamY - this.camera.y) * followSmooth;
+    
+    // Apply and decay screen shake
+    this.camera.shakeX *= this.camera.shakeDecay;
+    this.camera.shakeY *= this.camera.shakeDecay;
+    if (Math.abs(this.camera.shakeX) < 0.1) this.camera.shakeX = 0;
+    if (Math.abs(this.camera.shakeY) < 0.1) this.camera.shakeY = 0;
+    
     // Ensure player sprite stays visible after camera changes
     try { if (this.player?.sprite) this.player.sprite.visible = true; } catch {}
     
-    // Pixel-snapped placement to avoid subpixel shimmer on thin lines
-    this.worldContainer.x = Math.round(this.camera.x);
-    this.worldContainer.y = Math.round(this.camera.y);
+    // Pixel-snapped placement with shake applied to avoid subpixel shimmer on thin lines
+    this.worldContainer.x = Math.round(this.camera.x + this.camera.shakeX);
+    this.worldContainer.y = Math.round(this.camera.y + this.camera.shakeY);
     // Redraw crisp screen-space border overlay after camera updates
     try { this.drawBorderOverlay(); } catch {}
     this.worldContainer.scale.set(this.camera.zoom);
@@ -2001,12 +2091,13 @@ class SpermRaceGame {
   renderKillStreakNotifications() {
     if (!this.app) return;
     const now = Date.now();
-    const NOTIFICATION_LIFETIME = 2000;
+    const NOTIFICATION_LIFETIME = 2500; // Longer for better visibility
 
     // Filter expired notifications
     this.killStreakNotifications = this.killStreakNotifications.filter(n => now - n.time < NOTIFICATION_LIFETIME);
+    this.nearMisses = this.nearMisses.filter(n => now - n.time < 1500); // Shorter for near-misses
 
-    // Render notifications
+    // Render kill streak notifications with enhanced animation
     this.killStreakNotifications.forEach(notif => {
       const age = (now - notif.time) / 1000;
       const progress = age / (NOTIFICATION_LIFETIME / 1000);
@@ -2020,19 +2111,22 @@ class SpermRaceGame {
       if (!el) {
         el = document.createElement('div');
         el.id = `streak-${notif.time}`;
+        // Enhanced styling with scaling animation
+        const scale = progress < 0.2 ? 1 + (1 - progress / 0.2) * 0.5 : 1; // Pop in effect
         el.style.cssText = `
           position: fixed;
-          font-size: 20px;
+          font-size: ${24 * scale}px;
           font-weight: 900;
           color: #ffffff;
-          text-shadow: 0 0 10px rgba(255,100,0,0.8), 0 0 20px rgba(255,100,0,0.6);
+          text-shadow: 0 0 15px rgba(255,100,0,1), 0 0 30px rgba(255,100,0,0.8), 0 2px 4px rgba(0,0,0,0.8);
           pointer-events: none;
           z-index: 1000;
-          animation: slideUpFade 2s ease-out;
-          background: linear-gradient(90deg, #f43f5e, #fb923c);
+          background: linear-gradient(90deg, #f43f5e, #fb923c, #fbbf24);
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
           background-clip: text;
+          transform: scale(${scale});
+          filter: drop-shadow(0 0 10px rgba(251,146,60,0.6));
         `;
         el.textContent = notif.text;
         document.body.appendChild(el);
@@ -2043,6 +2137,40 @@ class SpermRaceGame {
       el.style.opacity = `${Math.max(0, 1 - progress)}`;
 
       // Remove element when expired
+      if (progress >= 1) {
+        try { if (el.parentElement) el.parentElement.removeChild(el); } catch {}
+      }
+    });
+    
+    // Render near-miss notifications
+    this.nearMisses.forEach(notif => {
+      const age = (now - notif.time) / 1000;
+      const progress = age / 1.5;
+
+      const sx = notif.x * this.camera.zoom + this.camera.x + this.app!.screen.width * 0.5;
+      const sy = notif.y * this.camera.zoom + this.camera.y + this.app!.screen.height * 0.5 - 40;
+
+      let el = document.getElementById(`miss-${notif.time}`);
+      if (!el) {
+        el = document.createElement('div');
+        el.id = `miss-${notif.time}`;
+        el.style.cssText = `
+          position: fixed;
+          font-size: 16px;
+          font-weight: 700;
+          color: #fbbf24;
+          text-shadow: 0 0 8px rgba(251,191,36,0.8), 0 1px 2px rgba(0,0,0,0.8);
+          pointer-events: none;
+          z-index: 999;
+        `;
+        el.textContent = notif.text;
+        document.body.appendChild(el);
+      }
+
+      el.style.left = `${sx}px`;
+      el.style.top = `${sy}px`;
+      el.style.opacity = `${Math.max(0, 1 - progress)}`;
+
       if (progress >= 1) {
         try { if (el.parentElement) el.parentElement.removeChild(el); } catch {}
       }
@@ -2604,6 +2732,9 @@ class SpermRaceGame {
     const cars = [this.player, this.bot, ...this.extraBots].filter((car): car is Car => car !== null && !car.destroyed);
 
     for (const car of cars) {
+      let closestMiss = Infinity; // Track closest near-miss for this frame
+      let missX = 0, missY = 0;
+      
       for (const trail of this.trails) {
         if (trail.points.length < 2) continue;
 
@@ -2631,9 +2762,21 @@ class SpermRaceGame {
             this.destroyCar(car);
             break;
           }
+          
+          // NEAR-MISS DETECTION - Reward skillful dodging!
+          if (car === this.player && !isSelfTrail && distance < 40 && distance < closestMiss) {
+            closestMiss = distance;
+            missX = (p1.x + p2.x) / 2;
+            missY = (p1.y + p2.y) / 2;
+          }
         }
 
         if (car.destroyed) break;
+      }
+      
+      // Show near-miss notification if player had a close call
+      if (car === this.player && closestMiss < 40 && Math.random() < 0.3) { // 30% chance to show (avoid spam)
+        this.showNearMiss(missX, missY, closestMiss);
       }
     }
   }
@@ -2646,6 +2789,17 @@ class SpermRaceGame {
     // Kill streak tracking for player
     if (killer === this.player) {
       const now = Date.now();
+      
+      // COMBO SYSTEM - Increases multiplier for rapid kills
+      if (now - this.lastComboTime < this.comboWindowMs) {
+        this.comboKills++;
+        this.comboMultiplier = 1 + (this.comboKills * 0.25); // +25% per combo kill
+      } else {
+        this.comboKills = 0;
+        this.comboMultiplier = 1;
+      }
+      this.lastComboTime = now;
+      
       // Reset streak if more than 5 seconds since last kill
       if (now - this.lastKillTime > 5000) {
         this.killStreak = 0;
@@ -2653,13 +2807,23 @@ class SpermRaceGame {
       this.killStreak++;
       this.lastKillTime = now;
 
-      // Show kill streak notification
-      if (this.killStreak >= 2) {
-        this.showKillStreakNotification(this.killStreak, victim.x, victim.y);
+      // Show enhanced combo notification with screen shake!
+      if (this.killStreak >= 2 || this.comboKills >= 1) {
+        this.showComboNotification(victim.x, victim.y, this.killStreak);
       }
 
-      // Haptic feedback for kills
-      try { navigator.vibrate?.([50, 30, 50]); } catch {}
+      // Enhanced haptic feedback based on combo
+      if (this.comboKills >= 3) {
+        this.hapticFeedback('heavy'); // Epic combo!
+      } else if (this.killStreak >= 2) {
+        this.hapticFeedback('success'); // Multi-kill
+      } else {
+        this.hapticFeedback('medium'); // Regular kill
+      }
+      
+      // Screen shake intensity based on streak
+      const shakeIntensity = Math.min(this.killStreak * 0.5, 3);
+      this.screenShake(shakeIntensity);
     }
   }
 
@@ -2865,6 +3029,10 @@ class SpermRaceGame {
           this.createExplosion(orb.x, orb.y, 0x00ffaa);
           this.pickupsContainer.removeChild(orb.graphics);
           this.pickups.splice(i, 1);
+          
+          // Satisfying pickup feedback!
+          this.hapticFeedback('light');
+          this.screenShake(0.3);
         }
       }
     }
@@ -3446,6 +3614,54 @@ class SpermRaceGame {
         boostBarLabel.classList.add('hud-pulse');
         setTimeout(() => { try { boostBarLabel.classList.remove('hud-pulse'); } catch {} }, 220);
       }
+    }
+    
+    // COMBO MULTIPLIER DISPLAY - Show when active!
+    this.updateComboDisplay();
+  }
+  
+  updateComboDisplay() {
+    const now = Date.now();
+    const comboActive = (now - this.lastComboTime) < this.comboWindowMs && this.comboKills > 0;
+    
+    let comboEl = document.getElementById('game-combo-display');
+    if (!comboEl) {
+      comboEl = document.createElement('div');
+      comboEl.id = 'game-combo-display';
+      comboEl.style.cssText = `
+        position: fixed;
+        top: 120px;
+        right: 20px;
+        padding: 12px 20px;
+        background: linear-gradient(135deg, rgba(251,146,60,0.95), rgba(244,63,94,0.95));
+        border: 2px solid #fbbf24;
+        border-radius: 12px;
+        font-size: 20px;
+        font-weight: 900;
+        color: #fff;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.8), 0 0 10px rgba(251,191,36,0.6);
+        z-index: 1000;
+        pointer-events: none;
+        box-shadow: 0 4px 12px rgba(251,146,60,0.5), 0 0 20px rgba(244,63,94,0.3);
+        transition: transform 0.2s, opacity 0.2s;
+      `;
+      document.body.appendChild(comboEl);
+    }
+    
+    if (comboActive) {
+      const timeLeft = this.comboWindowMs - (now - this.lastComboTime);
+      const progress = timeLeft / this.comboWindowMs;
+      const scale = 1 + (1 - progress) * 0.2; // Pulse as time runs out
+      
+      comboEl.textContent = `🔥 ${this.comboKills + 1}x COMBO! (${this.comboMultiplier.toFixed(1)}x)`;
+      comboEl.style.display = 'block';
+      comboEl.style.transform = `scale(${scale})`;
+      comboEl.style.opacity = '1';
+      comboEl.style.borderColor = progress < 0.3 ? '#ef4444' : '#fbbf24'; // Red when expiring
+    } else {
+      comboEl.style.opacity = '0';
+      comboEl.style.transform = 'scale(0.8)';
+      setTimeout(() => { comboEl!.style.display = 'none'; }, 200);
     }
   }
 
