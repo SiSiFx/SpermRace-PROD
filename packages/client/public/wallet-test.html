@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wallet Test - SpermRace.io</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+      background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+    h1 {
+      margin: 40px 0 20px;
+      font-size: 32px;
+      text-align: center;
+    }
+    .section {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      padding: 24px;
+      margin: 16px 0;
+      max-width: 600px;
+      width: 100%;
+    }
+    .section h2 {
+      font-size: 20px;
+      margin-bottom: 16px;
+      color: #22d3ee;
+    }
+    button {
+      background: linear-gradient(90deg, #22d3ee 0%, #6366f1 100%);
+      border: none;
+      border-radius: 8px;
+      color: #000;
+      font-size: 16px;
+      font-weight: 600;
+      padding: 12px 24px;
+      cursor: pointer;
+      margin: 8px 4px;
+      transition: transform 0.2s;
+    }
+    button:hover {
+      transform: translateY(-2px);
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .status {
+      background: rgba(0,0,0,0.3);
+      border-radius: 8px;
+      padding: 12px;
+      margin: 12px 0;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      word-break: break-all;
+    }
+    .success { color: #22d3ee; }
+    .error { color: #ef4444; }
+    #react-root { width: 100%; max-width: 600px; }
+  </style>
+</head>
+<body>
+  <h1>🔐 Wallet Connection Test</h1>
+
+  <div class="section">
+    <h2>Vanilla JavaScript Test</h2>
+    <button onclick="connectVanilla()">Connect (Vanilla)</button>
+    <button onclick="disconnectVanilla()">Disconnect</button>
+    <div id="vanilla-status" class="status">Status: Not connected</div>
+  </div>
+
+  <div id="react-root"></div>
+
+  <script>
+    let vanillaWallet = null;
+
+    async function connectVanilla() {
+      const status = document.getElementById('vanilla-status');
+      try {
+        status.textContent = 'Connecting...';
+
+        // Check for Phantom
+        if (window.solana && window.solana.isPhantom) {
+          status.textContent = 'Found Phantom, requesting connection...';
+          const resp = await window.solana.connect();
+          vanillaWallet = window.solana;
+          status.innerHTML = `<span class="success">✅ Connected to Phantom</span><br>Public Key: ${resp.publicKey.toString()}`;
+        } else {
+          status.innerHTML = '<span class="error">❌ Phantom wallet not found</span><br>Please install Phantom extension';
+        }
+      } catch (err) {
+        status.innerHTML = `<span class="error">❌ Connection failed</span><br>${err.message}`;
+      }
+    }
+
+    async function disconnectVanilla() {
+      const status = document.getElementById('vanilla-status');
+      try {
+        if (vanillaWallet) {
+          await vanillaWallet.disconnect();
+          vanillaWallet = null;
+        }
+        status.textContent = 'Status: Disconnected';
+      } catch (err) {
+        status.innerHTML = `<span class="error">❌ Disconnect failed</span><br>${err.message}`;
+      }
+    }
+  </script>
+
+  <!-- React Test (uncomment when needed) -->
+  <script type="module">
+    import React, { createElement as h, useState } from 'https://esm.sh/react@18';
+    import { createRoot } from 'https://esm.sh/react-dom@18/client';
+
+    function ReactWalletTest() {
+      const [status, setStatus] = useState('Not connected');
+      const [wallet, setWallet] = useState(null);
+
+      async function connect() {
+        try {
+          setStatus('Connecting...');
+          if (window.solana && window.solana.isPhantom) {
+            const resp = await window.solana.connect();
+            setWallet(resp.publicKey.toString());
+            setStatus('✅ Connected via React: ' + resp.publicKey.toString().slice(0, 8) + '...');
+          } else {
+            setStatus('❌ Phantom not found');
+          }
+        } catch (err) {
+          setStatus('❌ Error: ' + err.message);
+        }
+      }
+
+      async function disconnect() {
+        try {
+          if (window.solana) {
+            await window.solana.disconnect();
+            setWallet(null);
+            setStatus('Disconnected');
+          }
+        } catch (err) {
+          setStatus('❌ Error: ' + err.message);
+        }
+      }
+
+      return h('div', { className: 'section' },
+        h('h2', null, 'React Test'),
+        h('button', { onClick: connect }, 'Connect (React)'),
+        h('button', { onClick: disconnect }, 'Disconnect'),
+        h('div', { className: 'status' }, status)
+      );
+    }
+
+    const root = createRoot(document.getElementById('react-root'));
+    root.render(h(ReactWalletTest));
+  </script>
+</body>
+</html>

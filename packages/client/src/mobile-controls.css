@@ -1,0 +1,480 @@
+/* =================================================================
+   MOBILE TOUCH CONTROLS - Virtual Joystick + Boost Button
+   ================================================================= */
+
+/* Virtual Joystick - Left Side - Compact for better visibility */
+.mobile-joystick {
+  position: fixed;
+  bottom: 100px; /* Lower for easier reach */
+  left: 20px;
+  width: 140px; /* Smaller for less screen blocking */
+  height: 140px;
+  z-index: 1000;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  pointer-events: all;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.joystick-base {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.joystick-ring {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, rgba(34, 211, 238, 0.15), rgba(34, 211, 238, 0.08));
+  border: 2px solid rgba(34, 211, 238, 0.5);
+  box-shadow:
+    0 0 20px rgba(34, 211, 238, 0.3),
+    inset 0 0 15px rgba(34, 211, 238, 0.1);
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.mobile-joystick.active .joystick-ring {
+  border-color: rgba(34, 211, 238, 0.8);
+  box-shadow:
+    0 0 30px rgba(34, 211, 238, 0.5),
+    inset 0 0 30px rgba(34, 211, 238, 0.2);
+  transform: scale(1.05);
+}
+
+.joystick-stick {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 40px;
+  height: 40px;
+  margin-left: -20px;
+  margin-top: -20px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, rgba(99, 102, 241, 0.95), rgba(99, 102, 241, 0.75));
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  box-shadow:
+    0 4px 15px rgba(0, 0, 0, 0.4),
+    inset 0 2px 8px rgba(255, 255, 255, 0.4);
+  transition: transform 0.05s ease-out;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.mobile-joystick.active .joystick-stick {
+  background: radial-gradient(circle at 35% 35%, rgba(34, 211, 238, 0.95), rgba(34, 211, 238, 0.8));
+  box-shadow:
+    0 6px 16px rgba(34, 211, 238, 0.4),
+    inset 0 2px 8px rgba(255, 255, 255, 0.4);
+}
+
+.joystick-hint {
+  position: absolute;
+  bottom: -35px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.6);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+  letter-spacing: 1px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Add steering arrows on joystick */
+.joystick-ring::before {
+  content: '↖';
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.4);
+  font-weight: bold;
+}
+
+/* Removed duplicate STEER text - using joystick-hint instead */
+
+/* Boost Button - Right Side - Compact for better visibility */
+.mobile-boost-button {
+  position: fixed;
+  bottom: 100px; /* Lower for easier reach */
+  right: 20px;
+  width: 120px; /* Smaller for less screen blocking */
+  height: 120px;
+  border-radius: 0;
+  border: none;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  transition: none; /* Remove transitions for instant response */
+  z-index: 1001;
+  pointer-events: auto;
+}
+
+/* Visual button inside touch area - Smaller */
+.mobile-boost-button::before {
+  content: '';
+  position: absolute;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, rgba(251, 146, 60, 0.3), rgba(251, 146, 60, 0.15));
+  border: 2px solid rgba(251, 146, 60, 0.6);
+  box-shadow:
+    0 4px 20px rgba(251, 146, 60, 0.3),
+    inset 0 2px 8px rgba(255, 255, 255, 0.1);
+  pointer-events: none;
+}
+
+.mobile-boost-button.ready::before {
+  background: radial-gradient(circle at 30% 30%, rgba(34, 211, 238, 0.4), rgba(34, 211, 238, 0.2));
+  border-color: rgba(34, 211, 238, 0.8);
+  box-shadow:
+    0 6px 24px rgba(34, 211, 238, 0.5),
+    inset 0 2px 8px rgba(255, 255, 255, 0.2);
+  animation: pulse-boost 2s ease-in-out infinite;
+}
+
+.mobile-boost-button.ready:active::before {
+  transform: scale(0.92);
+  box-shadow:
+    0 3px 12px rgba(34, 211, 238, 0.6),
+    inset 0 2px 8px rgba(255, 255, 255, 0.3);
+}
+
+.mobile-boost-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.boost-icon {
+  font-size: 28px;
+  line-height: 1;
+  margin-bottom: 2px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+  transition: all 0.2s ease;
+  position: relative;
+  z-index: 2;
+}
+
+.mobile-boost-button.ready .boost-icon {
+  animation: zap 0.8s ease-in-out infinite;
+}
+
+.boost-label {
+  font-size: 9px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.8);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  letter-spacing: 0.5px;
+  position: relative;
+  z-index: 2;
+}
+
+/* Remove boost arrow indicator - causing visual glitch */
+.mobile-boost-button::after {
+  display: none !important;
+}
+
+/* Cooldown ring visualization */
+.boost-cooldown-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  margin-left: -34px;
+  margin-top: -34px;
+  width: 68px;
+  height: 68px;
+  pointer-events: none;
+  transform: rotate(-90deg);
+  z-index: 1;
+}
+
+.cooldown-bg {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.1);
+  stroke-width: 2;
+}
+
+.cooldown-progress {
+  fill: none;
+  stroke: rgba(34, 211, 238, 0.9);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 200;
+  transition: stroke-dashoffset 0.3s linear;
+  filter: drop-shadow(0 0 6px rgba(34, 211, 238, 0.6));
+}
+
+/* Touch hints (fade out after first interaction) */
+.mobile-touch-hint {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.75);
+  border-radius: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+  z-index: 999;
+  pointer-events: none;
+  animation: fadeOutHint 3s ease-in-out 2s forwards;
+}
+
+.hint-arrow-left,
+.hint-arrow-right {
+  font-size: 32px;
+  animation: bounce-horizontal 1.5s ease-in-out infinite;
+}
+
+.hint-arrow-right {
+  animation-delay: 0.75s;
+}
+
+.hint-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  text-align: center;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+/* Animations */
+@keyframes pulse-boost {
+  0%, 100% {
+    box-shadow:
+      0 6px 24px rgba(34, 211, 238, 0.5),
+      inset 0 2px 8px rgba(255, 255, 255, 0.2);
+  }
+  50% {
+    box-shadow:
+      0 8px 32px rgba(34, 211, 238, 0.7),
+      inset 0 2px 12px rgba(255, 255, 255, 0.3);
+  }
+}
+
+@keyframes zap {
+  0%, 100% {
+    transform: scale(1) rotate(0deg);
+    filter: drop-shadow(0 2px 4px rgba(34, 211, 238, 0.5));
+  }
+  25% {
+    transform: scale(1.1) rotate(-5deg);
+    filter: drop-shadow(0 4px 8px rgba(34, 211, 238, 0.8));
+  }
+  75% {
+    transform: scale(1.1) rotate(5deg);
+    filter: drop-shadow(0 4px 8px rgba(34, 211, 238, 0.8));
+  }
+}
+
+@keyframes bounce-horizontal {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(8px);
+  }
+}
+
+@keyframes fadeOutHint {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    display: none;
+  }
+}
+
+/* Landscape orientation warning */
+.orientation-warning {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.95);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  z-index: 10000;
+  padding: 40px;
+  text-align: center;
+}
+
+.orientation-icon {
+  font-size: 80px;
+  animation: rotate-phone 2s ease-in-out infinite;
+}
+
+.orientation-message {
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.orientation-subtitle {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.7);
+  max-width: 300px;
+}
+
+@keyframes rotate-phone {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-10deg);
+  }
+  75% {
+    transform: rotate(10deg);
+  }
+}
+
+/* Portrait mode adjustments for smaller screens */
+@media (max-height: 600px) and (orientation: portrait) {
+  .mobile-joystick {
+    bottom: 80px;
+    left: 20px;
+    width: 140px;
+    height: 140px;
+  }
+
+  .joystick-ring {
+    width: 70px;
+    height: 70px;
+  }
+
+  .joystick-stick {
+    width: 35px;
+    height: 35px;
+    margin-left: -17.5px;
+    margin-top: -17.5px;
+  }
+
+  .mobile-boost-button {
+    bottom: 80px;
+    right: 20px;
+    width: 120px;
+    height: 120px;
+  }
+
+  .boost-icon {
+    font-size: 24px;
+  }
+
+  .boost-cooldown-ring {
+    width: 70px;
+    height: 70px;
+  }
+}
+
+/* Tablet adjustments */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .mobile-joystick {
+    width: 160px;
+    height: 160px;
+    bottom: 100px;
+    left: 60px;
+  }
+
+  .joystick-ring {
+    width: 140px;
+    height: 140px;
+  }
+
+  .joystick-stick {
+    width: 70px;
+    height: 70px;
+    margin-left: -35px;
+    margin-top: -35px;
+  }
+
+  .mobile-boost-button {
+    width: 120px;
+    height: 120px;
+    bottom: 100px;
+    right: 60px;
+  }
+
+  .boost-icon {
+    font-size: 48px;
+  }
+
+  .boost-cooldown-ring {
+    width: 130px;
+    height: 130px;
+  }
+}
+
+/* Safe area insets for notched devices - CRITICAL for iPhone */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .mobile-joystick {
+    bottom: calc(120px + env(safe-area-inset-bottom));
+    left: calc(24px + env(safe-area-inset-left));
+  }
+
+  .mobile-boost-button {
+    bottom: calc(120px + env(safe-area-inset-bottom));
+    right: calc(24px + env(safe-area-inset-right));
+  }
+}
+
+/* Extra small screens adjustment */
+@media (max-width: 375px) and (orientation: portrait) {
+  .mobile-joystick {
+    bottom: 100px;
+    left: 16px;
+    width: 120px;
+    height: 120px;
+  }
+
+  .mobile-boost-button {
+    bottom: 100px;
+    right: 16px;
+    width: 100px;
+    height: 100px;
+  }
+
+  .joystick-ring {
+    width: 60px;
+    height: 60px;
+  }
+
+  .joystick-stick {
+    width: 30px;
+    height: 30px;
+    margin-left: -15px;
+    margin-top: -15px;
+  }
+
+  .mobile-boost-button::before {
+    width: 50px;
+    height: 50px;
+  }
+
+  .boost-icon {
+    font-size: 20px;
+  }
+}
+

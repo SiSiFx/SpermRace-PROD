@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sperm Animation Test</title>
+  <style>
+    body { margin: 0; background-color: #0a0a0f; overflow: hidden; }
+    canvas { display: block; }
+    #sperm-controls {
+      position: fixed; top: 10px; right: 10px; z-index: 5;
+      background: rgba(10,10,15,0.85); border: 1px solid #333;
+      border-radius: 8px; padding: 10px 12px; color: #eee;
+      font-family: sans-serif; font-size: 12px;
+    }
+    .sc-row{ display:flex; align-items:center; gap:8px; margin:6px 0; }
+    .sc-row input{ width: 140px; }
+    .sc-row label { min-width: 60px; }
+  </style>
+</head>
+<body>
+  <div id="sperm-controls">
+    <div class="sc-row"><label>Count</label><input id="sc-count" type="range" min="10" max="150" step="5"><span id="sc-count-val"></span></div>
+    <div class="sc-row"><label>Wiggle</label><input id="sc-wiggle" type="range" min="0.5" max="5.0" step="0.1"><span id="sc-wiggle-val"></span></div>
+    <div class="sc-row"><label>Speed</label><input id="sc-speed" type="range" min="0.2" max="3.0" step="0.1"><span id="sc-speed-val"></span></div>
+    <div class="sc-row"><label>Tail Len</label><input id="sc-taill" type="range" min="80" max="200" step="5"><span id="sc-taill-val"></span></div>
+    <div class="sc-row"><label>Tail Width</label><input id="sc-tailw" type="range" min="0.5" max="4.0" step="0.1"><span id="sc-tailw-val"></span></div>
+  </div>
+  <script type="importmap">
+    { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+
+    let scene, camera, renderer, swarm = [];
+    let width = window.innerWidth, height = window.innerHeight;
+
+    function init() {
+      scene = new THREE.Scene();
+      camera = new THREE.OrthographicCamera(-width / 2, width / 2, height / 2, -height / 2, 0.1, 2000);
+      camera.position.z = 1000;
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setSize(width, height);
+      renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+      document.body.appendChild(renderer.domElement);
+
+      const hemi = new THREE.HemisphereLight(0xffffff, 0x111122, 1.0);
+      scene.add(hemi);
+      const key = new THREE.DirectionalLight(0xffffff, 1.2);
+      key.position.set(0.4, 0.8, 1.0);
+      scene.add(key);
+      
+      setupControls();
+      rebuildSwarm();
+      animate();
+    }
+
+    class Sperm3D {
+      group; head; neck; tail;
+      dir = Math.random() * Math.PI * 2;
+      speed = 80 + Math.random() * 40; // Faster initial speed
+      phase = Math.random() * Math.PI * 2;
+      wiggle = 5.0;
+      tailLength = 80;
+      tailWidth = 0.5;
+      pos;
+      // Realistic swimming parameters
+      swimCycleSpeed = 8.0 + Math.random() * 4.0;
+      headBobAmplitude = 0.15;
+      tailFlexibility = 0.85;
+      propulsionForce = 0.12;
+      // Performance optimization
+      lastGeometryUpdate = 0;
+      geometryUpdateInterval = 0.016; // 60fps geometry updates
+
+      constructor() {
+        this.group = new THREE.Group();
+        scene.add(this.group);
+        this.pos = new THREE.Vector3((Math.random() - 0.5) * width, (Math.random() - 0.5) * height, (Math.random() - 0.5) * 60);
+        this.group.position.copy(this.pos);
+
+        // Enhanced realistic material with better subsurface scattering simulation
+        const spermMat = new THREE.MeshPhysicalMaterial({
+          color: 0xf8f8ff,
+          metalness: 0.01,
+          roughness: 0.12,
+          ior: 1.38,
+          transmission: 0.88,
+          thickness: 2.5,
+          transparent: true,
+          opacity: 0.94,
+          emissive: 0x111111,
+          emissiveIntensity: 0.06,
+          clearcoat: 0.4,
+          clearcoatRoughness: 0.08
+        });
+
+        // Highly realistic head: custom ellipsoid with biological proportions
+        const headGeo = new THREE.SphereGeometry(3.8, 24, 16);
+        this.head = new THREE.Mesh(headGeo, spermMat.clone());
+        this.head.scale.set(2.1, 1.0, 0.75);
+        this.head.position.set(2.5, 0, 0);
+        this.group.add(this.head);
+
+        // Mitochondrial sheath (neck) - more anatomically correct
+        const neckGeo = new THREE.CylinderGeometry(0.6, 1.2, 3.5, 12, 1, false);
+        this.neck = new THREE.Mesh(neckGeo, spermMat.clone());
+        this.neck.rotation.z = Math.PI / 2;
+        this.neck.position.x = -1.8;
+        this.group.add(this.neck);
+
+        // Enhanced material properties for realism
+        this.head.material.color.setHex(0xfafafa);
+        this.neck.material.color.setHex(0xf0f0f0);
+        this.head.material.emissiveIntensity = 0.08;
+        this.neck.material.emissiveIntensity = 0.06;
+
+        const tailSegments = 40; // Further reduced for better performance
+        const positions = new Float32Array((tailSegments + 1) * 2 * 3);
+        const indices = new Uint32Array(tailSegments * 6);
+        for (let i = 0; i < tailSegments; i++) {
+            const i0 = i * 2; const i1 = (i + 1) * 2;
+            const base = i * 6;
+            indices[base + 0] = i0; indices[base + 1] = i1; indices[base + 2] = i0 + 1;
+            indices[base + 3] = i1; indices[base + 4] = i1 + 1; indices[base + 5] = i0 + 1;
+        }
+        const tailGeom = new THREE.BufferGeometry();
+        tailGeom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        tailGeom.setIndex(new THREE.BufferAttribute(indices, 1));
+        
+        const tailMat = new THREE.MeshBasicMaterial({
+            color: 0xffffff, transparent: true, opacity: 0.85, side: THREE.DoubleSide
+        });
+        
+        this.tail = new THREE.Mesh(tailGeom, tailMat);
+        this.group.add(this.tail);
+        this.tail.frustumCulled = false;
+        this.update(0.016);
+      }
+
+      destroy() {
+        scene.remove(this.group);
+      }
+      
+      update(dt, updateGeometry = true) {
+        this.phase += dt * this.swimCycleSpeed;
+        this.lastGeometryUpdate += dt;
+        
+        // Enhanced movement with realistic swimming patterns
+        const swimVariation = Math.sin(this.phase * 2.0) * 0.3;
+        const currentSpeed = this.speed * (1.0 + swimVariation) * dt;
+        
+        // Smoother direction changes with momentum
+        const directionChange = (Math.random() - 0.5) * 0.06;
+        this.dir += directionChange;
+        
+        // Move forward based on current direction
+        const vx = Math.cos(this.dir) * currentSpeed;
+        const vy = Math.sin(this.dir) * currentSpeed;
+        
+        this.pos.x += vx;
+        this.pos.y += vy;
+        
+        // Improved boundary handling with smoother transitions
+        const margin = 80;
+        const turnZone = 60;
+        const headerHeight = 120;
+        let needsTurn = false;
+        let targetDir = this.dir;
+        
+        // Enhanced boundary collision with smoother turning
+        if (this.pos.x < -width / 2 + margin) {
+          const penetration = (-width / 2 + margin) - this.pos.x;
+          const turnStrength = Math.min(1, penetration / turnZone);
+          
+          if (this.pos.x < -width / 2 + margin - turnZone) {
+            this.pos.x = -width / 2 + margin - turnZone;
+          }
+          
+          targetDir = Math.atan2(this.pos.y, Math.abs(this.pos.x)) + (Math.random() - 0.5) * 0.3;
+          this.dir += (targetDir - this.dir) * turnStrength * 0.15;
+          needsTurn = true;
+        }
+        
+        if (this.pos.x > width / 2 - margin) {
+          const penetration = this.pos.x - (width / 2 - margin);
+          const turnStrength = Math.min(1, penetration / turnZone);
+          
+          if (this.pos.x > width / 2 - margin + turnZone) {
+            this.pos.x = width / 2 - margin + turnZone;
+          }
+          
+          targetDir = Math.atan2(this.pos.y, -Math.abs(this.pos.x)) + (Math.random() - 0.5) * 0.3;
+          this.dir += (targetDir - this.dir) * turnStrength * 0.15;
+          needsTurn = true;
+        }
+        
+        if (this.pos.y < -height / 2 + margin + headerHeight) {
+          const penetration = (-height / 2 + margin + headerHeight) - this.pos.y;
+          const turnStrength = Math.min(1, penetration / turnZone);
+          
+          if (this.pos.y < -height / 2 + margin + headerHeight - turnZone) {
+            this.pos.y = -height / 2 + margin + headerHeight - turnZone;
+          }
+          
+          targetDir = Math.PI / 2 + (Math.random() - 0.5) * 0.5;
+          this.dir += (targetDir - this.dir) * turnStrength * 0.25;
+          needsTurn = true;
+        }
+        
+        if (this.pos.y > height / 2 - margin) {
+          const penetration = this.pos.y - (height / 2 - margin);
+          const turnStrength = Math.min(1, penetration / turnZone);
+          
+          if (this.pos.y > height / 2 - margin + turnZone) {
+            this.pos.y = height / 2 - margin + turnZone;
+          }
+          
+          targetDir = Math.atan2(-Math.abs(this.pos.y), this.pos.x) + (Math.random() - 0.5) * 0.3;
+          this.dir += (targetDir - this.dir) * turnStrength * 0.15;
+          needsTurn = true;
+        }
+        
+        // Enhanced center obstacle avoidance with smoother flow
+        const dx = this.pos.x, dy = this.pos.y; 
+        const dist = Math.hypot(dx, dy);
+        const obstacleRadius = 100;
+        
+        if (dist < obstacleRadius + 60) {
+          const repulsionDir = Math.atan2(dy, dx);
+          const turnStrength = Math.max(0.1, (obstacleRadius + 60 - dist) / 60);
+          
+          let targetDir = repulsionDir;
+          let dirDiff = targetDir - this.dir;
+          
+          while (dirDiff > Math.PI) dirDiff -= 2 * Math.PI;
+          while (dirDiff < -Math.PI) dirDiff += 2 * Math.PI;
+          
+          this.dir += dirDiff * turnStrength * 0.25;
+          
+          if (dist < obstacleRadius + 30) {
+            const tangentDir = repulsionDir + Math.PI * 0.5 * Math.sign(dirDiff);
+            this.dir = this.dir * 0.7 + tangentDir * 0.3;
+            
+            const pushForce = (obstacleRadius + 30 - dist) / 30;
+            this.pos.x += Math.cos(repulsionDir) * pushForce * 2.5;
+            this.pos.y += Math.sin(repulsionDir) * pushForce * 2.5;
+          }
+        }
+        
+        // Realistic head bobbing during swimming
+        const headBob = Math.sin(this.phase * 1.8) * this.headBobAmplitude;
+        this.group.position.copy(this.pos);
+        this.group.rotation.z = this.dir + headBob * 0.2;
+
+        // Optimized geometry updates - only update when needed
+        const shouldUpdateGeometry = updateGeometry && this.lastGeometryUpdate >= this.geometryUpdateInterval;
+        if (shouldUpdateGeometry) {
+          this.lastGeometryUpdate = 0;
+          this.updateTailGeometry();
+        }
+      }
+
+      updateTailGeometry() {
+        const pos = this.tail.geometry.attributes.position.array;
+        const tailSegments = 40;
+
+        // Enhanced flagellar wave propagation
+        for (let i = 0; i <= tailSegments; i++) {
+            const t = i / tailSegments;
+            const x = -(i * (this.tailLength / tailSegments) + 4.0);
+            
+            const waveFrequency = 15.0;
+            const wavePhase = this.phase * 2.5 - t * waveFrequency;
+            
+            const primaryWave = Math.sin(wavePhase) * this.wiggle;
+            const secondaryWave = Math.sin(wavePhase * 1.3 + Math.PI * 0.25) * this.wiggle * 0.6;
+            const tertiaryWave = Math.cos(wavePhase * 0.8) * this.wiggle * 0.4;
+            
+            const baseAmplitude = 0.1 + 0.9 * Math.pow(Math.sin(Math.PI * t), 1.4);
+            const flexibilityTaper = Math.pow(1.0 - t, this.tailFlexibility);
+            const totalAmplitude = baseAmplitude * flexibilityTaper;
+            
+            const y = (primaryWave + secondaryWave) * totalAmplitude * 0.8;
+            const z = (primaryWave * 0.7 + tertiaryWave) * totalAmplitude * 0.6;
+            
+            const deltaT = 1.0 / tailSegments;
+            const nextWavePhase = this.phase * 2.5 - (t + deltaT) * waveFrequency;
+            const nextPrimary = Math.sin(nextWavePhase) * this.wiggle;
+            const nextSecondary = Math.sin(nextWavePhase * 1.3 + Math.PI * 0.25) * this.wiggle * 0.6;
+            const nextTertiary = Math.cos(nextWavePhase * 0.8) * this.wiggle * 0.4;
+            const nextAmplitude = (0.1 + 0.9 * Math.pow(Math.sin(Math.PI * (t + deltaT)), 1.4)) * 
+                                 Math.pow(1.0 - (t + deltaT), this.tailFlexibility);
+            
+            const xNext = -(i + 1) * (this.tailLength / tailSegments) + 4.0;
+            const yNext = (nextPrimary + nextSecondary) * nextAmplitude * 0.8;
+            const zNext = (nextPrimary * 0.7 + nextTertiary) * nextAmplitude * 0.6;
+
+            let tx = xNext - x, ty = yNext - y, tz = zNext - z;
+            const len = Math.max(0.0001, Math.sqrt(tx*tx + ty*ty + tz*tz));
+            tx /= len; ty /= len; tz /= len;
+            
+            const tangent = new THREE.Vector3(tx, ty, tz);
+            const up = new THREE.Vector3(0.1, 0.1, 0.98).normalize();
+            const normal = up.clone().cross(tangent).normalize();
+            
+            const width = this.tailWidth * Math.pow(1.0 - t, 0.8) + 0.08;
+            const base = i * 2 * 3;
+            pos[base + 0] = x + normal.x * width; pos[base + 1] = y + normal.y * width; pos[base + 2] = z + normal.z * width;
+            pos[base + 3] = x - normal.x * width; pos[base + 4] = y - normal.y * width; pos[base + 5] = z - normal.z * width;
+        }
+        this.tail.geometry.attributes.position.needsUpdate = true;
+        this.tail.geometry.computeBoundingSphere();
+      }
+    }
+
+    let last = performance.now();
+    let frameCount = 0;
+    function animate() {
+      const now = performance.now();
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      frameCount++;
+      
+      // Optimized rendering with intelligent batching
+      const updateBatch = Math.max(6, Math.floor(swarm.length / 6));
+      const startIdx = (frameCount * updateBatch) % swarm.length;
+      
+      for (let i = 0; i < swarm.length; i++) {
+        const s = swarm[i];
+        const updateGeometry = (i >= startIdx && i < startIdx + updateBatch) || 
+                             (startIdx + updateBatch > swarm.length && i < (startIdx + updateBatch) % swarm.length);
+        s.update(dt, updateGeometry);
+      }
+      
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    }
+    
+    function rebuildSwarm() {
+        for(const s of swarm) s.destroy();
+        const count = parseInt(document.getElementById('sc-count').value, 10);
+        swarm = Array.from({length: count}, () => new Sperm3D());
+        updateAllSperm();
+    }
+    
+    function updateAllSperm() {
+        const wiggle = parseFloat(document.getElementById('sc-wiggle').value);
+        const speed = parseFloat(document.getElementById('sc-speed').value);
+        const tailL = parseFloat(document.getElementById('sc-taill').value);
+        const tailW = parseFloat(document.getElementById('sc-tailw').value);
+        for(const s of swarm) {
+            s.wiggle = wiggle;
+            s.speed = 80 + speed * 80 + Math.random() * 40; // Much faster and more consistent speed
+            s.tailLength = tailL;
+            s.tailWidth = tailW;
+        }
+    }
+
+    function setupControls() {
+        const controls = [
+          {id: 'count', valId: 'sc-count-val', prop: 'count', initial: '20', onInput: rebuildSwarm},
+          {id: 'wiggle', valId: 'sc-wiggle-val', prop: 'wiggle', initial: '5.0', onInput: updateAllSperm},
+          {id: 'speed', valId: 'sc-speed-val', prop: 'speed', initial: '1.0', onInput: updateAllSperm},
+          {id: 'taill', valId: 'sc-taill-val', prop: 'tailLength', initial: '80', onInput: updateAllSperm},
+          {id: 'tailw', valId: 'sc-tailw-val', prop: 'tailWidth', initial: '0.5', onInput: updateAllSperm}
+        ];
+        
+        controls.forEach(c => {
+            const input = document.getElementById(`sc-${c.id}`);
+            const valEl = document.getElementById(c.valId);
+            input.value = c.initial;
+            valEl.textContent = c.initial;
+            input.addEventListener('input', () => {
+                valEl.textContent = input.value;
+                c.onInput();
+            });
+        });
+    }
+
+    window.addEventListener('resize', () => {
+        width = window.innerWidth;
+        height = window.innerHeight;
+        camera.left = -width/2; camera.right = width/2; camera.top = height/2; camera.bottom = -height/2;
+        camera.updateProjectionMatrix();
+        renderer.setSize(width, height);
+    });
+
+    init();
+  </script>
+</body>
+</html>

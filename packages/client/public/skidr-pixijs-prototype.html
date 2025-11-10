@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>SpermRace.io - PixiJS Prototype</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #000;
+            overflow: hidden;
+            touch-action: none;
+            font-family: Arial, sans-serif;
+        }
+        
+        #gameContainer {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        #instructions {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #00ffff;
+            font-size: 14px;
+            z-index: 100;
+            text-shadow: 0 0 10px #00ffff;
+        }
+        
+        #minimap {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 150px;
+            height: 150px;
+            border: 2px solid #00ffff;
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+        }
+        
+        #zoomControls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        #boostBar {
+            position: absolute;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 200px;
+            height: 12px;
+            background: rgba(0, 0, 0, 0.7);
+            border: 2px solid #00ffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.3);
+        }
+        
+        #boostBarFill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff6b00, #ffaa00);
+            border-radius: 4px;
+            transition: width 0.1s ease-out;
+            box-shadow: 0 0 10px rgba(255, 170, 0, 0.5);
+        }
+        
+        #boostBarLabel {
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #00ffff;
+            font-size: 12px;
+            text-shadow: 0 0 8px #00ffff;
+            font-weight: bold;
+        }
+        
+        #trailStatus {
+            position: absolute;
+            top: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #00ffff;
+            font-size: 14px;
+            text-shadow: 0 0 10px #00ffff;
+            font-weight: bold;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 8px 16px;
+            border-radius: 20px;
+            border: 2px solid #00ffff;
+            transition: all 0.3s ease;
+        }
+        
+        #trailStatus.active {
+            color: #ff6600;
+            border-color: #ff6600;
+            text-shadow: 0 0 15px #ff6600;
+            background: rgba(255, 102, 0, 0.1);
+        }
+        
+        #trailStatus.cooldown {
+            color: #888;
+            border-color: #888;
+            text-shadow: 0 0 10px #888;
+            background: rgba(136, 136, 136, 0.1);
+        }
+        
+        .zoom-btn {
+            width: 45px;
+            height: 45px;
+            background: linear-gradient(45deg, #ff69b4, #ff1493);
+            border: 3px solid #fff;
+            color: #fff;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            font-weight: bold;
+            transition: all 0.3s;
+            box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
+        }
+        
+        .zoom-btn:hover {
+            transform: scale(1.1);
+            background: linear-gradient(45deg, #ff1493, #ff69b4);
+            box-shadow: 0 8px 25px rgba(255, 105, 180, 0.7);
+        }
+        
+        @media (max-width: 768px) {
+            #instructions {
+                font-size: 12px;
+                right: 10px;
+                left: 10px;
+                text-align: center;
+            }
+            
+            #minimap {
+                width: 120px;
+                height: 120px;
+            }
+            
+            .zoom-btn {
+                width: 40px;
+                height: 40px;
+                font-size: 18px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="instructions">
+        Desktop: Mouse to steer, Space to boost & drift (bigger trail), Scroll to zoom<br>
+        Mobile: Touch/drag to steer, Double-tap to boost & drift (bigger trail), Pinch to zoom
+    </div>
+    <div id="trailStatus">NORMAL TRAIL</div>
+    <div id="zoomControls">
+        <button class="zoom-btn" id="zoomIn">+</button>
+        <button class="zoom-btn" id="zoomOut">-</button>
+    </div>
+    <canvas id="minimap"></canvas>
+    <div id="boostBarLabel">💪 ENERGY</div>
+    <div id="boostBar">
+        <div id="boostBarFill"></div>
+    </div>
+    <div id="gameContainer"></div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
+    <script>
+        class SpermRaceGame {
+            constructor() {
+                this.app = null;
+                this.arena = { width: 2400, height: 1800 };
+                this.player = null;
+                this.bot = null;
+                this.trails = [];
+                this.particles = [];
+                this.keys = {};
+                this.mouse = { x: 0, y: 0 };
+                this.touch = { active: false, x: 0, y: 0, lastTap: 0 };
+                this.trailActive = false;
+                this.trailCooldown = 0;
+                this.trailDuration = 0;
+                this.camera = { x: 0, y: 0, zoom: 0.8, targetZoom: 0.8, minZoom: 0.3, maxZoom: 1.5 };
+                this.minimap = null;
+                this.minimapCanvas = null;
+                this.radarAngle = 0; // for sonar sweep
+                
+                this.init();
+            }
+            
+            init() {
+                // Create PIXI application with responsive sizing
+                const container = document.getElementById('gameContainer');
+                const width = window.innerWidth;
+                const height = window.innerHeight;
+                
+                this.app = new PIXI.Application({
+                    width,
+                    height,
+                    backgroundColor: 0x1a1a1a,
+                    antialias: true
+                });
+                
+                container.appendChild(this.app.view);
+                
+                // Handle window resize
+                window.addEventListener('resize', () => this.resize());
+                
+                // Setup the game world
+                this.setupWorld();
+                this.setupControls();
+                this.setupMinimap();
+                this.createPlayer();
+                this.createBot();
+                
+                // Start game loop
+                this.app.ticker.add(() => this.gameLoop());
+            }
+            
+            resize() {
+                const width = window.innerWidth;
+                const height = window.innerHeight;
+                this.app.renderer.resize(width, height);
+                this.updateCamera();
+            }
+            
+            setupWorld() {
+                // Create arena background
+                this.worldContainer = new PIXI.Container();
+                this.app.stage.addChild(this.worldContainer);
+                
+                // Arena boundaries (dark asphalt with neon borders)
+                const arenaGraphics = new PIXI.Graphics();
+                arenaGraphics.beginFill(0x2a2a2a);
+                arenaGraphics.drawRect(-this.arena.width/2, -this.arena.height/2, this.arena.width, this.arena.height);
+                arenaGraphics.endFill();
+                
+                // Neon border
+                arenaGraphics.lineStyle(3, 0x00ffff, 1);
+                arenaGraphics.drawRect(-this.arena.width/2, -this.arena.height/2, this.arena.width, this.arena.height);
+                
+                this.worldContainer.addChild(arenaGraphics);
+                
+                // Add grid pattern for better navigation
+                this.createGrid();
+                
+                // Create separate container for trails (in front of arena but behind cars)
+                this.trailContainer = new PIXI.Container();
+                this.trailContainer.visible = true;
+                this.trailContainer.alpha = 1.0;
+                this.worldContainer.addChild(this.trailContainer);
+                
+                // Load Solana logo sprite for better quality
+                this.createSolanaTexture();
+            }
+            
+            setupControls() {
+                // Keyboard controls
+                window.addEventListener('keydown', (e) => {
+                    this.keys[e.code] = true;
+                });
+                window.addEventListener('keyup', (e) => {
+                    this.keys[e.code] = false;
+                });
+                
+                // Mouse controls
+                window.addEventListener('mousemove', (e) => {
+                    const rect = this.app.view.getBoundingClientRect();
+                    this.mouse.x = e.clientX - rect.left;
+                    this.mouse.y = e.clientY - rect.top;
+                });
+                
+                // Mouse click for trail toggle
+                window.addEventListener('click', (e) => {
+                    this.toggleTrail();
+                });
+                
+                // Touch controls
+                this.app.view.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    const touch = e.touches[0];
+                    const rect = this.app.view.getBoundingClientRect();
+                    const now = Date.now();
+                    
+                    this.touch.active = true;
+                    this.touch.x = touch.clientX - rect.left;
+                    this.touch.y = touch.clientY - rect.top;
+                    
+                    // Double tap detection for boost toggle
+                    if (now - this.touch.lastTap < 300) {
+                        // Toggle boost on double tap
+                        if (this.player.isBoosting) {
+                            this.player.stopBoost();
+                        } else {
+                            this.player.startBoost();
+                        }
+                    }
+                    this.touch.lastTap = now;
+                });
+                
+                this.app.view.addEventListener('touchmove', (e) => {
+                    e.preventDefault();
+                    if (this.touch.active && e.touches.length > 0) {
+                        const touch = e.touches[0];
+                        const rect = this.app.view.getBoundingClientRect();
+                        this.touch.x = touch.clientX - rect.left;
+                        this.touch.y = touch.clientY - rect.top;
+                    }
+                });
+                
+                this.app.view.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    this.touch.active = false;
+                });
+                
+                // Zoom controls
+                window.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    const zoomSpeed = 0.001;
+                    const zoomDelta = -e.deltaY * zoomSpeed;
+                    this.camera.targetZoom = Math.max(this.camera.minZoom, Math.min(this.camera.maxZoom, this.camera.targetZoom + zoomDelta));
+                });
+                
+                // Touch zoom (pinch)
+                let lastTouchDistance = 0;
+                this.app.view.addEventListener('touchstart', (e) => {
+                    if (e.touches.length === 2) {
+                        const touch1 = e.touches[0];
+                        const touch2 = e.touches[1];
+                        lastTouchDistance = Math.sqrt(
+                            Math.pow(touch2.clientX - touch1.clientX, 2) + 
+                            Math.pow(touch2.clientY - touch1.clientY, 2)
+                        );
+                    }
+                });
+                
+                this.app.view.addEventListener('touchmove', (e) => {
+                    if (e.touches.length === 2) {
+                        const touch1 = e.touches[0];
+                        const touch2 = e.touches[1];
+                        const distance = Math.sqrt(
+                            Math.pow(touch2.clientX - touch1.clientX, 2) + 
+                            Math.pow(touch2.clientY - touch1.clientY, 2)
+                        );
+                        
+                        if (lastTouchDistance > 0) {
+                            const zoomDelta = (distance - lastTouchDistance) * 0.005;
+                            this.camera.targetZoom = Math.max(this.camera.minZoom, Math.min(this.camera.maxZoom, this.camera.targetZoom + zoomDelta));
+                        }
+                        
+                        lastTouchDistance = distance;
+                    }
+                });
+                
+                // Zoom button controls
+                document.getElementById('zoomIn').addEventListener('click', () => {
+                    this.camera.targetZoom = Math.min(this.camera.maxZoom, this.camera.targetZoom + 0.2);
+                });
+                
+                document.getElementById('zoomOut').addEventListener('click', () => {
+                    this.camera.targetZoom = Math.max(this.camera.minZoom, this.camera.targetZoom - 0.2);
+                });
+            }
+            
+            createPlayer() {
+                this.player = new Car(0, 0, 0x00ffff, 'player');
+                this.worldContainer.addChild(this.player.sprite);
+            }
+            
+            createBot() {
+                this.bot = new Car(300, 300, 0xff00ff, 'bot');
+                this.worldContainer.addChild(this.bot.sprite);
+            }
+            
+            createGrid() {
+                const gridSize = 100;
+                const gridGraphics = new PIXI.Graphics();
+                gridGraphics.lineStyle(1, 0x333333, 0.3);
+                
+                // Vertical lines
+                for (let x = -this.arena.width/2; x <= this.arena.width/2; x += gridSize) {
+                    gridGraphics.moveTo(x, -this.arena.height/2);
+                    gridGraphics.lineTo(x, this.arena.height/2);
+                }
+                
+                // Horizontal lines
+                for (let y = -this.arena.height/2; y <= this.arena.height/2; y += gridSize) {
+                    gridGraphics.moveTo(-this.arena.width/2, y);
+                    gridGraphics.lineTo(this.arena.width/2, y);
+                }
+                
+                this.worldContainer.addChild(gridGraphics);
+            }
+            
+            createSolanaTexture() {
+                // Create a high-quality Solana logo texture
+                const logoGraphics = new PIXI.Graphics();
+                
+                // Solana logo colors
+                const purple = 0x9945FF;
+                const green = 0x14F195;
+                const gradient = 0x19FB9B;
+                
+                // Create Solana logo shape (simplified but recognizable)
+                logoGraphics.beginFill(purple);
+                logoGraphics.moveTo(0, -3);
+                logoGraphics.lineTo(6, -3);
+                logoGraphics.lineTo(8, -1);
+                logoGraphics.lineTo(2, -1);
+                logoGraphics.closePath();
+                logoGraphics.endFill();
+                
+                logoGraphics.beginFill(green);
+                logoGraphics.moveTo(0, 1);
+                logoGraphics.lineTo(6, 1);
+                logoGraphics.lineTo(8, 3);
+                logoGraphics.lineTo(2, 3);
+                logoGraphics.closePath();
+                logoGraphics.endFill();
+                
+                logoGraphics.beginFill(gradient);
+                logoGraphics.moveTo(2, -1);
+                logoGraphics.lineTo(8, -1);
+                logoGraphics.lineTo(6, 1);
+                logoGraphics.lineTo(0, 1);
+                logoGraphics.closePath();
+                logoGraphics.endFill();
+                
+                // Store the texture for reuse
+                this.solanaTexture = this.app.renderer.generateTexture(logoGraphics);
+            }
+            
+            setupMinimap() {
+                // Create sonar radar
+                this.radar = document.createElement('canvas');
+                this.radar.width = 120;
+                this.radar.height = 120;
+                Object.assign(this.radar.style, {
+                    position: 'absolute',
+                    bottom: '20px',
+                    right: '20px',
+                    width: '120px',
+                    height: '120px',
+                    background: 'rgba(0,0,0,0.7)',
+                    border: '1px solid rgba(0,255,255,0.3)',
+                    borderRadius: '60px',
+                    zIndex: '10'
+                });
+                document.body.appendChild(this.radar);
+                this.radarCtx = this.radar.getContext('2d');
+            }
+            
+            updateCamera() {
+                if (!this.player) return;
+                
+                // Smooth zoom transition
+                const zoomSpeed = 0.05;
+                this.camera.zoom += (this.camera.targetZoom - this.camera.zoom) * zoomSpeed;
+                
+                // Center camera on player with zoom
+                this.camera.x = -this.player.x * this.camera.zoom + this.app.view.width / 2;
+                this.camera.y = -this.player.y * this.camera.zoom + this.app.view.height / 2;
+                
+                this.worldContainer.x = this.camera.x;
+                this.worldContainer.y = this.camera.y;
+                this.worldContainer.scale.set(this.camera.zoom);
+            }
+            
+            gameLoop() {
+                const deltaTime = this.app.ticker.deltaMS / 1000;
+                
+                // Handle player input
+                this.handlePlayerInput();
+                
+                // Update cars
+                if (this.player && !this.player.destroyed) {
+                    this.player.update(deltaTime);
+                    this.checkArenaCollision(this.player);
+                }
+                
+                if (this.bot && !this.bot.destroyed) {
+                    this.bot.updateBot(deltaTime, this.arena);
+                    this.checkArenaCollision(this.bot);
+                }
+                
+                // Update trails
+                this.updateTrails(deltaTime);
+                
+                // Check trail collisions
+                this.checkTrailCollisions();
+                
+                // Update particles
+                this.updateParticles(deltaTime);
+                
+                // Update camera
+                this.updateCamera();
+                
+                // Update sonar radar
+                this.radarAngle = (this.radarAngle + deltaTime * 2) % (Math.PI * 2);
+                this.updateRadar();
+                
+                // Update boost bar
+                this.updateBoostBar();
+                
+                // Update trail status
+                this.updateTrailStatus();
+                
+                // Handle respawning
+                this.handleRespawning(deltaTime);
+            }
+            
+            updateRadar() {
+                if (!this.radarCtx || !this.player) return;
+                
+                const ctx = this.radarCtx;
+                const W = this.radar.width;
+                const H = this.radar.height;
+                const centerX = W / 2;
+                const centerY = H / 2;
+                const radius = Math.min(W, H) / 2 - 5;
+                
+                // Clear canvas
+                ctx.clearRect(0, 0, W, H);
+                
+                // Draw radar background
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Draw radar rings
+                ctx.strokeStyle = 'rgba(0, 255, 255, 0.2)';
+                ctx.lineWidth = 1;
+                for (let i = 1; i <= 3; i++) {
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, (radius * i) / 3, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+                
+                // Draw sonar sweep
+                ctx.save();
+                ctx.translate(centerX, centerY);
+                ctx.rotate(this.radarAngle);
+                
+                const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
+                gradient.addColorStop(0, 'rgba(0, 255, 255, 0.8)');
+                gradient.addColorStop(0.7, 'rgba(0, 255, 255, 0.2)');
+                gradient.addColorStop(1, 'rgba(0, 255, 255, 0)');
+                
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.arc(0, 0, radius, -0.3, 0.3);
+                ctx.closePath();
+                ctx.fill();
+                
+                ctx.restore();
+                
+                // Draw arena bounds
+                const scale = (radius * 0.8) / Math.max(this.arena.width, this.arena.height);
+                const arenaW = this.arena.width * scale;
+                const arenaH = this.arena.height * scale;
+                
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(centerX - arenaW/2, centerY - arenaH/2, arenaW, arenaH);
+                
+                // Draw player
+                if (!this.player.destroyed) {
+                    const px = centerX + (this.player.x * scale);
+                    const py = centerY + (this.player.y * scale);
+                    
+                    ctx.fillStyle = '#00ffff';
+                    ctx.beginPath();
+                    ctx.arc(px, py, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Player direction indicator
+                    ctx.strokeStyle = '#00ffff';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(px, py);
+                    ctx.lineTo(
+                        px + Math.cos(this.player.angle) * 6,
+                        py + Math.sin(this.player.angle) * 6
+                    );
+                    ctx.stroke();
+                }
+                
+                // Draw bot
+                if (this.bot && !this.bot.destroyed) {
+                    const bx = centerX + (this.bot.x * scale);
+                    const by = centerY + (this.bot.y * scale);
+                    
+                    ctx.fillStyle = '#ff00ff';
+                    ctx.beginPath();
+                    ctx.arc(bx, by, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+            
+            handlePlayerInput() {
+                if (!this.player || this.player.destroyed) return;
+                
+                let targetX, targetY;
+                
+                if (this.touch.active) {
+                    // Touch controls
+                    targetX = this.touch.x - this.app.view.width / 2;
+                    targetY = this.touch.y - this.app.view.height / 2;
+                } else {
+                    // Mouse controls
+                    targetX = this.mouse.x - this.app.view.width / 2;
+                    targetY = this.mouse.y - this.app.view.height / 2;
+                }
+                
+                // Calculate target angle from player position to input position
+                const dx = targetX;
+                const dy = targetY;
+                const targetAngle = Math.atan2(dy, dx);
+                
+                this.player.setTargetAngle(targetAngle);
+                
+                // Boost control - hold to boost
+                if (this.keys['Space']) {
+                    if (!this.player.isBoosting && this.player.boostEnergy >= this.player.minBoostEnergy) {
+                        this.player.isBoosting = true;
+                        this.player.targetSpeed = this.player.boostSpeed;
+                    }
+                } else {
+                    // Release space to stop boosting
+                    if (this.player.isBoosting) {
+                        this.player.isBoosting = false;
+                        this.player.targetSpeed = this.player.baseSpeed;
+                    }
+                }
+            }
+            
+            checkArenaCollision(car) {
+                const halfWidth = this.arena.width / 2;
+                const halfHeight = this.arena.height / 2;
+                const carSize = 20; // Car collision radius
+                
+                let bounced = false;
+                
+                // Left wall collision
+                if (car.x <= -halfWidth + carSize) {
+                    car.x = -halfWidth + carSize;
+                    car.velocityX = -car.velocityX * 0.7; // Reverse and reduce X velocity
+                    car.angle = Math.PI - car.angle; // Reflect angle
+                    bounced = true;
+                }
+                
+                // Right wall collision
+                if (car.x >= halfWidth - carSize) {
+                    car.x = halfWidth - carSize;
+                    car.velocityX = -car.velocityX * 0.7; // Reverse and reduce X velocity
+                    car.angle = Math.PI - car.angle; // Reflect angle
+                    bounced = true;
+                }
+                
+                // Top wall collision
+                if (car.y <= -halfHeight + carSize) {
+                    car.y = -halfHeight + carSize;
+                    car.velocityY = -car.velocityY * 0.7; // Reverse and reduce Y velocity
+                    car.angle = -car.angle; // Reflect angle
+                    bounced = true;
+                }
+                
+                // Bottom wall collision
+                if (car.y >= halfHeight - carSize) {
+                    car.y = halfHeight - carSize;
+                    car.velocityY = -car.velocityY * 0.7; // Reverse and reduce Y velocity
+                    car.angle = -car.angle; // Reflect angle
+                    bounced = true;
+                }
+                
+                if (bounced) {
+                    // Update target angle to match new direction
+                    car.targetAngle = car.angle;
+                    
+                    // Reduce speed slightly on bounce
+                    car.speed *= 0.9;
+                    
+                    if (car.type === 'bot') {
+                        // Bot gets new random direction after bouncing
+                        car.changeDirection();
+                    }
+                }
+            }
+            
+            updateTrails(deltaTime) {
+                // Add trail points for active cars
+                if (this.player && !this.player.destroyed) {
+                    this.addTrailPoint(this.player);
+                }
+                if (this.bot && !this.bot.destroyed) {
+                    this.addTrailPoint(this.bot);
+                }
+                
+                // Update and clean trails
+                for (let i = this.trails.length - 1; i >= 0; i--) {
+                    const trail = this.trails[i];
+                    const now = Date.now();
+                    
+                    // Remove old points
+                    const maxAge = 3.0; // All trails last 3 seconds
+                    trail.points = trail.points.filter(point => {
+                        return (now - point.time) / 1000 <= maxAge;
+                    });
+                    
+                    // Remove trail if no points left
+                    if (trail.points.length === 0) {
+                        if (trail.graphics && trail.graphics.parent) {
+                            this.trailContainer.removeChild(trail.graphics);
+                            trail.graphics.destroy();
+                        }
+                        this.trails.splice(i, 1);
+                    } else {
+                        // Update trail visuals
+                        this.renderTrail(trail);
+                    }
+                }
+            }
+            
+            addTrailPoint(car) {
+                const now = Date.now();
+                const interval = 50; // Add point every 50ms
+                
+                if (now - car.lastTrailTime > interval) {
+                    // Get or create trail for this car
+                    let trail = this.trails.find(t => t.carId === car.type);
+                    if (!trail) {
+                        trail = {
+                            carId: car.type,
+                            car: car,
+                            points: [],
+                            graphics: new PIXI.Graphics()
+                        };
+                        this.trails.push(trail);
+                        this.trailContainer.addChild(trail.graphics);
+                    }
+                    
+                    // Add new point
+                    trail.points.push({
+                        x: car.x,
+                        y: car.y,
+                        time: now,
+                        isBoosting: car.isBoosting
+                    });
+                    
+                    car.lastTrailTime = now;
+                    
+                    // Limit trail length
+                    if (trail.points.length > 60) {
+                        trail.points.shift();
+                    }
+                }
+            }
+            
+            renderTrail(trail) {
+                if (!trail.graphics || trail.points.length < 2) return;
+                
+                trail.graphics.clear();
+                const now = Date.now();
+                const car = trail.car;
+                
+                // Trail colors - boost uses same color as normal trail
+                const trailColor = car.type === 'player' ? 0x00ffff : 0xff00ff;
+                
+                // Draw trail as smooth line segments with varying width
+                for (let i = 1; i < trail.points.length; i++) {
+                    const point = trail.points[i];
+                    const prevPoint = trail.points[i - 1];
+                    const age = (now - point.time) / 1000;
+                    
+                    if (age > 3.0) continue;
+                    
+                    // Smooth fade out
+                    const alpha = Math.max(0.1, 1 - (age / 3.0));
+                    
+                    if (point.isBoosting) {
+                        // Boost trail: thicker with Solana-colored accents
+                        const width = 8;
+                        
+                        // Draw main trail
+                        trail.graphics.lineStyle(width, trailColor, alpha * 0.8);
+                        trail.graphics.moveTo(prevPoint.x, prevPoint.y);
+                        trail.graphics.lineTo(point.x, point.y);
+                        
+                        // Draw subtle Solana logo elements integrated into the trail
+                        if (i % 4 === 0) { // Draw logo accents every 4th point
+                            const centerX = (point.x + prevPoint.x) / 2;
+                            const centerY = (point.y + prevPoint.y) / 2;
+                            
+                            // Subtle Solana accent lines integrated into the trail
+                            const logoAlpha = alpha * 0.6;
+                            
+                            // Subtle purple accent
+                            trail.graphics.lineStyle(2, 0x9945FF, logoAlpha);
+                            trail.graphics.moveTo(centerX - 3, centerY - 1);
+                            trail.graphics.lineTo(centerX + 3, centerY - 1);
+                            
+                            // Subtle green accent
+                            trail.graphics.lineStyle(2, 0x14F195, logoAlpha);
+                            trail.graphics.moveTo(centerX - 3, centerY + 1);
+                            trail.graphics.lineTo(centerX + 3, centerY + 1);
+                        }
+                        
+                    } else {
+                        // Normal trail: thin line
+                        const width = 2;
+                        trail.graphics.lineStyle(width, trailColor, alpha);
+                        trail.graphics.moveTo(prevPoint.x, prevPoint.y);
+                        trail.graphics.lineTo(point.x, point.y);
+                    }
+                }
+            }
+            
+            
+            checkTrailCollisions() {
+                const cars = [this.player, this.bot].filter(car => car && !car.destroyed);
+                
+                for (const car of cars) {
+                    for (const trail of this.trails) {
+                        if (trail.points.length < 2 || trail.car === car) continue;
+                        
+                        const now = Date.now();
+                        
+                        // Check collision with trail points
+                        for (let i = 1; i < trail.points.length; i++) {
+                            const p1 = trail.points[i - 1];
+                            const p2 = trail.points[i];
+                            const age = (now - p2.time) / 1000;
+                            
+                            // Skip old points
+                            if (age > 3.0) continue;
+                            
+                            const distance = this.pointToLineDistance(car.x, car.y, p1.x, p1.y, p2.x, p2.y);
+                            const hitboxSize = p2.isBoosting ? 12 : 6; // Bigger hitbox for boost trails
+                            
+                            if (distance < hitboxSize) {
+                                this.destroyCar(car);
+                                break;
+                            }
+                        }
+                        
+                        if (car.destroyed) break;
+                    }
+                }
+            }
+            
+            pointToLineDistance(px, py, x1, y1, x2, y2) {
+                const dx = x2 - x1;
+                const dy = y2 - y1;
+                const length = Math.sqrt(dx * dx + dy * dy);
+                
+                if (length === 0) {
+                    return Math.sqrt((px - x1) * (px - x1) + (py - y1) * (py - y1));
+                }
+                
+                const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (length * length)));
+                const projection = {
+                    x: x1 + t * dx,
+                    y: y1 + t * dy
+                };
+                
+                return Math.sqrt((px - projection.x) * (px - projection.x) + (py - projection.y) * (py - projection.y));
+            }
+            
+            destroyCar(car) {
+                if (car.destroyed) return;
+                
+                car.destroyed = true;
+                car.sprite.visible = false;
+                car.respawnTimer = 2.0;
+                
+                // Clear car's trail
+                const trail = this.trails.find(t => t.car === car);
+                if (trail) {
+                    trail.points = [];
+                }
+                
+                // Create explosion effect
+                this.createExplosion(car.x, car.y, car.color);
+            }
+            
+            createExplosion(x, y, color) {
+                const particleCount = 15;
+                for (let i = 0; i < particleCount; i++) {
+                    const angle = (Math.PI * 2 / particleCount) * i;
+                    const speed = 100 + Math.random() * 100;
+                    const particle = {
+                        x: x,
+                        y: y,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed,
+                        life: 1.0,
+                        color: color,
+                        graphics: new PIXI.Graphics()
+                    };
+                    
+                    particle.graphics.beginFill(color);
+                    particle.graphics.drawCircle(0, 0, 3);
+                    particle.graphics.endFill();
+                    particle.graphics.x = x;
+                    particle.graphics.y = y;
+                    
+                    this.worldContainer.addChild(particle.graphics);
+                    this.particles.push(particle);
+                }
+            }
+            
+            updateParticles(deltaTime) {
+                for (let i = this.particles.length - 1; i >= 0; i--) {
+                    const particle = this.particles[i];
+                    
+                    particle.x += particle.vx * deltaTime;
+                    particle.y += particle.vy * deltaTime;
+                    particle.life -= deltaTime * 2;
+                    
+                    particle.graphics.x = particle.x;
+                    particle.graphics.y = particle.y;
+                    particle.graphics.alpha = Math.max(0, particle.life);
+                    
+                    if (particle.life <= 0) {
+                        this.worldContainer.removeChild(particle.graphics);
+                        this.particles.splice(i, 1);
+                    }
+                }
+            }
+            
+            handleRespawning(deltaTime) {
+                if (this.player && this.player.destroyed) {
+                    this.player.respawnTimer -= deltaTime;
+                    if (this.player.respawnTimer <= 0) {
+                        this.player.respawn(
+                    (Math.random() - 0.5) * this.arena.width * 0.5,
+                    (Math.random() - 0.5) * this.arena.height * 0.5
+                );
+                    }
+                }
+                
+                if (this.bot && this.bot.destroyed) {
+                    this.bot.respawnTimer -= deltaTime;
+                    if (this.bot.respawnTimer <= 0) {
+                        this.bot.respawn(
+                    (Math.random() - 0.5) * this.arena.width * 0.8,
+                    (Math.random() - 0.5) * this.arena.height * 0.8
+                );
+                    }
+                }
+            }
+            
+            updateBoostBar() {
+                if (!this.player) return;
+                
+                const boostBarFill = document.getElementById('boostBarFill');
+                const boostBarLabel = document.getElementById('boostBarLabel');
+                
+                const energyPercent = (this.player.boostEnergy / this.player.maxBoostEnergy) * 100;
+                boostBarFill.style.width = energyPercent + '%';
+                
+                if (this.player.isBoosting) {
+                    boostBarFill.style.background = 'linear-gradient(90deg, #00ff88, #00ffff)';
+                    boostBarLabel.textContent = `BOOSTING! (${Math.ceil(energyPercent)}%)`;
+                    boostBarLabel.style.color = '#00ff88';
+                } else if (this.player.boostEnergy < this.player.minBoostEnergy) {
+                    boostBarFill.style.background = 'linear-gradient(90deg, #ff4444, #ff8888)';
+                    boostBarLabel.textContent = `BOOST LOW (${Math.ceil(energyPercent)}%)`;
+                    boostBarLabel.style.color = '#ff8888';
+                } else {
+                    boostBarFill.style.background = 'linear-gradient(90deg, #00ffaa, #00ffff)';
+                    boostBarLabel.textContent = `BOOST READY (${Math.ceil(energyPercent)}%)`;
+                    boostBarLabel.style.color = '#00ffff';
+                }
+            }
+            
+            toggleTrail() {
+                // Trail toggle is now just for visual feedback - trails always exist
+                this.trailActive = !this.trailActive;
+            }
+            
+            updateTrailStatus() {
+                const trailStatus = document.getElementById('trailStatus');
+                
+                if (this.player && this.player.isBoosting) {
+                    trailStatus.textContent = 'BOOST TRAIL: ON';
+                    trailStatus.classList.add('active');
+                    trailStatus.classList.remove('cooldown');
+                } else {
+                    trailStatus.textContent = 'NORMAL TRAIL';
+                    trailStatus.classList.remove('active');
+                    trailStatus.classList.remove('cooldown');
+                }
+            }
+        }
+        
+        class Car {
+            constructor(x, y, color, type) {
+                this.x = x;
+                this.y = y;
+                this.angle = 0;
+                this.targetAngle = 0;
+                this.speed = 150;
+                this.baseSpeed = 150;
+                this.boostSpeed = 250;
+                this.targetSpeed = 150;
+                this.speedTransitionRate = 4.0;
+                this.driftFactor = 0;
+                this.maxDriftFactor = 0.7;
+                this.velocityX = 0;
+                this.velocityY = 0;
+                this.color = color;
+                this.type = type;
+                this.destroyed = false;
+                this.respawnTimer = 0;
+                this.isBoosting = false;
+                this.boostTimer = 0;
+                this.boostCooldown = 0;
+                this.boostEnergy = 100; // 0-100 boost energy
+                this.maxBoostEnergy = 100;
+                this.boostRegenRate = 20; // Energy per second when not boosting
+                this.boostConsumptionRate = 40; // Energy per second when boosting
+                this.minBoostEnergy = 5; // Minimum energy needed to start boost
+                this.trailPoints = [];
+                this.trailGraphics = null;
+                this.lastTrailTime = 0;
+                
+                // Bot-specific properties
+                this.turnTimer = 0;
+                this.boostAITimer = 0;
+                this.currentTrailId = null;
+                this.lastTrailBoostStatus = undefined;
+                this.driftFactor = 0;
+                this.maxDriftFactor = 0.8;
+                
+                this.createSprite();
+            }
+            
+            createSprite() {
+                this.sprite = new PIXI.Graphics();
+                
+                // Car body (rectangle with rounded front)
+                this.sprite.beginFill(this.color);
+                this.sprite.drawRoundedRect(-15, -8, 30, 16, 4);
+                this.sprite.endFill();
+                
+                // Car glow effect
+                this.sprite.lineStyle(2, this.color, 0.5);
+                this.sprite.drawRoundedRect(-17, -10, 34, 20, 5);
+                
+                this.sprite.x = this.x;
+                this.sprite.y = this.y;
+                this.sprite.rotation = this.angle;
+            }
+            
+            update(deltaTime) {
+                if (this.destroyed) return;
+                
+                // Update boost energy system
+                if (this.isBoosting) {
+                    this.boostEnergy -= this.boostConsumptionRate * deltaTime;
+                    this.targetSpeed = this.boostSpeed;
+                    this.driftFactor = Math.min(this.maxDriftFactor, this.driftFactor + deltaTime * 2.0);
+                    
+                    // Stop boosting if energy depleted
+                    if (this.boostEnergy <= 0) {
+                        this.boostEnergy = 0;
+                        this.isBoosting = false;
+                        this.targetSpeed = this.baseSpeed;
+                    }
+                } else {
+                    // Regenerate boost energy when not boosting
+                    this.boostEnergy += this.boostRegenRate * deltaTime;
+                    if (this.boostEnergy > this.maxBoostEnergy) {
+                        this.boostEnergy = this.maxBoostEnergy;
+                    }
+                    this.targetSpeed = this.baseSpeed;
+                    this.driftFactor = Math.max(0, this.driftFactor - deltaTime * 1.5);
+                }
+                
+                // Remove old cooldown system
+                this.boostCooldown = 0;
+                
+                // Smooth speed transitions
+                const speedDiff = this.targetSpeed - this.speed;
+                this.speed += speedDiff * this.speedTransitionRate * deltaTime;
+                
+                if (this.boostCooldown > 0) {
+                    this.boostCooldown -= deltaTime;
+                }
+                
+                // Smooth angle interpolation for drift effect
+                let angleDiff = this.targetAngle - this.angle;
+                while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+                while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+                
+                const baseTurnRate = 3.0;
+                const driftTurnRate = baseTurnRate * (1 + this.driftFactor * 1.5);
+                this.angle += angleDiff * driftTurnRate * deltaTime;
+                
+                // Calculate forward direction
+                const forwardX = Math.cos(this.angle);
+                const forwardY = Math.sin(this.angle);
+                
+                // Add drift effect - car slides sideways while turning
+                const driftAngle = this.angle + (Math.PI / 2);
+                const driftX = Math.cos(driftAngle);
+                const driftY = Math.sin(driftAngle);
+                
+                // Combine forward movement with drift
+                const driftIntensity = this.driftFactor * this.speed * 0.4 * Math.abs(angleDiff);
+                this.velocityX = forwardX * this.speed + driftX * driftIntensity;
+                this.velocityY = forwardY * this.speed + driftY * driftIntensity;
+                
+                // Update position
+                this.x += this.velocityX * deltaTime;
+                this.y += this.velocityY * deltaTime;
+                
+                // Update sprite
+                this.sprite.x = this.x;
+                this.sprite.y = this.y;
+                this.sprite.rotation = this.angle;
+                
+                // Update glow intensity when boosting
+                if (this.isBoosting) {
+                    this.sprite.alpha = 0.8 + Math.sin(Date.now() * 0.01) * 0.2;
+                } else {
+                    this.sprite.alpha = 1.0;
+                }
+            }
+            
+            updateBot(deltaTime, arena) {
+                if (this.destroyed) return;
+                
+                // Random direction changes
+                this.turnTimer -= deltaTime;
+                if (this.turnTimer <= 0) {
+                    this.changeDirection();
+                    this.turnTimer = 1.0 + Math.random() * 2.0;
+                }
+                
+                // Random boost (less frequent for more strategic gameplay)
+                this.boostAITimer -= deltaTime;
+                if (this.boostAITimer <= 0) {
+                    if (!this.isBoosting && this.boostEnergy >= this.minBoostEnergy && Math.random() < 0.3) {
+                        this.startBoost();
+                        this.boostAITimer = 2.0 + Math.random() * 3.0; // Boost for 2-5 seconds
+                    } else if (this.isBoosting && (this.boostEnergy < 10 || Math.random() < 0.4)) {
+                        this.stopBoost();
+                        this.boostAITimer = 1.0 + Math.random() * 2.0; // Wait before next boost
+                    } else {
+                        this.boostAITimer = 0.5; // Check again soon
+                    }
+                }
+                
+                // Update bot boost energy and drift
+                if (this.isBoosting) {
+                    this.boostEnergy -= this.boostConsumptionRate * deltaTime;
+                    this.driftFactor = Math.min(this.maxDriftFactor, this.driftFactor + deltaTime * 2.0);
+                    if (this.boostEnergy <= 0) {
+                        this.boostEnergy = 0;
+                        this.isBoosting = false;
+                        this.targetSpeed = this.baseSpeed;
+                    }
+                } else {
+                    this.boostEnergy += this.boostRegenRate * deltaTime;
+                    if (this.boostEnergy > this.maxBoostEnergy) {
+                        this.boostEnergy = this.maxBoostEnergy;
+                    }
+                    this.driftFactor = Math.max(0, this.driftFactor - deltaTime * 1.5);
+                }
+                
+                // Bot doesn't need trail toggle anymore - always creates trails
+                
+                this.update(deltaTime);
+            }
+            
+            changeDirection() {
+                this.targetAngle += (Math.random() - 0.5) * Math.PI * 0.5;
+            }
+            
+            setTargetAngle(angle) {
+                this.targetAngle = angle;
+            }
+            
+            startBoost() {
+                // Can boost anytime if we have enough energy
+                if (this.boostEnergy >= this.minBoostEnergy && !this.isBoosting) {
+                    this.isBoosting = true;
+                    this.targetSpeed = this.boostSpeed;
+                }
+            }
+            
+            stopBoost() {
+                if (this.isBoosting) {
+                    this.isBoosting = false;
+                    this.targetSpeed = this.baseSpeed;
+                }
+            }
+            
+            respawn(x, y) {
+                this.x = x;
+                this.y = y;
+                this.angle = Math.random() * Math.PI * 2;
+                this.targetAngle = this.angle;
+                this.destroyed = false;
+                this.sprite.visible = true;
+                this.sprite.alpha = 1.0;
+                this.isBoosting = false;
+                this.speed = this.baseSpeed;
+                this.targetSpeed = this.baseSpeed;
+                this.boostEnergy = this.maxBoostEnergy;
+                this.lastTrailTime = 0;
+                this.driftFactor = 0;
+                
+                // Clear trail on respawn
+                const trail = window.game ? window.game.trails.find(t => t.car === this) : null;
+                if (trail) {
+                    trail.points = [];
+                }
+            }
+        }
+        
+        // Initialize the game when the page loads
+        window.addEventListener('load', () => {
+            window.game = new SpermRaceGame();
+        });
+    </script>
+</body>
+</html>

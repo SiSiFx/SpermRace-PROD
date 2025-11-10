@@ -1,0 +1,5 @@
+- Always consult CONTEXT.md before changing gameplay or networking
+- Keep PixiJS v8 API usage (.rect().fill(), .stroke(), .circle(), .roundRect())
+- Do not re‑enable removed components or duplicate game files
+- Prefer small, safe edits; keep production server path /ws stable
+- Respect TypeScript types and avoid any; fix lints

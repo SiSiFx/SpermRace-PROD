@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phantom Wallet Diagnostics</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #ab9ff2;
+            text-align: center;
+        }
+        .diagnostic-item {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 8px;
+            border-left: 4px solid #ab9ff2;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 6px;
+            font-weight: bold;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .warning { background: #fff3cd; color: #856404; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        button {
+            background: #ab9ff2;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #9688e8;
+        }
+        .big-button {
+            padding: 20px 40px;
+            font-size: 20px;
+            display: block;
+            width: 100%;
+            margin: 20px 0;
+        }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        .popup-instructions {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border: 2px solid #ffc107;
+        }
+        .popup-instructions h3 {
+            margin-top: 0;
+            color: #856404;
+        }
+        img {
+            max-width: 100%;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Phantom Wallet Diagnostics & Unblock Tool</h1>
+        <p style="text-align: center; color: #666;">
+            This tool will help you identify and fix Phantom popup blocking issues
+        </p>
+
+        <!-- Popup Blocker Check -->
+        <div class="diagnostic-item">
+            <h3>🚫 Step 1: Check Browser Popup Blocker</h3>
+            <button onclick="testPopupBlocker()">Test Popup Blocker</button>
+            <div id="popupStatus"></div>
+
+            <div class="popup-instructions">
+                <h3>How to Allow Popups for this Site:</h3>
+                <p><strong>Chrome/Brave:</strong></p>
+                <ol>
+                    <li>Look for the popup blocked icon (🚫) in the address bar (right side)</li>
+                    <li>Click it and select "Always allow popups from this site"</li>
+                    <li>Or go to Settings → Privacy and security → Site Settings → Pop-ups and redirects</li>
+                    <li>Add <code>[*.]93.180.133.94</code> to the "Allowed to send pop-ups" list</li>
+                </ol>
+                <p><strong>Firefox:</strong></p>
+                <ol>
+                    <li>Click the shield icon in address bar</li>
+                    <li>Click "Turn off blocking for this site"</li>
+                    <li>Or go to Preferences → Privacy & Security → Permissions → Block pop-up windows</li>
+                    <li>Click "Exceptions" and add <code>http://93.180.133.94</code></li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- Phantom Detection -->
+        <div class="diagnostic-item">
+            <h3>👻 Step 2: Phantom Extension Detection</h3>
+            <button onclick="detectPhantom()">Detect Phantom</button>
+            <div id="phantomStatus"></div>
+        </div>
+
+        <!-- Phantom Lock Status -->
+        <div class="diagnostic-item">
+            <h3>🔒 Step 3: Check if Phantom is Locked</h3>
+            <button onclick="checkPhantomLock()">Check Lock Status</button>
+            <div id="lockStatus"></div>
+            <div class="popup-instructions">
+                <p><strong>If Phantom is locked:</strong></p>
+                <ol>
+                    <li>Click the Phantom extension icon in your browser toolbar</li>
+                    <li>Enter your password to unlock</li>
+                    <li>Make sure "Stay logged in" is checked</li>
+                    <li>Try connecting again</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- Phantom Permissions -->
+        <div class="diagnostic-item">
+            <h3>✅ Step 4: Grant Phantom Permissions</h3>
+            <button onclick="requestPhantomPermissions()">Request Permissions</button>
+            <div id="permissionsStatus"></div>
+        </div>
+
+        <!-- Check Connected Sites -->
+        <div class="diagnostic-item">
+            <h3>🌐 Step 5: Check Phantom Connected Sites</h3>
+            <div class="popup-instructions">
+                <p><strong>To check/manage connected sites in Phantom:</strong></p>
+                <ol>
+                    <li>Click the Phantom extension icon</li>
+                    <li>Click the hamburger menu (☰) in top left</li>
+                    <li>Go to "Settings" → "Trusted Apps"</li>
+                    <li>Check if <code>93.180.133.94</code> is listed</li>
+                    <li>If it's listed but not working, click it and choose "Revoke"</li>
+                    <li>Then try connecting again from scratch</li>
+                </ol>
+            </div>
+            <button onclick="checkConnectedSites()">Check Connection Status</button>
+            <div id="sitesStatus"></div>
+        </div>
+
+        <!-- Clear Phantom Cache -->
+        <div class="diagnostic-item">
+            <h3>🗑️ Step 6: Clear Phantom Cache/Reset</h3>
+            <div class="popup-instructions">
+                <p><strong>To reset Phantom connection:</strong></p>
+                <ol>
+                    <li>Open Phantom extension</li>
+                    <li>Settings → Advanced → Reset Account Connection</li>
+                    <li>Or completely remove and re-add this site in Trusted Apps</li>
+                    <li>Refresh this page and try again</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- Full Connection Test -->
+        <div class="diagnostic-item">
+            <h3>🎯 Step 7: Full Connection Test</h3>
+            <p>After fixing any issues above, test the full connection:</p>
+            <button class="big-button" onclick="fullConnectionTest()">
+                🚀 TEST PHANTOM CONNECTION
+            </button>
+            <div id="fullTestStatus"></div>
+        </div>
+
+        <!-- Extension Status Check -->
+        <div class="diagnostic-item">
+            <h3>🔧 Step 8: Advanced - Extension Status</h3>
+            <button onclick="checkExtensionStatus()">Check Extension Health</button>
+            <div id="extensionStatus"></div>
+            <div class="popup-instructions">
+                <p><strong>If extension seems broken:</strong></p>
+                <ol>
+                    <li>Go to <code>chrome://extensions</code> (or <code>brave://extensions</code>)</li>
+                    <li>Find Phantom wallet extension</li>
+                    <li>Toggle it off, then on again</li>
+                    <li>Or click "Reload" button</li>
+                    <li>Refresh this page and try again</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- CSP Check -->
+        <div class="diagnostic-item">
+            <h3>🛡️ Step 9: Check Content Security Policy</h3>
+            <button onclick="checkCSP()">Check CSP</button>
+            <div id="cspStatus"></div>
+        </div>
+
+        <!-- Final Manual Test -->
+        <div class="diagnostic-item" style="background: #e7f3ff; border-left: 4px solid #2196F3;">
+            <h3>✨ FINAL TEST: Manual Phantom Popup</h3>
+            <p>This will directly call Phantom without any frameworks or delays:</p>
+            <button class="big-button" style="background: #2196F3;" onclick="directPhantomTest()">
+                👻 OPEN PHANTOM POPUP NOW
+            </button>
+            <div id="directTestStatus"></div>
+            <p style="margin-top: 15px; color: #666; font-size: 14px;">
+                <strong>Watch for:</strong> A Phantom popup should appear immediately.
+                If it doesn't, check your browser's address bar for a blocked popup icon (usually on the right side).
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // Test 1: Popup Blocker
+        function testPopupBlocker() {
+            const statusDiv = document.getElementById('popupStatus');
+            statusDiv.innerHTML = '<div class="status info">Testing popup blocker...</div>';
+
+            try {
+                const popup = window.open('', 'test', 'width=100,height=100');
+
+                if (popup) {
+                    popup.close();
+                    statusDiv.innerHTML = `
+                        <div class="status success">✅ Popups are ALLOWED for this site!</div>
+                        <p>Your browser is not blocking popups. Good!</p>
+                    `;
+                } else {
+                    statusDiv.innerHTML = `
+                        <div class="status error">❌ POPUPS ARE BLOCKED!</div>
+                        <p><strong>ACTION REQUIRED:</strong> Look for a popup blocked icon (🚫) in your address bar and click it to allow popups.</p>
+                    `;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `
+                    <div class="status error">❌ Popup test failed: ${error.message}</div>
+                `;
+            }
+        }
+
+        // Test 2: Detect Phantom
+        function detectPhantom() {
+            const statusDiv = document.getElementById('phantomStatus');
+
+            console.log('window.solana:', window.solana);
+            console.log('window.phantom:', window.phantom);
+
+            if (window.solana && window.solana.isPhantom) {
+                statusDiv.innerHTML = `
+                    <div class="status success">✅ Phantom DETECTED via window.solana</div>
+                    <p>isPhantom: ${window.solana.isPhantom}</p>
+                    <p>isConnected: ${window.solana.isConnected}</p>
+                    <p>publicKey: ${window.solana.publicKey || 'Not connected'}</p>
+                `;
+            } else if (window.phantom?.solana) {
+                statusDiv.innerHTML = `
+                    <div class="status success">✅ Phantom DETECTED via window.phantom</div>
+                    <p>isPhantom: ${window.phantom.solana.isPhantom}</p>
+                    <p>isConnected: ${window.phantom.solana.isConnected}</p>
+                `;
+            } else {
+                statusDiv.innerHTML = `
+                    <div class="status error">❌ Phantom NOT DETECTED</div>
+                    <p><strong>ACTION REQUIRED:</strong></p>
+                    <ol>
+                        <li>Install Phantom from <a href="https://phantom.app" target="_blank">phantom.app</a></li>
+                        <li>After installing, refresh this page</li>
+                        <li>Make sure the extension is enabled in your browser</li>
+                    </ol>
+                `;
+            }
+        }
+
+        // Test 3: Check Lock Status
+        function checkPhantomLock() {
+            const statusDiv = document.getElementById('lockStatus');
+            const provider = window.solana || window.phantom?.solana;
+
+            if (!provider) {
+                statusDiv.innerHTML = '<div class="status error">❌ Phantom not detected</div>';
+                return;
+            }
+
+            if (provider.isConnected && provider.publicKey) {
+                statusDiv.innerHTML = `
+                    <div class="status success">✅ Phantom is UNLOCKED and connected</div>
+                    <p>Public Key: <code>${provider.publicKey.toString()}</code></p>
+                `;
+            } else {
+                statusDiv.innerHTML = `
+                    <div class="status warning">⚠️ Phantom is detected but not connected</div>
+                    <p>This could mean:</p>
+                    <ul>
+                        <li>Phantom is locked (click the extension icon and unlock with password)</li>
+                        <li>Phantom hasn't been connected to this site yet</li>
+                        <li>Connection was revoked in Phantom settings</li>
+                    </ul>
+                `;
+            }
+        }
+
+        // Test 4: Request Permissions
+        async function requestPhantomPermissions() {
+            const statusDiv = document.getElementById('permissionsStatus');
+            const provider = window.solana || window.phantom?.solana;
+
+            if (!provider) {
+                statusDiv.innerHTML = '<div class="status error">❌ Phantom not detected</div>';
+                return;
+            }
+
+            statusDiv.innerHTML = '<div class="status info">Requesting permissions from Phantom...</div>';
+
+            try {
+                if (provider.request) {
+                    const response = await provider.request({ method: 'connect' });
+                    statusDiv.innerHTML = `
+                        <div class="status success">✅ Permissions GRANTED!</div>
+                        <p>Public Key: <code>${response.publicKey.toString()}</code></p>
+                    `;
+                } else {
+                    statusDiv.innerHTML = '<div class="status error">❌ provider.request() method not available</div>';
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `
+                    <div class="status error">❌ Permission request failed: ${error.message}</div>
+                    <p>Error code: ${error.code || 'N/A'}</p>
+                `;
+            }
+        }
+
+        // Test 5: Check Connected Sites
+        function checkConnectedSites() {
+            const statusDiv = document.getElementById('sitesStatus');
+            const provider = window.solana || window.phantom?.solana;
+
+            if (!provider) {
+                statusDiv.innerHTML = '<div class="status error">❌ Phantom not detected</div>';
+                return;
+            }
+
+            if (provider.isConnected) {
+                statusDiv.innerHTML = `
+                    <div class="status success">✅ This site IS connected to Phantom</div>
+                    <p>Public Key: <code>${provider.publicKey.toString()}</code></p>
+                    <p>If having issues, try revoking and reconnecting from Phantom settings.</p>
+                `;
+            } else {
+                statusDiv.innerHTML = `
+                    <div class="status warning">⚠️ This site is NOT connected to Phantom</div>
+                    <p>This is normal if you haven't connected yet. Try the full connection test below.</p>
+                `;
+            }
+        }
+
+        // Test 7: Full Connection Test
+        async function fullConnectionTest() {
+            const statusDiv = document.getElementById('fullTestStatus');
+            const provider = window.solana || window.phantom?.solana;
+
+            if (!provider) {
+                statusDiv.innerHTML = '<div class="status error">❌ Phantom not detected - install it first</div>';
+                return;
+            }
+
+            statusDiv.innerHTML = '<div class="status info">🔄 Step 1/3: Calling connect()...</div>';
+            console.log('[FULL TEST] Starting connection test...');
+
+            try {
+                console.log('[FULL TEST] Calling provider.connect()...');
+                const response = await provider.connect();
+
+                statusDiv.innerHTML = '<div class="status info">🔄 Step 2/3: Connection established, verifying...</div>';
+                console.log('[FULL TEST] Connect response:', response);
+
+                if (response.publicKey) {
+                    const publicKey = response.publicKey.toString();
+                    console.log('[FULL TEST] Success! Public key:', publicKey);
+
+                    statusDiv.innerHTML = `
+                        <div class="status success">✅ CONNECTION SUCCESSFUL!</div>
+                        <h3 style="color: green;">🎉 Phantom is working perfectly!</h3>
+                        <p><strong>Connected Public Key:</strong></p>
+                        <code style="display: block; padding: 10px; background: #f4f4f4; margin: 10px 0;">${publicKey}</code>
+                        <p>Your Phantom wallet is properly configured and working. You can now use it with the application!</p>
+                    `;
+                } else {
+                    statusDiv.innerHTML = '<div class="status error">❌ Connected but no public key received</div>';
+                }
+            } catch (error) {
+                console.error('[FULL TEST] Error:', error);
+
+                let errorHTML = `
+                    <div class="status error">❌ CONNECTION FAILED</div>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                    <p><strong>Error Name:</strong> ${error.name}</p>
+                `;
+
+                if (error.message.includes('User rejected')) {
+                    errorHTML += `
+                        <div class="status warning">
+                            <p>You clicked "Cancel" in the Phantom popup.</p>
+                            <p>Try again and click "Connect" this time.</p>
+                        </div>
+                    `;
+                } else if (error.message.includes('popup')) {
+                    errorHTML += `
+                        <div class="status warning">
+                            <p>Popup was blocked! Check address bar for blocked popup icon (🚫)</p>
+                        </div>
+                    `;
+                }
+
+                statusDiv.innerHTML = errorHTML;
+            }
+        }
+
+        // Test 8: Extension Health
+        function checkExtensionStatus() {
+            const statusDiv = document.getElementById('extensionStatus');
+            const provider = window.solana || window.phantom?.solana;
+
+            if (!provider) {
+                statusDiv.innerHTML = `
+                    <div class="status error">❌ Extension not loaded</div>
+                    <p>Phantom extension is not injecting into the page. Try:</p>
+                    <ol>
+                        <li>Reload the extension from chrome://extensions</li>
+                        <li>Restart your browser</li>
+                        <li>Reinstall Phantom</li>
+                    </ol>
+                `;
+                return;
+            }
+
+            let html = '<div class="status success">✅ Extension is loaded</div>';
+            html += '<p><strong>Available methods:</strong></p><ul>';
+
+            const methods = ['connect', 'disconnect', 'signTransaction', 'signAllTransactions', 'signMessage', 'request'];
+            methods.forEach(method => {
+                const available = typeof provider[method] === 'function';
+                html += `<li>${method}: ${available ? '✅' : '❌'}</li>`;
+            });
+
+            html += '</ul>';
+            html += `<p><strong>Properties:</strong></p><ul>`;
+            html += `<li>isPhantom: ${provider.isPhantom ? '✅' : '❌'}</li>`;
+            html += `<li>isConnected: ${provider.isConnected ? '✅' : '❌'}</li>`;
+            html += `<li>publicKey: ${provider.publicKey || 'null'}</li>`;
+            html += '</ul>';
+
+            statusDiv.innerHTML = html;
+        }
+
+        // Test 9: CSP Check
+        function checkCSP() {
+            const statusDiv = document.getElementById('cspStatus');
+
+            // Check for CSP meta tag
+            const cspMeta = document.querySelector('meta[http-equiv="Content-Security-Policy"]');
+
+            if (cspMeta) {
+                statusDiv.innerHTML = `
+                    <div class="status warning">⚠️ CSP meta tag found</div>
+                    <p>Content: <code>${cspMeta.content}</code></p>
+                    <p>This might be blocking Phantom. Check if it allows chrome-extension: sources.</p>
+                `;
+            } else {
+                statusDiv.innerHTML = `
+                    <div class="status success">✅ No blocking CSP meta tag found</div>
+                    <p>CSP is not blocking the extension from this page.</p>
+                `;
+            }
+        }
+
+        // Direct Test
+        async function directPhantomTest() {
+            const statusDiv = document.getElementById('directTestStatus');
+
+            console.log('=== DIRECT PHANTOM TEST ===');
+            console.log('window.solana exists:', !!window.solana);
+            console.log('window.solana.isPhantom:', window.solana?.isPhantom);
+
+            if (!window.solana) {
+                statusDiv.innerHTML = `
+                    <div class="status error">❌ window.solana is undefined</div>
+                    <p>Phantom is not installed or not loading. Install from <a href="https://phantom.app" target="_blank">phantom.app</a></p>
+                `;
+                return;
+            }
+
+            statusDiv.innerHTML = '<div class="status info">Calling window.solana.connect() RIGHT NOW...</div>';
+
+            try {
+                console.log('Calling window.solana.connect()...');
+                const result = await window.solana.connect();
+                console.log('SUCCESS! Result:', result);
+
+                statusDiv.innerHTML = `
+                    <div class="status success">✅✅✅ IT WORKS! ✅✅✅</div>
+                    <h2 style="color: green;">Phantom popup appeared and you connected!</h2>
+                    <p><strong>Public Key:</strong> <code>${result.publicKey.toString()}</code></p>
+                    <p style="background: #d4edda; padding: 15px; border-radius: 8px; margin-top: 15px;">
+                        <strong>Great news!</strong> Phantom is working perfectly with direct calls.
+                        The issue is likely in how the React app is calling it.
+                        Tell the developer that <code>window.solana.connect()</code> works fine.
+                    </p>
+                `;
+            } catch (error) {
+                console.error('FAILED! Error:', error);
+
+                statusDiv.innerHTML = `
+                    <div class="status error">❌ Direct test failed</div>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                    <p><strong>Error name:</strong> ${error.name}</p>
+
+                    ${error.message.includes('popup') ? `
+                        <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-top: 10px;">
+                            <strong>🚫 POPUP IS BLOCKED!</strong><br>
+                            Look at your browser's address bar (top right area) for a popup blocked icon.
+                            Click it and allow popups from this site.
+                        </div>
+                    ` : ''}
+
+                    ${error.message.includes('User rejected') ? `
+                        <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-top: 10px;">
+                            You clicked "Cancel" in Phantom. Try again and click "Connect".
+                        </div>
+                    ` : ''}
+                `;
+            }
+        }
+
+        // Auto-run detection on load
+        window.addEventListener('load', () => {
+            console.log('=== PHANTOM DIAGNOSTICS ===');
+            setTimeout(() => {
+                detectPhantom();
+                checkPhantomLock();
+            }, 500);
+        });
+    </script>
+</body>
+</html>

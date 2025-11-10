@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Phantom Deep Diagnostic</title>
+  <style>
+    body { 
+      font-family: monospace; 
+      padding: 20px; 
+      background: #000; 
+      color: #0f0; 
+    }
+    button { 
+      padding: 10px 20px; 
+      margin: 5px; 
+      cursor: pointer; 
+      background: #0f0;
+      color: #000;
+      border: 2px solid #0f0;
+      font-weight: bold;
+    }
+    .log { 
+      background: #111; 
+      padding: 10px; 
+      margin: 10px 0;
+      border: 1px solid #0f0;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔬 Phantom Deep Diagnostic</h1>
+  
+  <button onclick="testConnect()">1. Test Connect</button>
+  <button onclick="inspectPhantom()">2. Inspect Phantom Object</button>
+  <button onclick="testEvents()">3. Test Events</button>
+  <button onclick="clearLogs()">Clear</button>
+  
+  <div id="logs"></div>
+
+  <script>
+    function log(msg) {
+      const div = document.createElement('div');
+      div.className = 'log';
+      div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      document.getElementById('logs').prepend(div);
+      console.log(msg);
+    }
+
+    function clearLogs() {
+      document.getElementById('logs').innerHTML = '';
+    }
+
+    async function testConnect() {
+      log('=== CONNECT TEST START ===');
+      
+      if (!window.solana) {
+        log('ERROR: window.solana not found');
+        return;
+      }
+      
+      log(`Phantom installed: ${window.solana.isPhantom}`);
+      log(`Currently connected: ${window.solana.isConnected}`);
+      
+      try {
+        log('Calling window.solana.connect()...');
+        log('>>> LOOK FOR POPUP NOW <<<');
+        
+        const promise = window.solana.connect();
+        log(`Promise returned: ${typeof promise}`);
+        log(`Promise is: ${promise}`);
+        
+        const result = await promise;
+        log(`SUCCESS! PublicKey: ${result.publicKey.toString()}`);
+        
+      } catch (err) {
+        log(`ERROR: ${err.message}`);
+        log(`Error type: ${err.constructor.name}`);
+        log(`Full error: ${JSON.stringify(err, Object.getOwnPropertyNames(err))}`);
+      }
+      
+      log('=== CONNECT TEST END ===');
+    }
+
+    function inspectPhantom() {
+      log('=== PHANTOM INSPECTION ===');
+      
+      if (!window.solana) {
+        log('window.solana: NOT FOUND');
+        return;
+      }
+      
+      const props = Object.keys(window.solana);
+      log(`window.solana properties: ${props.join(', ')}`);
+      
+      log(`isPhantom: ${window.solana.isPhantom}`);
+      log(`isConnected: ${window.solana.isConnected}`);
+      log(`publicKey: ${window.solana.publicKey}`);
+      log(`connect type: ${typeof window.solana.connect}`);
+      log(`disconnect type: ${typeof window.solana.disconnect}`);
+      
+      // Check if connect is a proper function
+      try {
+        log(`connect.toString(): ${window.solana.connect.toString().substring(0, 100)}`);
+      } catch (e) {
+        log(`Error inspecting connect: ${e.message}`);
+      }
+    }
+
+    function testEvents() {
+      log('=== EVENT TEST ===');
+      
+      if (!window.solana) {
+        log('window.solana not found');
+        return;
+      }
+      
+      log('Setting up event listeners...');
+      
+      window.solana.on?.('connect', (publicKey) => {
+        log(`EVENT: connect fired! PublicKey: ${publicKey}`);
+      });
+      
+      window.solana.on?.('disconnect', () => {
+        log(`EVENT: disconnect fired!`);
+      });
+      
+      window.solana.on?.('accountChanged', (publicKey) => {
+        log(`EVENT: accountChanged fired! PublicKey: ${publicKey}`);
+      });
+      
+      log('Event listeners registered. Try connecting now.');
+    }
+
+    // Auto-inspect on load
+    window.addEventListener('load', () => {
+      log('Page loaded. Phantom version check...');
+      
+      setTimeout(() => {
+        if (window.solana) {
+          log(`Phantom ready. Version info: ${window.solana._version || 'unknown'}`);
+          inspectPhantom();
+        } else {
+          log('Phantom NOT detected after 1 second');
+        }
+      }, 1000);
+    });
+  </script>
+</body>
+</html>

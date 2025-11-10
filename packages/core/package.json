@@ -1,0 +1,27 @@
+{
+  "name": "@skidr/core",
+  "version": "1.0.0",
+  "description": "Core game engine for skidr.io - environment agnostic",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist"
+  },
+  "keywords": ["game", "engine", "drift", "racing"],
+  "dependencies": {
+    "ws": "^8.14.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "@types/ws": "^8.5.8"
+  },
+  "peerDependencies": {},
+  "exports": {
+    ".": "./dist/index.js",
+    "./game": "./dist/game/index.js",
+    "./network": "./dist/network/index.js",
+    "./utils": "./dist/utils/index.js"
+  }
+}

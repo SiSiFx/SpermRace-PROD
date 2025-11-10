@@ -1,0 +1,5 @@
+* [33m78e59ed[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m test(prod): verify ignored build step gating
+* [33m5b21875[m chore(prod): redeploy using current project settings
+* [33m3525ca1[m chore(prod): trigger production deploy
+* [33mae852e4[m ui(client,prod): remove badge and add dynamic solscan cluster links
+* [33m2f34f97[m chore(dev): final trigger redeploy

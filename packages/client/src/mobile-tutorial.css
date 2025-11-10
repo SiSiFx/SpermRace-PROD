@@ -1,0 +1,251 @@
+/* =================================================================
+   MOBILE TUTORIAL OVERLAY - Countdown Control Guide
+   ================================================================= */
+
+.mobile-tutorial-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  pointer-events: none;
+  animation: tutorialFadeIn 0.3s ease-out;
+}
+
+.mobile-tutorial-overlay.compact {
+  background: transparent;
+}
+
+/* Countdown Display - Center */
+.tutorial-countdown {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  animation: pulseCountdown 1s ease-in-out infinite;
+}
+
+.countdown-number {
+  font-size: 80px;
+  font-weight: 900;
+  background: linear-gradient(135deg, #22d3ee, #14b8a6);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  line-height: 1;
+  filter: drop-shadow(0 0 20px rgba(34, 211, 238, 0.6));
+}
+
+/* Simple hint below countdown */
+.tutorial-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin-top: 80px;
+  text-align: center;
+  animation: fadeInUp 0.4s ease-out;
+}
+
+.countdown-ready {
+  font-size: 18px;
+  color: rgba(255, 255, 255, 0.9);
+  margin-top: 12px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  animation: fadeInUp 0.4s ease-out;
+}
+
+/* First-time Instructions Card */
+.tutorial-instructions {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin-top: 120px;
+  pointer-events: all;
+  animation: slideUp 0.4s ease-out;
+}
+
+.instructions-card {
+  background: linear-gradient(135deg, rgba(17, 24, 39, 0.98), rgba(31, 41, 55, 0.98));
+  border: 2px solid rgba(34, 211, 238, 0.4);
+  border-radius: 20px;
+  padding: 24px 28px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
+  max-width: 320px;
+  backdrop-filter: blur(20px);
+}
+
+.instructions-card h3 {
+  font-size: 22px;
+  font-weight: 800;
+  color: #fff;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.instructions-card ul {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 20px 0;
+}
+
+.instructions-card li {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.9);
+  margin-bottom: 12px;
+  padding-left: 24px;
+  position: relative;
+}
+
+.instructions-card li::before {
+  content: '→';
+  position: absolute;
+  left: 0;
+  color: #22d3ee;
+  font-weight: bold;
+}
+
+.instructions-card strong {
+  color: #22d3ee;
+  font-weight: 700;
+}
+
+.tutorial-got-it {
+  width: 100%;
+  padding: 14px;
+  background: linear-gradient(135deg, #22d3ee, #14b8a6);
+  border: none;
+  border-radius: 12px;
+  color: #000;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 6px 20px rgba(34, 211, 238, 0.4);
+}
+
+.tutorial-got-it:active {
+  transform: scale(0.96);
+}
+
+/* Quick Reminder for Returning Players */
+.tutorial-reminder {
+  position: absolute;
+  bottom: 180px;
+  left: 50%;
+  transform: translateX(-50%);
+  animation: slideUp 0.4s ease-out;
+}
+
+.reminder-text {
+  background: rgba(0, 0, 0, 0.85);
+  padding: 12px 20px;
+  border-radius: 30px;
+  border: 2px solid rgba(34, 211, 238, 0.3);
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+}
+
+/* Animations */
+@keyframes tutorialFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pulseCountdown {
+  0%, 100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.05);
+  }
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 20px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* Responsive adjustments */
+@media (max-height: 700px) {
+  .countdown-number {
+    font-size: 90px;
+  }
+
+  .tutorial-instructions {
+    margin-top: 100px;
+  }
+
+  .instructions-card {
+    padding: 20px 24px;
+  }
+
+  .joystick-indicator,
+  .boost-indicator {
+    bottom: 60px;
+  }
+}
+
+@media (max-width: 375px) {
+  .countdown-number {
+    font-size: 80px;
+  }
+
+  .joystick-indicator {
+    left: 60px;
+    bottom: 70px;
+  }
+
+  .boost-indicator {
+    right: 60px;
+    bottom: 70px;
+  }
+
+  .radar-indicator {
+    right: 50px;
+  }
+
+  .instructions-card {
+    max-width: 280px;
+    padding: 18px 22px;
+  }
+}
+
+/* Safe area support */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .joystick-indicator,
+  .boost-indicator {
+    bottom: calc(80px + env(safe-area-inset-bottom));
+  }
+
+  .tutorial-reminder {
+    bottom: calc(180px + env(safe-area-inset-bottom));
+  }
+}
+

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Phantom Connection Test</title>
+  <style>
+    body { 
+      font-family: Arial, sans-serif; 
+      padding: 40px; 
+      background: #1a1a1a; 
+      color: #fff; 
+    }
+    button { 
+      padding: 15px 30px; 
+      font-size: 16px; 
+      margin: 10px; 
+      cursor: pointer; 
+      background: linear-gradient(90deg, #22d3ee, #6366f1);
+      border: none;
+      border-radius: 8px;
+      color: #000;
+      font-weight: bold;
+    }
+    button:hover { transform: scale(1.05); }
+    #output { 
+      margin-top: 20px; 
+      padding: 20px; 
+      background: #2a2a2a; 
+      border-radius: 8px;
+      line-height: 1.6;
+    }
+    .success { color: #10b981; }
+    .error { color: #ef4444; }
+    .info { color: #22d3ee; }
+  </style>
+</head>
+<body>
+  <h1>🔍 Phantom Wallet Connection Test</h1>
+  <p>This page tests direct Phantom wallet connection without React/frameworks</p>
+  
+  <button onclick="testPhantom()">🚀 Test Phantom Connection</button>
+  <button onclick="clearOutput()">Clear</button>
+  
+  <div id="output"></div>
+
+  <script>
+    let logCount = 0;
+    
+    function clearOutput() {
+      document.getElementById('output').innerHTML = '';
+      logCount = 0;
+    }
+    
+    function log(msg, type = 'info') {
+      const output = document.getElementById('output');
+      logCount++;
+      const className = type === 'error' ? 'error' : type === 'success' ? 'success' : 'info';
+      output.innerHTML += `<p class="${className}">${logCount}. ${msg}</p>`;
+      console.log(`[${type.toUpperCase()}]`, msg);
+    }
+
+    async function testPhantom() {
+      clearOutput();
+      log('Starting Phantom connection test...', 'info');
+      
+      // Step 1: Check if Phantom is installed
+      if (!window.solana) {
+        log('❌ window.solana NOT FOUND - Phantom is not installed!', 'error');
+        log('Install Phantom from: https://phantom.app/', 'error');
+        return;
+      }
+      log('✅ window.solana EXISTS', 'success');
+      
+      // Step 2: Check if it's Phantom
+      if (!window.solana.isPhantom) {
+        log('⚠️ Wallet detected but it is NOT Phantom', 'error');
+        return;
+      }
+      log('✅ window.solana.isPhantom = true', 'success');
+      
+      // Step 3: Check connection status
+      log(`Connection status: ${window.solana.isConnected ? 'CONNECTED' : 'NOT CONNECTED'}`, 'info');
+      
+      if (window.solana.isConnected && window.solana.publicKey) {
+        log(`✅ Already connected! PublicKey: ${window.solana.publicKey.toString()}`, 'success');
+        return;
+      }
+      
+      // Step 4: Attempt connection
+      log('📞 Calling window.solana.connect()...', 'info');
+      log('👆 CHECK YOUR BROWSER FOR PHANTOM POPUP!', 'info');
+      log('⚠️ If popup is blocked, check your browser address bar for popup blocker icon', 'info');
+      
+      try {
+        // Set a timeout to detect if user doesn't approve
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout: No response after 30 seconds')), 30000)
+        );
+        
+        const connectPromise = window.solana.connect();
+        
+        const resp = await Promise.race([connectPromise, timeoutPromise]);
+        
+        log('✅✅✅ SUCCESS! Phantom connected!', 'success');
+        log(`PublicKey: ${resp.publicKey.toString()}`, 'success');
+        log(`You can now use this wallet for transactions!`, 'success');
+        
+      } catch (err) {
+        log(`❌ CONNECTION FAILED: ${err.message}`, 'error');
+        
+        if (err.message.includes('User rejected')) {
+          log('You clicked "Cancel" in the Phantom popup', 'error');
+        } else if (err.message.includes('Timeout')) {
+          log('Possible causes:', 'error');
+          log('1. Popup was blocked by browser', 'error');
+          log('2. Phantom extension is locked', 'error');
+          log('3. You did not approve the connection', 'error');
+        } else {
+          log(`Error details: ${JSON.stringify(err)}`, 'error');
+        }
+      }
+    }
+    
+    // Auto-run test on page load
+    window.addEventListener('load', () => {
+      log('Page loaded. Click "Test Phantom Connection" button to start.', 'info');
+    });
+  </script>
+</body>
+</html>
+
+<script>
+// Add a helper button to manually trigger Phantom
+window.addEventListener('load', () => {
+  const btn = document.createElement('button');
+  btn.textContent = '🔓 Open Phantom Extension';
+  btn.onclick = () => {
+    alert('Please:\n1. Click the Phantom extension icon in your browser toolbar (top right)\n2. Make sure it is UNLOCKED (enter password if needed)\n3. Then try the connection test again');
+    // Try to trigger Phantom programmatically
+    if (window.solana?.isPhantom) {
+      window.solana.connect({ onlyIfTrusted: false }).catch(e => console.log('Expected:', e));
+    }
+  };
+  document.body.insertBefore(btn, document.getElementById('output'));
+});
+</script>

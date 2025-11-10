@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Wallet Test</title>
+    <style>
+      body { font-family: system-ui, sans-serif; background: #0e1116; color: #fff; padding: 2rem; }
+      button { padding: 0.6rem 1.2rem; font-size: 1rem; margin-right: 1rem; border-radius: 0.5rem; border: none; cursor: pointer; }
+      button:disabled { opacity: 0.6; cursor: not-allowed; }
+      .status { margin-top: 1.5rem; white-space: pre-wrap; font-family: 'JetBrains Mono', monospace; background: rgba(255,255,255,0.05); padding: 1rem; border-radius: 0.75rem; }
+    </style>
+  </head>
+  <body>
+    <h1>Wallet Flow Smoke Test</h1>
+    <p>Click the button below to open your Solana wallet modal. Approve or reject the request and watch the status update.</p>
+    <div id="vanilla">
+      <button id="btnConnect">Connect (Vanilla)</button>
+      <button id="btnDisconnect" disabled>Disconnect</button>
+      <div class="status" id="status">Detecting providers…</div>
+    </div>
+    <hr style="margin:2rem 0; opacity:0.2" />
+    <h2>React Wallet Test</h2>
+    <div id="app"></div>
+    <script type="module">
+      // Vanilla fallback using injected providers
+      const status = document.getElementById('status');
+      const btnConnect = document.getElementById('btnConnect');
+      const btnDisconnect = document.getElementById('btnDisconnect');
+
+      function detectProvider() {
+        const w = window;
+        const candidates = [
+          { name: 'Phantom', p: (w).phantom?.solana },
+          { name: 'Window.solana', p: (w).solana },
+          { name: 'Solflare', p: (w).solflare },
+        ];
+        for (const c of candidates) {
+          if (c.p && typeof c.p.connect === 'function') return { name: c.name, p: c.p };
+        }
+        return null;
+      }
+
+      function updateStatus(msg) {
+        status.textContent = msg;
+      }
+
+      let currentProvider = null;
+      const found = detectProvider();
+      if (found) {
+        currentProvider = found.p;
+        updateStatus(`Found provider: ${found.name}`);
+      } else {
+        updateStatus('No wallet provider detected. Install Phantom or Solflare.');
+      }
+
+      btnConnect.addEventListener('click', async () => {
+        if (!currentProvider) {
+          updateStatus('No provider. Install a wallet.');
+          return;
+        }
+        try {
+          btnConnect.disabled = true;
+          updateStatus('Requesting connection…');
+          const res = await currentProvider.connect({ onlyIfTrusted: false }).catch(() => currentProvider.connect());
+          const pk = (res?.publicKey || currentProvider.publicKey)?.toString?.() || 'unknown';
+          updateStatus(`Connected: ${pk}`);
+          btnDisconnect.disabled = false;
+        } catch (e) {
+          console.error(e);
+          updateStatus('Connect cancelled or failed');
+          btnConnect.disabled = false;
+        }
+      });
+
+      btnDisconnect.addEventListener('click', async () => {
+        try { await currentProvider?.disconnect?.(); } catch {}
+        btnDisconnect.disabled = true;
+        btnConnect.disabled = false;
+        updateStatus('Disconnected');
+      });
+
+      // React test mounts below (best-effort). If it fails, vanilla test above still works.
+      (async () => {
+        try {
+          const React = await import('react');
+          const { createRoot } = await import('react-dom/client');
+          const { WalletProvider, useWallet } = await import('/src/WalletProvider.tsx');
+
+          function WalletTest() {
+            const { connect, disconnect, publicKey, walletName, connected, isConnecting } = useWallet();
+            const [msg, setMsg] = React.useState('Idle');
+            return React.createElement(
+              'div',
+              null,
+              React.createElement('button', { onClick: async () => { setMsg('Opening wallet…'); setMsg((await connect()) ? 'Connected' : 'Cancelled'); }, disabled: isConnecting }, 'Connect Wallet (React)'),
+              React.createElement('button', { onClick: async () => { setMsg('Disconnecting…'); await disconnect(); setMsg('Disconnected'); }, disabled: !connected }, 'Disconnect'),
+              React.createElement('div', { className: 'status' }, `Connected: ${connected}\nWallet: ${walletName ?? '-'}\nPublic Key: ${publicKey ?? '-'}\nStatus: ${msg}`)
+            );
+          }
+
+          createRoot(document.getElementById('app')).render(
+            React.createElement(WalletProvider, null, React.createElement(WalletTest, null))
+          );
+        } catch (e) {
+          console.warn('React test not mounted:', e);
+        }
+      })();
+    </script>
+  </body>
+</html>

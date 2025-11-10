@@ -1,0 +1,6 @@
+{
+  "installCommand": "corepack enable && corepack prepare pnpm@10.18.2 --activate && pnpm install --frozen-lockfile",
+  "buildCommand": "pnpm --filter shared build && pnpm --filter client build",
+  "outputDirectory": "packages/client/dist",
+  "framework": "vite"
+}
