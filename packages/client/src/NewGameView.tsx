@@ -94,18 +94,6 @@ interface RadarPing {
   ttlMs?: number;
 }
 
-interface GelField {
-  x: number; y: number; width: number; height: number;
-  speedMultiplier: number; // 0.6..0.9
-  graphics: PIXI.Graphics;
-}
-
-interface FlowStream {
-  x: number; y: number; width: number; height: number;
-  vx: number; vy: number; // world-units per second contribution
-  graphics: PIXI.Graphics;
-}
-
 interface BoostPad {
   x: number; y: number; radius: number;
   cooldownMs: number; lastTriggeredAt: number;
@@ -127,8 +115,6 @@ class SpermRaceGame {
   public particles: Particle[] = [];
   public pickups: Pickup[] = [];
   public artifactContainer!: PIXI.Container;
-  public gelFields: GelField[] = [];
-  public flowStreams: FlowStream[] = [];
   public boostPads: BoostPad[] = [];
   public keys: { [key: string]: boolean } = {};
   public mouse = { x: 0, y: 0 };
@@ -667,12 +653,10 @@ class SpermRaceGame {
   generateArtifacts() {
     // deterministic seed hook removed (unused)
     // Clear prior
-    this.gelFields = [];
-    this.flowStreams = [];
     this.artifactContainer.removeChildren();
     // Slowdown squares and flow lanes disabled per player feedback
     // Keep containers clear and leave arrays empty
-    // (No gelFields, no flowStreams)
+    // (Removed unused features)
 
     // Spawn a few simple boost pads (easy, fun)
     this.spawnBoostPads(6);
@@ -3165,8 +3149,6 @@ class SpermRaceGame {
     try { this.pickupsContainer?.removeChildren?.(); } catch {}
     this.pickups = [];
     try { this.artifactContainer?.removeChildren?.(); } catch {}
-    this.gelFields = [];
-    this.flowStreams = [];
     
     // Reset all cars
     if (this.player) {
