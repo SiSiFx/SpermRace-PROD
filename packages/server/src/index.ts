@@ -11,6 +11,7 @@ import { GameWorld } from './GameWorld.js';
 import { LobbyManager } from './LobbyManager.js';
 import { AuthService } from './AuthService.js';
 import { SmartContractService } from './SmartContractService.js';
+import { DatabaseService } from './DatabaseService.js';
 import { ClientToServerMessage, ServerToClientMessage, GameStateUpdateMessage, LobbyStateMessage, Lobby, AuthenticatedMessage } from 'shared';
 import { clientToServerMessageSchema } from 'shared/dist/schemas.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -74,6 +75,11 @@ const wss = new WebSocketServer({
 const smartContractService = new SmartContractService();
 const gameWorld = new GameWorld(smartContractService);
 const lobbyManager = new LobbyManager(smartContractService);
+
+// Database for leaderboards and player stats
+const DB_PATH = process.env.DB_PATH || './packages/server/data/spermrace.db';
+const db = new DatabaseService(DB_PATH);
+log.info(`[DB] Using database: ${DB_PATH}`);
 const pendingSockets = new Set<WebSocket>();
 const playerIdToSocket = new Map<string, WebSocket>();
 const socketToPlayerId = new Map<WebSocket, string>();
@@ -278,6 +284,68 @@ app.get('/api/prize-preflight', async (_req, res) => {
     // in production, require a configured payout OR explicit skip flag (should be false in prod).
     const configured = !IS_PRODUCTION || smartContractService.isPayoutConfigured() || process.env.SKIP_ENTRY_FEE === 'true';
     res.json({ address: addr, lamports, sol: lamports >= 0 ? lamports / 1_000_000_000 : null, configured });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || String(e) });
+  }
+});
+
+// ================================================================================================
+// Leaderboard & Player Stats API
+// ================================================================================================
+
+// Get top players by wins
+app.get('/api/leaderboard/wins', limiterSensitive, (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string || '100'), 100);
+    const leaderboard = db.getTopWins(limit);
+    res.json({ leaderboard, type: 'wins', count: leaderboard.length });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || String(e) });
+  }
+});
+
+// Get top players by earnings
+app.get('/api/leaderboard/earnings', limiterSensitive, (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string || '100'), 100);
+    const leaderboard = db.getTopEarnings(limit);
+    res.json({ leaderboard, type: 'earnings', count: leaderboard.length });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || String(e) });
+  }
+});
+
+// Get top players by kills
+app.get('/api/leaderboard/kills', limiterSensitive, (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string || '100'), 100);
+    const leaderboard = db.getTopKills(limit);
+    res.json({ leaderboard, type: 'kills', count: leaderboard.length });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || String(e) });
+  }
+});
+
+// Get player stats by wallet
+app.get('/api/player/:wallet/stats', limiterSensitive, (req, res) => {
+  try {
+    const { wallet } = req.params;
+    const stats = db.getPlayerStats(wallet);
+    if (!stats) {
+      res.status(404).json({ error: 'Player not found' });
+      return;
+    }
+    res.json({ player: stats });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || String(e) });
+  }
+});
+
+// Get overall stats
+app.get('/api/stats', limiterSensitive, (req, res) => {
+  try {
+    const stats = db.getTotalStats();
+    res.json(stats);
   } catch (e: any) {
     res.status(500).json({ error: e?.message || String(e) });
   }
@@ -561,6 +629,26 @@ gameWorld.onPlayerEliminated = (playerId) => {
 gameWorld.onRoundEnd = (winnerId, prizeAmount, txSignature) => {
   const message: ServerToClientMessage = { type: 'roundEnd', payload: { winnerId, prizeAmount, txSignature } } as any;
   broadcastToAll(message);
+
+  // Record game result in database (async, fire-and-forget)
+  try {
+    const lobby = lobbyManager.getLobbyForPlayer(winnerId);
+    if (lobby && prizeAmount > 0) {
+      const prizeLamports = Math.floor(prizeAmount * 1_000_000_000);
+      const playerWallets = lobby.players; // all player IDs (wallet addresses)
+      
+      // Build kills map (kills tracking not implemented yet, default to 0)
+      const killsMap: Record<string, number> = {};
+      for (const wallet of playerWallets) {
+        killsMap[wallet] = 0; // TODO: Add kills tracking to GameWorld
+      }
+
+      db.recordGameResult(winnerId, prizeLamports, playerWallets.length, killsMap);
+      log.info(`[DB] Recorded game result for ${playerWallets.length} players`);
+    }
+  } catch (error) {
+    log.error('[DB] Failed to record game result:', error);
+  }
 };
 
 
