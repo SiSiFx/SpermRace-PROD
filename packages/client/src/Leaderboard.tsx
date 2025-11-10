@@ -20,7 +20,7 @@ interface GlobalStats {
   totalPrizes: number;
 }
 
-type LeaderboardType = 'wins' | 'earnings' | 'kills';
+type LeaderboardType = 'wins' | 'earnings';
 
 interface LeaderboardProps {
   onClose: () => void;
@@ -83,7 +83,6 @@ export function Leaderboard({ onClose, apiBase = '/api', myWallet, isMobile = fa
     switch (type) {
       case 'wins': return 'Wins';
       case 'earnings': return 'Total Earned';
-      case 'kills': return 'Kills';
     }
   };
 
@@ -136,12 +135,6 @@ export function Leaderboard({ onClose, apiBase = '/api', myWallet, isMobile = fa
             onClick={() => setActiveTab('earnings')}
           >
             💰 Top Earners
-          </button>
-          <button
-            className={`tab ${activeTab === 'kills' ? 'active' : ''}`}
-            onClick={() => setActiveTab('kills')}
-          >
-            ⚔️ Most Kills
           </button>
         </div>
 
