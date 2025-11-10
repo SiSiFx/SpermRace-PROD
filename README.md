@@ -1,347 +1,511 @@
-# 🧬 SpermRace.io – Spermatozoide Battle Royale
+# 🧬 SpermRace.io
 
-A real-time multiplayer battle royale game where players control spermatozoa in a race to fertilize the egg. Built with TypeScript, WebSockets, and HTML5 Canvas.
+**Real-time multiplayer racing game with Solana crypto integration**
 
-## 🎮 Game Features
+A competitive multiplayer game where players control sperm cells racing to fertilize the egg. Built with TypeScript, WebSocket, HTML5 Canvas, and Solana blockchain.
 
-- **Real-time multiplayer** - Up to 100 simultaneous spermatozoa
-- **Mouse-only controls** - Point-to-swim mechanics
-- **Swimming trails** - Spermatozoa leave persistent trails in their wake
-- **Collision detection** - Hit your own trail and you're eliminated!
-- **Server-authoritative** - All game logic runs on the server
-- **Spatial partitioning** - Optimized for 50+ players
-- **Configurable mechanics** - Easy tuning of spermatozoide physics and gameplay
-- **AI Bot System** - Built-in bot testing and stress testing capabilities
-- **🎭 Demo Mode** - Complete showcase with auto-bots, fake wallet, and live stats
-- **💰 Crypto Integration** - Simple wallet connection, entry fees, and winner rewards
-- **🗺️ Live Minimap** - Real-time player positions and world overview
-- **📊 Game Stats** - Live elimination counter, deaths, and performance tracking
-- **🏆 Live Leaderboards** - Dynamic rankings with prize pool updates
-- **🤖 AI Bot System** - 8 different skill level bots with varied behaviors
+[![Production](https://img.shields.io/badge/status-production-success)]()
+[![Server](https://img.shields.io/badge/server-online-success)]()
+[![Solana](https://img.shields.io/badge/blockchain-solana-blueviolet)]()
 
-## 🎛️ Gameplay Configuration
+🎮 **Play Now:** [https://spermrace.io](https://spermrace.io)
 
-All core game mechanics are easily tunable through the unified configuration system in `packages/server/src/game.config.ts`. This is the **single source of truth** for all game settings - no environment variables or .env files needed:
+---
 
-```typescript
-export const GAME_CONFIG = {
-  gameplay: {
-    // Arena dimensions
-    arena: {
-      width: 4000,
-      height: 4000,
-    },
+## 🎯 Features
 
-    // Spermatozoide physics
-    sperm: {
-      baseSpeed: 500,        // Sperm base swimming speed
-      maxTurnRate: 12,       // Maximum turn rate
-      turnAcceleration: 60,  // Turn acceleration
-      turnDamping: 12,       // Turn damping
-    },
+### Game Modes
+- **🏆 Tournament Mode** - Compete for real SOL prizes
+  - Entry fees: 0.006 SOL (Small), 0.01 SOL (Medium), 0.05 SOL (Big)
+  - Prize distribution: 85% winner, 10% platform, 5% second place
+  - Solo player protection with automatic refunds
+- **🎮 Practice Mode** - Free play to learn the game
 
-    // Swimming and propulsion system
-    propulsion: {
-      turnRateThreshold: 8,  // Threshold for swimming maneuvers
-      highSpeedPropulsion: 8, // High-speed propulsion
-      lowSpeedPropulsion: 6,  // Low-speed propulsion
-    },
+### Gameplay
+- **Real-time multiplayer** - Up to 32 players per lobby
+- **Cross-platform** - Optimized for mobile and desktop
+- **Touch controls** - Mobile-optimized joystick and boost button
+- **Smooth physics** - 60 FPS server-side game loop
+- **Collision detection** - Advanced spatial partitioning system
 
-    // Trail system
-    trail: {
-      minSpacingSquared: 16, // Minimum distance between trail points
-      maxPoints: 35,         // Maximum trail points
-      hitRadius: 6,          // Collision detection radius
-    },
-  },
-};
+### Blockchain Integration
+- **Solana wallet support** - Phantom, Solflare, Coinbase
+- **Entry fee system** - Automatic payment processing
+- **Prize distribution** - Instant payouts to winners
+- **Refund system** - Auto-refund if lobby doesn't fill (60s countdown)
+- **Transaction tracking** - View all transactions on Solscan
+
+### User Experience
+- **Player stats** - Track games played, win rate, kills, earnings
+- **Mobile responsive** - Full support for portrait and landscape
+- **Tutorial overlay** - Learn controls before playing
+- **Orientation warning** - Guides mobile users to optimal orientation
+- **Live countdown** - Visual feedback for lobby start times
+
+---
+
+## 🏗️ Architecture
+
+```
+spermrace/
+├── packages/
+│   ├── client/              # Frontend (Vite + React + Canvas)
+│   │   ├── src/
+│   │   │   ├── App.tsx              # PC version
+│   │   │   ├── AppMobile.tsx        # Mobile version
+│   │   │   ├── NewGameView.tsx      # Canvas game rendering
+│   │   │   ├── WsProvider.tsx       # WebSocket connection
+│   │   │   ├── WalletProvider.tsx   # Solana wallet
+│   │   │   └── *.css                # Styling
+│   │   └── vercel.json      # Deployment config
+│   │
+│   ├── server/              # Backend (Node.js + WebSocket)
+│   │   ├── src/
+│   │   │   ├── index.ts             # Main server & HTTP endpoints
+│   │   │   ├── GameWorld.ts         # Game physics & simulation
+│   │   │   ├── LobbyManager.ts      # Matchmaking & lobby logic
+│   │   │   ├── CollisionSystem.ts   # Collision detection
+│   │   │   ├── Player.ts            # Player entity
+│   │   │   ├── SmartContractService.ts  # Solana transactions
+│   │   │   └── AuthService.ts       # SIWS authentication
+│   │   └── dist/            # Compiled JavaScript
+│   │
+│   └── shared/              # Shared types & schemas
+│       └── src/
+│           ├── schemas.ts   # Message schemas (Zod)
+│           └── constants.ts # Game constants
+│
+├── .env                     # Environment variables
+├── ecosystem.config.js      # PM2 configuration
+└── README.md               # This file
 ```
 
-**To tweak gameplay during development:**
-1. Edit `packages/server/src/game.config.ts`
-2. Restart the server (`pnpm dev`)
-3. Test your changes immediately
-
-**Note**: All configuration is hardcoded in `game.config.ts` for simplicity and consistency. No environment variables or .env files are used.
-
-## 🥔 Potato Mode
-
-Test how the game performs on low-end hardware:
-
-- **Server-side**: Reduces tick rate from 60 to 10 TPS
-- **Client-side**: Drops network updates (adjustable 0-100%)
-- **Realistic simulation**: Adds artificial CPU delays
-
-### How to Use Potato Mode
-
-1. **Server**: Set `features.potatoMode: true` in `game.config.ts`
-2. **Client**: Use the orange "🥔 Potato Mode" slider in the top-right UI
-   - Toggle to enable/disable
-   - Adjust intensity (0-100%) for network simulation
-
-**Note**: The potato mode slider in the UI is the primary way to test performance.
+---
 
 ## 🚀 Quick Start
+
+### Prerequisites
+- **Node.js** 18+ and **pnpm** 8+
+- **Solana wallet** (Phantom recommended)
+- **VPS** for production deployment (optional)
 
 ### Development Setup
 
 ```bash
-# Clone and install
-git clone <repository>
-cd spermrace.io
+# Clone repository
+git clone git@github.com:SiSiFx/SpermRace-PROD.git spermrace
+cd spermrace
+
+# Install dependencies
 pnpm install
 
-# Setup development environment (enables all debug features)
-./setup-development.sh
+# Build shared package
+pnpm --filter shared build
 
-# Start both server and client with one command
-pnpm dev
+# Start development
+# Terminal 1: Server
+pnpm --filter server dev
+
+# Terminal 2: Client
+pnpm --filter client dev
+
+# Visit http://localhost:5173
 ```
-
-### 🎭 Demo Mode
-
-Experience the full game with auto-bots, crypto features, and live stats:
-
-```bash
-# Start demo mode with auto-bots and fake wallet
-pnpm demo
-
-# Visit: http://localhost:5173/
-# or: http://localhost:3000?mode=demo
-```
-
-**Demo Features:**
-- ✅ Auto-connects mock wallet with 1.0 SOL (no real money)
-- ✅ Full production game logic with real-time stats
-- ✅ 8 AI bots with different skill levels (easy/medium/hard/expert)
-- ✅ Live minimap + crash counter overlays
-- ✅ Real leaderboards and prize pool tracking
-- ✅ All game features except actual SOL transactions
-
-**Note**: The shared package (@skidr/shared) is automatically built during installation and before starting the development server. This ensures all TypeScript type definitions are available to the client and server packages.
-
-### Quick Commands
-
-```bash
-pnpm dev          # Start development mode (full crypto + debug)
-pnpm demo         # Start demo mode (auto-bots + fake wallet)
-pnpm prod         # Start production mode (real crypto)
-pnpm server       # Start server only
-pnpm client       # Start client only
-pnpm build        # Build client for production
-pnpm build:shared # Build shared package only
-```
-
-### 🎮 Environment Modes
-
-The game supports three distinct modes:
-
-**🔧 Development Mode** (`pnpm dev`)
-- Full crypto features with mock wallet
-- Debug UI (F1) and dev tools
-- Bot testing capabilities
-- Performance monitoring
-
-**🎭 Demo Mode** (`pnpm demo`)
-- Auto-connects mock wallet with 1.0 SOL
-- Full production game logic and real stats
-- 8-12 AI bots fighting automatically
-- Real-time leaderboards and prize pools
-- No real money transactions (wallet mocked)
-
-**🚀 Production Mode** (`pnpm prod`)
-- Real wallet connections
-- Real SOL transactions
-- No debug features
-- Optimized for performance
-
-### Troubleshooting
-
-If you encounter TypeScript errors related to missing modules from `@skidr/shared`, run:
-
-```bash
-pnpm build:shared
-```
-
-This builds the shared package and generates the necessary TypeScript definitions.
 
 ### Production Deployment
 
-For the simplest, low-maintenance production setup (one VPS, one domain, unified API+WS, static SPA via Nginx), follow:
+**Server (VPS with PM2):**
+```bash
+# Build server
+cd /opt/spermrace
+pnpm --filter server build
 
-- DEPLOYMENT-VPS.md — step-by-step guide
-- Unified backend on a single port (WS at /ws, API at /api)
-- Nginx serves the built client from /var/www/spermrace
+# Start with PM2
+pm2 start ecosystem.config.js
+pm2 save
+
+# Check status
+pm2 status
+pm2 logs spermrace-server-ws
+```
+
+**Client (Vercel):**
+```bash
+# Deploy to Vercel
+cd packages/client
+vercel --prod
+
+# Or push to main branch (auto-deploy if connected)
+git push origin master
+```
+
+---
+
+## ⚙️ Configuration
+
+### Environment Variables
+
+Create `/opt/spermrace/.env`:
 
 ```bash
-# Backend (PM2)
-pm2 start ops/pm2/ecosystem.config.js && pm2 save
+# Server
+NODE_ENV=production
+PORT=8080
 
-# Frontend (build locally, upload to VPS web root)
-pnpm --filter client build
-scp -r packages/client/dist/* USER@VPS:/var/www/spermrace/
+# Solana
+SOLANA_RPC_ENDPOINT=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY
+PRIZE_POOL_WALLET=YOUR_WALLET_ADDRESS
+PRIZE_POOL_SECRET_KEY=YOUR_SECRET_KEY_BASE58
+
+# Security
+ALLOWED_ORIGINS=https://spermrace.io,https://www.spermrace.io,...
+
+# Game Settings
+SKIP_ENTRY_FEE=false
+ENABLE_DEV_BOTS=false
+AUTH_GRACE_MS=70000
+LOBBY_MAX_WAIT=50
+LOBBY_COUNTDOWN=10
 ```
 
-## 🔧 Configuration
+### PM2 Configuration
 
-### Unified Configuration System
-
-All configuration is centralized in `packages/server/src/game.config.ts`. This file contains:
-
-- **Server settings**: Port, max players, performance options
-- **Gameplay mechanics**: Car physics, arena size, trail settings
-- **Bot system**: AI behavior, spawn settings, cleanup
-- **Feature flags**: Debug, performance monitoring, security
-
-**Important**: This is the single source of truth for all settings. No environment variables or .env files are used - everything is hardcoded for simplicity and consistency.
-
-### Feature Flags
-
-Easily toggle features by editing `game.config.ts`:
-
-**Server-side:**
-- `features.debug` - Enable debug logging
-- `features.performanceMonitoring` - Show performance metrics
-- `features.antiCheatLogging` - Log security events
-- `features.potatoMode` - Enable potato mode
-- `features.botTesting` - Enable AI bot stress testing
-
-**Client-side:**
-- Debug UI elements are controlled by server feature flags
-- Performance monitoring is controlled by server settings
-
-## 🏗️ Architecture for GIZ
-
-This project maintains GIZ's original 3-package structure with additional infrastructure:
-
-```
-spermrace.io/
-├── packages/
-│   ├── shared/          # 🎯 SHARED PACKAGE (types & common code)
-│   │   ├── src/
-│   │   │   ├── types/   # Game types & interfaces
-│   │   │   └── index.ts # Exports for client & server
-│   │   └── package.json
-│   │
-│   ├── client/          # 🎮 CLIENT PACKAGE (game frontend)
-│   │   ├── src/
-│   │   │   ├── input/   # Mouse steering
-│   │   │   ├── render/  # Canvas rendering
-│   │   │   ├── components/ # UI components
-│   │   │   └── net.ts   # WebSocket networking
-│   │   └── index.html
-│   │
-│   ├── server/          # ⚙️ SERVER PACKAGE (game logic)
-│   │   ├── src/
-│   │   │   ├── game/    # Core game logic & physics
-│   │   │   │   ├── sperm.ts    # Spermatozoide entity & physics
-│   │   │   │   ├── world.ts    # World simulation & collision
-│   │   │   │   └── collision/  # Collision detection system
-│   │   │   ├── environments/   # Environment-specific setups
-│   │   │   │   ├── demo/       # Demo mode (with bots)
-│   │   │   │   ├── dev/        # Development mode
-│   │   │   │   └── prod/       # Production mode
-│   │   │   └── game.config.ts  # Unified configuration
-│   │   └── package.json
-│   │
-│   ├── frontend/        # 🌐 INFRASTRUCTURE: Landing Page (Next.js)
-│   │   └── src/pages/   # React pages & wallet integration
-│   │
-│   └── backend/         # 🗄️ INFRASTRUCTURE: API Backend
-│       └── src/api/     # REST API & database integration
+See `ecosystem.config.js`:
+```javascript
+module.exports = {
+  apps: [{
+    name: 'spermrace-server-ws',
+    script: './packages/server/dist/server/src/index.js',
+    cwd: '/opt/spermrace',
+    env_file: '/opt/spermrace/.env'
+  }]
+};
 ```
 
-### 🎯 GIZ Work Areas
+---
 
-**Primary GIZ packages (preserve structure):**
-- `packages/shared/` - Types and shared utilities
-- `packages/client/` - Game client and rendering  
-- `packages/server/` - Core game logic and physics
+## 🎮 How to Play
 
-**Infrastructure packages (don't modify):**
-- `packages/frontend/` - Landing page and wallet UI
-- `packages/backend/` - API and database integration
+### Tournament Mode
 
-### 🚀 Quick Start for GIZ
+1. **Connect Wallet**
+   - Click "Enter Tournament"
+   - Select Phantom/Solflare/Coinbase
+   - Approve connection
+
+2. **Choose Tier**
+   - Small: 0.006 SOL (~$0.12)
+   - Medium: 0.01 SOL (~$0.20)
+   - Big: 0.05 SOL (~$1.00)
+
+3. **Pay Entry Fee**
+   - Sign transaction in wallet
+   - Wait for confirmation
+
+4. **Join Lobby**
+   - Wait for other players (or 60s solo timeout)
+   - Game starts automatically when lobby fills
+
+5. **Race to Win**
+   - **Desktop:** Point with mouse to swim
+   - **Mobile:** Use joystick to control direction
+   - **Boost:** Space bar (desktop) or button (mobile)
+   - Avoid obstacles and other players
+   - First to reach the egg wins!
+
+6. **Collect Prize**
+   - Winner receives 85% of prize pool automatically
+   - Transaction visible on Solscan
+
+### Practice Mode
+
+1. Click "Practice (Free)"
+2. No wallet or payment required
+3. Play solo to learn controls
+4. No prizes awarded
+
+---
+
+## 🔐 Security Features
+
+- **SIWS Authentication** - Sign-in with Solana for verified sessions
+- **Rate limiting** - Prevents spam and abuse
+- **Server-authoritative** - All game logic on server (anti-cheat)
+- **Session tokens** - Secure WebSocket connections
+- **Input validation** - All messages validated with Zod schemas
+- **Refund protection** - Automatic refunds for solo lobbies
+
+---
+
+## 📊 API Endpoints
+
+### HTTP Endpoints
 
 ```bash
-# Clone and setup
-git clone <repository>
-cd spermrace.io
+GET  /api/healthz          # Server health check
+GET  /api/prize-preflight  # Prize pool status
+GET  /api/siws-challenge   # Get SIWS challenge
+POST /api/siws-auth        # Authenticate with signed message
+POST /api/analytics        # Track events
+GET  /api/sol-price        # Current SOL price
+GET  /api/metrics          # Prometheus metrics
+```
+
+### WebSocket Messages
+
+**Client → Server:**
+- `join` - Join lobby with entry fee tier
+- `input` - Send player input (direction, boost)
+- `leave` - Leave current lobby
+
+**Server → Client:**
+- `authenticated` - Authentication successful
+- `lobbyState` - Current lobby state
+- `lobbyCountdown` - Countdown to game start
+- `soloPlayerWarning` - Solo player refund countdown
+- `gameStarting` - Game about to begin
+- `gameStateUpdate` - Real-time game state (30 FPS)
+- `roundEnd` - Game ended, winner announced
+- `lobbyRefund` - Entry fee refunded
+- `refundFailed` - Refund failed (rare)
+- `error` - Error message
+
+---
+
+## 🛠️ Development
+
+### Project Structure
+
+- **Monorepo:** pnpm workspace with 3 packages
+- **TypeScript:** Strict type checking throughout
+- **Shared types:** Single source of truth for client/server
+- **Hot reload:** Both client and server support hot reload
+- **Build:** Separate build processes for each package
+
+### Common Commands
+
+```bash
+# Install dependencies
 pnpm install
 
-# Start development (all packages)
-pnpm dev
+# Build all packages
+pnpm -r build
 
-# Work on specific packages
-pnpm --filter client dev    # Client only
-pnpm --filter server dev    # Server only  
-pnpm --filter shared build  # Build shared types
+# Build specific package
+pnpm --filter client build
+pnpm --filter server build
+pnpm --filter shared build
+
+# Development mode
+pnpm --filter server dev
+pnpm --filter client dev
+
+# Type checking
+pnpm --filter server tsc --noEmit
+pnpm --filter client tsc --noEmit
+
+# Lint (if configured)
+pnpm --filter server lint
+pnpm --filter client lint
 ```
 
-## 🎯 Game Mechanics
+### Git Workflow
 
-### Controls
-- **Mouse**: Point where you want to swim
-- **Arrow Keys**: Alternative swimming direction (fallback)
+```bash
+# Check status
+git status
 
-### Physics
-- **Movement**: Smooth swimming acceleration/deceleration with configurable parameters
-- **Trails**: Persistent swimming trails with collision detection
-- **Collision**: Self-collision detection with spawn protection
-- **Propulsion System**: Configurable swimming power and maneuverability
+# Commit changes
+git add .
+git commit -m "feat: description"
 
-### Performance
-- **Spatial Partitioning**: O(log n) collision detection for 50+ players
-- **Trail Optimization**: Efficient trail point management
-- **Network Optimization**: Minimal data transfer with potato mode simulation
+# Push to GitHub (backup)
+git push origin master
 
-## 🆕 Latest Updates
+# View history
+git log --oneline -10
+```
 
-### New Components Added
-- **🗺️ Live Minimap** (`packages/client/src/components/Minimap.ts`) - Real-time player positions overlay
-- **📊 Game Stats** (`packages/client/src/components/GameStats.ts`) - Crash counter, eliminations, survival time  
-- **🏆 Demo Dashboard** (`packages/frontend/src/pages/demo.tsx`) - Complete showcase with prize pools and earnings
-- **🤖 Enhanced Bots** (`packages/server/src/demo/DemoController.ts`) - 8 intelligent AI opponents with varied skills
+**⚠️ Important:** This repo is in **push-only mode**. Never `git pull` without reviewing changes first. See `GIT_PUSH_ONLY_GUIDE.md` for details.
 
-### Production Ready
-- **Environment switching**: Simple config change from DEMO → PRODUCTION  
-- **Smart contracts**: Ready for real SOL transactions
-- **Monitoring**: Built-in performance tracking
-- **Documentation**: Complete deployment guides in `PRODUCTION_DEPLOYMENT.md`
+---
 
-## 🔒 Security Features
+## 📝 Troubleshooting
 
-- **Input validation** - All inputs validated server-side
-- **Rate limiting** - Prevents spam inputs (configurable max inputs/second)
-- **Session tokens** - Authenticated WebSocket connections
-- **Anti-cheat logging** - Tracks suspicious behavior
+### Server Issues
 
-## 🧪 Testing
+**Server won't start:**
+```bash
+# Check PM2 logs
+pm2 logs spermrace-server-ws
 
-### Performance Testing
-- **FPS Throttling**: Test client performance at different framerates
-- **Potato Mode**: Simulate low-end hardware and slow networks
-- **Player Scaling**: Test with multiple simultaneous players
+# Restart server
+pm2 restart spermrace-server-ws
 
-### Bot Testing
-- **AI Bots**: Built-in bot system for stress testing
-- **Stress Controller**: Automated stress testing scenarios
-- **Debug Commands**: In-game bot management via debug UI
+# Check environment
+cat /opt/spermrace/.env
+```
+
+**CORS errors:**
+```bash
+# Verify ALLOWED_ORIGINS includes your domain
+grep ALLOWED_ORIGINS /opt/spermrace/.env
+
+# Restart after changing
+pm2 restart spermrace-server-ws
+```
+
+**Prize pool not configured:**
+```bash
+# Check prize pool status
+curl https://spermrace.io/api/prize-preflight
+
+# Verify secret key is set
+grep PRIZE_POOL_SECRET_KEY /opt/spermrace/.env
+```
+
+### Client Issues
+
+**Wallet won't connect:**
+- Clear browser cache
+- Try incognito mode
+- Ensure wallet extension is installed
+- Check browser console for errors
+
+**Can't join tournament:**
+- Verify wallet has enough SOL
+- Check network tab for failed requests
+- Ensure you're on the correct network (mainnet)
+
+**Game freezes or lags:**
+- Check internet connection
+- Try refreshing page
+- Test practice mode first
+- Check server status
+
+---
+
+## 📈 Monitoring
+
+### Server Health
+
+```bash
+# Check PM2 status
+pm2 status
+
+# View logs in real-time
+pm2 logs spermrace-server-ws --lines 100
+
+# Check memory usage
+pm2 monit
+
+# Metrics endpoint
+curl https://spermrace.io/api/metrics
+```
+
+### Analytics
+
+Analytics events tracked:
+- `join_requested` - Player attempts to join
+- `lobby_state` - Lobby state changes
+- `lobby_refund` - Refund processed
+- `refund_failed` - Refund failed
+- Various debug events for troubleshooting
+
+---
+
+## 🔄 Backup & Recovery
+
+### Automated Backups
+
+**Git repository:** All code backed up to GitHub
+- Repository: https://github.com/SiSiFx/SpermRace-PROD
+- Auto-backup on every commit
+- Version history preserved
+
+**Local backups:**
+```bash
+# Create backup
+cd /opt/spermrace
+tar -czf /root/backups/spermrace-$(date +%Y%m%d).tar.gz \
+  --exclude='node_modules' \
+  --exclude='dist' \
+  .
+```
+
+### Disaster Recovery
+
+If VPS crashes:
+```bash
+# On new VPS:
+git clone git@github.com:SiSiFx/SpermRace-PROD.git /opt/spermrace
+cd /opt/spermrace
+
+# Restore .env from backup
+scp backup-server:/path/to/.env .env
+
+# Install and build
+pnpm install
+pnpm --filter server build
+
+# Start
+pm2 start ecosystem.config.js
+pm2 save
+```
+
+See `RESTORATION_REPORT.md` for full recovery procedures.
+
+---
 
 ## 📚 Documentation
 
-- **CONFIGURATION.md**: Detailed guide for tuning all game parameters
-- **README.md**: This file - project overview and quick start
-- **Code Comments**: Extensive inline documentation in source files
+- **RESTORATION_REPORT.md** - Complete system restoration guide
+- **GIT_PUSH_ONLY_GUIDE.md** - Safe Git workflow for production
+- **DEPLOYMENT-VPS.md** - VPS deployment instructions (if exists)
+- **ARCHITECTURE.md** - Detailed architecture overview (if exists)
+
+---
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Make your changes
-3. Test thoroughly with the built-in testing tools
-4. Submit a pull request
+This is a private production repository. For feature requests or bug reports:
+
+1. Test thoroughly in practice mode first
+2. Check server logs for errors
+3. Document steps to reproduce
+4. Contact repository owner
+
+---
 
 ## 📄 License
 
-This project is licensed under the MIT License. 
+Proprietary - All rights reserved
+
+---
+
+## 🎯 Key Metrics
+
+- **Server uptime:** Check with `pm2 status`
+- **Prize pool:** 0.000895 SOL (check /api/prize-preflight)
+- **Players:** Real-time via WebSocket
+- **Response time:** <100ms average
+
+---
+
+## 🆘 Support
+
+**Production issues:**
+- Check server logs: `pm2 logs spermrace-server-ws`
+- View health: `curl https://spermrace.io/api/healthz`
+- GitHub: https://github.com/SiSiFx/SpermRace-PROD
+
+**Game support:**
+- Practice mode available for testing
+- No real money required for practice
+- Tournament mode requires SOL for entry fees
+
+---
+
+**Built with ❤️ using TypeScript, Node.js, Solana, and React**
+
+Last updated: November 10, 2025
