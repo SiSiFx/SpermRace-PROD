@@ -306,8 +306,47 @@ class SpermRaceGame {
     const text = combo >= texts.length ? `👑 ${combo}x RAMPAGE!` : texts[combo];
     if (text) {
       this.killStreakNotifications.push({ text, time: Date.now(), x, y });
-      this.screenShake(combo >= 3 ? 2 : 1);
-      this.hapticFeedback(combo >= 5 ? 'heavy' : 'success');
+      
+      // CRAZY COMBO EFFECTS!
+      const intensity = Math.min(combo, 6); // Cap at 6 for sanity
+      
+      // Massive screen shake for combos
+      this.screenShake(intensity * 0.8);
+      
+      // Camera zoom pulse - gets more intense with combo
+      if (combo >= 3) {
+        const zoomBoost = 1 + (intensity * 0.03); // Up to 18% zoom
+        this.camera.targetZoom = Math.min(this.camera.zoom * zoomBoost, this.camera.maxZoom);
+      }
+      
+      // Haptic goes wild
+      if (combo >= 5) {
+        this.hapticFeedback('heavy');
+        // Extra vibration for insane combos
+        setTimeout(() => { try { navigator.vibrate?.(50); } catch {} }, 100);
+      } else if (combo >= 3) {
+        this.hapticFeedback('success');
+      } else {
+        this.hapticFeedback('medium');
+      }
+      
+      // Particle explosion burst for high combos
+      if (combo >= 3 && this.player) {
+        const particleCount = combo * 3; // More particles per combo level
+        for (let i = 0; i < particleCount; i++) {
+          const angle = (Math.PI * 2 * i) / particleCount;
+          const speed = 100 + (combo * 20);
+          this.particles.push({
+            x: this.player.x,
+            y: this.player.y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            life: 1.0,
+            color: combo >= 5 ? 0xffaa00 : combo >= 4 ? 0xff6600 : 0xff3300,
+            graphics: this.getParticle()
+          });
+        }
+      }
     }
   }
 
@@ -2093,48 +2132,62 @@ class SpermRaceGame {
     const now = Date.now();
     const NOTIFICATION_LIFETIME = 2500; // Longer for better visibility
 
-    // Filter expired notifications
+    // Filter expired notifications FIRST to prevent duplicates
     this.killStreakNotifications = this.killStreakNotifications.filter(n => now - n.time < NOTIFICATION_LIFETIME);
-    this.nearMisses = this.nearMisses.filter(n => now - n.time < 1500); // Shorter for near-misses
+    this.nearMisses = this.nearMisses.filter(n => now - n.time < 1500);
+
+    // Clean up old DOM elements that might be stuck
+    const existingEls = document.querySelectorAll('[id^="streak-"], [id^="miss-"]');
+    existingEls.forEach(el => {
+      const id = el.id;
+      const timestamp = parseInt(id.split('-')[1]);
+      if (isNaN(timestamp) || now - timestamp > 3000) {
+        try { el.parentElement?.removeChild(el); } catch {}
+      }
+    });
 
     // Render kill streak notifications with enhanced animation
-    this.killStreakNotifications.forEach(notif => {
+    this.killStreakNotifications.forEach((notif, index) => {
       const age = (now - notif.time) / 1000;
       const progress = age / (NOTIFICATION_LIFETIME / 1000);
 
+      // Stack notifications vertically to prevent overlap
+      const yOffset = index * 40; // Space them out
+      
       // Calculate screen position
       const sx = notif.x * this.camera.zoom + this.camera.x + this.app!.screen.width * 0.5;
-      const sy = notif.y * this.camera.zoom + this.camera.y + this.app!.screen.height * 0.5 - 60 - (age * 30);
+      const sy = notif.y * this.camera.zoom + this.camera.y + this.app!.screen.height * 0.5 - 60 - (age * 30) - yOffset;
 
       // Create or update notification element
       let el = document.getElementById(`streak-${notif.time}`);
       if (!el) {
         el = document.createElement('div');
         el.id = `streak-${notif.time}`;
-        // Enhanced styling with scaling animation
-        const scale = progress < 0.2 ? 1 + (1 - progress / 0.2) * 0.5 : 1; // Pop in effect
-        el.style.cssText = `
-          position: fixed;
-          font-size: ${24 * scale}px;
-          font-weight: 900;
-          color: #ffffff;
-          text-shadow: 0 0 15px rgba(255,100,0,1), 0 0 30px rgba(255,100,0,0.8), 0 2px 4px rgba(0,0,0,0.8);
-          pointer-events: none;
-          z-index: 1000;
-          background: linear-gradient(90deg, #f43f5e, #fb923c, #fbbf24);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-          transform: scale(${scale});
-          filter: drop-shadow(0 0 10px rgba(251,146,60,0.6));
-        `;
         el.textContent = notif.text;
         document.body.appendChild(el);
       }
-
-      el.style.left = `${sx}px`;
-      el.style.top = `${sy}px`;
-      el.style.opacity = `${Math.max(0, 1 - progress)}`;
+      
+      // Enhanced styling with scaling animation
+      const scale = progress < 0.2 ? 1 + (1 - progress / 0.2) * 0.5 : 1; // Pop in effect
+      el.style.cssText = `
+        position: fixed;
+        left: ${sx}px;
+        top: ${sy}px;
+        font-size: ${24 * scale}px;
+        font-weight: 900;
+        color: #ffffff;
+        text-shadow: 0 0 15px rgba(255,100,0,1), 0 0 30px rgba(255,100,0,0.8), 0 2px 4px rgba(0,0,0,0.8);
+        pointer-events: none;
+        z-index: 1000;
+        background: linear-gradient(90deg, #f43f5e, #fb923c, #fbbf24);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        transform: scale(${scale});
+        filter: drop-shadow(0 0 10px rgba(251,146,60,0.6));
+        opacity: ${Math.max(0, 1 - progress)};
+        will-change: transform, opacity;
+      `;
 
       // Remove element when expired
       if (progress >= 1) {
@@ -2142,34 +2195,37 @@ class SpermRaceGame {
       }
     });
     
-    // Render near-miss notifications
-    this.nearMisses.forEach(notif => {
+    // Render near-miss notifications (prevent overlap)
+    this.nearMisses.forEach((notif, index) => {
       const age = (now - notif.time) / 1000;
       const progress = age / 1.5;
+      
+      const yOffset = index * 30; // Stack them
 
       const sx = notif.x * this.camera.zoom + this.camera.x + this.app!.screen.width * 0.5;
-      const sy = notif.y * this.camera.zoom + this.camera.y + this.app!.screen.height * 0.5 - 40;
+      const sy = notif.y * this.camera.zoom + this.camera.y + this.app!.screen.height * 0.5 - 40 + yOffset;
 
       let el = document.getElementById(`miss-${notif.time}`);
       if (!el) {
         el = document.createElement('div');
         el.id = `miss-${notif.time}`;
-        el.style.cssText = `
-          position: fixed;
-          font-size: 16px;
-          font-weight: 700;
-          color: #fbbf24;
-          text-shadow: 0 0 8px rgba(251,191,36,0.8), 0 1px 2px rgba(0,0,0,0.8);
-          pointer-events: none;
-          z-index: 999;
-        `;
         el.textContent = notif.text;
         document.body.appendChild(el);
       }
-
-      el.style.left = `${sx}px`;
-      el.style.top = `${sy}px`;
-      el.style.opacity = `${Math.max(0, 1 - progress)}`;
+      
+      el.style.cssText = `
+        position: fixed;
+        left: ${sx}px;
+        top: ${sy}px;
+        font-size: 16px;
+        font-weight: 700;
+        color: #fbbf24;
+        text-shadow: 0 0 8px rgba(251,191,36,0.8), 0 1px 2px rgba(0,0,0,0.8);
+        pointer-events: none;
+        z-index: 999;
+        opacity: ${Math.max(0, 1 - progress)};
+        will-change: opacity;
+      `;
 
       if (progress >= 1) {
         try { if (el.parentElement) el.parentElement.removeChild(el); } catch {}
@@ -2180,6 +2236,8 @@ class SpermRaceGame {
   renderKillFeed() {
     if (!this.killFeedContainer) return;
     const now = Date.now();
+    const KILL_LIFETIME = 6000;
+    
     // Merge local and server kill feed (server preferred when active)
     let feed: Array<{ killer: string; victim: string; time: number }> = [];
     if (this.wsHud?.active && Array.isArray(this.wsHud.killFeed)) {
@@ -2189,18 +2247,47 @@ class SpermRaceGame {
         time: ev.ts || now
       }));
     } else {
-      // Local practice
-      this.recentKills = this.recentKills.filter(k => now - k.time < 6000).slice(-6);
+      // Local practice - clean expired kills
+      this.recentKills = this.recentKills.filter(k => now - k.time < KILL_LIFETIME);
       feed = this.recentKills;
     }
-    // Fade by age
-    const KILL_LIFETIME = 6000;
+    
+    // Only show last 6 kills, most recent at bottom
     const items = feed.slice(-6);
-    this.killFeedContainer.innerHTML = items.map(k => {
-      const age = (now - k.time) / 1000;
-      const alpha = Math.max(0, 1 - (age * 1000) / KILL_LIFETIME);
-      return `<div class=\"hud-fade-in\" style=\"display:flex;gap:8px;align-items:center;background:rgba(0,0,0,0.45);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:6px 8px;color:${this.theme.text};opacity:${alpha}\">\n        <span style=\"width:6px;height:6px;border-radius:50%;background:#ef4444;display:inline-block\"></span>\n        <span style=\"color:${this.theme.text};opacity:0.9\">${k.killer}</span>\n        <span style=\"opacity:0.7\">→</span>\n        <span style=\"color:${this.theme.text}\">${k.victim}</span>\n      </div>`;
+    
+    // Build HTML in one go to prevent flickering
+    const html = items.map(k => {
+      const age = now - k.time;
+      const alpha = Math.max(0, 1 - (age / KILL_LIFETIME));
+      const slideIn = age < 300; // Slide in animation for first 300ms
+      const translateY = slideIn ? `translateY(${(1 - age / 300) * 20}px)` : 'translateY(0)';
+      
+      return `<div class="killfeed-item" style="
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        background: rgba(0,0,0,0.7);
+        border: 1px solid rgba(255,100,0,0.3);
+        border-radius: 8px;
+        padding: 8px 12px;
+        margin-bottom: 4px;
+        color: ${this.theme.text};
+        opacity: ${alpha};
+        transform: ${translateY};
+        transition: transform 0.3s ease-out, opacity 0.3s;
+        will-change: transform, opacity;
+      ">
+        <span style="width:6px;height:6px;border-radius:50%;background:#ef4444;flex-shrink:0;"></span>
+        <span style="color:#ff6b6b;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;">${k.killer}</span>
+        <span style="opacity:0.7;flex-shrink:0;">💀</span>
+        <span style="color:#fbbf24;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;">${k.victim}</span>
+      </div>`;
     }).join('');
+    
+    // Only update if content changed to prevent glitching
+    if (this.killFeedContainer.innerHTML !== html) {
+      this.killFeedContainer.innerHTML = html;
+    }
   }
 
   renderDebugOverlays() {
@@ -2740,6 +2827,9 @@ class SpermRaceGame {
 
         const now = Date.now();
         const isSelfTrail = trail.car === car;
+        
+        // REMOVE SELF-COLLISION - Players can't die from their own trail
+        if (isSelfTrail) continue;
 
         // Check collision with trail points
         for (let i = 1; i < trail.points.length; i++) {
@@ -2750,21 +2840,18 @@ class SpermRaceGame {
           // Skip old points
           if (age > 3.0) continue;
 
-          // Self-collision: skip last 10 points to prevent instant death
-          if (isSelfTrail && i >= trail.points.length - 10) continue;
-
           const distance = this.pointToLineDistance(car.x, car.y, p1.x, p1.y, p2.x, p2.y);
           const hitboxSize = p2.isBoosting ? 12 : 6;
 
           if (distance < hitboxSize) {
-            // Attribute kill to trail owner (or self)
+            // Attribute kill to trail owner
             this.recordKill(trail.car, car);
             this.destroyCar(car);
             break;
           }
           
           // NEAR-MISS DETECTION - Reward skillful dodging!
-          if (car === this.player && !isSelfTrail && distance < 40 && distance < closestMiss) {
+          if (car === this.player && distance < 40 && distance < closestMiss) {
             closestMiss = distance;
             missX = (p1.x + p2.x) / 2;
             missY = (p1.y + p2.y) / 2;
@@ -2876,6 +2963,13 @@ class SpermRaceGame {
     // Haptic feedback on death (mobile)
     if (car === this.player) {
       try { navigator.vibrate?.([100, 50, 100]); } catch {}
+      
+      // RESET KILL STREAK WHEN PLAYER DIES
+      this.killStreak = 0;
+      this.comboKills = 0;
+      this.comboMultiplier = 1;
+      this.lastKillTime = 0;
+      this.lastComboTime = 0;
     }
 
     // Ensure all visual parts are removed/destroyed to avoid lingering head/tail
