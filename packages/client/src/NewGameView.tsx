@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import * as PIXI from 'pixi.js';
 import { useWs } from './WsProvider';
+import { HudManager } from './HudManager';
 
 interface Car {
   x: number;
@@ -52,6 +53,12 @@ interface Car {
   turnResponsiveness?: number;
   lateralDragScalar?: number;
   tailColor?: number;
+  accelerationScalar?: number;
+  handlingAssist?: number;
+  impactMitigation?: number;
+  hotspotBuffExpiresAt?: number;
+  spotlightUntil?: number;
+  contactCooldown?: number;
 }
 
 interface Trail {
@@ -75,7 +82,7 @@ interface Pickup {
   x: number;
   y: number;
   radius: number;
-  type: 'energy';
+  type: 'energy' | 'overdrive';
   amount: number; // boost energy restored
   graphics: PIXI.Container;
   shape: PIXI.Graphics;
@@ -83,6 +90,8 @@ interface Pickup {
   pulseT: number;
   rotationSpeed: number;
   color: number;
+  expiresAt?: number;
+  source?: 'ambient' | 'hotspot';
 }
 
 interface RadarPing {
@@ -98,6 +107,20 @@ interface BoostPad {
   x: number; y: number; radius: number;
   cooldownMs: number; lastTriggeredAt: number;
   graphics: PIXI.Graphics;
+}
+
+interface Hotspot {
+  id: string;
+  x: number;
+  y: number;
+  radius: number;
+  state: 'telegraph' | 'active';
+  spawnAtMs: number;
+  activateAtMs: number;
+  expiresAtMs: number;
+  graphics: PIXI.Graphics;
+  label?: HTMLDivElement;
+  hasSpawnedLoot: boolean;
 }
 
 class SpermRaceGame {
@@ -125,7 +148,7 @@ class SpermRaceGame {
   public camera = (() => {
     // Portrait mobile: Zoom out more to see the narrow arena better
     const isPortraitMobile = typeof window !== 'undefined' && window.innerHeight > window.innerWidth && window.innerWidth < 768;
-    const defaultZoom = isPortraitMobile ? 0.6 : 0.8;
+    const defaultZoom = isPortraitMobile ? 0.45 : 0.55; // Even wider view
     return { 
       x: 0, y: 0, 
       zoom: defaultZoom, targetZoom: defaultZoom, 
@@ -147,6 +170,14 @@ class SpermRaceGame {
   public radarCtx!: CanvasRenderingContext2D;
   private container: HTMLElement;
   private cleanupFunctions: (() => void)[] = [];
+  private combatHotspots: Hotspot[] = [];
+  private hotspotSchedule: Array<{ triggerMs: number; triggered: boolean }> = [];
+  private finalSurgeBannerShown: boolean = false;
+  private lastSpotlightPingAt: number = 0;
+  private overdriveBannerEl: HTMLDivElement | null = null;
+  private hotspotToastEl: HTMLDivElement | null = null;
+  private hotspotToastTimeout: number | undefined;
+  private finalSurgeTimeout: number | undefined;
   
   // Visual toggles
   public smallTailEnabled: boolean = false; // disable near-head tail; keep only big gameplay trail
@@ -162,21 +193,25 @@ class SpermRaceGame {
   public unlockPickupsAfterMs: number = 25000;
   public unlockArtifactsAfterMs: number = 15000;
   
+  // Round-based tournament system
+  public currentRound: number = 1;
+  public totalRounds: number = 3;
+  public roundWins: number = 0;
+  public roundLosses: number = 0;
+  public roundInProgress: boolean = false;
+  public roundEndTime: number = 0;
+  
   // UI container for game elements
   public uiContainer!: HTMLDivElement;
   public leaderboardContainer!: HTMLDivElement;
   public killFeedContainer!: HTMLDivElement;
+  public hudManager!: HudManager;
   public recentKills: Array<{ killer: string; victim: string; time: number }>=[];
   private lastToastAt: number = 0;
   public killStreak: number = 0;
   public lastKillTime: number = 0;
   public killStreakNotifications: Array<{ text: string; time: number; x: number; y: number }> = [];
   
-  // Combo system for addictive gameplay
-  public comboMultiplier: number = 1;
-  public comboKills: number = 0;
-  public lastComboTime: number = 0;
-  public comboWindowMs: number = 5000; // 5s window to maintain combo
   
   // Near-miss detection for skill rewards
   public nearMisses: Array<{ text: string; time: number; x: number; y: number }> = [];
@@ -264,9 +299,9 @@ class SpermRaceGame {
 
   // JUICE METHODS - Make game feel amazing!
   private screenShake(intensity: number = 1) {
-    // Shake intensity: 1 = normal, 2 = strong, 3 = mega
-    this.camera.shakeX = (Math.random() - 0.5) * 20 * intensity;
-    this.camera.shakeY = (Math.random() - 0.5) * 20 * intensity;
+    // Reduced shake - less disorienting on mobile
+    this.camera.shakeX = (Math.random() - 0.5) * 8 * intensity;
+    this.camera.shakeY = (Math.random() - 0.5) * 8 * intensity;
   }
 
   private hapticFeedback(pattern: 'light' | 'medium' | 'heavy' | 'success' | 'warning') {
@@ -291,63 +326,6 @@ class SpermRaceGame {
           break;
       }
     } catch {}
-  }
-
-  private showComboNotification(x: number, y: number, combo: number) {
-    const texts = [
-      '', // 0
-      '', // 1
-      '🔥 DOUBLE KILL', // 2
-      '💥 TRIPLE KILL', // 3
-      '⚡ MEGA KILL', // 4
-      '🌟 ULTRA KILL', // 5
-      '👑 RAMPAGE', // 6+
-    ];
-    const text = combo >= texts.length ? `👑 ${combo}x RAMPAGE!` : texts[combo];
-    if (text) {
-      this.killStreakNotifications.push({ text, time: Date.now(), x, y });
-      
-      // CRAZY COMBO EFFECTS!
-      const intensity = Math.min(combo, 6); // Cap at 6 for sanity
-      
-      // Massive screen shake for combos
-      this.screenShake(intensity * 0.8);
-      
-      // Camera zoom pulse - gets more intense with combo
-      if (combo >= 3) {
-        const zoomBoost = 1 + (intensity * 0.03); // Up to 18% zoom
-        this.camera.targetZoom = Math.min(this.camera.zoom * zoomBoost, this.camera.maxZoom);
-      }
-      
-      // Haptic goes wild
-      if (combo >= 5) {
-        this.hapticFeedback('heavy');
-        // Extra vibration for insane combos
-        setTimeout(() => { try { navigator.vibrate?.(50); } catch {} }, 100);
-      } else if (combo >= 3) {
-        this.hapticFeedback('success');
-      } else {
-        this.hapticFeedback('medium');
-      }
-      
-      // Particle explosion burst for high combos
-      if (combo >= 3 && this.player) {
-        const particleCount = combo * 3; // More particles per combo level
-        for (let i = 0; i < particleCount; i++) {
-          const angle = (Math.PI * 2 * i) / particleCount;
-          const speed = 100 + (combo * 20);
-          this.particles.push({
-            x: this.player.x,
-            y: this.player.y,
-            vx: Math.cos(angle) * speed,
-            vy: Math.sin(angle) * speed,
-            life: 1.0,
-            color: combo >= 5 ? 0xffaa00 : combo >= 4 ? 0xff6600 : 0xff3300,
-            graphics: this.getParticle()
-          });
-        }
-      }
-    }
   }
 
   private showNearMiss(x: number, y: number, distance: number) {
@@ -456,7 +434,7 @@ class SpermRaceGame {
     await this.app.init({
       width,
       height,
-      backgroundColor: 0x1a1a1a,
+      backgroundColor: 0x1a1f2e, // Lighter dark blue for better visibility
       antialias: true,
       resolution: pixelRatio, // Capped at 2x on mobile (was causing 9x pixels on 3x devices)
       autoDensity: true, // Auto-adjust CSS to match resolution
@@ -502,6 +480,29 @@ class SpermRaceGame {
       });
     } catch {}
 
+    // WebGL context loss recovery (prevents black screen on mobile)
+    const handleContextLost = (e: Event) => {
+      e.preventDefault();
+      console.warn('[GAME] WebGL context lost, pausing game...');
+      try { (this.app as any)?.ticker?.stop?.(); } catch {}
+    };
+    const handleContextRestored = () => {
+      console.log('[GAME] WebGL context restored, resuming game...');
+      try { (this.app as any)?.ticker?.start?.(); } catch {}
+    };
+    try {
+      if (canvas) {
+        canvas.addEventListener('webglcontextlost', handleContextLost as EventListener);
+        canvas.addEventListener('webglcontextrestored', handleContextRestored as EventListener);
+        this.cleanupFunctions.push(() => {
+          try { canvas.removeEventListener('webglcontextlost', handleContextLost as EventListener); } catch {}
+          try { canvas.removeEventListener('webglcontextrestored', handleContextRestored as EventListener); } catch {}
+        });
+      }
+    } catch (e) {
+      console.warn('[GAME] Could not add WebGL context handlers:', e);
+    }
+
     // Create UI container for game-specific UI elements
     this.uiContainer = document.createElement('div');
     this.uiContainer.style.cssText = `
@@ -523,6 +524,26 @@ class SpermRaceGame {
     this.uiContainer.appendChild(this.overviewCanvas);
     this.overviewCtx = this.overviewCanvas.getContext('2d');
     
+    // Create danger overlay for zone warnings (vignette, desaturation, pulse effects)
+    const dangerOverlay = document.createElement('div');
+    dangerOverlay.id = 'game-danger-overlay';
+    Object.assign(dangerOverlay.style, {
+      position: 'absolute',
+      top: '0',
+      left: '0',
+      width: '100%',
+      height: '100%',
+      pointerEvents: 'none',
+      zIndex: '11',
+      opacity: '0',
+      transition: 'opacity 0.3s ease',
+      background: 'radial-gradient(circle at center, transparent 30%, rgba(239, 68, 68, 0.15) 100%)',
+      boxShadow: 'inset 0 0 200px rgba(239, 68, 68, 0.3)',
+      border: '4px solid transparent',
+      willChange: 'opacity, border-color'
+    });
+    this.uiContainer.appendChild(dangerOverlay);
+    
     // Setup the game world immediately
     this.setupWorld();
     this.dbg('setupWorld: done, stageChildren=', (this.app as any)?.stage?.children?.length);
@@ -543,6 +564,7 @@ class SpermRaceGame {
     // Build more spawn points to accommodate extra bots without falling back to random edge spawns
     this.buildSpawnQueue(40);
     this.preStart = { startAt: Date.now(), durationMs: 5000 };
+    this.roundInProgress = true; // Start first round
     this.dbg('spawnQueue[0..3]', this.spawnQueue.slice(0, 4));
     try { this.createPlayer(); } catch (e) { console.warn('createPlayer failed', e); }
     // Only create local dev bots in practice (when tournament HUD is not active)
@@ -621,6 +643,9 @@ class SpermRaceGame {
     this.pickupsContainer.visible = false;
     this.worldContainer.addChild(this.pickupsContainer);
     // Defer initial pickup spawn
+    
+    // Add ambient colored particles for atmosphere
+    this.createAmbientParticles();
 
     // Boost pads layer
     this.boostPadsContainer = new PIXI.Container();
@@ -679,6 +704,32 @@ class SpermRaceGame {
     // Matte grid only (remove veins that could look like a border)
     this.gridGraphics.stroke({ width: 1, color: this.theme.grid, alpha: this.theme.gridAlpha });
     this.worldContainer.addChild(this.gridGraphics);
+  }
+  
+  createAmbientParticles() {
+    // Add subtle floating colored particles for atmosphere
+    const particleCount = 40;
+    const colors = [0x22d3ee, 0x6366f1, 0x10b981, 0xfbbf24]; // Cyan, purple, green, yellow
+    
+    for (let i = 0; i < particleCount; i++) {
+      const x = (Math.random() - 0.5) * this.arena.width;
+      const y = (Math.random() - 0.5) * this.arena.height;
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      const size = 2 + Math.random() * 3;
+      
+      const particle = new PIXI.Graphics();
+      particle.circle(0, 0, size).fill({ color, alpha: 0.3 });
+      particle.x = x;
+      particle.y = y;
+      
+      // Store animation data
+      (particle as any).baseY = y;
+      (particle as any).floatSpeed = 0.3 + Math.random() * 0.5;
+      (particle as any).floatOffset = Math.random() * Math.PI * 2;
+      
+      this.worldContainer.addChild(particle);
+      try { (particle as any).zIndex = 3; } catch {}
+    }
   }
 
   drawArenaBorder() {
@@ -771,8 +822,8 @@ class SpermRaceGame {
     // Keep containers clear and leave arrays empty
     // (Removed unused features)
 
-    // Spawn a few simple boost pads (easy, fun)
-    this.spawnBoostPads(6);
+    // Spawn boost pads - increased for more strategic gameplay
+    this.spawnBoostPads(15);
   }
   spawnDecor() {
     // Scatter subtle neon nodes across the map
@@ -790,25 +841,47 @@ class SpermRaceGame {
     }
   }
 
-  spawnPickups(count: number) {
-    if (!this.app) return;
-    if (!this.pickupsContainer) {
-      try {
-        this.pickupsContainer = new PIXI.Container();
-        this.pickupsContainer.visible = true;
-        this.worldContainer?.addChild?.(this.pickupsContainer as any);
-      } catch {}
-      if (!this.pickupsContainer) return;
-    }
-    for (let i = 0; i < count; i++) {
-      const px = (Math.random() - 0.5) * this.arena.width * 0.9;
-      const py = (Math.random() - 0.5) * this.arena.height * 0.9;
-      const container = new PIXI.Container();
-      const g = new PIXI.Graphics();
-      const aura = new PIXI.Graphics();
-      const radius = 9 + Math.random() * 7;
-      // Triad shard: rotating triangle with neon stroke
-      const c = Math.random() < 0.5 ? 0x00ffd1 : 0xff6bd6;
+  private ensurePickupsContainer(): boolean {
+    if (this.pickupsContainer) return true;
+    try {
+      this.pickupsContainer = new PIXI.Container();
+      this.pickupsContainer.visible = true;
+      this.worldContainer?.addChild?.(this.pickupsContainer as any);
+    } catch {}
+    return !!this.pickupsContainer;
+  }
+
+  private createPickup(
+    x: number,
+    y: number,
+    type: Pickup['type'],
+    amount: number,
+    opts: {
+      radius?: number;
+      color?: number;
+      rotationSpeed?: number;
+      pulseOffset?: number;
+      expiresAt?: number;
+      source?: Pickup['source'];
+    } = {}
+  ): Pickup | null {
+    if (!this.ensurePickupsContainer() || !this.pickupsContainer) return null;
+
+    const container = new PIXI.Container();
+    const g = new PIXI.Graphics();
+    const aura = new PIXI.Graphics();
+    const radius = opts.radius ?? (type === 'overdrive' ? 18 : 9 + Math.random() * 7);
+    const color = opts.color ?? (type === 'overdrive' ? 0xfacc15 : (Math.random() < 0.5 ? 0x00ffd1 : 0xff6bd6));
+    const rotationSpeed = opts.rotationSpeed ?? ((Math.random() * 0.8 + 0.3) * (Math.random() < 0.5 ? -1 : 1));
+    const pulseOffset = opts.pulseOffset ?? Math.random() * Math.PI * 2;
+
+    if (type === 'overdrive') {
+      g.circle(0, 0, radius * 0.55).fill({ color: 0xffffff, alpha: 0.92 });
+      g.circle(0, 0, radius).stroke({ width: 3, color, alpha: 0.9 });
+      g.moveTo(-radius * 0.7, 0).lineTo(radius * 0.7, 0).stroke({ width: 2, color, alpha: 0.75 });
+      g.moveTo(0, -radius * 0.7).lineTo(0, radius * 0.7).stroke({ width: 2, color, alpha: 0.75 });
+      aura.circle(0, 0, radius * 1.45).stroke({ width: 2, color, alpha: 0.15 });
+    } else {
       const inner = Math.max(3, radius * 0.55);
       const tri = [
         { x: 0, y: -radius },
@@ -816,18 +889,282 @@ class SpermRaceGame {
         { x: -inner, y: radius * 0.6 }
       ];
       g.moveTo(tri[0].x, tri[0].y)
-       .lineTo(tri[1].x, tri[1].y)
-       .lineTo(tri[2].x, tri[2].y)
-       .closePath()
-       .stroke({ width: 2, color: c, alpha: 0.9 });
+        .lineTo(tri[1].x, tri[1].y)
+        .lineTo(tri[2].x, tri[2].y)
+        .closePath()
+        .stroke({ width: 2, color, alpha: 0.9 });
       g.circle(0, 0, Math.max(2, radius * 0.35)).fill({ color: 0xffffff, alpha: 0.85 });
-      aura.circle(0, 0, radius * 1.2).stroke({ width: 1, color: c, alpha: 0.08 });
-      container.addChild(aura);
-      container.addChild(g);
-      container.x = px;
-      container.y = py;
-      try { this.pickupsContainer.addChild(container); } catch {}
-      this.pickups.push({ x: px, y: py, radius, type: 'energy', amount: 15 + Math.floor(Math.random() * 15), graphics: container, shape: g, aura, pulseT: Math.random() * Math.PI * 2, rotationSpeed: (Math.random() * 0.8 + 0.3) * (Math.random() < 0.5 ? -1 : 1), color: c });
+      aura.circle(0, 0, radius * 1.2).stroke({ width: 1, color, alpha: 0.08 });
+    }
+
+    container.addChild(aura);
+    container.addChild(g);
+    container.x = x;
+    container.y = y;
+    try { this.pickupsContainer.addChild(container); } catch {}
+
+    const pickup: Pickup = {
+      x,
+      y,
+      radius,
+      type,
+      amount,
+      graphics: container,
+      shape: g,
+      aura,
+      pulseT: pulseOffset,
+      rotationSpeed,
+      color,
+      expiresAt: opts.expiresAt,
+      source: opts.source ?? 'ambient'
+    };
+
+    this.pickups.push(pickup);
+    return pickup;
+  }
+
+  spawnPickups(count: number) {
+    if (!this.app || !this.ensurePickupsContainer()) return;
+    for (let i = 0; i < count; i++) {
+      const px = (Math.random() - 0.5) * this.arena.width * 0.9;
+      const py = (Math.random() - 0.5) * this.arena.height * 0.9;
+      this.createPickup(px, py, 'energy', 15 + Math.floor(Math.random() * 15));
+    }
+  }
+
+  private showHotspotToast(message: string, accent: string) {
+    if (!this.uiContainer) return;
+    if (!this.hotspotToastEl) {
+      const el = document.createElement('div');
+      el.id = 'hotspot-toast';
+      Object.assign(el.style, {
+        position: 'absolute',
+        top: '16%',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        padding: '10px 18px',
+        borderRadius: '999px',
+        fontWeight: '700',
+        letterSpacing: '0.12em',
+        fontSize: '14px',
+        background: 'rgba(0,0,0,0.75)',
+        border: '2px solid rgba(250,204,21,0.6)',
+        color: accent,
+        textShadow: '0 0 12px rgba(250,204,21,0.45)',
+        opacity: '0',
+        transition: 'opacity 220ms ease-out',
+        pointerEvents: 'none',
+        zIndex: '40'
+  } as Partial<CSSStyleDeclaration>);
+      this.uiContainer.appendChild(el);
+      this.hotspotToastEl = el;
+    }
+
+    if (!this.hotspotToastEl) return;
+    this.hotspotToastEl.textContent = message;
+    this.hotspotToastEl.style.color = accent;
+    this.hotspotToastEl.style.borderColor = accent;
+    this.hotspotToastEl.style.textShadow = `0 0 12px ${accent}55`;
+    this.hotspotToastEl.style.opacity = '1';
+    if (this.hotspotToastTimeout) window.clearTimeout(this.hotspotToastTimeout);
+    this.hotspotToastTimeout = window.setTimeout(() => {
+      try { if (this.hotspotToastEl) this.hotspotToastEl.style.opacity = '0'; } catch {}
+    }, 1800);
+  }
+
+  private initializeHotspotSchedule() {
+    // Clear existing hotspots
+    for (const hotspot of this.combatHotspots) {
+      this.teardownHotspot(hotspot);
+    }
+    this.combatHotspots = [];
+
+    const duration = this.zone.durationMs || 0;
+    if (!duration) {
+      this.hotspotSchedule = [];
+      return;
+    }
+    const first = Math.floor(duration * 0.32);
+    const second = Math.floor(duration * 0.62);
+    this.hotspotSchedule = [
+      { triggerMs: first, triggered: false },
+      { triggerMs: second, triggered: false }
+    ];
+  }
+
+  private spawnHotspot(_triggerMs: number) {
+    if (!this.worldContainer) return;
+    const now = Date.now();
+    const radius = Math.min(320, Math.max(220, this.arena.width * 0.04));
+    const x = (Math.random() - 0.5) * this.arena.width * 0.35;
+    const y = (Math.random() - 0.5) * this.arena.height * 0.35;
+
+    const graphics = new PIXI.Graphics();
+    graphics.x = x;
+    graphics.y = y;
+    (graphics as any).zIndex = 6;
+    this.worldContainer.addChild(graphics);
+
+    const hotspot: Hotspot = {
+      id: `hotspot_${now}`,
+      x,
+      y,
+      radius,
+      state: 'telegraph',
+      spawnAtMs: now,
+      activateAtMs: now + 2500,
+      expiresAtMs: now + 9000,
+      graphics,
+      hasSpawnedLoot: false
+    };
+
+    this.combatHotspots.push(hotspot);
+    this.showHotspotToast('Overdrive hotspot incoming', '#facc15');
+    this.radarPings.push({ x, y, timestamp: now, playerId: `${hotspot.id}_tele`, kind: 'bounty', ttlMs: 2400 });
+  }
+
+  private activateHotspot(hotspot: Hotspot) {
+    hotspot.state = 'active';
+    hotspot.hasSpawnedLoot = false;
+    hotspot.expiresAtMs = Date.now() + 6000;
+    this.showHotspotToast('Overdrive active • grab power then bail!', '#facc15');
+    this.radarPings.push({ x: hotspot.x, y: hotspot.y, timestamp: Date.now(), playerId: `${hotspot.id}_active`, kind: 'bounty', ttlMs: 3400 });
+  }
+
+  private deployHotspotPickups(hotspot: Hotspot) {
+    if (hotspot.hasSpawnedLoot) return;
+    const count = 3;
+    for (let i = 0; i < count; i++) {
+      const angle = (Math.PI * 2 / count) * i;
+      const offset = hotspot.radius * 0.38;
+      this.createPickup(
+        hotspot.x + Math.cos(angle) * offset,
+        hotspot.y + Math.sin(angle) * offset,
+        'overdrive',
+        0,
+        {
+          radius: 18,
+          color: 0xfacc15,
+          rotationSpeed: 1.4 * (i % 2 === 0 ? 1 : -1),
+          expiresAt: hotspot.expiresAtMs,
+          source: 'hotspot'
+        }
+      );
+    }
+    hotspot.hasSpawnedLoot = true;
+  }
+
+  private teardownHotspot(hotspot: Hotspot) {
+    try { this.worldContainer?.removeChild(hotspot.graphics); } catch {}
+    try { hotspot.graphics.destroy(); } catch {}
+    if (hotspot.label) {
+      try { hotspot.label.remove(); } catch {}
+      hotspot.label = undefined;
+    }
+  }
+
+  private updateHotspots(_deltaTime: number) {
+    if (!this.worldContainer || !this.app) return;
+    if (!this.zone.startAtMs) return;
+    const now = Date.now();
+    const elapsed = now - this.zone.startAtMs;
+
+    for (const event of this.hotspotSchedule) {
+      if (!event.triggered && elapsed >= event.triggerMs) {
+        event.triggered = true;
+        this.spawnHotspot(event.triggerMs);
+      }
+    }
+
+    for (let i = this.combatHotspots.length - 1; i >= 0; i--) {
+      const hotspot = this.combatHotspots[i];
+      const g = hotspot.graphics;
+      if (hotspot.state === 'telegraph') {
+        const total = Math.max(1, hotspot.activateAtMs - hotspot.spawnAtMs);
+        const progress = Math.min(1, (now - hotspot.spawnAtMs) / total);
+        g.clear();
+        const rimAlpha = 0.35 + Math.sin(now * 0.009) * 0.18;
+        g.circle(0, 0, hotspot.radius).stroke({ width: 5, color: 0xfacc15, alpha: rimAlpha });
+        g.circle(0, 0, hotspot.radius * progress).stroke({ width: 2, color: 0xffffff, alpha: 0.25 + progress * 0.5 });
+        if (now >= hotspot.activateAtMs) {
+          this.activateHotspot(hotspot);
+        }
+      } else {
+        const remaining = hotspot.expiresAtMs - now;
+        g.clear();
+        const pulse = 0.55 + Math.sin(now * 0.012) * 0.25;
+        g.circle(0, 0, hotspot.radius * 0.78).fill({ color: 0x2b1800, alpha: 0.28 });
+        g.circle(0, 0, hotspot.radius * pulse).stroke({ width: 5, color: 0xfacc15, alpha: 0.52 });
+        g.circle(0, 0, hotspot.radius * (pulse * 0.6)).stroke({ width: 2, color: 0xffffff, alpha: 0.35 });
+        if (!hotspot.hasSpawnedLoot) this.deployHotspotPickups(hotspot);
+        if (remaining <= 0) {
+          this.teardownHotspot(hotspot);
+          this.combatHotspots.splice(i, 1);
+          continue;
+        }
+      }
+    }
+  }
+
+  private applyOverdriveBuff(car: Car) {
+    const now = Date.now();
+    car.boostEnergy = car.maxBoostEnergy;
+    car.hotspotBuffExpiresAt = now + 5000;
+    car.spotlightUntil = now + 7000;
+    car.isBoosting = true;
+    car.targetSpeed = car.boostSpeed * 1.05;
+    this.radarPings.push({ x: car.x, y: car.y, timestamp: now, playerId: 'overdrive', kind: 'bounty', ttlMs: 900 });
+    this.lastSpotlightPingAt = now;
+    this.showHotspotToast('Overdrive engaged • opponents can track you!', '#facc15');
+    if (car === this.player) {
+      this.hapticFeedback('success');
+      this.screenShake(0.55);
+      this.updateOverdriveBanner(true, car.hotspotBuffExpiresAt - now);
+    } else {
+      this.screenShake(0.35);
+    }
+  }
+
+  private updateOverdriveBanner(active: boolean, remainingMs: number) {
+    if (!this.uiContainer) return;
+    if (!this.overdriveBannerEl) {
+      const el = document.createElement('div');
+      el.id = 'overdrive-banner';
+      Object.assign(el.style, {
+        position: 'absolute',
+        top: '8%',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        padding: '6px 14px',
+        borderRadius: '10px',
+        fontWeight: '700',
+        fontSize: '13px',
+        letterSpacing: '0.08em',
+        background: 'rgba(0,0,0,0.75)',
+        border: '2px solid rgba(250,204,21,0.6)',
+        color: '#facc15',
+        textShadow: '0 0 12px rgba(250,204,21,0.45)',
+        opacity: '0',
+        transition: 'opacity 180ms ease-out',
+        pointerEvents: 'none',
+        zIndex: '42'
+  } as Partial<CSSStyleDeclaration>);
+      this.uiContainer.appendChild(el);
+      this.overdriveBannerEl = el;
+    }
+
+    if (!this.overdriveBannerEl) return;
+    if (active) {
+      const seconds = Math.max(0, Math.ceil(remainingMs / 1000));
+      this.overdriveBannerEl.innerHTML = `
+        <div style="font-size:14px;letter-spacing:0.1em;">OVERDRIVE ACTIVE • ${seconds}s EXPOSED</div>
+        <div style="font-size:11px;opacity:0.8;margin-top:4px;letter-spacing:0.04em;">
+          Glow brighter • Radar pings your position • Haptics & shakes spike with hits
+        </div>
+      `;
+      this.overdriveBannerEl.style.opacity = '1';
+    } else {
+      this.overdriveBannerEl.style.opacity = '0';
     }
   }
 
@@ -997,6 +1334,8 @@ class SpermRaceGame {
   }
 
   setupRadar() {
+    // Radar disabled - cleaner UI
+    return;
     // Check if mobile - if yes, use proximity radar instead
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     
@@ -1048,93 +1387,39 @@ class SpermRaceGame {
   createUI() {
     // Ensure HUD animations are available
     injectHudAnimationStylesOnce();
-    // Create boost bar (matte, theme-driven)
-    const boostBarLabel = document.createElement('div');
-    boostBarLabel.id = 'game-boost-label';
-    boostBarLabel.textContent = 'JUICE';
-    Object.assign(boostBarLabel.style, {
-      position: 'absolute',
-      bottom: '100px',
-      left: '50%',
-      transform: 'translateX(-50%)',
-      color: this.theme.text,
-      fontSize: '12px',
-      fontWeight: '600',
-      zIndex: '10'
-    });
-    this.uiContainer.appendChild(boostBarLabel);
-
-    const boostBar = document.createElement('div');
-    boostBar.id = 'game-boost-bar';
-    Object.assign(boostBar.style, {
-      position: 'absolute',
-      bottom: '80px',
-      left: '50%',
-      transform: 'translateX(-50%)',
-      width: '200px',
-      height: '12px',
-      background: 'rgba(0,0,0,0.55)',
-      border: '1px solid rgba(255,255,255,0.12)',
-      borderRadius: '8px',
-      overflow: 'hidden',
-      boxShadow: 'none',
-      zIndex: '10'
-    });
-    this.uiContainer.appendChild(boostBar);
-
-    const boostBarFill = document.createElement('div');
-    boostBarFill.id = 'game-boost-fill';
-    Object.assign(boostBarFill.style, {
-      height: '100%',
-      background: '#22d3ee',
-      borderRadius: '4px',
-      transition: 'width 0.1s ease-out',
-      boxShadow: 'none',
-      width: '100%'
-    });
-    boostBar.appendChild(boostBarFill);
-
-    // Create trail status
-    const trailStatus = document.createElement('div');
-    trailStatus.id = 'game-trail-status';
-    trailStatus.textContent = 'TRAIL ACTIVE';
-    Object.assign(trailStatus.style, {
-      position: 'absolute',
-      top: '60px',
-      left: '50%',
-      transform: 'translateX(-50%)',
-      color: this.theme.text,
-      fontSize: '14px',
-      fontWeight: '600',
-      background: 'rgba(0, 0, 0, 0.55)',
-      padding: '8px 16px',
-      borderRadius: '20px',
-      border: '1px solid rgba(255,255,255,0.12)',
-      transition: 'all 0.3s ease',
-      zIndex: '10'
-    });
-    this.uiContainer.appendChild(trailStatus);
-
-    // Remove separate alive counter (use leaderboard header only)
+    
+    // Initialize clean HUD manager
+    this.hudManager = new HudManager(this.uiContainer);
+    this.hudManager.createHUD();
 
     // Create controls hint
     const controlsHint = document.createElement('div');
     controlsHint.id = 'game-controls-hint';
-    controlsHint.innerHTML = 'WASD: Move • SPACE: Boost';
+    
+    // Detect mobile device
+    const isMobileControls = window.innerWidth <= 768 && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+    
+    // Show appropriate controls text
+    controlsHint.innerHTML = isMobileControls 
+      ? 'Drag left side to move • Tap ⚡ to boost'
+      : 'WASD: Move • SPACE: Boost';
+    
     Object.assign(controlsHint.style, {
       position: 'absolute',
       bottom: '20px',
       left: '50%',
       transform: 'translateX(-50%)',
       color: this.theme.text,
-      fontSize: '14px',
-      fontWeight: '600',
-      background: 'rgba(0, 0, 0, 0.55)',
-      padding: '8px 16px',
+      fontSize: isMobileControls ? '15px' : '14px',
+      fontWeight: '700',
+      background: 'rgba(0, 0, 0, 0.75)',
+      padding: '10px 20px',
       borderRadius: '20px',
-      border: '1px solid rgba(255,255,255,0.12)',
+      border: '1px solid rgba(0,255,255,0.3)',
       zIndex: '10',
-      opacity: '0.8'
+      opacity: '0.9',
+      textAlign: 'center',
+      whiteSpace: 'nowrap'
     });
     this.uiContainer.appendChild(controlsHint);
     
@@ -1152,7 +1437,7 @@ class SpermRaceGame {
     const isMobileDevice = window.innerWidth <= 768 && window.matchMedia('(orientation: portrait)').matches;
     Object.assign(this.leaderboardContainer.style, {
       position: 'absolute',
-      top: '80px',
+      top: '70px',
       right: '20px',
       width: '260px',
       background: 'rgba(0,0,0,0.55)',
@@ -1179,32 +1464,13 @@ class SpermRaceGame {
     this.uiContainer.appendChild(this.killFeedContainer);
 
     // Settings UI toggle removed
-
-    // Zone timer HUD (top center)
-    const zoneTimer = document.createElement('div');
-    zoneTimer.id = 'game-zone-timer';
-    Object.assign(zoneTimer.style, {
-      position: 'absolute',
-      top: '20px',
-      left: '50%',
-      transform: 'translateX(-50%)',
-      color: this.theme.text,
-      fontSize: '14px',
-      fontWeight: '600',
-      background: 'rgba(0, 0, 0, 0.55)',
-      padding: '6px 12px',
-      borderRadius: '16px',
-      border: '1px solid rgba(255,255,255,0.12)',
-      zIndex: '10'
-    });
-    zoneTimer.textContent = 'Zone closes in: 90s';
-    this.uiContainer.appendChild(zoneTimer);
+    // Zone timer now integrated into top HUD bar (created above)
     // (bounty HUD removed)
 
-    // Toast container for playful feedback
+    // Toast container for playful feedback - moved to bottom to avoid overlap
     const toast = document.createElement('div');
     toast.id = 'game-toast';
-    Object.assign(toast.style, { position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.55)', color: this.theme.text, padding: '6px 10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', fontSize: '12px', opacity: '0', transition: 'opacity 180ms ease', pointerEvents: 'none', zIndex: '12' });
+    Object.assign(toast.style, { position: 'absolute', bottom: '20px', left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.55)', color: this.theme.text, padding: '6px 10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', fontSize: '12px', opacity: '0', transition: 'opacity 180ms ease', pointerEvents: 'none', zIndex: '12' });
     this.uiContainer.appendChild(toast);
 
     // Create emote buttons (mobile-friendly)
@@ -1523,9 +1789,9 @@ class SpermRaceGame {
       targetAngle: 0,
       speed: 220,
       baseSpeed: 220,
-      boostSpeed: 620,
+      boostSpeed: 850, // Increased from 620 - much faster boost!
       targetSpeed: 220,
-      speedTransitionRate: 12.0, // Faster transition for snappier boost
+      speedTransitionRate: 18.0, // Faster transition for instant boost feel
       driftFactor: 0,
       maxDriftFactor: type === 'bot' ? 0.8 : 0.7,
       vx: 0,
@@ -1555,13 +1821,27 @@ class SpermRaceGame {
       tailSegments: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 6 : 10, // Fewer segments on mobile for performance
       tailAmplitude: 5,
       turnResponsiveness: type === 'player' ? 10.0 : 6.5, // Snappier turning
-      lateralDragScalar: 1.15
+      lateralDragScalar: 1.15,
+      accelerationScalar: type === 'player' ? 24 : 18,
+      handlingAssist: type === 'player' ? 0.65 : 0.35,
+      impactMitigation: type === 'player' ? 0.75 : 0.6,
+      hotspotBuffExpiresAt: undefined,
+      spotlightUntil: 0,
+      contactCooldown: 0
     };
 
     // Build spermatozoid: head + tail
-    // Head (capsule/circle)
+    // Head (capsule/circle) - larger and brighter for enemies
     car.headGraphics!.clear();
-    car.headGraphics!.circle(0, 0, 8).fill(color).stroke({ width: 2, color, alpha: 0.25 });
+    const headSize = type === 'player' ? 8 : 10; // Enemies 25% bigger
+    const strokeWidth = type === 'player' ? 2 : 3; // Thicker stroke for enemies
+    car.headGraphics!.circle(0, 0, headSize).fill(color).stroke({ width: strokeWidth, color, alpha: 0.5 });
+    
+    // Add glow effect for better visibility
+    if (type !== 'player') {
+      car.headGraphics!.circle(0, 0, headSize + 4).fill({ color, alpha: 0.15 });
+    }
+    
     // Tail (wavy polyline), initially empty; updated each frame
     if (car.tailGraphics) {
       car.tailGraphics!.clear();
@@ -1653,18 +1933,18 @@ class SpermRaceGame {
     // Create a visual burst effect at boost location using pooled particles
     if (!this.worldContainer) return;
     
-    // Reduce particles on mobile for better performance
+    // More particles for dramatic boost effect
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const particleCount = isMobile ? 8 : 12;
+    const particleCount = isMobile ? 12 : 18; // Increased from 8/12
     
     for (let i = 0; i < particleCount; i++) {
       const angle = (Math.PI * 2 * i) / particleCount;
-      const speed = 200 + Math.random() * 100;
-      const lifetime = 0.6;
+      const speed = 300 + Math.random() * 150; // Faster particles
+      const lifetime = 0.8; // Longer visible time
       
       const particle = this.getParticle();
       particle.beginFill(0x00ffff);
-      particle.drawCircle(0, 0, 3);
+      particle.drawCircle(0, 0, 4); // Bigger particles
       particle.endFill();
       particle.x = x;
       particle.y = y;
@@ -1726,7 +2006,7 @@ class SpermRaceGame {
       }
       const crowdFactor = Math.min(1, nearbyCount / 8);
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      const baseZoom = isMobile ? 0.75 : 1.0; // Balanced view for mobile (was 0.5 - too wide)
+      const baseZoom = isMobile ? 0.55 : 0.75; // Wider for better tactical view
       // REMOVED boost zoom wobble - keep constant zoom
       // Reduce dynamic zoom changes for smoother camera
       const out = isMobile ? 0.08 * speedFactor + 0.10 * crowdFactor : 0.24 * speedFactor + 0.30 * crowdFactor;
@@ -1747,13 +2027,10 @@ class SpermRaceGame {
     let desiredCenterY = this.player.y;
     if (this.preStart) {
       const remain = Math.max(0, this.preStart.durationMs - (Date.now() - this.preStart.startAt));
-      if (remain > 2000) {
-        // Fit the entire arena so all players (on edges) are visible
-        const fitW = this.app.screen.width / (this.arena.width + 200); // extra padding
-        const fitH = this.app.screen.height / (this.arena.height + 200);
-        const zoomFit = Math.min(fitW, fitH);
-        this.camera.targetZoom = Math.max(0.01, Math.min(this.camera.maxZoom, zoomFit));
-        desiredCenterX = 0; desiredCenterY = 0;
+      if (remain > 2500) {
+        // During overview, center on arena center (0, 0)
+        desiredCenterX = 0;
+        desiredCenterY = 0;
       }
     }
     // Compute unclamped camera target from desired center
@@ -1838,31 +2115,163 @@ class SpermRaceGame {
     if (this.preStart) {
       const remain = Math.max(0, this.preStart.durationMs - (Date.now() - this.preStart.startAt));
       const sec = Math.ceil(remain / 1000);
-      // Camera: 5-3s VERY wide overview to see ALL players; 2-0s zoom into player
-      const baseZoom = 0.2; // Much wider for full arena view
-      const endZoom = 0.6; // Mobile-optimized zoom level
-      if (remain > 2000) {
-        this.camera.targetZoom = baseZoom;
+      
+      // COUNTDOWN CAMERA: Show full arena overview, then zoom to player
+      if (remain > 2500) {
+        // First 2.5 seconds: Calculate zoom to fit entire arena
+        const fitW = this.app.screen.width / (this.arena.width + 400);
+        const fitH = this.app.screen.height / (this.arena.height + 400);
+        this.camera.targetZoom = Math.max(0.15, Math.min(fitW, fitH));
       } else {
-        const t2 = 1 - Math.min(1, remain / 2000);
-        this.camera.targetZoom = baseZoom + (endZoom - baseZoom) * t2;
+        // Last 2.5 seconds: Gradually zoom into player
+        const t = 1 - (remain / 2500);
+        const startZoom = this.camera.zoom;
+        const endZoom = 0.6;
+        this.camera.targetZoom = startZoom + (endZoom - startZoom) * t;
       }
-      // Show countdown HUD
+      
+      // Show countdown HUD with AAA-grade animations
       let cd = document.getElementById('prestart-countdown');
       if (!cd && this.uiContainer) {
         cd = document.createElement('div');
         cd.id = 'prestart-countdown';
-        Object.assign(cd.style, { position: 'absolute', left: '50%', top: '40%', transform: 'translate(-50%, -50%)', color: this.theme.text, fontSize: '48px', fontWeight: '700', zIndex: '20' });
+        Object.assign(cd.style, { 
+          position: 'absolute', 
+          left: '50%', 
+          top: '40%', 
+          transform: 'translate(-50%, -50%)', 
+          color: this.theme.text, 
+          fontSize: '48px', 
+          fontWeight: '700', 
+          zIndex: '20',
+          textAlign: 'center',
+          textShadow: '0 0 20px rgba(16, 185, 129, 0.5), 0 0 40px rgba(16, 185, 129, 0.3)',
+          filter: 'drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5))'
+        });
         this.uiContainer.appendChild(cd);
       }
       if (cd) {
-        cd.textContent = sec > 0 ? String(sec) : 'GO!';
-        // Subtle bounce scale synced to each second
+        const isMobile = window.innerWidth <= 768;
+        
+        // Calculate animation progress
         const phaseInMs = this.preStart.durationMs - remain;
         const frac = (phaseInMs % 1000) / 1000;
-        const eased = this.easeOutBack(Math.min(1, Math.max(0, frac)));
-        const scale = Math.min(1.06, 0.94 + 0.06 * eased);
+        
+        // Multi-stage easing for professional feel - NUMBER ONLY
+        const bounceIn = frac < 0.4 ? this.easeOutBack(frac / 0.4) : 1;
+        const fadeOut = frac > 0.85 ? 1 - ((frac - 0.85) / 0.15) : 1;
+        const pulseScale = 1 + Math.sin(frac * Math.PI) * 0.1;
+        
+        const scale = bounceIn * pulseScale;
+        const opacity = fadeOut;
+        
+        // Text below stays stable (no sync to number animation)
+        const textOpacity = Math.min(1, phaseInMs / 500); // Fade in once at start
+        
+        if (sec > 0) {
+          // Dynamic color based on urgency
+          const numberColor = sec === 1 ? '#ef4444' : sec === 2 ? '#fbbf24' : '#10b981';
+          const glowColor = sec === 1 ? '239, 68, 68' : sec === 2 ? '251, 191, 36' : '16, 185, 129';
+          
+          if (isMobile) {
+            cd.innerHTML = `
+              <div style="
+                font-size:72px;
+                font-weight:800;
+                color:${numberColor};
+                text-shadow: 
+                  0 0 30px rgba(${glowColor}, 0.8),
+                  0 0 60px rgba(${glowColor}, 0.4),
+                  0 4px 20px rgba(0, 0, 0, 0.6);
+                letter-spacing: -2px;
+                opacity:${opacity}
+              ">${sec}</div>
+              <div style="
+                font-size:16px;
+                margin-top:16px;
+                opacity:${textOpacity};
+                font-weight:600;
+                color:#22d3ee;
+                text-shadow: 
+                  0 0 20px rgba(34, 211, 238, 0.6),
+                  0 2px 8px rgba(0, 0, 0, 0.7);
+                letter-spacing: 0.5px;
+                transition: opacity 0.3s ease;
+              ">LAST ONE STANDING WINS</div>
+            `;
+          } else {
+            cd.innerHTML = `
+              <div style="
+                font-size:96px;
+                font-weight:800;
+                color:${numberColor};
+                text-shadow: 
+                  0 0 40px rgba(${glowColor}, 0.8),
+                  0 0 80px rgba(${glowColor}, 0.4),
+                  0 6px 24px rgba(0, 0, 0, 0.7);
+                letter-spacing: -4px;
+                opacity:${opacity}
+              ">${sec}</div>
+              <div style="
+                font-size:20px;
+                margin-top:20px;
+                opacity:${textOpacity};
+                font-weight:600;
+                color:#22d3ee;
+                text-shadow: 
+                  0 0 20px rgba(34, 211, 238, 0.5),
+                  0 2px 10px rgba(0, 0, 0, 0.8);
+                letter-spacing: 1px;
+                text-transform: uppercase;
+                transition: opacity 0.3s ease;
+              ">Last One Standing Wins</div>
+              <div style="
+                font-size:14px;
+                margin-top:12px;
+                opacity:${textOpacity * 0.9};
+                color:#fbbf24;
+                font-weight:500;
+                text-shadow: 
+                  0 0 15px rgba(251, 191, 36, 0.4),
+                  0 2px 8px rgba(0, 0, 0, 0.6);
+                transition: opacity 0.3s ease;
+              ">⚠ Zone closes in 10 seconds</div>
+            `;
+          }
+        } else {
+          // Epic "GO!" moment
+          const goScale = 1 + Math.sin(frac * Math.PI * 2) * 0.15;
+          cd.innerHTML = `
+            <div style="
+              font-size:${isMobile ? '80px' : '120px'};
+              font-weight:900;
+              color:#10b981;
+              text-shadow: 
+                0 0 50px rgba(16, 185, 129, 1),
+                0 0 100px rgba(16, 185, 129, 0.6),
+                0 8px 32px rgba(0, 0, 0, 0.8);
+              letter-spacing: ${isMobile ? '4px' : '8px'};
+              opacity:${opacity};
+              transform: scale(${goScale});
+              transition: transform 0.1s ease-out;
+            ">GO!</div>
+            ${!isMobile ? `<div style="
+              font-size:18px;
+              margin-top:24px;
+              opacity:${opacity * 0.8};
+              color:#fbbf24;
+              font-weight:600;
+              text-shadow: 
+                0 0 20px rgba(251, 191, 36, 0.4),
+                0 2px 10px rgba(0, 0, 0, 0.8);
+              letter-spacing: 2px;
+            ">SURVIVE THE ZONE</div>` : ''}
+          `;
+        }
+        
+        // Smooth transform with hardware acceleration
         (cd as HTMLDivElement).style.transform = `translate(-50%, -50%) scale(${scale})`;
+        (cd as HTMLDivElement).style.willChange = 'transform, opacity';
       }
       if (remain <= 0) {
         // Remove HUD and unfreeze
@@ -1922,16 +2331,21 @@ class SpermRaceGame {
       
       // Check trail collisions
       this.checkTrailCollisions();
+      this.resolveCarBumps(deltaTime);
     }
     
     // Update particles
     this.updateParticles(deltaTime);
 
     // Animate and collect pickups (collection only after countdown)
-    if (!this.preStart && this.pickupsUnlocked && this.pickupsContainer) this.updatePickups(deltaTime);
+  if (!this.preStart && this.pickupsUnlocked && this.pickupsContainer) this.updatePickups(deltaTime);
+  if (!this.preStart) this.updateHotspots(deltaTime);
     
     // Update camera
     this.updateCamera();
+    
+    // Update round system
+    this.updateRoundSystem();
     
     // Update BR zone
     this.updateZoneAndDamage(deltaTime);
@@ -1966,11 +2380,11 @@ class SpermRaceGame {
 
     // Countdown overlay drawings disabled to reduce CPU
     
-    // Update HUD elements: nameplates and leaderboard/killfeed
+    // Update HUD elements: nameplates and alive count
     this.updateNameplates();
     this.updateLeaderboard();
-    this.renderKillFeed();
-    this.renderKillStreakNotifications();
+    // Kill feed removed - clutters mobile screen
+    // Combo notifications removed - too cluttered
 
     // Render debug collision overlays (short TTL)
     this.renderDebugOverlays();
@@ -2127,110 +2541,8 @@ class SpermRaceGame {
     };
   }
 
-  renderKillStreakNotifications() {
-    if (!this.app) return;
-    const now = Date.now();
-    const NOTIFICATION_LIFETIME = 2500; // Longer for better visibility
-
-    // Filter expired notifications FIRST to prevent duplicates
-    this.killStreakNotifications = this.killStreakNotifications.filter(n => now - n.time < NOTIFICATION_LIFETIME);
-    this.nearMisses = this.nearMisses.filter(n => now - n.time < 1500);
-
-    // Clean up old DOM elements that might be stuck
-    const existingEls = document.querySelectorAll('[id^="streak-"], [id^="miss-"]');
-    existingEls.forEach(el => {
-      const id = el.id;
-      const timestamp = parseInt(id.split('-')[1]);
-      if (isNaN(timestamp) || now - timestamp > 3000) {
-        try { el.parentElement?.removeChild(el); } catch {}
-      }
-    });
-
-    // Render kill streak notifications with enhanced animation
-    this.killStreakNotifications.forEach((notif, index) => {
-      const age = (now - notif.time) / 1000;
-      const progress = age / (NOTIFICATION_LIFETIME / 1000);
-
-      // Stack notifications vertically to prevent overlap
-      const yOffset = index * 40; // Space them out
-      
-      // Calculate screen position
-      const sx = notif.x * this.camera.zoom + this.camera.x + this.app!.screen.width * 0.5;
-      const sy = notif.y * this.camera.zoom + this.camera.y + this.app!.screen.height * 0.5 - 60 - (age * 30) - yOffset;
-
-      // Create or update notification element
-      let el = document.getElementById(`streak-${notif.time}`);
-      if (!el) {
-        el = document.createElement('div');
-        el.id = `streak-${notif.time}`;
-        el.textContent = notif.text;
-        document.body.appendChild(el);
-      }
-      
-      // Enhanced styling with scaling animation
-      const scale = progress < 0.2 ? 1 + (1 - progress / 0.2) * 0.5 : 1; // Pop in effect
-      el.style.cssText = `
-        position: fixed;
-        left: ${sx}px;
-        top: ${sy}px;
-        font-size: ${24 * scale}px;
-        font-weight: 900;
-        color: #ffffff;
-        text-shadow: 0 0 15px rgba(255,100,0,1), 0 0 30px rgba(255,100,0,0.8), 0 2px 4px rgba(0,0,0,0.8);
-        pointer-events: none;
-        z-index: 1000;
-        background: linear-gradient(90deg, #f43f5e, #fb923c, #fbbf24);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        transform: scale(${scale});
-        filter: drop-shadow(0 0 10px rgba(251,146,60,0.6));
-        opacity: ${Math.max(0, 1 - progress)};
-        will-change: transform, opacity;
-      `;
-
-      // Remove element when expired
-      if (progress >= 1) {
-        try { if (el.parentElement) el.parentElement.removeChild(el); } catch {}
-      }
-    });
-    
-    // Render near-miss notifications (prevent overlap)
-    this.nearMisses.forEach((notif, index) => {
-      const age = (now - notif.time) / 1000;
-      const progress = age / 1.5;
-      
-      const yOffset = index * 30; // Stack them
-
-      const sx = notif.x * this.camera.zoom + this.camera.x + this.app!.screen.width * 0.5;
-      const sy = notif.y * this.camera.zoom + this.camera.y + this.app!.screen.height * 0.5 - 40 + yOffset;
-
-      let el = document.getElementById(`miss-${notif.time}`);
-      if (!el) {
-        el = document.createElement('div');
-        el.id = `miss-${notif.time}`;
-        el.textContent = notif.text;
-        document.body.appendChild(el);
-      }
-      
-      el.style.cssText = `
-        position: fixed;
-        left: ${sx}px;
-        top: ${sy}px;
-        font-size: 16px;
-        font-weight: 700;
-        color: #fbbf24;
-        text-shadow: 0 0 8px rgba(251,191,36,0.8), 0 1px 2px rgba(0,0,0,0.8);
-        pointer-events: none;
-        z-index: 999;
-        opacity: ${Math.max(0, 1 - progress)};
-        will-change: opacity;
-      `;
-
-      if (progress >= 1) {
-        try { if (el.parentElement) el.parentElement.removeChild(el); } catch {}
-      }
-    });
+  renderAliveCounter() {
+    // Combo and near-miss rendering removed - too cluttered on mobile
   }
 
   renderKillFeed() {
@@ -2402,12 +2714,17 @@ class SpermRaceGame {
 
   updateCar(car: Car, deltaTime: number) {
     if (car.destroyed) return;
+    const now = Date.now();
+    if (car.hotspotBuffExpiresAt && car.hotspotBuffExpiresAt <= now) car.hotspotBuffExpiresAt = undefined;
+    if (car.spotlightUntil && car.spotlightUntil <= now) car.spotlightUntil = undefined;
+    const buffActive = !!(car.hotspotBuffExpiresAt && car.hotspotBuffExpiresAt > now);
     
     // Update boost energy system
     const wasBoosting = car.isBoosting;
     if (car.isBoosting) {
       car.boostEnergy -= car.boostConsumptionRate * deltaTime;
       car.targetSpeed = car.boostSpeed;
+      if (buffActive) car.targetSpeed *= 1.08;
       car.driftFactor = Math.min(car.maxDriftFactor, car.driftFactor + deltaTime * 2.0);
       
       // Stop boosting if energy depleted
@@ -2418,11 +2735,29 @@ class SpermRaceGame {
       }
     } else {
       // Regenerate boost energy when not boosting
-      car.boostEnergy += car.boostRegenRate * deltaTime;
+      // Progressive regen: faster in early game, slower in final seconds
+      let regenMultiplier = 1.0;
+      
+      if (this.zone && this.zone.startAtMs) {
+        const elapsed = Date.now() - this.zone.startAtMs;
+        const remainMs = Math.max(0, this.zone.durationMs - elapsed);
+        
+        // First 10 seconds: 50% faster regen (1.5x)
+        if (elapsed < 10000) {
+          regenMultiplier = 1.5;
+        }
+        // Final 5 seconds: 30% slower regen (0.7x) for tension
+        else if (remainMs < 5000) {
+          regenMultiplier = 0.7;
+        }
+      }
+      
+      car.boostEnergy += car.boostRegenRate * deltaTime * regenMultiplier;
       if (car.boostEnergy > car.maxBoostEnergy) {
         car.boostEnergy = car.maxBoostEnergy;
       }
       car.targetSpeed = car.baseSpeed;
+      if (buffActive) car.targetSpeed *= 1.05;
       car.driftFactor = Math.max(0, car.driftFactor - deltaTime * 1.5);
     }
     // Emit boost echo on start
@@ -2431,8 +2766,7 @@ class SpermRaceGame {
     }
     
     // Boost pads trigger (simple distance check)
-    const now = Date.now();
-    for (const pad of this.boostPads) {
+  for (const pad of this.boostPads) {
       const dx = car.x - pad.x, dy = car.y - pad.y;
       const within = (dx * dx + dy * dy) <= (pad.radius * pad.radius);
       if (within && (now - pad.lastTriggeredAt) >= pad.cooldownMs) {
@@ -2460,12 +2794,18 @@ class SpermRaceGame {
     
     // Smooth speed transitions
     const speedDiff = car.targetSpeed - car.speed;
-    const speedChange = speedDiff * car.speedTransitionRate * deltaTime;
+    const accel = car.accelerationScalar ?? car.speedTransitionRate;
+    const speedChange = speedDiff * accel * deltaTime;
     car.speed += speedChange;
     
     // Smooth angle interpolation for drift effect
     const angleDiff = normalizeAngle((car as any).targetAngle - car.angle);
-    const turnRate = (car as any).turnResponsiveness ?? 7.0;
+    const baseTurn = (car as any).turnResponsiveness ?? 7.0;
+    const handlingAssist = car.handlingAssist ?? 0;
+    const speedRatio = Math.min(1, Math.abs(car.speed) / Math.max(1, car.boostSpeed));
+    const assistMultiplier = 1 + handlingAssist * (1 - speedRatio);
+    const boostPenalty = car.isBoosting ? 0.92 : 1;
+    const turnRate = baseTurn * assistMultiplier * boostPenalty;
     car.angle += angleDiff * Math.min(1.0, turnRate * deltaTime);
     car.sprite.rotation = car.angle;
     
@@ -2506,14 +2846,14 @@ class SpermRaceGame {
     // Animate sperm tail (tapered ribbon) and head (static oval)
     try {
       if (this.smallTailEnabled && car.tailGraphics) {
-        car.tailWaveT = (car.tailWaveT || 0) + deltaTime * (car.isBoosting ? 12 : 8);
+        car.tailWaveT = (car.tailWaveT || 0) + deltaTime * (car.isBoosting ? 18 : 10); // Faster wave animation
         const segs = Math.max(8, car.tailSegments || 16);
         const len = (car.tailLength || 48);
         const speedMag = Math.hypot(car.vx, car.vy);
         const speedScale = 0.5 + Math.min(1, speedMag / 350);
-        const ampBase = (car.tailAmplitude || 6) * (car.isBoosting ? 1.15 : 1.0);
-        const amp = ampBase; // steadier amplitude; envelope applied per-segment below
-        const baseWidth = 3 * (0.75 + 0.25 * speedScale); // thinner overall
+        const ampBase = (car.tailAmplitude || 6) * (car.isBoosting ? 1.5 : 1.0); // More dramatic boost wave
+        const amp = ampBase;
+        const baseWidth = 3 * (0.75 + 0.25 * speedScale);
         const step = len / segs;
         const g = car.tailGraphics;
         g.clear();
@@ -2547,14 +2887,22 @@ class SpermRaceGame {
           const s = spine[i];
           poly.push(s.x + latX * s.w, s.y + latY * s.w);
         }
-        g.poly(poly).fill({ color: car.color, alpha: 0.8 });
+        g.poly(poly).fill({ color: car.color, alpha: car.isBoosting ? 0.95 : 0.8 }); // Brighter when boosting
       }
       if (car.headGraphics) {
-        // Static head (no pulsation/highlight)
-        const rx = 9;
-        const ry = 6;
+        // Dynamic head with boost pulsation
+        const rx = car.isBoosting ? 10 : 9; // Larger when boosting
+        const ry = car.isBoosting ? 7 : 6;
         car.headGraphics.clear();
-        car.headGraphics.ellipse(0, 0, rx, ry).fill({ color: car.color, alpha: 1.0 }).stroke({ width: 2, color: car.color, alpha: 0.3 });
+        car.headGraphics.ellipse(0, 0, rx, ry).fill({ color: car.color, alpha: 1.0 }).stroke({ width: car.isBoosting ? 3 : 2, color: car.color, alpha: car.isBoosting ? 0.7 : 0.3 });
+        
+        // Add boost glow effect
+        if (car.isBoosting) {
+          car.headGraphics.ellipse(0, 0, rx + 3, ry + 2).fill({ color: car.color, alpha: 0.2 });
+        }
+        if (buffActive) {
+          car.headGraphics.ellipse(0, 0, rx + 5, ry + 4).stroke({ width: 2, color: 0xfacc15, alpha: 0.9 });
+        }
       }
     } catch {}
     
@@ -2563,6 +2911,18 @@ class SpermRaceGame {
       (car.headGraphics as any).alpha = 0.9;
     } else if (car.headGraphics) {
       (car.headGraphics as any).alpha = 1.0;
+    }
+
+    if (car === this.player) {
+      if (buffActive) {
+        this.updateOverdriveBanner(true, (car.hotspotBuffExpiresAt || now) - now);
+      } else {
+        this.updateOverdriveBanner(false, 0);
+      }
+      if ((buffActive || (car.spotlightUntil && car.spotlightUntil > now)) && now - this.lastSpotlightPingAt > 320) {
+        this.lastSpotlightPingAt = now;
+        this.radarPings.push({ x: car.x, y: car.y, timestamp: now, playerId: 'overdrive', kind: 'bounty', ttlMs: 900 });
+      }
     }
   }
 
@@ -2844,6 +3204,9 @@ class SpermRaceGame {
           const hitboxSize = p2.isBoosting ? 12 : 6;
 
           if (distance < hitboxSize) {
+            // EXPLOSION when WE crash (not when we kill others)
+            this.createExplosion(car.x, car.y, car.color);
+            
             // Attribute kill to trail owner
             this.recordKill(trail.car, car);
             this.destroyCar(car);
@@ -2868,24 +3231,102 @@ class SpermRaceGame {
     }
   }
 
+  private resolveCarBumps(deltaTime: number) {
+    const cars = [this.player, this.bot, ...this.extraBots].filter((car): car is Car => car !== null && !car.destroyed);
+    if (cars.length < 2) return;
+
+    const collisionRadius = 32;
+    for (const car of cars) {
+      car.contactCooldown = Math.max(0, (car.contactCooldown ?? 0) - deltaTime);
+    }
+
+    for (let i = 0; i < cars.length; i++) {
+      for (let j = i + 1; j < cars.length; j++) {
+        const a = cars[i];
+        const b = cars[j];
+        if ((a.contactCooldown ?? 0) > 0.02 && (b.contactCooldown ?? 0) > 0.02) continue;
+
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const distSq = dx * dx + dy * dy;
+        if (distSq === 0 || distSq > collisionRadius * collisionRadius) continue;
+
+        const dist = Math.sqrt(distSq) || 1;
+        const normalX = dx / dist;
+        const normalY = dy / dist;
+        const relativeVel = (b.vx - a.vx) * normalX + (b.vy - a.vy) * normalY;
+        if (relativeVel >= 0) continue; // moving apart already
+
+        // Lightweight impulse resolution
+        const restitution = 1.1;
+        const impulse = -(1 + restitution) * relativeVel * 0.5;
+        const mitigationA = a.impactMitigation ?? 0.7;
+        const mitigationB = b.impactMitigation ?? 0.7;
+        a.vx -= impulse * normalX * (1 - mitigationA * 0.4);
+        a.vy -= impulse * normalY * (1 - mitigationA * 0.4);
+        b.vx += impulse * normalX * (1 - mitigationB * 0.4);
+        b.vy += impulse * normalY * (1 - mitigationB * 0.4);
+
+        const forwardA = Math.cos(a.angle) * normalX + Math.sin(a.angle) * normalY;
+        const forwardB = -(Math.cos(b.angle) * normalX + Math.sin(b.angle) * normalY);
+        const headOn = Math.abs(forwardA) > 0.6 && Math.abs(forwardB) > 0.6;
+        const flankA = Math.abs(forwardA) > 0.65 && Math.abs(forwardB) < 0.35;
+        const flankB = Math.abs(forwardB) > 0.65 && Math.abs(forwardA) < 0.35;
+
+        if (headOn) {
+          a.speed *= 0.85;
+          b.speed *= 0.85;
+          if (a === this.player || b === this.player) {
+            this.hapticFeedback('medium');
+            this.screenShake(0.4);
+          }
+        } else {
+          if (flankA) {
+            b.speed *= 0.7;
+            b.contactCooldown = Math.max(b.contactCooldown ?? 0, 0.45);
+          }
+          if (flankB) {
+            a.speed *= 0.7;
+            a.contactCooldown = Math.max(a.contactCooldown ?? 0, 0.45);
+          }
+          if ((flankA && a === this.player) || (flankB && b === this.player)) {
+            this.hapticFeedback('light');
+            this.screenShake(0.25);
+          }
+        }
+
+        // Positional correction to avoid overlap
+        const penetration = collisionRadius - dist;
+        if (penetration > 0) {
+          const correction = penetration * 0.5;
+          a.x -= normalX * correction;
+          a.y -= normalY * correction;
+          b.x += normalX * correction;
+          b.y += normalY * correction;
+          if (a.sprite) {
+            a.sprite.x = a.x;
+            a.sprite.y = a.y;
+          }
+          if (b.sprite) {
+            b.sprite.x = b.x;
+            b.sprite.y = b.y;
+          }
+        }
+
+        a.contactCooldown = Math.max(a.contactCooldown ?? 0, 0.25);
+        b.contactCooldown = Math.max(b.contactCooldown ?? 0, 0.25);
+      }
+    }
+  }
+
   recordKill(killer: Car, victim: Car) {
     if (!killer || !victim) return;
     killer.kills = (killer.kills || 0) + 1;
     this.recentKills.push({ killer: killer.name, victim: victim.name, time: Date.now() });
 
-    // Kill streak tracking for player
+    // Kill streak tracking for player - simplified without combo
     if (killer === this.player) {
       const now = Date.now();
-      
-      // COMBO SYSTEM - Increases multiplier for rapid kills
-      if (now - this.lastComboTime < this.comboWindowMs) {
-        this.comboKills++;
-        this.comboMultiplier = 1 + (this.comboKills * 0.25); // +25% per combo kill
-      } else {
-        this.comboKills = 0;
-        this.comboMultiplier = 1;
-      }
-      this.lastComboTime = now;
       
       // Reset streak if more than 5 seconds since last kill
       if (now - this.lastKillTime > 5000) {
@@ -2894,23 +3335,11 @@ class SpermRaceGame {
       this.killStreak++;
       this.lastKillTime = now;
 
-      // Show enhanced combo notification with screen shake!
-      if (this.killStreak >= 2 || this.comboKills >= 1) {
-        this.showComboNotification(victim.x, victim.y, this.killStreak);
-      }
-
-      // Enhanced haptic feedback based on combo
-      if (this.comboKills >= 3) {
-        this.hapticFeedback('heavy'); // Epic combo!
-      } else if (this.killStreak >= 2) {
-        this.hapticFeedback('success'); // Multi-kill
-      } else {
-        this.hapticFeedback('medium'); // Regular kill
-      }
+      // Simple haptic feedback
+      this.hapticFeedback('medium');
       
-      // Screen shake intensity based on streak
-      const shakeIntensity = Math.min(this.killStreak * 0.5, 3);
-      this.screenShake(shakeIntensity);
+      // Mild screen shake
+      this.screenShake(0.3);
     }
   }
 
@@ -2959,6 +3388,23 @@ class SpermRaceGame {
     car.destroyed = true;
     car.elimAtMs = Date.now();
     car.sprite.visible = false;
+    
+    let playerDistance = Infinity;
+    let viewportRadius = Math.max(window.innerWidth, window.innerHeight) / 2;
+    const playerAlive = this.player && !this.player.destroyed;
+    if (playerAlive) {
+      const dx = car.x - this.player!.x;
+      const dy = car.y - this.player!.y;
+      playerDistance = Math.sqrt(dx * dx + dy * dy);
+    }
+
+    // AAA Impact Frame: only trigger when the drama is near the player or involves them
+    const playerInvolved = car === this.player || (playerDistance <= viewportRadius * 0.9);
+    if (playerAlive && car !== this.player && playerInvolved) {
+      this.triggerImpactFrame();
+    } else if (car === this.player) {
+      this.triggerImpactFrame();
+    }
 
     // Haptic feedback on death (mobile)
     if (car === this.player) {
@@ -2966,10 +3412,7 @@ class SpermRaceGame {
       
       // RESET KILL STREAK WHEN PLAYER DIES
       this.killStreak = 0;
-      this.comboKills = 0;
-      this.comboMultiplier = 1;
       this.lastKillTime = 0;
-      this.lastComboTime = 0;
     }
 
     // Ensure all visual parts are removed/destroyed to avoid lingering head/tail
@@ -2994,17 +3437,11 @@ class SpermRaceGame {
       this.trails.splice(tIdx, 1);
     }
     
-    // Create explosion effect
-    this.createExplosion(car.x, car.y, car.color);
+    // Explosion already created at collision point - don't duplicate here
 
     // Flash only if death is near player (within viewport)
-    if (this.player && !this.player.destroyed) {
-      const dx = car.x - this.player.x;
-      const dy = car.y - this.player.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const viewportRadius = Math.max(window.innerWidth, window.innerHeight) / 2;
-
-      if (dist < viewportRadius) {
+    if (playerAlive) {
+      if (playerDistance < viewportRadius) {
         try {
           let flash = document.getElementById('elim-flash');
           if (!flash) {
@@ -3050,27 +3487,38 @@ class SpermRaceGame {
   }
 
   createExplosion(x: number, y: number, color: number) {
-    const particleCount = 15;
+    const particleCount = 30; // More particles for visibility
     for (let i = 0; i < particleCount; i++) {
-      const angle = (Math.PI * 2 / particleCount) * i;
-      const speed = 100 + Math.random() * 100;
+      const angle = (Math.PI * 2 / particleCount) * i + (Math.random() - 0.5) * 0.3;
+      const speed = 150 + Math.random() * 200; // Faster explosion
+      
+      // Bright explosion colors (mix victim color with bright white/yellow)
+      const explosionColors = [0xFFFFFF, 0xFFFF00, 0xFF6600, color];
+      const particleColor = explosionColors[Math.floor(Math.random() * explosionColors.length)];
+      
       const particle: Particle = {
         x: x,
         y: y,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
-        life: 1.0,
-        color: color,
+        life: 1.2, // Longer lifetime
+        color: particleColor,
         graphics: new PIXI.Graphics()
       };
       
-      particle.graphics.circle(0, 0, 3).fill(color);
+      // Bigger particles (5-8px radius)
+      const size = 5 + Math.random() * 3;
+      particle.graphics.circle(0, 0, size).fill(particleColor);
       particle.graphics.x = x;
       particle.graphics.y = y;
       
       this.worldContainer.addChild(particle.graphics);
       this.particles.push(particle);
     }
+    
+    // Add screen shake on explosion (reduced)
+    this.camera.shakeX = 6;
+    this.camera.shakeY = 6;
   }
 
   updateParticles(deltaTime: number) {
@@ -3094,43 +3542,55 @@ class SpermRaceGame {
 
   updatePickups(deltaTime: number) {
     if (!this.pickupsContainer) return;
-    const t = Date.now() * 0.001;
-    // Pulse visuals
-    for (const p of this.pickups) {
-      p.pulseT += deltaTime * 2;
-      const s = 1 + Math.sin(p.pulseT) * 0.06;
-      p.shape.scale.set(s);
-      p.shape.alpha = 0.7 + Math.sin(t + p.pulseT) * 0.15;
-      // Rotate the triad shard
+    const now = Date.now();
+    const t = now * 0.001;
+
+    for (let i = this.pickups.length - 1; i >= 0; i--) {
+      const p = this.pickups[i];
+      if (p.expiresAt && now >= p.expiresAt) {
+        try { this.pickupsContainer.removeChild(p.graphics); } catch {}
+        this.pickups.splice(i, 1);
+        continue;
+      }
+
+      const pulseSpeed = p.type === 'overdrive' ? 2.6 : 2.0;
+      p.pulseT += deltaTime * pulseSpeed;
+      const scale = 1 + Math.sin(p.pulseT) * (p.type === 'overdrive' ? 0.09 : 0.06);
+      p.shape.scale.set(scale);
+      p.shape.alpha = p.type === 'overdrive'
+        ? 0.9 + Math.sin(t + p.pulseT) * 0.12
+        : 0.7 + Math.sin(t + p.pulseT) * 0.15;
       p.shape.rotation += p.rotationSpeed * deltaTime;
-      // Add a faint neon aura
       p.aura.clear();
-      p.aura.circle(0, 0, p.radius * (1.15 + Math.sin(t * 1.5) * 0.05)).stroke({ width: 1, color: p.color, alpha: 0.08 });
+      const auraWidth = p.type === 'overdrive' ? 2 : 1;
+      const auraAlpha = p.type === 'overdrive' ? 0.2 : 0.08;
+      const auraScale = p.type === 'overdrive' ? 1.7 : 1.15;
+      p.aura.circle(0, 0, p.radius * (auraScale + Math.sin(t * 1.2) * 0.05))
+        .stroke({ width: auraWidth, color: p.color, alpha: auraAlpha });
     }
-    // Check collection by player
+
     if (this.player && !this.player.destroyed) {
       for (let i = this.pickups.length - 1; i >= 0; i--) {
         const orb = this.pickups[i];
         const dx = orb.x - this.player.x;
         const dy = orb.y - this.player.y;
-        const dist = Math.sqrt(dx*dx + dy*dy);
+        const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist < orb.radius + 18) {
-          // Collect
           if (orb.type === 'energy') {
             this.player.boostEnergy = Math.min(this.player.maxBoostEnergy, this.player.boostEnergy + orb.amount);
+          } else if (orb.type === 'overdrive') {
+            this.applyOverdriveBuff(this.player);
           }
-          // Burst effect
-          this.createExplosion(orb.x, orb.y, 0x00ffaa);
-          this.pickupsContainer.removeChild(orb.graphics);
+
+          this.createExplosion(orb.x, orb.y, orb.type === 'overdrive' ? 0xfacc15 : 0x00ffaa);
+          try { this.pickupsContainer.removeChild(orb.graphics); } catch {}
           this.pickups.splice(i, 1);
-          
-          // Satisfying pickup feedback!
-          this.hapticFeedback('light');
-          this.screenShake(0.3);
+          this.hapticFeedback(orb.type === 'overdrive' ? 'success' : 'light');
+          this.screenShake(orb.type === 'overdrive' ? 0.6 : 0.3);
         }
       }
     }
-    // Maintain a minimum number of pickups on map
+
     if (this.pickups.length < 25) this.spawnPickups(8);
   }
 
@@ -3143,29 +3603,9 @@ class SpermRaceGame {
     const allCars = [this.player, this.bot, ...this.extraBots].filter((car): car is Car => car !== null);
     this.alivePlayers = allCars.filter(car => !car.destroyed).length;
 
-    // Update UI counter
-    const aliveCounter = document.getElementById('game-alive-counter');
-    if (aliveCounter) {
-      // Fix: Use template literal properly to avoid glitch
-      const aliveText = `ALIVE: ${this.alivePlayers}`;
-      if (aliveCounter.textContent !== aliveText) {
-        aliveCounter.textContent = aliveText;
-      }
-
-      // Change color based on alive count
-      if (this.alivePlayers <= 3) {
-        aliveCounter.style.color = '#ff66aa';
-        aliveCounter.style.borderColor = '#ff66aa';
-        aliveCounter.style.textShadow = '0 0 10px rgba(255, 102, 170, 0.8)';
-      } else if (this.alivePlayers <= 5) {
-        aliveCounter.style.color = '#ffaa00';
-        aliveCounter.style.borderColor = '#ffaa00';
-        aliveCounter.style.textShadow = '0 0 10px rgba(255, 170, 0, 0.8)';
-      } else {
-        aliveCounter.style.color = '#00ffff';
-        aliveCounter.style.borderColor = '#00ffff';
-        aliveCounter.style.textShadow = '';
-      }
+    // Update HUD manager
+    if (this.hudManager) {
+      this.hudManager.updateAliveCount(this.alivePlayers);
     }
   }
 
@@ -3174,6 +3614,11 @@ class SpermRaceGame {
     const allCars = [this.player, this.bot, ...this.extraBots].filter((car): car is Car => car !== null);
     const aliveCars = allCars.filter(car => !car.destroyed);
     const winner = aliveCars[0];
+    
+    // AAA Victory Moment: Slow-mo + zoom on winner
+    if (winner) {
+      this.triggerVictorySlowMo(winner);
+    }
     
     // Calculate player rank (8 - current alive count + 1 if player is alive)
     let playerRank;
@@ -3488,6 +3933,8 @@ class SpermRaceGame {
   }
 
   updateRadar() {
+    // Radar disabled
+    return;
     if (!this.radarCtx || !this.player) return;
     
     // Check if mobile - use proximity radar
@@ -3611,15 +4058,16 @@ class SpermRaceGame {
       const py = centerY + (ping.y * scale);
       const age = (now - ping.timestamp) / 1000;
       const alpha = Math.max(0.2, 1 - age);
-      ctx.fillStyle = `rgba(255, 0, 255, ${alpha})`;
+      const isBounty = ping.kind === 'bounty';
+      ctx.fillStyle = isBounty ? `rgba(250, 204, 21, ${alpha})` : `rgba(255, 0, 255, ${alpha})`;
       ctx.beginPath();
-      ctx.arc(px, py, 3, 0, Math.PI * 2); // Slightly larger dot
+      ctx.arc(px, py, isBounty ? 4 : 3, 0, Math.PI * 2); // Slightly larger dot for bounty
       ctx.fill();
       
       // Add pulsing effect
       if (age < 0.3) { // Pulse for first 300ms
         const pulseRadius = 2 + Math.sin(age * 20) * 2;
-        ctx.strokeStyle = `rgba(255, 0, 255, ${alpha * 0.5})`;
+        ctx.strokeStyle = isBounty ? `rgba(250, 204, 21, ${alpha * 0.6})` : `rgba(255, 0, 255, ${alpha * 0.5})`;
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.arc(px, py, pulseRadius, 0, Math.PI * 2);
@@ -3627,7 +4075,7 @@ class SpermRaceGame {
       }
     }
 
-    // Draw echo rings from boost events (inside map rect only)
+    // Draw echo rings from boost events (inside map rect only) - brighter and more visible
     for (const ping of this.echoPings) {
       const ex = centerX + (ping.x * scale);
       const ey = centerY + (ping.y * scale);
@@ -3635,10 +4083,10 @@ class SpermRaceGame {
       const life = (ping.ttlMs || 0) / 1000 || 0.9;
       const tnorm = Math.min(1, elapsed / life);
       const r = tnorm * radius * 0.9;
-      const a = Math.max(0, 0.6 * (1 - tnorm));
+      const a = Math.max(0, 0.85 * (1 - tnorm)); // Brighter alpha
       if (ex >= rectL && ex <= rectR && ey >= rectT && ey <= rectB) {
         ctx.strokeStyle = `rgba(0, 255, 200, ${a})`;
-        ctx.lineWidth = 1;
+        ctx.lineWidth = 2; // Thicker line
         ctx.beginPath();
         ctx.arc(ex, ey, r, 0, Math.PI * 2);
         ctx.stroke();
@@ -3673,90 +4121,24 @@ class SpermRaceGame {
   }
 
   updateBoostBar() {
-    if (!this.player) return;
-    
-    const boostBarFill = document.getElementById('game-boost-fill');
-    const boostBarLabel = document.getElementById('game-boost-label');
-    
-    if (!boostBarFill || !boostBarLabel) return;
+    if (!this.player || !this.hudManager) return;
     
     const energyPercent = (this.player.boostEnergy / this.player.maxBoostEnergy) * 100;
-    boostBarFill.style.width = energyPercent + '%';
-    
     const boostingNow = this.player.isBoosting && (this.player.boostEnergy >= (this.player.minBoostEnergy + 5));
-    if (boostingNow) {
-      boostBarFill.style.background = '#22d3ee';
-      boostBarLabel.textContent = `BOOSTING! (${Math.ceil(energyPercent)}%)`;
-      boostBarLabel.style.color = '#00ff88';
-      // Emit echo only on boost start (rising edge)
-      if (!(this as any).wasBoostingUI) {
-        this.emitBoostEcho(this.player.x, this.player.y);
-      }
-    } else if (this.player.boostEnergy < this.player.minBoostEnergy) {
-      boostBarFill.style.background = '#ef4444';
-      boostBarLabel.textContent = `BOOST LOW (${Math.ceil(energyPercent)}%)`;
-      boostBarLabel.style.color = '#ff8888';
-    } else {
-      boostBarFill.style.background = '#22d3ee';
-      boostBarLabel.textContent = `BOOST READY (${Math.ceil(energyPercent)}%)`;
-      boostBarLabel.style.color = '#00ffff';
+    const isLow = this.player.boostEnergy < this.player.minBoostEnergy;
+    
+    // Update HUD manager
+    this.hudManager.updateBoost(energyPercent, boostingNow, isLow);
+    
+    // Emit echo on boost start
+    if (boostingNow && !(this as any).wasBoostingUI) {
+      this.emitBoostEcho(this.player.x, this.player.y);
     }
     (this as any).wasBoostingUI = boostingNow;
-    if (boostBarLabel) {
-      const ready = this.player.boostEnergy >= (this.player.minBoostEnergy + 5);
-      if (ready) {
-        boostBarLabel.classList.add('hud-pulse');
-        setTimeout(() => { try { boostBarLabel.classList.remove('hud-pulse'); } catch {} }, 220);
-      }
-    }
-    
-    // COMBO MULTIPLIER DISPLAY - Show when active!
-    this.updateComboDisplay();
   }
   
   updateComboDisplay() {
-    const now = Date.now();
-    const comboActive = (now - this.lastComboTime) < this.comboWindowMs && this.comboKills > 0;
-    
-    let comboEl = document.getElementById('game-combo-display');
-    if (!comboEl) {
-      comboEl = document.createElement('div');
-      comboEl.id = 'game-combo-display';
-      comboEl.style.cssText = `
-        position: fixed;
-        top: 120px;
-        right: 20px;
-        padding: 12px 20px;
-        background: linear-gradient(135deg, rgba(251,146,60,0.95), rgba(244,63,94,0.95));
-        border: 2px solid #fbbf24;
-        border-radius: 12px;
-        font-size: 20px;
-        font-weight: 900;
-        color: #fff;
-        text-shadow: 0 2px 4px rgba(0,0,0,0.8), 0 0 10px rgba(251,191,36,0.6);
-        z-index: 1000;
-        pointer-events: none;
-        box-shadow: 0 4px 12px rgba(251,146,60,0.5), 0 0 20px rgba(244,63,94,0.3);
-        transition: transform 0.2s, opacity 0.2s;
-      `;
-      document.body.appendChild(comboEl);
-    }
-    
-    if (comboActive) {
-      const timeLeft = this.comboWindowMs - (now - this.lastComboTime);
-      const progress = timeLeft / this.comboWindowMs;
-      const scale = 1 + (1 - progress) * 0.2; // Pulse as time runs out
-      
-      comboEl.textContent = `🔥 ${this.comboKills + 1}x COMBO! (${this.comboMultiplier.toFixed(1)}x)`;
-      comboEl.style.display = 'block';
-      comboEl.style.transform = `scale(${scale})`;
-      comboEl.style.opacity = '1';
-      comboEl.style.borderColor = progress < 0.3 ? '#ef4444' : '#fbbf24'; // Red when expiring
-    } else {
-      comboEl.style.opacity = '0';
-      comboEl.style.transform = 'scale(0.8)';
-      setTimeout(() => { comboEl!.style.display = 'none'; }, 200);
-    }
+    // Combo display removed - too cluttered
   }
 
   updateTrailStatus() {
@@ -3780,6 +4162,8 @@ class SpermRaceGame {
   }
 
   updateProximityRadar() {
+    // Radar disabled
+    return;
     if (!this.radarCtx || !this.player || !this.app) return;
     
     // Throttle radar updates on mobile for better performance
@@ -3811,12 +4195,13 @@ class SpermRaceGame {
       if (dist > detectionRange) return;
       const onScreen = car.x >= viewLeft && car.x <= viewRight && car.y >= viewTop && car.y <= viewBottom;
       if (onScreen) return;
-      const angle = Math.atan2(dy, dx);
-      const edgeMargin = 40;
-      let indicatorX: number, indicatorY: number;
-      const absAngle = Math.abs(angle);
-      const aspectRatio = W / H;
-      const cornerAngle = Math.atan(1 / aspectRatio);
+    const angle = Math.atan2(dy, dx);
+    const edgeMargin = 40;
+    let indicatorX: number;
+    let indicatorY: number;
+    const aspectRatio = W / H;
+    const cornerAngle = Math.atan(1 / aspectRatio);
+    const absAngle = Math.abs(angle);
       if (absAngle < cornerAngle) {
         indicatorX = W - edgeMargin;
         indicatorY = H / 2 + Math.tan(angle) * (W / 2 - edgeMargin);
@@ -3888,12 +4273,12 @@ class SpermRaceGame {
         radial-gradient(ellipse at 50% 50%, rgba(34, 211, 238, 0.05), transparent 65%),
         conic-gradient(from ${t}rad, rgba(34,211,238,0.06), rgba(34,211,238,0.0) 15%, rgba(255,255,255,0.04) 30%, rgba(34,211,238,0.0) 45%, rgba(255,102,0,0.06) 60%, rgba(34,211,238,0.0) 75%, rgba(255,255,255,0.04) 90%, rgba(34,211,238,0.06))
       `;
-      // Accent the player head with a glow while boosting
-      try { this.player.headGraphics!.filters = [new (PIXI as any).filters.BlurFilter({ strength: 2 })]; } catch {}
+      // Accent the player head with a glow while boosting (filter removed for compatibility)
+      // try { this.player.headGraphics!.filters = [new (PIXI as any).filters.BlurFilter({ strength: 2 })]; } catch {}
     } else {
-      // Boost not active - fade out effects and clear filters
+      // Boost not active - fade out effects
       boostOverlay.style.opacity = '0';
-      try { this.player.headGraphics!.filters = []; } catch {}
+      // try { this.player.headGraphics!.filters = []; } catch {}
       document.body.style.transform = 'translate(0px, 0px)';
     }
   }
@@ -3905,10 +4290,12 @@ class SpermRaceGame {
     this.zone.centerY = 0;
     this.zone.startRadius = Math.min(this.arena.width, this.arena.height) * 0.48;
     this.zone.startAtMs = Date.now();
-    // Target 90–100s rounds for stronger pacing
-    this.zone.durationMs = 100000; // 100s
+  // Sharper pacing: ~42s core rounds with aggressive finale
+  this.zone.durationMs = 42000;
     this.zoneGraphics = new PIXI.Graphics();
     this.worldContainer.addChild(this.zoneGraphics);
+  this.finalSurgeBannerShown = false;
+  this.initializeHotspotSchedule();
 
     // Rectangular slicer init
     this.rectZone.left = -this.arena.width / 2;
@@ -3932,6 +4319,14 @@ class SpermRaceGame {
   updateZoneAndDamage(deltaTime: number) {
     if (!this.zoneGraphics) return;
     const now = Date.now();
+    const zoneStart = this.zone.startAtMs || now;
+    const elapsed = Math.max(0, now - zoneStart);
+    const progress = this.zone.durationMs > 0 ? Math.min(1, Math.max(0, elapsed / this.zone.durationMs)) : 0;
+    const tension = Math.pow(progress, 1.35);
+    const targetInterval = 3200 - Math.min(2200, 2200 * tension);
+    this.rectZone.sliceIntervalMs = Math.max(900, targetInterval);
+    this.rectZone.sliceStep = Math.round(260 + 240 * tension);
+
     // Rectangular slicer: periodically push one side inward
     if (!this.rectZone.pendingSide && now >= this.rectZone.nextSliceAt - this.rectZone.telegraphMs) {
       // Use seeded daily pattern, avoid immediate repeats
@@ -3970,7 +4365,14 @@ class SpermRaceGame {
     // Safe rectangle
     this.zoneGraphics
       .rect(this.rectZone.left, this.rectZone.top, this.rectZone.right - this.rectZone.left, this.rectZone.bottom - this.rectZone.top)
-      .stroke({ width: 2, color: this.theme.accent, alpha: 0.22 });
+      .stroke({ width: 3, color: this.theme.accent, alpha: 0.35 });
+    
+    // Add pulsing danger zone outside safe area
+    const dangerPulse = 0.3 + 0.2 * Math.sin(now * 0.003);
+    this.zoneGraphics
+      .rect(-this.arena.width/2, -this.arena.height/2, this.arena.width, this.arena.height)
+      .fill({ color: 0xff0000, alpha: 0.02 + dangerPulse * 0.03 });
+      
     // Telegraph arrow on pending side
     if (this.rectZone.pendingSide) {
       const remain = Math.max(0, this.rectZone.nextSliceAt - now);
@@ -3999,10 +4401,15 @@ class SpermRaceGame {
 
     // Update HUD timer
     const remainMs = Math.max(0, this.zone.startAtMs + this.zone.durationMs - Date.now());
-    const zoneTimer = this.uiContainer?.querySelector('#game-zone-timer') as HTMLDivElement | null;
-    if (zoneTimer) {
+    if (!this.finalSurgeBannerShown && remainMs <= 10000) {
+      this.showFinalSurgeBanner();
+      this.finalSurgeBannerShown = true;
+    }
+    
+    // Update zone timer in HUD
+    if (this.hudManager) {
       const secs = Math.ceil(remainMs / 1000);
-      zoneTimer.textContent = `Zone closes in: ${Math.floor(secs/60)}m ${secs%60}s`;
+      this.hudManager.updateZoneTimer(secs);
     }
 
     // Apply soft damage outside rectangular zone
@@ -4010,6 +4417,11 @@ class SpermRaceGame {
       if (!car || car.destroyed) return;
       const inside = car.x >= this.rectZone.left && car.x <= this.rectZone.right && car.y >= this.rectZone.top && car.y <= this.rectZone.bottom;
       if (!inside) {
+        // Show warning for player outside zone
+        if (car === this.player) {
+          this.showZoneWarning();
+        }
+        
         // Compute shortest push vector toward rectangle
         const clampedX = Math.max(this.rectZone.left, Math.min(this.rectZone.right, car.x));
         const clampedY = Math.max(this.rectZone.top, Math.min(this.rectZone.bottom, car.y));
@@ -4018,22 +4430,563 @@ class SpermRaceGame {
         const dist = Math.sqrt(dx*dx + dy*dy) || 1;
         const dirX = dx / dist;
         const dirY = dy / dist;
-        car.vx -= dirX * 14 * deltaTime;
-        car.vy -= dirY * 14 * deltaTime;
+        const pushStrength = 14 + tension * 36;
+        car.vx -= dirX * pushStrength * deltaTime;
+        car.vy -= dirY * pushStrength * deltaTime;
         car.outZoneTime = (car.outZoneTime || 0) + deltaTime;
         // If prolonged outside, eliminate
-        if (car.outZoneTime > 6) this.destroyCar(car);
+        const grace = Math.max(2.4, 6 - tension * 3.5);
+        if (car.outZoneTime > grace) this.destroyCar(car);
       } else {
         car.outZoneTime = 0;
+        // Hide warning when back inside
+        if (car === this.player) {
+          this.hideZoneWarning();
+        }
       }
     };
     applyZone(this.player);
     applyZone(this.bot);
     for (const b of this.extraBots) applyZone(b);
+    
+    // Update danger overlay based on zone proximity and time
+    this.updateDangerOverlay(remainMs);
+  }
+
+  private showFinalSurgeBanner() {
+    if (!this.uiContainer) return;
+    let banner = document.getElementById('final-surge-banner') as HTMLDivElement | null;
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'final-surge-banner';
+      Object.assign(banner.style, {
+        position: 'absolute',
+        top: '35%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        padding: '20px 32px',
+        borderRadius: '18px',
+        background: 'rgba(15, 23, 42, 0.9)',
+        border: '2px solid rgba(250,204,21,0.6)',
+        color: '#facc15',
+        fontSize: '28px',
+        fontWeight: '800',
+        letterSpacing: '0.14em',
+        textShadow: '0 0 18px rgba(250,204,21,0.45)',
+        opacity: '0',
+        transition: 'opacity 200ms ease-out',
+        pointerEvents: 'none',
+        zIndex: '50',
+        textAlign: 'center'
+  } as Partial<CSSStyleDeclaration>);
+      banner.textContent = 'FINAL SURGE • ZONE CRUSHING';
+      this.uiContainer.appendChild(banner);
+    }
+
+    banner.style.opacity = '1';
+    if (this.finalSurgeTimeout) window.clearTimeout(this.finalSurgeTimeout);
+    this.finalSurgeTimeout = window.setTimeout(() => {
+      try { banner!.style.opacity = '0'; } catch {}
+    }, 2200);
+  }
+  
+  showZoneWarning() {
+    let warning = document.getElementById('zone-warning');
+    if (!warning && this.uiContainer) {
+      warning = document.createElement('div');
+      warning.id = 'zone-warning';
+      
+      const isMobile = window.innerWidth <= 768;
+      Object.assign(warning.style, {
+        position: 'absolute',
+        top: isMobile ? '30%' : '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        color: '#ef4444',
+        fontSize: isMobile ? '20px' : '32px',
+        fontWeight: '700',
+        textAlign: 'center',
+        zIndex: '30',
+        pointerEvents: 'none',
+        textShadow: '0 0 10px rgba(239,68,68,0.8)',
+        animation: 'pulse 1s ease-in-out infinite'
+      });
+      this.uiContainer.appendChild(warning);
+      
+      // Add CSS animation
+      const style = document.createElement('style');
+      style.textContent = `
+        @keyframes pulse {
+          0%, 100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+          50% { opacity: 0.7; transform: translate(-50%, -50%) scale(1.1); }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    
+    if (warning) {
+      const isMobile = window.innerWidth <= 768;
+      if (isMobile) {
+        // Simple mobile warning
+        warning.innerHTML = `<div>⚠️ OUTSIDE ZONE!</div>`;
+      } else {
+        warning.innerHTML = `
+          <div>⚠️ OUTSIDE ZONE!</div>
+          <div style="font-size:20px;margin-top:8px">Return to safe area!</div>
+        `;
+      }
+      warning.style.display = 'block';
+    }
+  }
+  
+  hideZoneWarning() {
+    const warning = document.getElementById('zone-warning');
+    if (warning) {
+      warning.style.display = 'none';
+    }
+  }
+  
+  updateDangerOverlay(remainMs: number) {
+    const overlay = document.getElementById('game-danger-overlay');
+    if (!overlay || !this.player || this.player.destroyed) return;
+    
+    // Calculate danger level from multiple sources
+    let dangerLevel = 0;
+    
+    // 1. Time pressure - final 5 seconds
+    if (remainMs <= 5000) {
+      dangerLevel = Math.max(dangerLevel, 1 - (remainMs / 5000)); // 0 to 1 as time runs out
+    }
+    
+    // 2. Zone proximity - when near zone edges
+    if (this.player) {
+      const distToLeft = Math.abs(this.player.x - this.rectZone.left);
+      const distToRight = Math.abs(this.player.x - this.rectZone.right);
+      const distToTop = Math.abs(this.player.y - this.rectZone.top);
+      const distToBottom = Math.abs(this.player.y - this.rectZone.bottom);
+      const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
+      const dangerThreshold = 200; // Distance at which warning starts
+      
+      if (minDist < dangerThreshold) {
+        const proximityDanger = 1 - (minDist / dangerThreshold);
+        dangerLevel = Math.max(dangerLevel, proximityDanger * 0.6); // Max 0.6 from proximity
+      }
+    }
+    
+    // 3. Outside zone - max danger
+    if (this.player.outZoneTime && this.player.outZoneTime > 0) {
+      dangerLevel = Math.max(dangerLevel, 0.8);
+    }
+    
+    // Apply smooth transitions
+    const targetOpacity = dangerLevel * 0.8; // Max 80% opacity
+    overlay.style.opacity = targetOpacity.toFixed(2);
+    
+    // Pulsing border effect when in high danger
+    if (dangerLevel > 0.3) {
+      const pulseIntensity = Math.sin(Date.now() * 0.005) * 0.5 + 0.5; // 0 to 1
+      const borderAlpha = dangerLevel * pulseIntensity * 0.8;
+      overlay.style.borderColor = `rgba(239, 68, 68, ${borderAlpha})`;
+      overlay.style.filter = `saturate(${0.7 - dangerLevel * 0.3}) brightness(${1 - dangerLevel * 0.2})`;
+    } else {
+      overlay.style.borderColor = 'transparent';
+      overlay.style.filter = 'none';
+    }
+  }
+  
+  triggerImpactFrame() {
+    // Very brief time slow (not freeze) - 25ms at 50% speed
+    const slowDuration = 25;
+    const originalTimeScale = (this.app as any)?.ticker?.speed ?? 1;
+    
+    // Slow time (50% speed instead of full freeze)
+    if ((this.app as any)?.ticker) {
+      (this.app as any).ticker.speed = 0.5;
+    }
+    
+    // Subtle camera shake (1.5x intensity)
+    this.screenShake(1.5);
+    
+    // Haptic feedback (short sharp burst)
+    try { navigator.vibrate?.(10); } catch {}
+    
+    // Resume after brief slow
+    setTimeout(() => {
+      if ((this.app as any)?.ticker) {
+        (this.app as any).ticker.speed = originalTimeScale;
+      }
+    }, slowDuration);
+    
+    // Add impact flash overlay
+    try {
+      let impactFlash = document.getElementById('impact-flash');
+      if (!impactFlash) {
+        impactFlash = document.createElement('div');
+        impactFlash.id = 'impact-flash';
+        impactFlash.style.cssText = `
+          position: fixed;
+          inset: 0;
+          background: radial-gradient(circle, rgba(255,255,255,0.4) 0%, transparent 70%);
+          pointer-events: none;
+          z-index: 9998;
+          opacity: 0;
+          transition: opacity 100ms ease-out;
+        `;
+        document.body.appendChild(impactFlash);
+      }
+      // Trigger flash
+      impactFlash.style.opacity = '1';
+      setTimeout(() => { try { impactFlash!.style.opacity = '0'; } catch {} }, 50);
+    } catch {}
+  }
+  
+  triggerVictorySlowMo(winner: Car) {
+    // Slow motion effect for 1.5 seconds
+    const slowDuration = 1500;
+    const slowMotionSpeed = 0.3; // 30% speed
+    
+    // Slow down time
+    if ((this.app as any)?.ticker) {
+      (this.app as any).ticker.speed = slowMotionSpeed;
+    }
+    
+    // Zoom camera to winner
+    if (this.camera) {
+      const startZoom = this.camera.zoom;
+      const targetZoom = Math.min(0.8, startZoom * 1.3); // Zoom in 30%
+      const zoomDuration = 800;
+      const startTime = Date.now();
+      
+      const animateZoom = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(1, elapsed / zoomDuration);
+        const eased = 1 - Math.pow(1 - progress, 3); // ease-out-cubic
+        
+        this.camera.targetZoom = startZoom + (targetZoom - startZoom) * eased;
+        
+        if (progress < 1) {
+          requestAnimationFrame(animateZoom);
+        }
+      };
+      animateZoom();
+    }
+    
+    // Add epic victory overlay
+    try {
+      let victoryOverlay = document.getElementById('victory-overlay');
+      if (!victoryOverlay) {
+        victoryOverlay = document.createElement('div');
+        victoryOverlay.id = 'victory-overlay';
+        victoryOverlay.style.cssText = `
+          position: fixed;
+          inset: 0;
+          background: radial-gradient(circle at center, 
+            rgba(16, 185, 129, 0.2) 0%, 
+            rgba(16, 185, 129, 0.05) 50%, 
+            transparent 100%);
+          pointer-events: none;
+          z-index: 9997;
+          opacity: 0;
+          transition: opacity 600ms ease-in;
+          box-shadow: inset 0 0 100px rgba(16, 185, 129, 0.3);
+        `;
+        document.body.appendChild(victoryOverlay);
+      }
+      // Fade in
+      victoryOverlay.style.opacity = '1';
+      
+      // Add "VICTORY" text if player won
+      if (winner === this.player) {
+        const victoryText = document.createElement('div');
+        victoryText.style.cssText = `
+          position: fixed;
+          top: 30%;
+          left: 50%;
+          transform: translate(-50%, -50%) scale(0.5);
+          font-size: 72px;
+          font-weight: 900;
+          color: #10b981;
+          text-shadow: 
+            0 0 40px rgba(16, 185, 129, 1),
+            0 0 80px rgba(16, 185, 129, 0.6),
+            0 8px 32px rgba(0, 0, 0, 0.8);
+          letter-spacing: 12px;
+          z-index: 9998;
+          opacity: 0;
+          transition: all 800ms cubic-bezier(0.34, 1.56, 0.64, 1);
+          pointer-events: none;
+        `;
+        victoryText.textContent = 'VICTORY';
+        document.body.appendChild(victoryText);
+        
+        // Animate in
+        setTimeout(() => {
+          victoryText.style.opacity = '1';
+          victoryText.style.transform = 'translate(-50%, -50%) scale(1)';
+        }, 100);
+        
+        // Remove after slow-mo ends
+        setTimeout(() => {
+          victoryText.style.opacity = '0';
+          victoryText.style.transform = 'translate(-50%, -50%) scale(1.5)';
+          setTimeout(() => victoryText.remove(), 500);
+        }, slowDuration - 300);
+      }
+    } catch {}
+    
+    // Resume normal speed after slow-mo
+    setTimeout(() => {
+      if ((this.app as any)?.ticker) {
+        (this.app as any).ticker.speed = 1.0;
+      }
+    }, slowDuration);
+  }
+  
+  updateRoundSystem() {
+    // Round indicator disabled - using unified top HUD bar instead
+    return;
+    // Display round UI - compact for mobile
+    let roundUI = document.getElementById('round-indicator');
+    if (!roundUI && this.uiContainer) {
+      roundUI = document.createElement('div');
+      roundUI.id = 'round-indicator';
+      
+      const isMobile = window.innerWidth <= 768;
+      Object.assign(roundUI.style, {
+        position: 'absolute',
+        top: isMobile ? '10px' : '60px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        color: this.theme.text,
+        fontSize: isMobile ? '12px' : '16px',
+        fontWeight: '600',
+        background: 'rgba(0,0,0,0.7)',
+        padding: isMobile ? '4px 10px' : '8px 16px',
+        borderRadius: '6px',
+        border: '1px solid rgba(255,255,255,0.2)',
+        zIndex: '25',
+        pointerEvents: 'none'
+      });
+      this.uiContainer.appendChild(roundUI);
+    }
+    
+    if (roundUI) {
+      const winsNeeded = Math.ceil(this.totalRounds / 2);
+      const roundTimeRemain = this.zone.startAtMs ? Math.max(0, this.zone.durationMs - (Date.now() - this.zone.startAtMs)) : 0;
+      const secs = Math.ceil(roundTimeRemain / 1000);
+      const isMobile = window.innerWidth <= 768;
+      
+      // Count alive players
+      const alivePlayers = [this.player, this.bot, ...this.extraBots].filter(c => c && !c.destroyed).length;
+      
+      if (isMobile) {
+        // Cleaner mobile view - essential info only
+        roundUI.innerHTML = `
+          <div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600">
+            <span style="color:#10b981">R${this.currentRound}</span>
+            <span style="color:#666">|</span>
+            <span style="color:#fbbf24">⏱${String(secs%60).padStart(2,'0')}s</span>
+            <span style="color:#666">|</span>
+            <span style="color:#3b82f6">${alivePlayers} left</span>
+          </div>
+        `;
+      } else {
+        // Desktop view - remove W/L display
+        roundUI.innerHTML = `
+          <div style="text-align:center">
+            <div style="font-size:14px;opacity:0.7;margin-bottom:4px">BEST OF ${this.totalRounds} • First to ${winsNeeded}</div>
+            <div style="font-size:18px;color:#10b981;margin:4px 0">Round ${this.currentRound}/3 • ${alivePlayers} Alive</div>
+            <div style="font-size:14px;opacity:0.9;color:#fbbf24">⏱️ ${Math.floor(secs/60)}:${String(secs%60).padStart(2,'0')}</div>
+          </div>
+        `;
+      }
+    }
+    
+    // Check round end conditions
+    if (!this.roundInProgress) return;
+    
+    const aliveCars = [this.player, this.bot, ...this.extraBots].filter(c => c && !c.destroyed);
+    
+    // Round ends when only one car remains (last survivor wins)
+    if (aliveCars.length === 1 && this.roundInProgress) {
+      const playerWon = !!(this.player && !this.player.destroyed);
+      this.endRound(playerWon);
+    } else if (aliveCars.length === 0 && this.roundInProgress) {
+      // Everyone died (zone killed all) - round draw, replay
+      this.endRound(false);
+    }
+  }
+  
+  endRound(playerWon: boolean) {
+    this.roundInProgress = false;
+    this.roundEndTime = Date.now();
+    
+    // Hide zone warning
+    this.hideZoneWarning();
+    
+    if (playerWon) {
+      this.roundWins++;
+    } else {
+      this.roundLosses++;
+    }
+    
+    // Show round result
+    this.showRoundResult(playerWon);
+    
+    // Check if match is over
+    const winsNeeded = Math.ceil(this.totalRounds / 2);
+    if (this.roundWins >= winsNeeded) {
+      setTimeout(() => this.showMatchResult(true), 2500);
+    } else if (this.roundLosses >= winsNeeded) {
+      setTimeout(() => this.showMatchResult(false), 2500);
+    } else {
+      // Start next round
+      setTimeout(() => this.startNextRound(), 3000);
+    }
+  }
+  
+  showRoundResult(won: boolean) {
+    let resultUI = document.getElementById('round-result');
+    const isMobile = window.innerWidth <= 768;
+    
+    if (!resultUI && this.uiContainer) {
+      resultUI = document.createElement('div');
+      resultUI.id = 'round-result';
+      Object.assign(resultUI.style, {
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        fontSize: isMobile ? '32px' : '48px',
+        fontWeight: '700',
+        color: won ? '#10b981' : '#ef4444',
+        textAlign: 'center',
+        zIndex: '30',
+        pointerEvents: 'none',
+        opacity: '0',
+        transition: 'opacity 300ms ease',
+        background: 'rgba(0,0,0,0.85)',
+        padding: isMobile ? '20px 32px' : '32px 48px',
+        borderRadius: '12px',
+        border: `2px solid ${won ? '#10b981' : '#ef4444'}`
+      });
+      this.uiContainer.appendChild(resultUI);
+    }
+    
+    if (resultUI) {
+      const message = won ? (isMobile ? 'WON! 🎉' : 'ROUND WON! 🎉') : (isMobile ? 'LOST' : 'ROUND LOST');
+      const subtitle = won 
+        ? `${this.roundWins}/${Math.ceil(this.totalRounds/2)} wins` 
+        : `${this.roundLosses} losses`;
+      
+      resultUI.innerHTML = `
+        <div>${message}</div>
+        <div style="font-size:${isMobile ? '16px' : '20px'};margin-top:${isMobile ? '8px' : '12px'};opacity:0.8">${subtitle}</div>
+      `;
+      resultUI.style.opacity = '1';
+      setTimeout(() => { resultUI!.style.opacity = '0'; }, 2000);
+    }
+  }
+  
+  showMatchResult(won: boolean) {
+    let matchUI = document.getElementById('match-result');
+    const isMobile = window.innerWidth <= 768;
+    
+    if (!matchUI && this.uiContainer) {
+      matchUI = document.createElement('div');
+      matchUI.id = 'match-result';
+      Object.assign(matchUI.style, {
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        fontSize: isMobile ? '36px' : '56px',
+        fontWeight: '700',
+        color: won ? '#10b981' : '#ef4444',
+        textAlign: 'center',
+        zIndex: '35',
+        pointerEvents: 'none',
+        background: 'rgba(0,0,0,0.9)',
+        padding: isMobile ? '24px 40px' : '32px 64px',
+        borderRadius: '16px',
+        border: `3px solid ${won ? '#10b981' : '#ef4444'}`
+      });
+      this.uiContainer.appendChild(matchUI);
+    }
+    
+    if (matchUI) {
+      matchUI.innerHTML = `
+        <div>${won ? '🏆 VICTORY!' : '💀 DEFEAT'}</div>
+        <div style="font-size:${isMobile ? '18px' : '24px'};margin-top:${isMobile ? '12px' : '16px'};opacity:0.8">
+          ${this.roundWins} - ${this.roundLosses}
+        </div>
+      `;
+    }
+  }
+  
+  startNextRound() {
+    this.currentRound++;
+    this.roundInProgress = true;
+    
+    // Reset all cars
+    const resetCar = (car: Car | null) => {
+      if (!car) return;
+      car.destroyed = false;
+      car.sprite.visible = true;
+      car.vx = 0;
+      car.vy = 0;
+      car.speed = car.baseSpeed;
+      car.targetSpeed = car.baseSpeed;
+      car.isBoosting = false;
+      car.boostEnergy = car.maxBoostEnergy;
+      car.outZoneTime = 0;
+      
+      // Respawn at random position
+      const angle = Math.random() * Math.PI * 2;
+      const dist = Math.random() * 500 + 200;
+      car.x = Math.cos(angle) * dist;
+      car.y = Math.sin(angle) * dist;
+      car.angle = Math.random() * Math.PI * 2;
+      car.targetAngle = car.angle;
+    };
+    
+    resetCar(this.player);
+    resetCar(this.bot);
+    this.extraBots.forEach(b => resetCar(b));
+    
+    // Reset zone for new round (faster closing for urgency)
+  this.zone.startAtMs = Date.now() + 5000; // Start zone after countdown
+  this.zone.durationMs = 26000; // Later rounds stay fast but allow finale
+    this.rectZone.left = -this.arena.width / 2;
+    this.rectZone.right = this.arena.width / 2;
+    this.rectZone.top = -this.arena.height / 2;
+    this.rectZone.bottom = this.arena.height / 2;
+    this.rectZone.nextSliceAt = this.zone.startAtMs + 5000; // First slice at 5s
+    this.rectZone.pendingSide = null;
+    this.sliceIndex = 0;
+  this.finalSurgeBannerShown = false;
+  this.initializeHotspotSchedule();
+    
+    // Clear trails
+    this.trails = [];
+    if (this.trailContainer) {
+      this.trailContainer.removeChildren();
+    }
+    
+    // Clear particles
+    this.particles.forEach(p => {
+      if (p.graphics && p.graphics.parent) {
+        p.graphics.parent.removeChild(p.graphics);
+      }
+    });
+    this.particles = [];
+    
+    // Start countdown
+    this.preStart = { startAt: Date.now(), durationMs: 5000 };
   }
 
   emitBoostEcho(x: number, y: number) {
-    this.echoPings.push({ x, y, timestamp: Date.now(), playerId: 'echo', kind: 'echo', ttlMs: 900 });
+    this.echoPings.push({ x, y, timestamp: Date.now(), playerId: 'echo', kind: 'echo', ttlMs: 1200 }); // Longer visible time
   }
 
   // assignNewBounty removed

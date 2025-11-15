@@ -148,8 +148,8 @@ function AppInner() {
       {showHelp && (
         <div style={{ position: 'fixed', top: 40, left: 8, zIndex: 60, padding: '10px 12px', borderRadius: 10, background: 'rgba(0,0,0,0.80)', color: '#c7d2de', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12, maxWidth: 260 }}>
           <div style={{ fontWeight: 700, marginBottom: 6 }}>Controls</div>
-          <div>• Drag to aim</div>
-          <div>• Double‑tap to boost</div>
+          <div>• Drag left side to move</div>
+          <div>• Tap ⚡ button to boost</div>
         </div>
       )}
 

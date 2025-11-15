@@ -2,13 +2,13 @@
    MOBILE TOUCH CONTROLS - Virtual Joystick + Boost Button
    ================================================================= */
 
-/* Virtual Joystick - Left Side - Compact for better visibility */
-.mobile-joystick {
+/* DYNAMIC Joystick Area - Left Side (full touch zone) */
+.mobile-joystick-area {
   position: fixed;
-  bottom: 100px; /* Lower for easier reach */
-  left: 20px;
-  width: 140px; /* Smaller for less screen blocking */
-  height: 140px;
+  bottom: 0;
+  left: 0;
+  width: 50%; /* Left half of screen */
+  height: 100vh; /* Full height */
   z-index: 1000;
   user-select: none;
   -webkit-user-select: none;
@@ -20,12 +20,15 @@
 }
 
 .joystick-base {
-  position: relative;
-  width: 100%;
-  height: 100%;
+  position: fixed; /* Appears where you tap */
+  width: 140px;
+  height: 140px;
   display: flex;
   align-items: center;
   justify-content: center;
+  pointer-events: none;
+  z-index: 1001;
+  will-change: transform; /* GPU acceleration */
 }
 
 .joystick-ring {
@@ -41,11 +44,11 @@
   position: relative;
 }
 
-.mobile-joystick.active .joystick-ring {
-  border-color: rgba(34, 211, 238, 0.8);
+.joystick-base.active .joystick-ring {
+  border-color: rgba(34, 211, 238, 0.9);
   box-shadow:
-    0 0 30px rgba(34, 211, 238, 0.5),
-    inset 0 0 30px rgba(34, 211, 238, 0.2);
+    0 0 25px rgba(34, 211, 238, 0.5),
+    inset 0 0 20px rgba(34, 211, 238, 0.2);
   transform: scale(1.05);
 }
 
@@ -63,30 +66,31 @@
   box-shadow:
     0 4px 15px rgba(0, 0, 0, 0.4),
     inset 0 2px 8px rgba(255, 255, 255, 0.4);
-  transition: transform 0.05s ease-out;
   pointer-events: none;
   z-index: 10;
+  will-change: transform; /* GPU acceleration */
 }
 
-.mobile-joystick.active .joystick-stick {
-  background: radial-gradient(circle at 35% 35%, rgba(34, 211, 238, 0.95), rgba(34, 211, 238, 0.8));
+.joystick-base.active .joystick-stick {
+  background: radial-gradient(circle at 35% 35%, rgba(34, 211, 238, 1), rgba(34, 211, 238, 0.85));
   box-shadow:
-    0 6px 16px rgba(34, 211, 238, 0.4),
-    inset 0 2px 8px rgba(255, 255, 255, 0.4);
+    0 4px 12px rgba(34, 211, 238, 0.5),
+    inset 0 2px 6px rgba(255, 255, 255, 0.4);
 }
 
 .joystick-hint {
-  position: absolute;
-  bottom: -35px;
-  left: 50%;
+  position: fixed;
+  bottom: 120px;
+  left: 25%;
   transform: translateX(-50%);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.6);
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
-  letter-spacing: 1px;
+  color: rgba(255, 255, 255, 0.5);
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+  letter-spacing: 1.5px;
   white-space: nowrap;
   pointer-events: none;
+  opacity: 0.6;
 }
 
 /* Add steering arrows on joystick */
@@ -105,10 +109,10 @@
 /* Boost Button - Right Side - Compact for better visibility */
 .mobile-boost-button {
   position: fixed;
-  bottom: 100px; /* Lower for easier reach */
+  bottom: 30px; /* Move down - away from top menu */
   right: 20px;
-  width: 120px; /* Smaller for less screen blocking */
-  height: 120px;
+  width: 100px; /* Slightly smaller */
+  height: 100px;
   border-radius: 0;
   border: none;
   background: transparent;
@@ -129,8 +133,8 @@
 .mobile-boost-button::before {
   content: '';
   position: absolute;
-  width: 60px;
-  height: 60px;
+  width: 70px;
+  height: 70px;
   border-radius: 50%;
   background: radial-gradient(circle at 30% 30%, rgba(251, 146, 60, 0.3), rgba(251, 146, 60, 0.15));
   border: 2px solid rgba(251, 146, 60, 0.6);
@@ -149,11 +153,12 @@
   animation: pulse-boost 2s ease-in-out infinite;
 }
 
+.mobile-boost-button.pressed::before,
 .mobile-boost-button.ready:active::before {
-  transform: scale(0.92);
+  transform: scale(1.08);
   box-shadow:
-    0 3px 12px rgba(34, 211, 238, 0.6),
-    inset 0 2px 8px rgba(255, 255, 255, 0.3);
+    0 6px 24px rgba(34, 211, 238, 0.8),
+    inset 0 3px 12px rgba(255, 255, 255, 0.3);
 }
 
 .mobile-boost-button:disabled {
@@ -259,6 +264,52 @@
 }
 
 /* Animations */
+@keyframes ring-pulse {
+  0% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.15);
+  }
+  100% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+}
+
+@keyframes stick-appear {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes boost-press {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1.15);
+  }
+}
+
+@keyframes hint-fade {
+  0%, 100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
 @keyframes pulse-boost {
   0%, 100% {
     box-shadow:
