@@ -3,8 +3,8 @@
 export const WORLD = {
   WIDTH: 3500,
   HEIGHT: 2500,
-  ARENA_SHRINK_START_S: 60,
-  ARENA_SHRINK_DURATION_S: 90,
+  ARENA_SHRINK_START_S: 10,  // Start shrinking at 10s for fast 42s rounds
+  ARENA_SHRINK_DURATION_S: 32,  // Complete shrink by 42s (10+32)
 };
 
 export const PHYSICS = {

@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Debug Logs - Sperm Race</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Courier New', monospace;
+      background: #0a0a0a;
+      color: #0f0;
+      padding: 20px;
+      overflow: hidden;
+    }
+    
+    h1 {
+      color: #0ff;
+      margin-bottom: 20px;
+      font-size: 24px;
+      text-shadow: 0 0 10px #0ff;
+    }
+    
+    #controls {
+      margin-bottom: 20px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    
+    button {
+      background: #222;
+      color: #0f0;
+      border: 2px solid #0f0;
+      padding: 8px 16px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+    
+    button:hover {
+      background: #0f0;
+      color: #000;
+    }
+    
+    #status {
+      color: #ff0;
+      font-size: 12px;
+      margin-bottom: 10px;
+    }
+    
+    #logs-container {
+      background: #111;
+      border: 2px solid #0f0;
+      border-radius: 4px;
+      padding: 15px;
+      height: calc(100vh - 180px);
+      overflow-y: auto;
+      box-shadow: 0 0 20px rgba(0, 255, 0, 0.2);
+    }
+    
+    .log-entry {
+      margin: 4px 0;
+      padding: 6px;
+      border-left: 3px solid #333;
+      font-size: 12px;
+      line-height: 1.4;
+      word-break: break-word;
+    }
+    
+    .log-entry.LOG {
+      border-left-color: #0f0;
+      color: #0f0;
+    }
+    
+    .log-entry.ERROR {
+      border-left-color: #f00;
+      color: #f00;
+      background: rgba(255, 0, 0, 0.1);
+    }
+    
+    .log-entry.WARN {
+      border-left-color: #ff0;
+      color: #ff0;
+      background: rgba(255, 255, 0, 0.05);
+    }
+    
+    .timestamp {
+      color: #666;
+      font-size: 10px;
+      margin-right: 8px;
+    }
+    
+    .log-message {
+      display: inline;
+    }
+    
+    ::-webkit-scrollbar {
+      width: 10px;
+    }
+    
+    ::-webkit-scrollbar-track {
+      background: #0a0a0a;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+      background: #0f0;
+      border-radius: 5px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+      background: #0ff;
+    }
+  </style>
+</head>
+<body>
+  <h1>📱 Mobile Debug Logs - Live Monitor</h1>
+  
+  <div id="controls">
+    <button onclick="clearLogs()">Clear Logs</button>
+    <button onclick="toggleAutoScroll()">Auto-scroll: <span id="autoscroll-status">ON</span></button>
+    <button onclick="exportLogs()">Export Logs</button>
+  </div>
+  
+  <div id="status">
+    Waiting for logs... <span id="log-count">0</span> entries
+  </div>
+  
+  <div id="logs-container"></div>
+
+  <script>
+    let logs = [];
+    let autoScroll = true;
+    const logsContainer = document.getElementById('logs-container');
+    const logCountEl = document.getElementById('log-count');
+    const statusEl = document.getElementById('status');
+    
+    // Poll for logs from localStorage (updated by the game)
+    let logStore = [];
+    
+    function updateDisplay() {
+      // Get logs from localStorage
+      try {
+        const stored = localStorage.getItem('debug_logs');
+        if (stored) {
+          const newLogs = JSON.parse(stored);
+          if (newLogs.length > logs.length) {
+            logs = newLogs;
+            renderLogs();
+          }
+        }
+      } catch (e) {
+        console.error('Failed to read logs:', e);
+      }
+    }
+    
+    function renderLogs() {
+      const html = logs.map(log => {
+        const match = log.match(/\[(.*?)\]\[(.*?)\] (.*)/);
+        if (!match) return `<div class="log-entry">${log}</div>`;
+        
+        const [, timestamp, level, message] = match;
+        const time = new Date(timestamp).toLocaleTimeString();
+        
+        return `
+          <div class="log-entry ${level}">
+            <span class="timestamp">${time}</span>
+            <span class="log-message">${escapeHtml(message)}</span>
+          </div>
+        `;
+      }).join('');
+      
+      logsContainer.innerHTML = html;
+      logCountEl.textContent = logs.length;
+      
+      if (autoScroll) {
+        logsContainer.scrollTop = logsContainer.scrollHeight;
+      }
+      
+      if (logs.length > 0) {
+        const lastLog = logs[logs.length - 1];
+        const match = lastLog.match(/\[(.*?)\]/);
+        if (match) {
+          const time = new Date(match[1]).toLocaleTimeString();
+          statusEl.innerHTML = `Last log at ${time} - <span id="log-count">${logs.length}</span> entries`;
+        }
+      }
+    }
+    
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+    
+    function clearLogs() {
+      logs = [];
+      localStorage.removeItem('debug_logs');
+      renderLogs();
+      statusEl.innerHTML = 'Logs cleared - <span id="log-count">0</span> entries';
+    }
+    
+    function toggleAutoScroll() {
+      autoScroll = !autoScroll;
+      document.getElementById('autoscroll-status').textContent = autoScroll ? 'ON' : 'OFF';
+    }
+    
+    function exportLogs() {
+      const blob = new Blob([logs.join('\n')], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `debug-logs-${new Date().toISOString()}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+    
+    // Poll every 500ms for new logs
+    setInterval(updateDisplay, 500);
+    
+    // Initial load
+    updateDisplay();
+  </script>
+</body>
+</html>

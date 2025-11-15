@@ -155,8 +155,8 @@ function AppInner() {
       {showHelp && (
         <div style={{ position: 'fixed', top: 40, left: 8, zIndex: 60, padding: '10px 12px', borderRadius: 10, background: 'rgba(0,0,0,0.80)', color: '#c7d2de', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12, maxWidth: 260 }}>
           <div style={{ fontWeight: 700, marginBottom: 6 }}>Controls</div>
-          <div>• Drag to aim</div>
-          <div>• Double‑tap to boost</div>
+          <div>• Drag left side to move</div>
+          <div>• Tap ⚡ button to boost</div>
         </div>
       )}
 
@@ -913,28 +913,7 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void; 
   
   return (
     <div className="screen active" style={{ padding: 0, position: 'fixed', inset: 0, width: '100vw', height: '100vh', zIndex: 100 }}>
-      {/* Back button - top left, safe area aware */}
-      <button 
-        onClick={onEnd}
-        style={{
-          position: 'fixed',
-          top: 'calc(12px + env(safe-area-inset-top, 0px))',
-          left: 'calc(12px + env(safe-area-inset-left, 0px))',
-          zIndex: 2001,
-          padding: '10px 16px',
-          background: 'rgba(0, 0, 0, 0.7)',
-          border: '1.5px solid rgba(255, 255, 255, 0.3)',
-          borderRadius: '12px',
-          color: '#fff',
-          fontSize: '16px',
-          fontWeight: 600,
-          cursor: 'pointer',
-          backdropFilter: 'blur(10px)',
-          WebkitTapHighlightColor: 'transparent'
-        }}
-      >
-        ✕
-      </button>
+      {/* X button removed from tournament - players must finish to maintain competitive integrity */}
       <NewGameView 
         onReplay={onRestart}
         onExit={onEnd}
