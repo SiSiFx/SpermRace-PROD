@@ -31,6 +31,7 @@ import { WsProvider, useWs } from './WsProvider';
 import NewGameView from './NewGameView';
 import { Leaderboard } from './Leaderboard';
 import HowToPlayOverlay from './HowToPlayOverlay';
+import { Modes } from './components/Modes';
 import './leaderboard.css';
 
 type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
@@ -56,7 +57,6 @@ function AppInner() {
   };
   const wallet = useWallet();
   const { publicKey } = wallet;
-  const [showHelp] = useState<boolean>(false);
   const [showLeaderboard, setShowLeaderboard] = useState<boolean>(false);
   const [showHowTo, setShowHowTo] = useState<boolean>(false);
   
@@ -104,6 +104,7 @@ function AppInner() {
 
   const onPractice = () => setScreen('practice');
   const onTournament = () => setScreen('modes');
+  const onWallet = () => setScreen('wallet');
 
   useEffect(() => {
     if (wsState.phase === 'lobby') setScreen('lobby');
@@ -205,6 +206,7 @@ function AppInner() {
           solPrice={solPrice}
           onPractice={onPractice}
           onTournament={onTournament}
+          onWallet={onWallet}
           onLeaderboard={() => setShowLeaderboard(true)}
         />
       )}
@@ -212,7 +214,7 @@ function AppInner() {
         <Practice onFinish={() => setScreen('results')} onBack={() => setScreen('landing')} />
       )}
       {screen === 'modes' && (
-        <Modes onSelect={() => setScreen('wallet')} onClose={() => setScreen('landing')} onNotify={showToast} />
+        <TournamentModesScreen onSelect={() => setScreen('wallet')} onClose={() => setScreen('landing')} onNotify={showToast} />
       )}
       {screen === 'wallet' && (
         <Wallet onConnected={() => setScreen('lobby')} onClose={() => setScreen('modes')} />
@@ -280,85 +282,137 @@ function HeaderWallet({ screen }: { screen: string }) {
   return null;
 }
 
-function Landing({ solPrice, onPractice, onTournament, onLeaderboard }: { solPrice: number | null; onPractice: () => void; onTournament: () => void; onLeaderboard?: () => void; }) {
-  const { publicKey, isConnecting } = useWallet();
-  const sendAnalytic = async (type: string, payload: any) => { try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, payload }) }); } catch {} };
-  
-  const handleTournament = async () => {
-    sendAnalytic('landing_cta_click', { publicKey: publicKey || null });
-    onTournament();
-  };
+interface LandingProps {
+  solPrice: number | null;
+  onPractice: () => void;
+  onTournament?: () => void;
+  onWallet: () => void;
+  onLeaderboard?: () => void;
+}
 
-  const getPlayerStats = () => {
-    try {
-      const stored = localStorage.getItem('spermrace_stats');
-      if (stored) return JSON.parse(stored);
-    } catch {}
-    return { totalGames: 0, wins: 0, losses: 0, totalPrizes: 0, totalKills: 0, history: [] };
-  };
-  const stats = getPlayerStats();
-  const winRate = stats.totalGames > 0 ? ((stats.wins / stats.totalGames) * 100).toFixed(1) : '0.0';
+function Landing({
+  solPrice,
+  onPractice,
+  onWallet,
+  onLeaderboard,
+}: LandingProps) {
 
   return (
     <div className="screen active mobile-landing" id="landing-screen">
-      <div className="mobile-landing-container">
-        <div className="mobile-brand-section">
-          <h1 className="mobile-brand-title">
-            <span className="text-gradient">SPERM</span>
-            <span className="text-accent">RACE</span>
-            <span className="text-gradient">.IO</span>
-          </h1>
-          <p className="mobile-brand-subtitle">Battle Royale 💥</p>
-          
-          {stats.totalGames > 0 && (
-            <div className="mobile-stats-row">
-              <div className="mobile-stat">
-                <div className="label">Games</div>
-                <div className="value">{stats.totalGames}</div>
-              </div>
-              <div className="mobile-stat">
-                <div className="label">Win%</div>
-                <div className="value">{winRate}%</div>
-              </div>
-              <div className="mobile-stat">
-                <div className="label">Kills</div>
-                <div className="value">{stats.totalKills}</div>
-              </div>
-              {stats.totalPrizes > 0 && (
-                <div className="mobile-stat highlight">
-                  <div className="label">💰 Won</div>
-                  <div className="value">{stats.totalPrizes.toFixed(3)}</div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        
-        <div className="mobile-cta-section">
-          <button className="mobile-cta-primary" onClick={handleTournament} disabled={isConnecting}>
-            <span className="icon">🏆</span>
-            <span className="text">
-              {isConnecting ? 'Opening Wallet...' : 'Enter Tournament'}
-            </span>
-          </button>
-          
-          <button className="mobile-btn-secondary" onClick={onPractice}>
-            <span className="icon">🎮</span>
-            <span className="text">Practice (Free)</span>
-          </button>
-
-          {onLeaderboard && (
-            <button className="mobile-btn-secondary" onClick={onLeaderboard} style={{ marginTop: '12px' }}>
-              <span className="icon">🏆</span>
-              <span className="text">Leaderboard</span>
-            </button>
-          )}
-          
-          <div className="mobile-sol-price">
-            <span className="label">SOL</span>
-            <span className="price">${solPrice?.toFixed(2) ?? '--'}</span>
+      <div
+        className="mobile-landing-container"
+        style={{
+          maxWidth: 960,
+          margin: '0 auto',
+          minHeight: '100vh',
+          padding: '32px 16px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          gap: 24,
+        }}
+      >
+        <header style={{ textAlign: 'center' }}>
+          <div
+            style={{
+              fontFamily: 'Orbitron, system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
+              letterSpacing: '0.24em',
+              fontSize: 10,
+              textTransform: 'uppercase',
+              color: 'rgba(148,163,184,0.9)',
+              marginBottom: 10,
+            }}
+          >
+            BIO-ARENA PROTOCOL
           </div>
-        </div>
+          <h1
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'baseline',
+              gap: 8,
+              fontSize: 34,
+              lineHeight: 1,
+            }}
+          >
+            <span style={{ color: '#fff', fontWeight: 800 }}>SPERM</span>
+            <span
+              style={{
+                fontWeight: 800,
+                color: 'transparent',
+                WebkitTextStroke: '1px rgba(148,163,184,0.9)',
+              }}
+            >
+              RACE
+            </span>
+          </h1>
+          <p
+            style={{
+              marginTop: 10,
+              fontSize: 11,
+              letterSpacing: '0.2em',
+              textTransform: 'uppercase',
+              color: 'rgba(148,163,184,0.9)',
+            }}
+          >
+            ON-CHAIN FERTILIZATION BATTLE ROYALE
+          </p>
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: 11,
+              color: 'rgba(148,163,184,0.78)',
+              fontFamily: 'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, monospace',
+            }}
+          >
+            SOL: {solPrice != null ? `$${solPrice.toFixed(2)}` : '--.--'}
+          </div>
+        </header>
+
+        <main>
+          <Modes />
+        </main>
+
+        <footer
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginTop: 4,
+            gap: 12,
+            fontSize: 11,
+            color: 'rgba(148,163,184,0.85)',
+          }}
+        >
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              className="mobile-btn-secondary"
+              style={{ padding: '4px 8px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em' }}
+              onClick={onPractice}
+            >
+              Practice
+            </button>
+            {onLeaderboard && (
+              <button
+                type="button"
+                className="mobile-btn-secondary"
+                style={{ padding: '4px 8px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em' }}
+                onClick={onLeaderboard}
+              >
+                Leaderboard
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            className="mobile-btn-secondary"
+            style={{ padding: '4px 8px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em' }}
+            onClick={onWallet}
+          >
+            Wallet
+          </button>
+        </footer>
       </div>
     </div>
   );
@@ -368,8 +422,6 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
   const [step, setStep] = useState<'lobby' | 'game'>('lobby');
   const [meId] = useState<string>('PLAYER_' + Math.random().toString(36).slice(2, 8));
   const [players, setPlayers] = useState<string[]>([]);
-  const [countdown, setCountdown] = useState<number>(0);
-  const countdownTotal = 0;
   const [showPracticeIntro, setShowPracticeIntro] = useState<boolean>(() => {
     try {
       return !localStorage.getItem('sr_practice_full_tuto_seen');
@@ -508,7 +560,7 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
   return null;
 }
 
-function Modes({ onSelect: _onSelect, onClose, onNotify }: { onSelect: () => void; onClose: () => void; onNotify: (msg: string, duration?: number) => void }) {
+function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onSelect: () => void; onClose: () => void; onNotify: (msg: string, duration?: number) => void }) {
   const { publicKey, connect } = useWallet();
   const { connectAndJoin, state: wsState } = useWs();
   const [isJoining, setIsJoining] = useState<boolean>(false);

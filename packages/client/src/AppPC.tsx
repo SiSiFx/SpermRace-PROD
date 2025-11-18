@@ -24,6 +24,8 @@ import { WalletProvider, useWallet } from './WalletProvider';
 import { WsProvider, useWs } from './WsProvider';
 import NewGameView from './NewGameView';
 import HowToPlayOverlay from './HowToPlayOverlay';
+import { Leaderboard } from './Leaderboard';
+import { Modes } from './components/Modes';
 
 type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
 
@@ -47,8 +49,9 @@ function AppInner() {
     setToast(msg);
     window.setTimeout(() => setToast(null), duration);
   };
-  const [showHelp, setShowHelp] = useState<boolean>(false);
+  const [showHelp] = useState<boolean>(false);
   const [showHowTo, setShowHowTo] = useState<boolean>(false);
+  const [showLeaderboard, setShowLeaderboard] = useState<boolean>(false);
   
   // Loading progress for overlay (indefinite fill)
   const [loadProg, setLoadProg] = useState<number>(0);
@@ -113,6 +116,7 @@ function AppInner() {
 
   const onPractice = () => setScreen('practice');
   const onTournament = () => setScreen('modes');
+  const onWallet = () => setScreen('wallet');
 
   useEffect(() => {
     if (wsState.phase === 'lobby') setScreen('lobby');
@@ -300,13 +304,15 @@ function AppInner() {
           solPrice={solPrice}
           onPractice={onPractice}
           onTournament={onTournament}
+          onWallet={onWallet}
+          onLeaderboard={() => setShowLeaderboard(true)}
         />
       )}
       {screen === 'practice' && (
         <Practice onFinish={() => setScreen('results')} onBack={() => setScreen('landing')} />
       )}
       {screen === 'modes' && (
-        <Modes onSelect={() => setScreen('wallet')} onClose={() => setScreen('landing')} onNotify={showToast} />
+        <TournamentModesScreen onSelect={() => setScreen('wallet')} onClose={() => setScreen('landing')} onNotify={showToast} />
       )}
       {screen === 'wallet' && (
         <Wallet onConnected={() => setScreen('lobby')} onClose={() => setScreen('modes')} />
@@ -356,6 +362,15 @@ function AppInner() {
           }}
         />
       )}
+
+      {showLeaderboard && (
+        <Leaderboard
+          onClose={() => setShowLeaderboard(false)}
+          apiBase={API_BASE}
+          myWallet={publicKey || null}
+          isMobile={false}
+        />
+      )}
     </div>
   );
 }
@@ -395,80 +410,138 @@ function HeaderWallet({ screen, status }: { screen: string; status: string }) {
   return <div style={{ ...style, color: '#c7d2de' }}>{status}</div>;
 }
 
-function Landing({ solPrice, onPractice, onTournament }: { solPrice: number | null; onPractice: () => void; onTournament: () => void; }) {
-  const { publicKey, isConnecting } = useWallet();
-  const sendAnalytic = async (type: string, payload: any) => { try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, payload }) }); } catch {} };
-  
-  const handleTournament = async () => {
-    sendAnalytic('landing_cta_click', { publicKey: publicKey || null });
-    onTournament();
-  };
+interface LandingProps {
+  solPrice: number | null;
+  onPractice: () => void;
+  onTournament?: () => void;
+  onWallet: () => void;
+  onLeaderboard?: () => void;
+}
 
-  // Get player stats from localStorage
-  const getPlayerStats = () => {
-    try {
-      const stored = localStorage.getItem('spermrace_stats');
-      if (stored) return JSON.parse(stored);
-    } catch {}
-    return { totalGames: 0, wins: 0, losses: 0, totalPrizes: 0, totalKills: 0, history: [] };
-  };
-  const stats = getPlayerStats();
-  const winRate = stats.totalGames > 0 ? ((stats.wins / stats.totalGames) * 100).toFixed(1) : '0.0';
+function Landing({
+  solPrice,
+  onPractice,
+  onWallet,
+  onLeaderboard,
+}: LandingProps) {
 
   return (
     <div className="screen active pc-landing" id="landing-screen">
-      <div className="landing-container pc-container">
-        <div className="brand-section">
-          <div className="pc-badge">🖥️ PC EDITION</div>
-          <h1 className="brand-title pc-title">
-            <span className="text-gradient">SPERM</span>
-            <span className="text-accent">RACE</span>
-            <span className="text-gradient">.IO</span>
-          </h1>
-          <p className="brand-punchline">Battle Royale starts at birth 💥</p>
-          
-          {stats.totalGames > 0 && (
-            <div className="pc-stats-grid">
-              <div className="pc-stat-card">
-                <div className="stat-label">Total Games</div>
-                <div className="stat-value">{stats.totalGames}</div>
-              </div>
-              <div className="pc-stat-card">
-                <div className="stat-label">Win Rate</div>
-                <div className="stat-value">{winRate}%</div>
-              </div>
-              <div className="pc-stat-card">
-                <div className="stat-label">Total Kills</div>
-                <div className="stat-value">{stats.totalKills}</div>
-              </div>
-              {stats.totalPrizes > 0 && (
-                <div className="pc-stat-card highlight">
-                  <div className="stat-label">💰 Prizes Won</div>
-                  <div className="stat-value">{stats.totalPrizes.toFixed(4)} SOL</div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        
-        <div className="cta-section pc-cta">
-          <button className="cta-primary pc-btn-large" onClick={handleTournament} disabled={isConnecting}>
-            <span className="cta-text">
-              {isConnecting ? 'Opening wallet…' : 'Enter Tournament'}
-            </span>
-            <div className="cta-glow"/>
-          </button>
-          
-          <button className="btn-secondary pc-btn-secondary" onClick={onPractice}>
-            🎮 Practice Mode (Free)
-          </button>
-          
-          <div className="live-sol-price pc-price">
-            <span className="price-label">SOLANA</span>
-            <span className="price-value">${solPrice?.toFixed(2) ?? '--'}</span>
-            <span className="price-updated">Live</span>
+      <div
+        className="landing-container"
+        style={{
+          maxWidth: 1200,
+          margin: '0 auto',
+          minHeight: '100vh',
+          padding: '48px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'stretch',
+          justifyContent: 'center',
+          gap: 32,
+        }}
+      >
+        <header style={{ textAlign: 'center' }}>
+          <div
+            style={{
+              fontFamily: 'Orbitron, system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
+              letterSpacing: '0.22em',
+              fontSize: 12,
+              textTransform: 'uppercase',
+              color: 'rgba(148,163,184,0.9)',
+              marginBottom: 12,
+            }}
+          >
+            BIO-ARENA PROTOCOL
           </div>
-        </div>
+          <h1
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'baseline',
+              gap: 12,
+              fontSize: 56,
+              lineHeight: 1,
+            }}
+          >
+            <span style={{ color: '#fff', fontWeight: 800 }}>SPERM</span>
+            <span
+              style={{
+                fontWeight: 800,
+                color: 'transparent',
+                WebkitTextStroke: '1px rgba(148,163,184,0.9)',
+              }}
+            >
+              RACE
+            </span>
+          </h1>
+          <p
+            style={{
+              marginTop: 16,
+              fontSize: 14,
+              letterSpacing: '0.18em',
+              textTransform: 'uppercase',
+              color: 'rgba(148,163,184,0.9)',
+            }}
+          >
+            ON-CHAIN FERTILIZATION BATTLE ROYALE
+          </p>
+          <div
+            style={{
+              marginTop: 10,
+              fontSize: 12,
+              color: 'rgba(148,163,184,0.75)',
+              fontFamily: 'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, monospace',
+            }}
+          >
+            SOL: {solPrice != null ? `$${solPrice.toFixed(2)}` : '--.--'}
+          </div>
+        </header>
+
+        <main>
+          <Modes />
+        </main>
+
+        <footer
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginTop: 8,
+            gap: 12,
+            fontSize: 12,
+            color: 'rgba(148,163,184,0.85)',
+          }}
+        >
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button
+              type="button"
+              className="btn-secondary"
+              style={{ padding: '4px 10px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em' }}
+              onClick={onPractice}
+            >
+              Practice
+            </button>
+            {onLeaderboard && (
+              <button
+                type="button"
+                className="btn-secondary"
+                style={{ padding: '4px 10px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em' }}
+                onClick={onLeaderboard}
+              >
+                Leaderboard
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            className="btn-secondary"
+            style={{ padding: '4px 10px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em' }}
+            onClick={onWallet}
+          >
+            Wallet
+          </button>
+        </footer>
       </div>
     </div>
   );
@@ -559,7 +632,7 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
   return null;
 }
 
-function Modes({ onSelect: _onSelect, onClose, onNotify }: { onSelect: () => void; onClose: () => void; onNotify: (msg: string, duration?: number) => void }) {
+function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onSelect: () => void; onClose: () => void; onNotify: (msg: string, duration?: number) => void }) {
   const { publicKey, connect } = useWallet();
   const { connectAndJoin, state: wsState } = useWs();
   const [isJoining, setIsJoining] = useState<boolean>(false);

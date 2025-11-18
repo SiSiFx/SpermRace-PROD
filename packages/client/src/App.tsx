@@ -24,7 +24,7 @@ import { WalletProvider, useWallet } from './WalletProvider';
 import { WsProvider, useWs } from './WsProvider';
 import NewGameView from './NewGameView';
 import { Leaderboard } from './Leaderboard';
-import Modes, { type ModeKey } from './components/Modes';
+import { Modes } from './components/Modes';
 import './leaderboard.css';
 
 type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
@@ -360,11 +360,7 @@ function Landing({
         </header>
 
         {/* Modes Grid */}
-        <Modes
-          onModeSelect={(_mode: ModeKey) => {
-            // Hook into richer flows later; for now this is visual/selection only.
-          }}
-        />
+        <Modes />
 
         {/* Footer */}
         <footer

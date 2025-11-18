@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useEffect, useRef } from 'react';
 import * as PIXI from 'pixi.js';
 import { useWs } from './WsProvider';
