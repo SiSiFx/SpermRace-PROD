@@ -368,8 +368,8 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
   const [step, setStep] = useState<'lobby' | 'game'>('lobby');
   const [meId] = useState<string>('PLAYER_' + Math.random().toString(36).slice(2, 8));
   const [players, setPlayers] = useState<string[]>([]);
-  const [countdown, setCountdown] = useState<number>(5);
-  const countdownTotal = 5;
+  const [countdown, setCountdown] = useState<number>(3);
+  const countdownTotal = 3;
   const [showPracticeIntro, setShowPracticeIntro] = useState<boolean>(() => {
     try {
       return !localStorage.getItem('sr_practice_full_tuto_seen');
@@ -427,7 +427,9 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
 
   if (step === 'lobby') {
     const maxPlayers = 8;
-    const progressPct = Math.max(0, Math.min(100, Math.floor(((countdownTotal - countdown) / countdownTotal) * 100)));
+    const progressPct = showPracticeIntro
+      ? 0
+      : Math.max(0, Math.min(100, ((countdownTotal - countdown) / countdownTotal) * 100));
     return (
       <div className="screen active mobile-lobby-screen">
         <div className="mobile-lobby-container">
@@ -442,7 +444,9 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
               <span>{players.length} Ready</span>
             </div>
             <div className="status-item">
-              <span>Starting in {countdown}s</span>
+              <span>
+                {showPracticeIntro ? 'Tutorial' : `Starting in ${countdown}s`}
+              </span>
             </div>
           </div>
           
@@ -453,7 +457,7 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
                 <div key={p} className="orbit-sperm" style={{ '--i': i, '--n': players.length } as any} />
               ))}
             </div>
-            <div className="mobile-countdown">{countdown}s</div>
+            <div className="mobile-countdown">{showPracticeIntro ? '' : `${countdown}s`}</div>
           </div>
           
           <div className="mobile-progress-bar">

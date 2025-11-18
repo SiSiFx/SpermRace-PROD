@@ -29,24 +29,38 @@ const SLIDES: Slide[] = [
   },
 ];
 
+// Show tutorial for ~7 seconds total: 2s + 2s + 3s across the three slides
+const SLIDE_DURATIONS_MS: number[] = [2000, 2000, 3000];
+
 export function PracticeFullTutorial({ visible, onDone }: PracticeFullTutorialProps) {
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
     if (!visible) return;
     setIndex(0);
-    const id = window.setInterval(() => {
-      setIndex((prev) => {
-        const next = prev + 1;
-        if (next >= SLIDES.length) {
-          window.clearInterval(id);
+    let currentIndex = 0;
+    let timeoutId: number | undefined;
+
+    const scheduleNext = () => {
+      const duration = SLIDE_DURATIONS_MS[currentIndex] ?? 3000;
+      timeoutId = window.setTimeout(() => {
+        if (currentIndex >= SLIDES.length - 1) {
           onDone();
-          return prev;
+          return;
         }
-        return next;
-      });
-    }, 3000);
-    return () => window.clearInterval(id);
+        currentIndex += 1;
+        setIndex(currentIndex);
+        scheduleNext();
+      }, duration);
+    };
+
+    scheduleNext();
+
+    return () => {
+      if (timeoutId != null) {
+        window.clearTimeout(timeoutId);
+      }
+    };
   }, [visible, onDone]);
 
   if (!visible) return null;
