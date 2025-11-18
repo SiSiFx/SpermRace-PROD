@@ -23,6 +23,7 @@ const SOLANA_CLUSTER: 'devnet' | 'mainnet' = (() => {
 import { WalletProvider, useWallet } from './WalletProvider';
 import { WsProvider, useWs } from './WsProvider';
 import NewGameView from './NewGameView';
+import HowToPlayOverlay from './HowToPlayOverlay';
 
 type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
 
@@ -47,6 +48,7 @@ function AppInner() {
     window.setTimeout(() => setToast(null), duration);
   };
   const [showHelp, setShowHelp] = useState<boolean>(false);
+  const [showHowTo, setShowHowTo] = useState<boolean>(false);
   
   // Loading progress for overlay (indefinite fill)
   const [loadProg, setLoadProg] = useState<number>(0);
@@ -320,7 +322,13 @@ function AppInner() {
       )}
 
       {/* Help toggle */}
-      <button onClick={() => setShowHelp(v => !v)} title="Help" style={{ position: 'fixed', top: 10, left: 10, zIndex: 60, padding: '6px 8px', borderRadius: 8, background: 'rgba(0,0,0,0.55)', color: '#c7d2de', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12, cursor: 'pointer' }}>?</button>
+      <button
+        onClick={() => setShowHowTo(true)}
+        title="How to play"
+        style={{ position: 'fixed', top: 10, left: 10, zIndex: 60, padding: '6px 8px', borderRadius: 8, background: 'rgba(0,0,0,0.55)', color: '#c7d2de', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12, cursor: 'pointer' }}
+      >
+        ?
+      </button>
       {showHelp && (
         <div style={{ position: 'fixed', top: 44, left: 10, zIndex: 60, padding: '10px 12px', borderRadius: 10, background: 'rgba(0,0,0,0.80)', color: '#c7d2de', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12, maxWidth: 320 }}>
           <div style={{ fontWeight: 700, marginBottom: 6 }}>Controls</div>
@@ -335,6 +343,18 @@ function AppInner() {
         <div className="pc-toast" style={{ zIndex: 10001 }}>
           {toast}
         </div>
+      )}
+
+      {showHowTo && (
+        <HowToPlayOverlay
+          mode="pc"
+          onClose={() => {
+            setShowHowTo(false);
+            try {
+              localStorage.setItem('sr_howto_seen_v2', '1');
+            } catch {}
+          }}
+        />
       )}
     </div>
   );
@@ -891,6 +911,32 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void }
       return () => { try { cancelAnimationFrame(smoothRef.raf); } catch {} smoothRef.running = false; };
     }
   }, [cdMs, cdMax]);
+  // Simple pre-start tips countdown for early players (first few games)
+  const [prestartCountdown, setPrestartCountdown] = useState<number>(() => {
+    try {
+      const stored = localStorage.getItem('spermrace_stats');
+      if (!stored) return 5;
+      const stats = JSON.parse(stored) as { totalGames?: number };
+      return (stats.totalGames ?? 0) < 5 ? 5 : 0;
+    } catch {
+      return 5;
+    }
+  });
+  const [tipIndex, setTipIndex] = useState(0);
+  useEffect(() => {
+    if (prestartCountdown <= 0) return;
+    const id = window.setInterval(() => {
+      setPrestartCountdown((v) => (v <= 1 ? 0 : v - 1));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [prestartCountdown]);
+  useEffect(() => {
+    if (prestartCountdown <= 0) return;
+    const id = window.setInterval(() => {
+      setTipIndex((i) => (i + 1) % 3);
+    }, 2000);
+    return () => window.clearInterval(id);
+  }, [prestartCountdown]);
   const [debugOn, setDebugOn] = useState<boolean>(() => {
     try { const v = localStorage.getItem('sr_debug'); return v === '1'; } catch { return false; }
   });
@@ -903,6 +949,37 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void }
         onReplay={onRestart}
         onExit={onEnd}
       />
+      {prestartCountdown > 0 && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 90,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 30,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            pointerEvents: 'none',
+          }}
+        >
+          <div
+            style={{
+              background: 'rgba(0,0,0,0.78)',
+              borderRadius: 999,
+              border: '1px solid rgba(148,163,184,0.6)',
+              padding: '6px 14px',
+              fontSize: 13,
+              color: '#e5e7eb',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {tipIndex === 0 && 'Your trail kills on contact  even you after a short grace.'}
+            {tipIndex === 1 && 'Stay inside the shrinking zone as the arena slices in.'}
+            {tipIndex === 2 && 'Collect energy orbs to refill boost and chase kills.'}
+          </div>
+        </div>
+      )}
       {/* Simple boost cooldown bar (server authoritative) */}
       <div style={{ position: 'fixed', bottom: 18, left: '50%', transform: 'translateX(-50%)', width: 220, height: 10, borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.08)', overflow: 'hidden', zIndex: 20 }}>
         <div style={{ height: '100%', width: `${Math.round(boostPct * 100)}%`, background: 'linear-gradient(90deg, #22d3ee, #14b8a6)', transition: 'width 60ms linear' }} />

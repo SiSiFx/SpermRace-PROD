@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { OrientationWarning } from './OrientationWarning';
 import { MobileTouchControls } from './MobileTouchControls';
+import MobileTutorial from './MobileTutorial';
+import PracticeFullTutorial from './PracticeFullTutorial';
 // Base URL for backend API; prefer env, else infer by hostname, else same-origin /api
 const API_BASE: string = (() => {
   const env = (import.meta as any).env?.VITE_API_BASE as string | undefined;
@@ -28,6 +30,7 @@ import { useWallet as useAdapterWallet } from '@solana/wallet-adapter-react';
 import { WsProvider, useWs } from './WsProvider';
 import NewGameView from './NewGameView';
 import { Leaderboard } from './Leaderboard';
+import HowToPlayOverlay from './HowToPlayOverlay';
 import './leaderboard.css';
 
 type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
@@ -53,8 +56,9 @@ function AppInner() {
   };
   const wallet = useWallet();
   const { publicKey } = wallet;
-  const [showHelp, setShowHelp] = useState<boolean>(false);
+  const [showHelp] = useState<boolean>(false);
   const [showLeaderboard, setShowLeaderboard] = useState<boolean>(false);
+  const [showHowTo, setShowHowTo] = useState<boolean>(false);
   
   // Loading progress for overlay
   const [loadProg, setLoadProg] = useState<number>(0);
@@ -148,16 +152,14 @@ function AppInner() {
             {wsState.phase === 'authenticating' ? 'Authenticating…' : wsState.phase === 'lobby' ? 'Lobby' : wsState.phase === 'game' ? 'In Game' : wsState.phase === 'connecting' ? 'Connecting…' : (publicKey ? 'Connected' : 'Not Connected')}
           </div>
           
-          <button onClick={() => setShowHelp(v => !v)} title="Help" style={{ position: 'fixed', top: 8, left: 8, zIndex: 60, padding: '6px 8px', borderRadius: 8, background: 'rgba(0,0,0,0.55)', color: '#c7d2de', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12, cursor: 'pointer' }}>?</button>
+          <button
+            onClick={() => setShowHowTo(true)}
+            title="How to play"
+            style={{ position: 'fixed', top: 8, left: 8, zIndex: 60, padding: '6px 8px', borderRadius: 8, background: 'rgba(0,0,0,0.55)', color: '#c7d2de', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12, cursor: 'pointer' }}
+          >
+            ?
+          </button>
         </>
-      )}
-      
-      {showHelp && (
-        <div style={{ position: 'fixed', top: 40, left: 8, zIndex: 60, padding: '10px 12px', borderRadius: 10, background: 'rgba(0,0,0,0.80)', color: '#c7d2de', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12, maxWidth: 260 }}>
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>Controls</div>
-          <div>• Drag left side to move</div>
-          <div>• Tap ⚡ button to boost</div>
-        </div>
       )}
 
       {wsState.lastError && (
@@ -233,6 +235,18 @@ function AppInner() {
         <div className="mobile-toast">
           {toast}
         </div>
+      )}
+
+      {showHowTo && (
+        <HowToPlayOverlay
+          mode="mobile"
+          onClose={() => {
+            setShowHowTo(false);
+            try {
+              localStorage.setItem('sr_howto_seen_v2', '1');
+            } catch {}
+          }}
+        />
       )}
 
       {/* Leaderboard Modal */}
@@ -354,8 +368,15 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
   const [step, setStep] = useState<'lobby' | 'game'>('lobby');
   const [meId] = useState<string>('PLAYER_' + Math.random().toString(36).slice(2, 8));
   const [players, setPlayers] = useState<string[]>([]);
-  const [countdown, setCountdown] = useState<number>(5);
-  const countdownTotal = 5;
+  const [countdown, setCountdown] = useState<number>(0);
+  const countdownTotal = 0;
+  const [showPracticeIntro, setShowPracticeIntro] = useState<boolean>(() => {
+    try {
+      return !localStorage.getItem('sr_practice_full_tuto_seen');
+    } catch {
+      return true;
+    }
+  });
   
   // Mobile control state (MUST be at top level, not inside conditionals!)
   const [gameCountdown, setGameCountdown] = useState<number>(6); // 6 seconds to account for game engine preStart
@@ -373,39 +394,26 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
 
   useEffect(() => {
     if (step === 'lobby') {
-      setGameCountdown(6); // 6 seconds to match game engine
+      if (showPracticeIntro) return;
+      setGameCountdown(3); // 3-second on-field countdown
       const base = [meId];
       const bots = Array.from({ length: 7 }, (_, i) => `BOT_${i.toString(36)}${Math.random().toString(36).slice(2,4)}`);
       setPlayers([...base, ...bots]);
-      
-      setCountdown(countdownTotal);
-      let currentCountdown = countdownTotal;
-      
-      const t = setInterval(() => {
-        currentCountdown -= 1;
-        setCountdown(currentCountdown);
-        
-        if (currentCountdown <= 0) {
-          clearInterval(t);
-          setStep('game');
-        }
-      }, 1000);
-      
-      return () => clearInterval(t);
+      setStep('game');
     }
     
     if (step === 'game') {
-      setGameCountdown(6); // Reset to 6 seconds when game starts
+      setGameCountdown(3); // Practice: 3-second pre-start countdown on field
       const timer = setInterval(() => {
         setGameCountdown(prev => Math.max(0, prev - 1));
       }, 1000);
       return () => clearInterval(timer);
     }
-  }, [step, meId]);
+  }, [step, meId, showPracticeIntro]);
 
   if (step === 'lobby') {
     const maxPlayers = 8;
-    const progressPct = Math.max(0, Math.min(100, Math.floor(((countdownTotal - countdown) / countdownTotal) * 100)));
+    const progressPct = 0;
     return (
       <div className="screen active mobile-lobby-screen">
         <div className="mobile-lobby-container">
@@ -420,7 +428,7 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
               <span>{players.length} Ready</span>
             </div>
             <div className="status-item">
-              <span>Starting in {countdown}s</span>
+              <span>Tutorial</span>
             </div>
           </div>
           
@@ -431,7 +439,7 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
                 <div key={p} className="orbit-sperm" style={{ '--i': i, '--n': players.length } as any} />
               ))}
             </div>
-            <div className="mobile-countdown">{countdown}s</div>
+            <div className="mobile-countdown"></div>
           </div>
           
           <div className="mobile-progress-bar">
@@ -442,6 +450,15 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
             <button className="mobile-btn-back" onClick={onBack}>← Back</button>
           </div>
         </div>
+        <PracticeFullTutorial
+          visible={showPracticeIntro}
+          onDone={() => {
+            setShowPracticeIntro(false);
+            try {
+              localStorage.setItem('sr_practice_full_tuto_seen', '1');
+            } catch {}
+          }}
+        />
       </div>
     );
   }
@@ -482,7 +499,8 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
           canBoost={true}
           boostCooldownPct={1}
         />
-        {/* Game engine handles countdown display */}
+        {/* Practice: continue quick tips during pre-start countdown */}
+        <MobileTutorial countdown={gameCountdown} context="practice" />
       </div>
     );
   }
@@ -924,7 +942,7 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void; 
         canBoost={true}
         boostCooldownPct={1}
       />
-      {/* Game engine handles countdown display */}
+      <MobileTutorial countdown={gameCountdown} />
     </div>
   );
 }
