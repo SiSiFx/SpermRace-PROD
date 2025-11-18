@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { OrientationWarning } from './OrientationWarning';
 import { MobileTouchControls } from './MobileTouchControls';
 import MobileTutorial from './MobileTutorial';
+import PracticeFullTutorial from './PracticeFullTutorial';
 // Base URL for backend API; prefer env, else infer by hostname, else same-origin /api
 const API_BASE: string = (() => {
   const env = (import.meta as any).env?.VITE_API_BASE as string | undefined;
@@ -369,6 +370,13 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
   const [players, setPlayers] = useState<string[]>([]);
   const [countdown, setCountdown] = useState<number>(5);
   const countdownTotal = 5;
+  const [showPracticeIntro, setShowPracticeIntro] = useState<boolean>(() => {
+    try {
+      return !localStorage.getItem('sr_practice_full_tuto_seen');
+    } catch {
+      return true;
+    }
+  });
   
   // Mobile control state (MUST be at top level, not inside conditionals!)
   const [gameCountdown, setGameCountdown] = useState<number>(6); // 6 seconds to account for game engine preStart
@@ -386,6 +394,7 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
 
   useEffect(() => {
     if (step === 'lobby') {
+      if (showPracticeIntro) return;
       setGameCountdown(6); // 6 seconds to match game engine
       const base = [meId];
       const bots = Array.from({ length: 7 }, (_, i) => `BOT_${i.toString(36)}${Math.random().toString(36).slice(2,4)}`);
@@ -414,7 +423,7 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
       }, 1000);
       return () => clearInterval(timer);
     }
-  }, [step, meId]);
+  }, [step, meId, showPracticeIntro]);
 
   if (step === 'lobby') {
     const maxPlayers = 8;
@@ -455,6 +464,15 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
             <button className="mobile-btn-back" onClick={onBack}>← Back</button>
           </div>
         </div>
+        <PracticeFullTutorial
+          visible={showPracticeIntro}
+          onDone={() => {
+            setShowPracticeIntro(false);
+            try {
+              localStorage.setItem('sr_practice_full_tuto_seen', '1');
+            } catch {}
+          }}
+        />
         {/* Practice: show quick tips as slide during lobby countdown */}
         <MobileTutorial countdown={countdown} context="practice" />
       </div>
