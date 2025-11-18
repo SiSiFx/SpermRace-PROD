@@ -100,6 +100,7 @@ let flashRect: PIXI.Graphics | null = null;
 let latestServerTimestamp = 0;
 let matchTimerStartMs: number | null = null;
 let gotGameStarting = false;
+let lastHeartbeatVibrationAt = 0;
 
 // Simple SFX via Web Audio API
 let audioCtx: AudioContext | null = null;
@@ -671,6 +672,11 @@ async function initializeGame(): Promise<void> {
       e.preventDefault();
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'playerInput', payload: { ...playerInput, boost: true } }));
+        try {
+          if (typeof navigator !== 'undefined' && (navigator as any).vibrate) {
+            navigator.vibrate?.(30);
+          }
+        } catch {}
       }
     }
   });
@@ -694,6 +700,11 @@ async function initializeGame(): Promise<void> {
         e.preventDefault();
         if (ws && ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: 'playerInput', payload: { ...playerInput, boost: true } }));
+          try {
+            if (typeof navigator !== 'undefined' && (navigator as any).vibrate) {
+              navigator.vibrate?.(30);
+            }
+          } catch {}
         }
         break;
       // Keyboard accelerate disabled (mouse-only)
@@ -959,6 +970,17 @@ async function handleServerMessage(event: MessageEvent): Promise<void> {
         elements.killFeed.prepend(row);
         setTimeout(() => { row.remove(); }, 5000);
       }
+
+      // Haptics: strong buzz on death, double pulse on kill
+      try {
+        if (typeof navigator !== 'undefined' && (navigator as any).vibrate) {
+          if (playerId && playerId === state.playerId) {
+            try { navigator.vibrate?.(400); } catch {}
+          } else if (eliminatorId && eliminatorId === state.playerId) {
+            try { navigator.vibrate?.([50, 30, 50]); } catch {}
+          }
+        }
+      } catch {}
         break;
     }
 
@@ -1139,6 +1161,26 @@ function renderGame(gameState: GameStateUpdateMessage['payload']): void {
   
   // Draw arena boundaries
   drawArena(world);
+
+  // Heartbeat haptics: pulse when the nearest enemy is very close
+  try {
+    const me = players.find(p => p.id === state.playerId && p.isAlive);
+    if (me && typeof navigator !== 'undefined' && (navigator as any).vibrate) {
+      let nearest = Infinity;
+      for (const p of players) {
+        if (!p.isAlive || p.id === me.id) continue;
+        const dx = p.sperm.position.x - me.sperm.position.x;
+        const dy = p.sperm.position.y - me.sperm.position.y;
+        const d = Math.hypot(dx, dy);
+        if (d < nearest) nearest = d;
+      }
+      const now = Date.now();
+      if (nearest < 300 && (now - lastHeartbeatVibrationAt) >= 500) {
+        try { navigator.vibrate?.([5, 50]); } catch {}
+        lastHeartbeatVibrationAt = now;
+      }
+    }
+  } catch {}
   
   // Update or create player groups and trails
   for (const player of players) {

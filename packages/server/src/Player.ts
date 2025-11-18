@@ -1,11 +1,12 @@
 import { Player, SpermState, PlayerInput, Vector2, TrailPoint } from 'shared';
-import { PHYSICS as S_PHYSICS, TRAIL as S_TRAIL } from 'shared/dist/constants.js';
+import { PHYSICS as S_PHYSICS, TRAIL as S_TRAIL, TICK as S_TICK } from 'shared/dist/constants.js';
 
 // =================================================================================================
 // GAME CONSTANTS
 // =================================================================================================
 
 const PHYSICS_CONSTANTS = { ...S_PHYSICS } as const;
+const TICK_INTERVAL_S = S_TICK.INTERVAL_MS / 1000;
 
 const TRAIL_CONSTANTS = {
   BASE_LIFETIME: S_TRAIL.BASE_LIFETIME_MS,
@@ -54,6 +55,8 @@ export class PlayerEntity implements Player {
   private shrinkFactor: number = 1;
   // Temporary speed multiplier from schooling (1..1.2)
   private speedMultiplier: number = 1;
+  // Last raw input-derived aim angle for anti-cheat smoothing
+  private lastInputAngle: number | null = null;
 
   constructor(id: string, spawnPosition: Vector2) {
     this.id = id;
@@ -82,10 +85,26 @@ export class PlayerEntity implements Player {
    */
   setInput(input: PlayerInput): void {
     this.input = input;
-    // Calculate the target angle based on the mouse position
-    const dx = this.input.target.x - this.sperm.position.x;
-    const dy = this.input.target.y - this.sperm.position.y;
-    this.targetAngle = Math.atan2(dy, dx);
+
+    // Sanitize target to avoid NaNs or extreme coordinates
+    const tx = Number.isFinite(input.target.x) ? input.target.x : this.sperm.position.x;
+    const ty = Number.isFinite(input.target.y) ? input.target.y : this.sperm.position.y;
+
+    // Calculate the desired angle based on the pointer position
+    const desiredAngle = Math.atan2(ty - this.sperm.position.y, tx - this.sperm.position.x);
+
+    // Anti-cheat: clamp how fast the *input* can rotate per tick; server already clamps physics below
+    if (this.lastInputAngle == null) {
+      this.targetAngle = desiredAngle;
+    } else {
+      let diff = desiredAngle - this.lastInputAngle;
+      while (diff > Math.PI) diff -= 2 * Math.PI;
+      while (diff < -Math.PI) diff += 2 * Math.PI;
+      const maxInputTurn = PHYSICS_CONSTANTS.MAX_TURN_RATE_RAD_PER_S * TICK_INTERVAL_S;
+      const clamped = Math.max(-maxInputTurn, Math.min(maxInputTurn, diff));
+      this.targetAngle = this.lastInputAngle + clamped;
+    }
+    this.lastInputAngle = this.targetAngle;
   }
 
   /**
@@ -141,7 +160,7 @@ export class PlayerEntity implements Player {
 
     // --- 4. Clamp to Max Speed (recompute after accel/drag) ---
     const speedNow = Math.hypot(this.sperm.velocity.x, this.sperm.velocity.y);
-    const maxSpeed = PHYSICS_CONSTANTS.MAX_SPEED * (this.speedMultiplier || 1);
+    const maxSpeed = PHYSICS_CONSTANTS.MAX_SPEED * (this.speedMultiplier || 1) * BOOST.MULTIPLIER;
     if (speedNow > maxSpeed) {
       const ratio = maxSpeed / speedNow;
       this.sperm.velocity.x *= ratio;
@@ -256,6 +275,17 @@ export class PlayerEntity implements Player {
 
     // Set lunge rhythm cooldown
     this.nextBoostAvailableAt = now + BOOST.COOLDOWN_MS;
+  }
+
+  /** Read-only view of remaining boost energy for AI/telemetry. */
+  getBoostEnergy(): number {
+    return this.boostEnergy;
+  }
+
+  /** Returns true if a lunge boost could be activated with the given minimum energy. */
+  canLunge(minEnergy: number = 30): boolean {
+    const now = Date.now();
+    return this.isAlive && this.boostEnergy >= minEnergy && now >= this.nextBoostAvailableAt;
   }
 
   /** Temporary per-tick schooling buff: 1.0 (none) to 1.2 (max). */

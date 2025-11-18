@@ -1,8 +1,9 @@
 import { GameState, PlayerInput, EntryFeeTier, Player, GameItem } from 'shared';
 import { PlayerEntity } from './Player.js';
+import { BotController } from './BotController.js';
 import { CollisionSystem } from './CollisionSystem.js';
 import { SmartContractService } from './SmartContractService.js';
-import { WORLD as S_WORLD, TICK as S_TICK, COLLISION as S_COLLISION } from 'shared/dist/constants.js';
+import { WORLD as S_WORLD, TICK as S_TICK, COLLISION as S_COLLISION, PHYSICS as S_PHYSICS } from 'shared/dist/constants.js';
 import { v4 as uuidv4 } from 'uuid';
 
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -15,6 +16,7 @@ const WORLD_WIDTH = S_WORLD.WIDTH; // SYNCED WITH CLIENT gameConstants.ts
 const WORLD_HEIGHT = S_WORLD.HEIGHT; // SYNCED WITH CLIENT gameConstants.ts
 const ARENA_SHRINK_START_S = S_WORLD.ARENA_SHRINK_START_S; // start shrink near mid-game per plan pacing
 const ARENA_SHRINK_DURATION_S = S_WORLD.ARENA_SHRINK_DURATION_S; // shrink over 90s to 50%
+const PHYSICS_CONSTANTS = { ...S_PHYSICS } as const;
 
 // Apex Predator DNA fragment settings
 const MAX_DNA_ON_MAP = 20;
@@ -37,6 +39,7 @@ export class GameWorld {
   private lastUpdateAtMs: number = 0;
   private currentLobby: { entryFee: EntryFeeTier, players: string[] } | null = null;
   private players: Map<string, PlayerEntity> = new Map();
+  private bots: Map<string, BotController> = new Map();
   private roundStartedAtMs: number | null = null;
   private shrinkFactor: number = 1; // 1..0.5
   private lastDevAliveLogMs: number = 0;
@@ -92,6 +95,7 @@ export class GameWorld {
 
   startRound(players: string[], entryFee: EntryFeeTier): void {
     this.players.clear();
+    this.bots.clear();
     this.items.clear();
     this.lastItemSpawnTime = 0;
     this.currentLobby = { players, entryFee };
@@ -161,8 +165,28 @@ export class GameWorld {
 
     const deltaTime = TICK_INTERVAL / 1000; // in seconds
 
-    // 0. Schooling (flocking buff) - compute per-player speed multipliers before physics
     const playersArray = Array.from(this.players.values());
+
+    // -1. Drive bot AI before physics so inputs are ready for the tick
+    if (this.bots.size > 0) {
+      const itemsArray = Array.from(this.items.values());
+      const worldWidth = this.gameState.world.width || WORLD_WIDTH;
+      const worldHeight = this.gameState.world.height || WORLD_HEIGHT;
+      this.bots.forEach(bot => {
+        try {
+          bot.update(deltaTime, {
+            items: itemsArray,
+            players: playersArray,
+            worldWidth,
+            worldHeight,
+          });
+        } catch (e) {
+          try { console.warn('[BOT] update error for', bot.id, e); } catch {}
+        }
+      });
+    }
+
+    // 0. Schooling (flocking buff) - compute per-player speed multipliers before physics
     const count = playersArray.length;
     const SCHOOL_RADIUS = 300;
     const SCHOOL_RADIUS_SQ = SCHOOL_RADIUS * SCHOOL_RADIUS;
@@ -301,13 +325,37 @@ export class GameWorld {
 
   removePlayer(playerId: string): void {
     this.players.delete(playerId);
+     this.bots.delete(playerId);
     this.syncGameState();
   }
 
   handlePlayerInput(playerId: string, input: PlayerInput): void {
     const player = this.players.get(playerId);
     if (player && player.isAlive) {
-      player.setInput(input);
+      // Sanity-check pointer target: ignore obviously invalid coordinates that would break physics.
+      const sanitized: PlayerInput = {
+        target: { ...input.target },
+        accelerate: !!input.accelerate,
+        boost: !!input.boost,
+        drift: !!(input as any).drift,
+      };
+
+      const worldWidth = this.gameState.world.width || WORLD_WIDTH;
+      const worldHeight = this.gameState.world.height || WORLD_HEIGHT;
+      const maxDelta = Math.max(worldWidth, worldHeight) * 4; // generous bound for mouse movement
+      const dx = sanitized.target.x - player.sperm.position.x;
+      const dy = sanitized.target.y - player.sperm.position.y;
+      const dist = Math.hypot(dx, dy);
+      if (!Number.isFinite(dist) || dist > maxDelta) {
+        // Ignore impossible target - keep aiming roughly forward from current angle
+        const forwardX = Math.cos(player.sperm.angle);
+        const forwardY = Math.sin(player.sperm.angle);
+        const safeLen = PHYSICS_CONSTANTS.MAX_SPEED * 1.5;
+        sanitized.target.x = player.sperm.position.x + forwardX * safeLen;
+        sanitized.target.y = player.sperm.position.y + forwardY * safeLen;
+      }
+
+      player.setInput(sanitized);
       const boost = (input as any)?.boost as boolean | undefined;
       if (boost) player.tryActivateBoost();
     }
@@ -352,6 +400,11 @@ export class GameWorld {
     }
     const player = new PlayerEntity(playerId, spawnPosition);
     this.players.set(playerId, player);
+
+    // Wrap bots with AI controllers (identified by BOT_ prefix)
+    if (typeof playerId === 'string' && playerId.startsWith('BOT_')) {
+      this.bots.set(playerId, new BotController(player));
+    }
   }
 
   private syncGameState(): void {
