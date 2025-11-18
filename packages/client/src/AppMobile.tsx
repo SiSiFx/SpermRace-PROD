@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { OrientationWarning } from './OrientationWarning';
 import { MobileTouchControls } from './MobileTouchControls';
+import MobileTutorial from './MobileTutorial';
 // Base URL for backend API; prefer env, else infer by hostname, else same-origin /api
 const API_BASE: string = (() => {
   const env = (import.meta as any).env?.VITE_API_BASE as string | undefined;
@@ -28,6 +29,7 @@ import { useWallet as useAdapterWallet } from '@solana/wallet-adapter-react';
 import { WsProvider, useWs } from './WsProvider';
 import NewGameView from './NewGameView';
 import { Leaderboard } from './Leaderboard';
+import HowToPlayOverlay from './HowToPlayOverlay';
 import './leaderboard.css';
 
 type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
@@ -53,8 +55,15 @@ function AppInner() {
   };
   const wallet = useWallet();
   const { publicKey } = wallet;
-  const [showHelp, setShowHelp] = useState<boolean>(false);
+  const [showHelp] = useState<boolean>(false);
   const [showLeaderboard, setShowLeaderboard] = useState<boolean>(false);
+  const [showHowTo, setShowHowTo] = useState<boolean>(() => {
+    try {
+      return !localStorage.getItem('sr_howto_seen_v2');
+    } catch {
+      return true;
+    }
+  });
   
   // Loading progress for overlay
   const [loadProg, setLoadProg] = useState<number>(0);
@@ -148,16 +157,14 @@ function AppInner() {
             {wsState.phase === 'authenticating' ? 'Authenticating…' : wsState.phase === 'lobby' ? 'Lobby' : wsState.phase === 'game' ? 'In Game' : wsState.phase === 'connecting' ? 'Connecting…' : (publicKey ? 'Connected' : 'Not Connected')}
           </div>
           
-          <button onClick={() => setShowHelp(v => !v)} title="Help" style={{ position: 'fixed', top: 8, left: 8, zIndex: 60, padding: '6px 8px', borderRadius: 8, background: 'rgba(0,0,0,0.55)', color: '#c7d2de', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12, cursor: 'pointer' }}>?</button>
+          <button
+            onClick={() => setShowHowTo(true)}
+            title="How to play"
+            style={{ position: 'fixed', top: 8, left: 8, zIndex: 60, padding: '6px 8px', borderRadius: 8, background: 'rgba(0,0,0,0.55)', color: '#c7d2de', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12, cursor: 'pointer' }}
+          >
+            ?
+          </button>
         </>
-      )}
-      
-      {showHelp && (
-        <div style={{ position: 'fixed', top: 40, left: 8, zIndex: 60, padding: '10px 12px', borderRadius: 10, background: 'rgba(0,0,0,0.80)', color: '#c7d2de', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12, maxWidth: 260 }}>
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>Controls</div>
-          <div>• Drag left side to move</div>
-          <div>• Tap ⚡ button to boost</div>
-        </div>
       )}
 
       {wsState.lastError && (
@@ -233,6 +240,18 @@ function AppInner() {
         <div className="mobile-toast">
           {toast}
         </div>
+      )}
+
+      {showHowTo && (
+        <HowToPlayOverlay
+          mode="mobile"
+          onClose={() => {
+            setShowHowTo(false);
+            try {
+              localStorage.setItem('sr_howto_seen_v2', '1');
+            } catch {}
+          }}
+        />
       )}
 
       {/* Leaderboard Modal */}
@@ -482,7 +501,7 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
           canBoost={true}
           boostCooldownPct={1}
         />
-        {/* Game engine handles countdown display */}
+        <MobileTutorial countdown={gameCountdown} />
       </div>
     );
   }
@@ -924,7 +943,7 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void; 
         canBoost={true}
         boostCooldownPct={1}
       />
-      {/* Game engine handles countdown display */}
+      <MobileTutorial countdown={gameCountdown} />
     </div>
   );
 }

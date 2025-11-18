@@ -1,11 +1,7 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "packages/client/dist/**",
-      "use": "@vercel/static"
-    }
-  ],
+  "buildCommand": "pnpm run vercel-build",
+  "outputDirectory": "packages/client/dist",
+  "installCommand": "pnpm install",
   "routes": [
     {
       "src": "/api/(.*)",
@@ -14,10 +10,6 @@
     {
       "src": "/ws",
       "dest": "https://spermrace.io/ws"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/packages/client/dist/$1"
     }
   ]
 }
