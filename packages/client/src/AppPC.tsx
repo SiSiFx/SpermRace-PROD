@@ -965,20 +965,6 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void }
         >
           <div
             style={{
-              fontSize: 42,
-              fontWeight: 900,
-              background: 'linear-gradient(135deg,#22d3ee,#14b8a6)',
-              WebkitBackgroundClip: 'text',
-              backgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              filter: 'drop-shadow(0 0 16px rgba(34,211,238,0.6))',
-              marginBottom: 4,
-            }}
-          >
-            {prestartCountdown}
-          </div>
-          <div
-            style={{
               background: 'rgba(0,0,0,0.78)',
               borderRadius: 999,
               border: '1px solid rgba(148,163,184,0.6)',

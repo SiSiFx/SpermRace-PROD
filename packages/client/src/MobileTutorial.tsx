@@ -49,10 +49,6 @@ export function MobileTutorial({ countdown, onComplete }: MobileTutorialProps) {
 
   return (
     <div className="mobile-tutorial-overlay compact">
-      <div className="tutorial-countdown">
-        <div className="countdown-number">{countdown}</div>
-        <div className="countdown-ready">Get Ready!</div>
-      </div>
       <div className="tutorial-reminder">
         <div className="reminder-text">{tip}</div>
       </div>
