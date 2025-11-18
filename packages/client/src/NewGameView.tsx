@@ -2112,9 +2112,10 @@ class SpermRaceGame {
     }
     
     const deltaTime = this.app.ticker.deltaMS / 1000;
+    const isTournament = !!(this.wsHud && this.wsHud.active);
     
     // Handle pre-start countdown (freeze inputs/boost/trails until GO)
-    if (this.preStart) {
+    if (this.preStart && isTournament) {
       const remain = Math.max(0, this.preStart.durationMs - (Date.now() - this.preStart.startAt));
       const sec = Math.ceil(remain / 1000);
       
@@ -2282,6 +2283,14 @@ class SpermRaceGame {
         // Clear overview markers
         if (this.overviewCtx && this.overviewCanvas) this.overviewCtx.clearRect(0, 0, this.overviewCanvas.width, this.overviewCanvas.height);
       }
+    } else if (this.preStart && !isTournament) {
+      // Practice/solo: skip in-game countdown and start instantly
+      const cd = document.getElementById('prestart-countdown');
+      if (cd) cd.remove();
+      if (this.overviewCtx && this.overviewCanvas) {
+        this.overviewCtx.clearRect(0, 0, this.overviewCanvas.width, this.overviewCanvas.height);
+      }
+      this.preStart = null;
     }
     // Handle player input only after countdown
     if (!this.preStart) this.handlePlayerInput();
