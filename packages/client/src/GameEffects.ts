@@ -7,9 +7,32 @@ import * as PIXI from 'pixi.js';
 
 export class GameEffects {
   private worldContainer: PIXI.Container;
+  private circleTexture: PIXI.Texture;
 
   constructor(worldContainer: PIXI.Container) {
     this.worldContainer = worldContainer;
+
+    // Pre-rendered radial circle texture for explosion particles
+    if (typeof document !== 'undefined') {
+      const size = 32;
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        const r = size / 2;
+        const gradient = ctx.createRadialGradient(r, r, 0, r, r, r);
+        gradient.addColorStop(0, 'rgba(255,255,255,1)');
+        gradient.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(r, r, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      this.circleTexture = PIXI.Texture.from(canvas);
+    } else {
+      // Fallback for non-DOM environments (tests, SSR)
+      this.circleTexture = PIXI.Texture.WHITE;
+    }
   }
 
   /**
@@ -160,8 +183,8 @@ export class GameEffects {
     y: number,
     color: number,
     particleCount: number = 50
-  ): PIXI.Graphics[] {
-    const particles: PIXI.Graphics[] = [];
+  ): PIXI.Sprite[] {
+    const particles: PIXI.Sprite[] = [];
 
     for (let i = 0; i < particleCount; i++) {
       const angle = (Math.PI * 2 / particleCount) * i + (Math.random() - 0.5) * 0.5;
@@ -172,11 +195,15 @@ export class GameEffects {
       const explosionColors = [0xFFFFFF, 0xFFFF00, 0xFF6600, 0xFF0000, color];
       const particleColor = explosionColors[Math.floor(Math.random() * explosionColors.length)];
 
-      const particle = new PIXI.Graphics();
-      particle.circle(0, 0, size).fill(particleColor);
+      const particle = new PIXI.Sprite(this.circleTexture);
+      particle.anchor.set(0.5);
       particle.x = x;
       particle.y = y;
       particle.alpha = 1;
+      particle.tint = particleColor;
+      const baseRadius = 16;
+      const scale = size / baseRadius;
+      particle.scale.set(scale);
 
       this.worldContainer.addChild(particle);
       particles.push(particle);
@@ -192,15 +219,15 @@ export class GameEffects {
         const progress = elapsed / lifetime;
 
         if (progress >= 1) {
-          this.worldContainer.removeChild(particle);
-          particle.destroy();
+        this.worldContainer.removeChild(particle);
+        particle.destroy();
           return;
         }
 
         particle.x += vx * 0.016;
         particle.y += vy * 0.016;
         particle.alpha = 1 - progress;
-        particle.scale.set(1 - progress * 0.5);
+        particle.scale.set(scale * (1 - progress * 0.5));
 
         requestAnimationFrame(animate);
       };

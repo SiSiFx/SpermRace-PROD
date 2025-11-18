@@ -60,11 +60,17 @@ const PRICE_API_URL = (import.meta as any).env?.VITE_PRICE_API_URL || '/api/sol-
 
 type PlayerRenderGroup = {
   container: PIXI.Container;
-  sperm: PIXI.Graphics;
-  trail: PIXI.Graphics;
-  trailGlow: PIXI.Graphics;
+  // Sperm body rendered as a textured sprite (tinted per-player)
+  sperm: PIXI.Sprite;
+  // Trails rendered as MeshRope instances for GPU-accelerated ribbons
+  trail: any;
+  trailGlow: any;
   boostGlow: PIXI.Graphics;
 };
+const TRAIL_SEGMENTS = 32;
+let spermTexture: PIXI.Texture | null = null;
+let spermAnchor: PIXI.Point | null = null;
+let trailTexture: PIXI.Texture | null = null;
 const playerGroups: Map<string, PlayerRenderGroup> = new Map();
 const playerInput: PlayerInput = {
   target: { x: 3000, y: 2000 }, // Start at center of map
@@ -627,6 +633,9 @@ async function initializeGame(): Promise<void> {
   app.stage.addChild(rootContainer);
   rootContainer.addChild(worldContainer);
   app.stage.addChild(screenLayer);
+  // Generate shared textures used by player sprites and trail ropes
+  generateSpermTexture(app);
+  generateTrailTexture(app);
   // Start smooth interpolation renderer
   startInterpolatedRender();
   
@@ -1058,6 +1067,67 @@ async function joinLobby(): Promise<void> {
 // Game Rendering
 // =================================================================================================
 
+// Pre-rendered textures for sperm bodies and trails
+function generateSpermTexture(app: PIXI.Application): void {
+  if (spermTexture) return;
+
+  const g = new PIXI.Graphics();
+
+  // Sperm head (white, to be tinted per-player)
+  g.ellipse(0, 0, 8, 4).fill({ color: 0xffffff, alpha: 1.0 });
+  g.ellipse(0, 0, 8, 4).stroke({ width: 2, color: 0xffffff, alpha: 0.4 });
+
+  // Tail (simple wavy line)
+  g.moveTo(-8, 0)
+    .lineTo(-12, -1)
+    .lineTo(-16, 1)
+    .lineTo(-20, -1)
+    .lineTo(-24, 0)
+    .lineTo(-28, 1)
+    .lineTo(-32, 0)
+    .stroke({ width: 2, color: 0xffffff, alpha: 0.9 });
+
+  // Head nucleus
+  g.circle(2, 0, 2).fill({ color: 0xffffff, alpha: 0.9 });
+
+  const bounds = g.getLocalBounds();
+  const resolution = (window.devicePixelRatio || 1) as number;
+
+  spermTexture = app.renderer.generateTexture(g, {
+    resolution,
+    region: bounds,
+  } as any);
+  spermAnchor = new PIXI.Point(
+    -bounds.x / bounds.width,
+    -bounds.y / bounds.height,
+  );
+
+  g.destroy();
+}
+
+function generateTrailTexture(app: PIXI.Application): void {
+  if (trailTexture) return;
+
+  const g = new PIXI.Graphics();
+  const length = 128;
+  const thickness = 16;
+
+  // Soft outer glow
+  g.rect(0, (thickness - 10) / 2, length, 10).fill({ color: 0xffffff, alpha: 0.25 });
+  // Bright inner core
+  g.rect(0, (thickness - 4) / 2, length, 4).fill({ color: 0xffffff, alpha: 1.0 });
+
+  const bounds = g.getLocalBounds();
+  const resolution = (window.devicePixelRatio || 1) as number;
+
+  trailTexture = app.renderer.generateTexture(g, {
+    resolution,
+    region: bounds,
+  } as any);
+
+  g.destroy();
+}
+
 function renderGame(gameState: GameStateUpdateMessage['payload']): void {
   if (!app || !state.isInGame) return;
   
@@ -1165,77 +1235,122 @@ function ensurePlayerGroup(id: string): PlayerRenderGroup {
   let group = playerGroups.get(id);
   if (group) return group;
   const container = new PIXI.Container();
-            const sperm = new PIXI.Graphics();
-  const trail = new PIXI.Graphics();
-  const trailGlow = new PIXI.Graphics();
+
+  // Ensure textures exist before creating renderers
+  if (!spermTexture || !trailTexture) {
+    generateSpermTexture(app);
+    generateTrailTexture(app);
+  }
+
+  const sperm = new PIXI.Sprite(spermTexture || PIXI.Texture.WHITE);
+  if (spermAnchor) {
+    sperm.anchor.set(spermAnchor.x, spermAnchor.y);
+  } else {
+    sperm.anchor.set(0.5);
+  }
+  container.addChild(sperm);
+
+  // Preallocate rope geometry for trails (shared points array for main + glow ropes)
+  const ropePoints: PIXI.Point[] = [];
+  for (let i = 0; i < TRAIL_SEGMENTS; i++) {
+    ropePoints.push(new PIXI.Point(0, 0));
+  }
+
+  const trail = new (PIXI as any).MeshRope(trailTexture || PIXI.Texture.WHITE, ropePoints);
+  trail.autoUpdate = true;
+
+  const trailGlow = new (PIXI as any).MeshRope(trailTexture || PIXI.Texture.WHITE, ropePoints);
+  trailGlow.autoUpdate = true;
+  trailGlow.alpha = 0;
+  trailGlow.scale.y = 1.5;
+  trailGlow.blendMode = 'add';
+
   const boostGlow = new PIXI.Graphics();
   boostGlow.blendMode = 'add';
-  container.addChild(sperm);
+
   playersLayer.addChild(container);
   trailsLayer.addChild(trail);
   trailsLayer.addChild(trailGlow);
   vfxLayer.addChild(boostGlow);
+
   group = { container, sperm, trail, trailGlow, boostGlow };
   playerGroups.set(id, group);
   return group;
 }
 
 function updatePlayerGroup(group: PlayerRenderGroup, player: GameStateUpdateMessage['payload']['players'][0]): void {
-  // Trail
-  group.trail.clear();
-  group.trailGlow.clear();
-  const trail = player.trail as TrailPoint[];
-  if (trail && trail.length > 1) {
-    const speed = Math.hypot(player.sperm.velocity.x, player.sperm.velocity.y);
-    const width = 5 + Math.min(8, speed / 70);
-    const isSelf = player.id === state.playerId;
-    const color = isSelf ? 0x00d4ff : 0xff6b6b;
-    const alpha = (player as any).status?.boosting ? 1.0 : 0.85;
-    for (let i = 0; i < trail.length; i++) {
-      const p = trail[i];
-      if (i === 0) group.trail.moveTo(p.x, p.y); else group.trail.lineTo(p.x, p.y);
+  // Trails rendered as MeshRope ribbons
+  const trailHistory = player.trail as TrailPoint[];
+  const rope = group.trail as any;
+  const glowRope = group.trailGlow as any;
+  const isSelf = player.id === state.playerId;
+  const speed = Math.hypot(player.sperm.velocity.x, player.sperm.velocity.y);
+  const color = isSelf ? 0x00d4ff : 0xff6b6b;
+  const boosting = !!(player as any).status?.boosting;
+
+  if (!trailHistory || trailHistory.length < 2 || !rope || !rope.points) {
+    if (rope) rope.visible = false;
+    if (glowRope) glowRope.visible = false;
+  } else {
+    rope.visible = true;
+    rope.tint = color;
+
+    const points = rope.points as PIXI.Point[];
+    const maxPoints = points.length;
+    const srcLen = Math.min(trailHistory.length, maxPoints);
+
+    // Sample from latest trail points backwards into the rope geometry
+    const step = (trailHistory.length - 1) / Math.max(1, srcLen - 1);
+    const offset = maxPoints - srcLen;
+    for (let i = 0; i < srcLen; i++) {
+      const srcIndex = Math.floor(i * step);
+      const src = trailHistory[trailHistory.length - 1 - srcIndex]; // newest → head
+      const p = points[offset + i];
+      p.x = src.x;
+      p.y = src.y;
     }
-    group.trail.stroke({ width, color, alpha, cap: 'round', join: 'round' });
-    if (isSelf && (player as any).status?.boosting) {
-      for (let i = 0; i < trail.length; i++) {
-        const p = trail[i];
-        if (i === 0) group.trailGlow.moveTo(p.x, p.y); else group.trailGlow.lineTo(p.x, p.y);
-      }
-      group.trailGlow.stroke({ width: width + 6, color, alpha: 0.12, cap: 'round', join: 'round' });
-      group.trailGlow.blendMode = 'add';
+    // Extend the far tail with the oldest sampled point
+    for (let i = 0; i < offset; i++) {
+      points[i].x = points[offset].x;
+      points[i].y = points[offset].y;
+    }
+
+    // Apply lightweight sine-wave wiggle along the rope for organic motion
+    const now = performance.now() * 0.004;
+    const speedFactor = 1.0 + Math.min(1.5, speed / 280);
+    for (let i = 1; i < maxPoints - 1; i++) {
+      const prev = points[i - 1];
+      const curr = points[i];
+      const dx = curr.x - prev.x;
+      const dy = curr.y - prev.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len;
+      const ny = dx / len;
+      const tNorm = i / (maxPoints - 1); // 0 at head → 1 at tail
+      const ampBase = isSelf ? 6 : 4;
+      const amp = ampBase * tNorm;
+      const wave = Math.sin(now + tNorm * 5.0) * amp * speedFactor;
+      curr.x += nx * wave;
+      curr.y += ny * wave;
+    }
+
+    if (glowRope) {
+      glowRope.visible = isSelf && boosting;
+      glowRope.tint = color;
+      glowRope.alpha = boosting ? 0.22 : 0;
     }
   }
 
   // Player container/spermatozoide
   group.container.position.set(player.sperm.position.x, player.sperm.position.y);
   group.container.rotation = player.sperm.angle;
-  group.sperm.clear();
   const isOwnPlayer = player.id === state.playerId;
   const spermColor = isOwnPlayer ? 0x00ff88 : 0xff6b6b;
+  group.sperm.tint = spermColor;
 
-  // Sperm head (oval/round)
-  group.sperm.beginFill(spermColor);
-  group.sperm.drawEllipse(0, 0, 8, 4);
-  group.sperm.endFill();
-
-  // Sperm tail (wavy line)
-  group.sperm.lineStyle(2, spermColor, 0.9);
-  group.sperm.moveTo(-8, 0);
-  group.sperm.lineTo(-12, -1);
-  group.sperm.lineTo(-16, 1);
-  group.sperm.lineTo(-20, -1);
-  group.sperm.lineTo(-24, 0);
-  group.sperm.lineTo(-28, 1);
-  group.sperm.lineTo(-32, 0);
-
-  // Sperm head nucleus (smaller white circle)
-  group.sperm.beginFill(0xffffff);
-  group.sperm.drawCircle(2, 0, 2);
-  group.sperm.endFill();
-
-  // Propulsion glow
+  // Propulsion glow (small Graphics triangle behind head)
   group.boostGlow.clear();
-  if ((player as any).status?.boosting) {
+  if (boosting) {
     const hx = Math.cos(player.sperm.angle), hy = Math.sin(player.sperm.angle);
     const backX = -hx * 18, backY = -hy * 18;
     group.boostGlow.moveTo(backX, backY);
