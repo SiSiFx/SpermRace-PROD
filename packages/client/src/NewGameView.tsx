@@ -190,8 +190,10 @@ class SpermRaceGame {
   public gameStartTime: number = Date.now();
   public pickupsUnlocked: boolean = false;
   public artifactsUnlocked: boolean = false;
-  public unlockPickupsAfterMs: number = 25000;
-  public unlockArtifactsAfterMs: number = 15000;
+  // Pacing: powerups phase in early/mid game
+  // Measured from gameStartTime (includes pre-start countdown)
+  public unlockPickupsAfterMs: number = 18000;  // ~10–12s into live play after countdown
+  public unlockArtifactsAfterMs: number = 12000; // ~5–7s into live play after countdown
   
   // Round-based tournament system
   public currentRound: number = 1;
@@ -2292,11 +2294,15 @@ class SpermRaceGame {
         this.artifactsUnlocked = true;
         try { this.generateArtifacts(); } catch {}
         if (this.artifactContainer) this.artifactContainer.visible = true;
+        // HUD cue: artifacts phase begins
+        this.showHotspotToast('Artifacts active • reroll your route', '#38bdf8');
       }
       if (!this.pickupsUnlocked && sinceStart >= this.unlockPickupsAfterMs) {
         this.pickupsUnlocked = true;
         try { this.spawnPickups(35); } catch {}
         if (this.pickupsContainer) this.pickupsContainer.visible = true;
+        // HUD cue: energy orbs phase begins
+        this.showHotspotToast('Energy orbs active • refill boost and chase kills', '#4ade80');
       }
       if (this.player && !this.player.destroyed) {
         this.updateCar(this.player, deltaTime);
