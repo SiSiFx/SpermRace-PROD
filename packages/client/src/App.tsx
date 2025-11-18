@@ -24,6 +24,7 @@ import { WalletProvider, useWallet } from './WalletProvider';
 import { WsProvider, useWs } from './WsProvider';
 import NewGameView from './NewGameView';
 import { Leaderboard } from './Leaderboard';
+import Modes from './components/Modes';
 import './leaderboard.css';
 
 type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
@@ -240,7 +241,12 @@ function AppInner() {
         <Practice onFinish={() => setScreen('results')} onBack={() => setScreen('landing')} />
       )}
       {screen === 'modes' && (
-        <Modes onSelect={() => setScreen('wallet')} onClose={() => setScreen('landing')} onNotify={showToast} />
+        <Modes
+          onSelect={() => setScreen('wallet')}
+          onClose={() => setScreen('landing')}
+          onNotify={showToast}
+          apiBase={API_BASE}
+        />
       )}
       {screen === 'wallet' && (
         <Wallet onConnected={() => setScreen('lobby')} onClose={() => setScreen('modes')} />
@@ -464,228 +470,6 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
   }
 
   return null;
-}
-
-function Modes({ onSelect: _onSelect, onClose, onNotify }: { onSelect: () => void; onClose: () => void; onNotify: (msg: string, duration?: number) => void }) {
-  const { publicKey, connect } = useWallet();
-  const { connectAndJoin, state: wsState } = useWs();
-  const [isJoining, setIsJoining] = useState<boolean>(false);
-  const [preflight, setPreflight] = useState<{ address: string | null; sol: number | null; configured: boolean } | null>(null);
-  const [preflightError, setPreflightError] = useState<boolean>(false);
-  useEffect(() => {
-    (async () => {
-      try {
-        const r = await fetch(`${API_BASE}/prize-preflight`);
-        if (!r.ok) throw new Error(`preflight ${r.status}`);
-        const j = await r.json();
-        setPreflight(j);
-        const misconfigured = !j?.configured || !j?.address || j?.sol == null;
-        setPreflightError(!!misconfigured);
-      } catch {
-        setPreflightError(true);
-      }
-    })();
-  }, []);
-  const tiers = [
-    { name: 'Micro Race', usd: 1, max: 16, dur: '2-3 min' },
-    { name: 'Nano Race', usd: 5, max: 32, dur: '3-4 min' },
-    { name: 'Mega Race', usd: 25, max: 32, dur: '4-6 min' },
-    { name: 'Championship', usd: 100, max: 16, dur: '5-8 min' },
-  ];
-  useEffect(() => {
-    if (wsState.phase === 'lobby' || wsState.phase === 'game') setIsJoining(false);
-  }, [wsState.phase]);
-  return (
-    <div className="screen active" id="mode-screen">
-      <div className="modes-sheet">
-        <div className="sheet-grip" />
-        <div className="modal-header"><h2 className="modal-title">Enter Sperm Race</h2><p className="modal-subtitle">Select a tier</p></div>
-        {(preflightError) && (
-          <div className="modal-subtitle" style={{ color: '#ff8080', marginBottom: 8 }}>Tournaments are temporarily unavailable (prize preflight issue).</div>
-        )}
-        {/* Overlay removed here; global overlay handles connecting/auth */}
-        <div className="tournament-grid">
-          {tiers.map((t, i) => {
-            const prize = (t.usd * t.max * 0.85).toFixed(2);
-            const cardGradients = [
-              'linear-gradient(135deg, rgba(34,211,238,0.15) 0%, rgba(99,102,241,0.15) 100%)',
-              'linear-gradient(135deg, rgba(99,102,241,0.18) 0%, rgba(244,63,94,0.18) 100%)', 
-              'linear-gradient(135deg, rgba(244,63,94,0.20) 0%, rgba(251,146,60,0.20) 100%)',
-              'linear-gradient(135deg, rgba(251,146,60,0.22) 0%, rgba(34,211,238,0.22) 100%)'
-            ];
-            const prizeGradients = [
-              'linear-gradient(90deg, rgba(34,211,238,0.25), rgba(99,102,241,0.25))',
-              'linear-gradient(90deg, rgba(99,102,241,0.28), rgba(244,63,94,0.28))',
-              'linear-gradient(90deg, rgba(244,63,94,0.30), rgba(251,146,60,0.30))',
-              'linear-gradient(90deg, rgba(251,146,60,0.32), rgba(34,211,238,0.32))'
-            ];
-            const buttonGradients = [
-              'linear-gradient(90deg, #22d3ee 0%, #6366f1 100%)',
-              'linear-gradient(90deg, #6366f1 0%, #f43f5e 100%)',
-              'linear-gradient(90deg, #f43f5e 0%, #fb923c 100%)',
-              'linear-gradient(90deg, #fb923c 0%, #22d3ee 100%)'
-            ];
-            return (
-              <div key={t.name} className="tournament-card" style={{
-                background: cardGradients[i],
-                border: '2px solid rgba(255,255,255,0.15)',
-                borderRadius: '20px',
-                padding: '24px',
-                position: 'relative',
-                overflow: 'hidden',
-                backdropFilter: 'blur(10px)',
-                boxShadow: '0 20px 40px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.1)'
-              }} data-ribbon={i===0? '🔥 HOT' : i===1? '⭐ POPULAR' : i===2? '💎 VIP' : '👑 ELITE'}>
-                
-                {/* Animated background orb */}
-                <div style={{
-                  position: 'absolute',
-                  top: '-50%',
-                  right: '-30%',
-                  width: '200px',
-                  height: '200px',
-                  background: prizeGradients[i],
-                  borderRadius: '50%',
-                  opacity: 0.3,
-                  filter: 'blur(60px)',
-                  animation: 'float 6s ease-in-out infinite'
-                }} />
-                
-                <div className="tournament-header" style={{ position: 'relative', zIndex: 2 }}>
-                  <div className="tournament-icon" style={{ fontSize: '32px', marginBottom: '8px' }}>🧬</div>
-                  <h3 className="tournament-title" style={{ fontSize: '24px', fontWeight: 800, marginBottom: '4px' }}>{t.name}</h3>
-                  <div className="tournament-badge" style={{ 
-                    background: 'rgba(255,255,255,0.2)', 
-                    padding: '4px 12px', 
-                    borderRadius: '20px', 
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    backdropFilter: 'blur(10px)'
-                  }}>Tier {i+1}</div>
-                </div>
-                
-                {/* Massive prize display */}
-                <div style={{ 
-                  textAlign: 'center', 
-                  margin: '20px 0', 
-                  position: 'relative', 
-                  zIndex: 2 
-                }}>
-                  <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.8)', marginBottom: '8px' }}>WIN UP TO</div>
-                  <div style={{ 
-                    fontSize: '48px', 
-                    fontWeight: 900, 
-                    background: buttonGradients[i],
-                    backgroundClip: 'text',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    textShadow: '0 4px 20px rgba(255,255,255,0.3)',
-                    lineHeight: 1,
-                    marginBottom: '4px'
-                  }}>${prize}</div>
-                  <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)' }}>Instant crypto payout</div>
-                </div>
-
-                <div className="tournament-details" style={{ position: 'relative', zIndex: 2 }}>
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    background: 'rgba(255,255,255,0.1)',
-                    padding: '12px 16px',
-                    borderRadius: '12px',
-                    marginBottom: '16px',
-                    backdropFilter: 'blur(10px)'
-                  }}>
-                    <div>
-                      <div style={{ fontSize: '18px', fontWeight: 700 }}>${t.usd.toFixed(2)}</div>
-                      <div style={{ fontSize: '11px', opacity: 0.8 }}>Entry fee</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '14px', fontWeight: 600 }}>{t.max} players max</div>
-                      <div style={{ fontSize: '11px', opacity: 0.8 }}>{t.dur} duration</div>
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  style={{
-                    width: '100%',
-                    padding: '16px 24px',
-                    background: buttonGradients[i],
-                    border: 'none',
-                    borderRadius: '16px',
-                    color: '#000',
-                    fontSize: '18px',
-                    fontWeight: 800,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                    cursor: 'pointer',
-                    position: 'relative',
-                    zIndex: 2,
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.3)',
-                    // Disable transition when animating to avoid conflicts
-                    transition: (publicKey && !isJoining && wsState.phase !== 'connecting' && wsState.phase !== 'authenticating') ? 'none' : 'all 0.2s ease',
-                    // Only set transform when NOT animating (animation will handle it)
-                    ...(!(publicKey && !isJoining && wsState.phase !== 'connecting' && wsState.phase !== 'authenticating') && { transform: 'translateY(0px)' }),
-                    // Add glowing animation when wallet is connected and ready
-                    animation: publicKey && !isJoining && wsState.phase !== 'connecting' && wsState.phase !== 'authenticating'
-                      ? 'buttonGlow 2s ease-in-out infinite, buttonPulse 2s ease-in-out infinite'
-                      : 'none'
-                  }}
-                  disabled={
-                    isJoining
-                    || wsState.phase === 'connecting'
-                    || wsState.phase === 'authenticating'
-                    || preflightError
-                    || (!!preflight && (!preflight.configured || !preflight.address || preflight.sol == null))
-                  }
-                  onClick={async () => {
-                    setIsJoining(true);
-                    const ok = publicKey ? true : await connect();
-                    if (!ok) {
-                      setIsJoining(false);
-                      onNotify('Wallet not detected. Please install or unlock your wallet.');
-                      return;
-                    }
-                    await connectAndJoin({ entryFeeTier: t.usd as any, mode: 'tournament' });
-                  }}
-                  onMouseEnter={(e) => {
-                    if (publicKey && !isJoining && wsState.phase !== 'connecting' && wsState.phase !== 'authenticating') {
-                      e.currentTarget.style.animation = 'none';
-                      e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)';
-                      e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.4), 0 0 35px rgba(34,211,238,0.8)';
-                    } else {
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                      e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.4)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (publicKey && !isJoining && wsState.phase !== 'connecting' && wsState.phase !== 'authenticating') {
-                      e.currentTarget.style.animation = 'buttonGlow 2s ease-in-out infinite, buttonPulse 2s ease-in-out infinite';
-                      e.currentTarget.style.transform = 'translateY(0px)';
-                      e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.3)';
-                    } else {
-                      e.currentTarget.style.transform = 'translateY(0px)';
-                      e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.3)';
-                    }
-                  }}
-                >{
-                  preflightError ? 'Service unavailable'
-                  : (preflight && (!preflight.configured || !preflight.address || preflight.sol == null)) ? 'Temporarily unavailable'
-                  : (isJoining || wsState.phase === 'connecting' || wsState.phase === 'authenticating') ? 'Joining…'
-                  : publicKey ? `🚀 ENTER RACE - READY!` : `🚀 ENTER RACE`
-                }</button>
-              </div>
-            );
-          })}
-        </div>
-        <div className="mode-footer">
-          <button className="btn-secondary" onClick={onClose}>Back</button>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function Wallet({ onConnected, onClose }: { onConnected: () => void; onClose: () => void }) {

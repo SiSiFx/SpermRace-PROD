@@ -13,19 +13,19 @@ interface Slide {
 
 const SLIDES: Slide[] = [
   {
-    title: 'Drag to steer',
-    body: 'Use your thumb to glide along the canal. Tiny adjustments keep you alive.',
+    title: 'PILOT SYSTEMS',
+    body: 'Drift to survive. Precision is your only defense against the void.',
     icon: '🕹️',
   },
   {
-    title: 'Your trail kills',
-    body: 'Leave a deadly wake – touch any trail (even yours after a short grace) and you die.',
+    title: 'LETHAL WAKE',
+    body: 'Your tail is a weapon. Cut off enemies to secure the kill.',
     icon: '💀',
   },
   {
-    title: 'Zone keeps shrinking',
-    body: 'Stay inside the glowing safe zone as slices close in and push everyone together.',
-    icon: '🧬',
+    title: 'ZONE COLLAPSE',
+    body: 'The arena is dying. Force the fight into the center or perish.',
+    icon: '☢️', // Changed to radioactive sign for impact
   },
 ];
 
