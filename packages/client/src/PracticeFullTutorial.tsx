@@ -106,6 +106,35 @@ export function PracticeFullTutorial({ visible, onDone }: PracticeFullTutorialPr
       >
         <div
           style={{
+            width: '100%',
+            borderRadius: 18,
+            overflow: 'hidden',
+            marginBottom: 16,
+            background:
+              'radial-gradient(circle at top, rgba(15,23,42,0.9), rgba(15,23,42,1))',
+            border: '1px solid rgba(51,65,85,0.9)',
+            position: 'relative',
+            paddingTop: '56.25%',
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'rgba(148,163,184,0.95)',
+              fontSize: 12,
+              letterSpacing: 0.4,
+              textTransform: 'uppercase',
+            }}
+          >
+            Gameplay screenshot placeholder
+          </div>
+        </div>
+        <div
+          style={{
             width: 64,
             height: 64,
             borderRadius: 999,
