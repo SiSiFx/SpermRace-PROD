@@ -95,7 +95,7 @@ export function PracticeFullTutorial({ visible, onDone }: PracticeFullTutorialPr
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '24px 20px',
+        padding: '20px 16px',
       }}
     >
       <div
@@ -103,24 +103,47 @@ export function PracticeFullTutorial({ visible, onDone }: PracticeFullTutorialPr
           position: 'absolute',
           top: '16px',
           right: '16px',
-          fontSize: 12,
           color: 'rgba(148,163,184,0.9)',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'flex-end',
         }}
       >
-        <div>Practice tips</div>
-        <div style={{ marginTop: 4, fontSize: 11, opacity: 0.9 }}>
-          Race starts in {secondsLeft}s
+        <div style={{ fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', opacity: 0.85 }}>Practice tutorial</div>
+        <div
+          style={{
+            marginTop: 6,
+            padding: '6px 10px',
+            borderRadius: 999,
+            background: 'rgba(15,23,42,0.96)',
+            boxShadow: '0 0 0 1px rgba(148,163,184,0.6), 0 8px 20px rgba(15,23,42,0.85)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 }}>Race starts in</span>
+          <span
+            style={{
+              fontSize: 18,
+              fontWeight: 800,
+              color: '#e5e7eb',
+              minWidth: 32,
+              textAlign: 'right',
+            }}
+          >
+            {secondsLeft}s
+          </span>
         </div>
       </div>
       <div
         style={{
           width: '100%',
-          maxWidth: 360,
-          borderRadius: 24,
-          padding: '22px 20px 18px',
+          maxWidth: 420,
+          height: '80vh',
+          maxHeight: 560,
+          borderRadius: 28,
+          padding: '24px 22px 22px',
           background:
             'linear-gradient(135deg, rgba(15,23,42,0.96), rgba(30,64,175,0.96))',
           border: '1px solid rgba(148,163,184,0.6)',
@@ -133,12 +156,12 @@ export function PracticeFullTutorial({ visible, onDone }: PracticeFullTutorialPr
             width: '100%',
             borderRadius: 18,
             overflow: 'hidden',
-            marginBottom: 16,
+            marginBottom: 20,
             background:
               'radial-gradient(circle at top, rgba(15,23,42,0.9), rgba(15,23,42,1))',
             border: '1px solid rgba(51,65,85,0.9)',
             position: 'relative',
-            paddingTop: '56.25%',
+            paddingTop: '60%',
           }}
         >
           <div

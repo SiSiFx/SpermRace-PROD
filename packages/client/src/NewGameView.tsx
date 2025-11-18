@@ -767,9 +767,10 @@ class SpermRaceGame {
     const sh = Math.round(this.arena.height * zoom);
     const g = this.borderOverlay;
     g.clear();
-    g.rect(sx, sy, sw, sh).stroke({ width: 3, color: this.theme.border, alpha: 0.95 });
-    // subtle inner line
-    g.rect(sx + 2, sy + 2, Math.max(0, sw - 4), Math.max(0, sh - 4)).stroke({ width: 1, color: this.theme.border, alpha: 0.5 });
+    // Make map edge more subtle so the shrinking zone stands out
+    g.rect(sx, sy, sw, sh).stroke({ width: 1.5, color: this.theme.border, alpha: 0.45 });
+    // very soft inner line
+    g.rect(sx + 3, sy + 3, Math.max(0, sw - 6), Math.max(0, sh - 6)).stroke({ width: 1, color: this.theme.border, alpha: 0.25 });
   }
 
   createSolanaTexture() {
@@ -1021,16 +1022,12 @@ class SpermRaceGame {
     };
 
     this.combatHotspots.push(hotspot);
-    this.showHotspotToast('Overdrive hotspot incoming', '#facc15');
-    this.radarPings.push({ x, y, timestamp: now, playerId: `${hotspot.id}_tele`, kind: 'bounty', ttlMs: 2400 });
   }
 
   private activateHotspot(hotspot: Hotspot) {
     hotspot.state = 'active';
     hotspot.hasSpawnedLoot = false;
     hotspot.expiresAtMs = Date.now() + 6000;
-    this.showHotspotToast('Overdrive active • grab power then bail!', '#facc15');
-    this.radarPings.push({ x: hotspot.x, y: hotspot.y, timestamp: Date.now(), playerId: `${hotspot.id}_active`, kind: 'bounty', ttlMs: 3400 });
   }
 
   private deployHotspotPickups(hotspot: Hotspot) {
@@ -1066,46 +1063,8 @@ class SpermRaceGame {
   }
 
   private updateHotspots(_deltaTime: number) {
-    if (!this.worldContainer || !this.app) return;
-    if (!this.zone.startAtMs) return;
-    const now = Date.now();
-    const elapsed = now - this.zone.startAtMs;
-
-    for (const event of this.hotspotSchedule) {
-      if (!event.triggered && elapsed >= event.triggerMs) {
-        event.triggered = true;
-        this.spawnHotspot(event.triggerMs);
-      }
-    }
-
-    for (let i = this.combatHotspots.length - 1; i >= 0; i--) {
-      const hotspot = this.combatHotspots[i];
-      const g = hotspot.graphics;
-      if (hotspot.state === 'telegraph') {
-        const total = Math.max(1, hotspot.activateAtMs - hotspot.spawnAtMs);
-        const progress = Math.min(1, (now - hotspot.spawnAtMs) / total);
-        g.clear();
-        const rimAlpha = 0.35 + Math.sin(now * 0.009) * 0.18;
-        g.circle(0, 0, hotspot.radius).stroke({ width: 5, color: 0xfacc15, alpha: rimAlpha });
-        g.circle(0, 0, hotspot.radius * progress).stroke({ width: 2, color: 0xffffff, alpha: 0.25 + progress * 0.5 });
-        if (now >= hotspot.activateAtMs) {
-          this.activateHotspot(hotspot);
-        }
-      } else {
-        const remaining = hotspot.expiresAtMs - now;
-        g.clear();
-        const pulse = 0.55 + Math.sin(now * 0.012) * 0.25;
-        g.circle(0, 0, hotspot.radius * 0.78).fill({ color: 0x2b1800, alpha: 0.28 });
-        g.circle(0, 0, hotspot.radius * pulse).stroke({ width: 5, color: 0xfacc15, alpha: 0.52 });
-        g.circle(0, 0, hotspot.radius * (pulse * 0.6)).stroke({ width: 2, color: 0xffffff, alpha: 0.35 });
-        if (!hotspot.hasSpawnedLoot) this.deployHotspotPickups(hotspot);
-        if (remaining <= 0) {
-          this.teardownHotspot(hotspot);
-          this.combatHotspots.splice(i, 1);
-          continue;
-        }
-      }
-    }
+    // Hotspots/overdrive are disabled for now to keep early games clean.
+    return;
   }
 
   private applyOverdriveBuff(car: Car) {
@@ -1117,7 +1076,6 @@ class SpermRaceGame {
     car.targetSpeed = car.boostSpeed * 1.05;
     this.radarPings.push({ x: car.x, y: car.y, timestamp: now, playerId: 'overdrive', kind: 'bounty', ttlMs: 900 });
     this.lastSpotlightPingAt = now;
-    this.showHotspotToast('Overdrive engaged • opponents can track you!', '#facc15');
     if (car === this.player) {
       this.hapticFeedback('success');
       this.screenShake(0.55);
@@ -2289,15 +2247,8 @@ class SpermRaceGame {
     
     // Update cars only after countdown
     if (!this.preStart) {
-      // Timed unlock of artifacts/pickups to avoid early clutter
+      // Timed unlock of pickups to avoid early clutter (artifacts/hotspots disabled)
       const sinceStart = Date.now() - (this.gameStartTime || Date.now());
-      if (!this.artifactsUnlocked && sinceStart >= this.unlockArtifactsAfterMs) {
-        this.artifactsUnlocked = true;
-        try { this.generateArtifacts(); } catch {}
-        if (this.artifactContainer) this.artifactContainer.visible = true;
-        // HUD cue: artifacts phase begins
-        this.showHotspotToast('Artifacts active • reroll your route', '#38bdf8');
-      }
       if (!this.pickupsUnlocked && sinceStart >= this.unlockPickupsAfterMs) {
         this.pickupsUnlocked = true;
         try { this.spawnPickups(35); } catch {}
@@ -2345,8 +2296,9 @@ class SpermRaceGame {
     this.updateParticles(deltaTime);
 
     // Animate and collect pickups (collection only after countdown)
-  if (!this.preStart && this.pickupsUnlocked && this.pickupsContainer) this.updatePickups(deltaTime);
-  if (!this.preStart) this.updateHotspots(deltaTime);
+    if (!this.preStart && this.pickupsUnlocked && this.pickupsContainer) {
+      this.updatePickups(deltaTime);
+    }
     
     // Update camera
     this.updateCamera();
@@ -4301,8 +4253,7 @@ class SpermRaceGame {
   this.zone.durationMs = 42000;
     this.zoneGraphics = new PIXI.Graphics();
     this.worldContainer.addChild(this.zoneGraphics);
-  this.finalSurgeBannerShown = false;
-  this.initializeHotspotSchedule();
+    this.finalSurgeBannerShown = false;
 
     // Rectangular slicer init
     this.rectZone.left = -this.arena.width / 2;
@@ -4369,18 +4320,48 @@ class SpermRaceGame {
     }
     // Draw rectangular safe zone and telegraph
     this.zoneGraphics.clear();
-    // Safe rectangle
+
+    const safeLeft = this.rectZone.left;
+    const safeTop = this.rectZone.top;
+    const safeWidth = this.rectZone.right - this.rectZone.left;
+    const safeHeight = this.rectZone.bottom - this.rectZone.top;
+
+    // 1) Safe zone fill + bold border so it's clearly distinct from map edge
     this.zoneGraphics
-      .rect(this.rectZone.left, this.rectZone.top, this.rectZone.right - this.rectZone.left, this.rectZone.bottom - this.rectZone.top)
-      .stroke({ width: 3, color: this.theme.accent, alpha: 0.35 });
-    
-    // Add pulsing danger zone outside safe area
+      .rect(safeLeft, safeTop, safeWidth, safeHeight)
+      .fill({ color: 0x020617, alpha: 0.55 })
+      .stroke({ width: 6, color: this.theme.accent, alpha: 0.9 });
+    // Inner crisp line for extra clarity
+    this.zoneGraphics
+      .rect(safeLeft + 4, safeTop + 4, Math.max(0, safeWidth - 8), Math.max(0, safeHeight - 8))
+      .stroke({ width: 2, color: 0xffffff, alpha: 0.6 });
+
+    // 2) Darken everything outside the safe zone with a strong danger tint
     const dangerPulse = 0.3 + 0.2 * Math.sin(now * 0.003);
+    const outerAlpha = 0.16 + dangerPulse * 0.16;
+    const worldLeft = -this.arena.width / 2;
+    const worldTop = -this.arena.height / 2;
+    const worldRight = this.arena.width / 2;
+    const worldBottom = this.arena.height / 2;
+
+    // Top band
     this.zoneGraphics
-      .rect(-this.arena.width/2, -this.arena.height/2, this.arena.width, this.arena.height)
-      .fill({ color: 0xff0000, alpha: 0.02 + dangerPulse * 0.03 });
+      .rect(worldLeft, worldTop, this.arena.width, Math.max(0, safeTop - worldTop))
+      .fill({ color: 0x450a0a, alpha: outerAlpha });
+    // Bottom band
+    this.zoneGraphics
+      .rect(worldLeft, this.rectZone.bottom, this.arena.width, Math.max(0, worldBottom - this.rectZone.bottom))
+      .fill({ color: 0x450a0a, alpha: outerAlpha });
+    // Left band
+    this.zoneGraphics
+      .rect(worldLeft, safeTop, Math.max(0, safeLeft - worldLeft), safeHeight)
+      .fill({ color: 0x450a0a, alpha: outerAlpha });
+    // Right band
+    this.zoneGraphics
+      .rect(this.rectZone.right, safeTop, Math.max(0, worldRight - this.rectZone.right), safeHeight)
+      .fill({ color: 0x450a0a, alpha: outerAlpha });
       
-    // Telegraph arrow on pending side
+    // 3) Telegraph arrow on pending side
     if (this.rectZone.pendingSide) {
       const remain = Math.max(0, this.rectZone.nextSliceAt - now);
       const pulse = 0.5 + 0.5 * Math.sin(now * 0.01);
@@ -4971,8 +4952,7 @@ class SpermRaceGame {
     this.rectZone.nextSliceAt = this.zone.startAtMs + 5000; // First slice at 5s
     this.rectZone.pendingSide = null;
     this.sliceIndex = 0;
-  this.finalSurgeBannerShown = false;
-  this.initializeHotspotSchedule();
+    this.finalSurgeBannerShown = false;
     
     // Clear trails
     this.trails = [];
