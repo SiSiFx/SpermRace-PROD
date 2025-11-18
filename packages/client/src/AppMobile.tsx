@@ -368,8 +368,8 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
   const [step, setStep] = useState<'lobby' | 'game'>('lobby');
   const [meId] = useState<string>('PLAYER_' + Math.random().toString(36).slice(2, 8));
   const [players, setPlayers] = useState<string[]>([]);
-  const [countdown, setCountdown] = useState<number>(3);
-  const countdownTotal = 3;
+  const [countdown, setCountdown] = useState<number>(0);
+  const countdownTotal = 0;
   const [showPracticeIntro, setShowPracticeIntro] = useState<boolean>(() => {
     try {
       return !localStorage.getItem('sr_practice_full_tuto_seen');
@@ -395,29 +395,15 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
   useEffect(() => {
     if (step === 'lobby') {
       if (showPracticeIntro) return;
-      setGameCountdown(6); // 6 seconds to match game engine
+      setGameCountdown(3); // 3-second on-field countdown
       const base = [meId];
       const bots = Array.from({ length: 7 }, (_, i) => `BOT_${i.toString(36)}${Math.random().toString(36).slice(2,4)}`);
       setPlayers([...base, ...bots]);
-      
-      setCountdown(countdownTotal);
-      let currentCountdown = countdownTotal;
-      
-      const t = setInterval(() => {
-        currentCountdown -= 1;
-        setCountdown(currentCountdown);
-        
-        if (currentCountdown <= 0) {
-          clearInterval(t);
-          setStep('game');
-        }
-      }, 1000);
-      
-      return () => clearInterval(t);
+      setStep('game');
     }
     
     if (step === 'game') {
-      setGameCountdown(6); // Reset to 6 seconds when game starts
+      setGameCountdown(3); // Practice: 3-second pre-start countdown on field
       const timer = setInterval(() => {
         setGameCountdown(prev => Math.max(0, prev - 1));
       }, 1000);
@@ -427,9 +413,7 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
 
   if (step === 'lobby') {
     const maxPlayers = 8;
-    const progressPct = showPracticeIntro
-      ? 0
-      : Math.max(0, Math.min(100, ((countdownTotal - countdown) / countdownTotal) * 100));
+    const progressPct = 0;
     return (
       <div className="screen active mobile-lobby-screen">
         <div className="mobile-lobby-container">
@@ -444,9 +428,7 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
               <span>{players.length} Ready</span>
             </div>
             <div className="status-item">
-              <span>
-                {showPracticeIntro ? 'Tutorial' : `Starting in ${countdown}s`}
-              </span>
+              <span>Tutorial</span>
             </div>
           </div>
           
@@ -457,7 +439,7 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
                 <div key={p} className="orbit-sperm" style={{ '--i': i, '--n': players.length } as any} />
               ))}
             </div>
-            <div className="mobile-countdown">{showPracticeIntro ? '' : `${countdown}s`}</div>
+            <div className="mobile-countdown"></div>
           </div>
           
           <div className="mobile-progress-bar">
@@ -477,8 +459,6 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
             } catch {}
           }}
         />
-        {/* Practice: show quick tips as slide during lobby countdown */}
-        <MobileTutorial countdown={countdown} context="practice" />
       </div>
     );
   }

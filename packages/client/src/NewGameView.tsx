@@ -565,7 +565,7 @@ class SpermRaceGame {
     this.spawnBounds = { left: -this.arena.width / 2, right: this.arena.width / 2, top: -this.arena.height / 2, bottom: this.arena.height / 2 };
     // Build more spawn points to accommodate extra bots without falling back to random edge spawns
     this.buildSpawnQueue(40);
-    this.preStart = { startAt: Date.now(), durationMs: 5000 };
+    this.preStart = { startAt: Date.now(), durationMs: 3000 };
     this.roundInProgress = true; // Start first round
     this.dbg('spawnQueue[0..3]', this.spawnQueue.slice(0, 4));
     try { this.createPlayer(); } catch (e) { console.warn('createPlayer failed', e); }
@@ -2115,7 +2115,7 @@ class SpermRaceGame {
     const isTournament = !!(this.wsHud && this.wsHud.active);
     
     // Handle pre-start countdown (freeze inputs/boost/trails until GO)
-    if (this.preStart && isTournament) {
+    if (this.preStart) {
       const remain = Math.max(0, this.preStart.durationMs - (Date.now() - this.preStart.startAt));
       const sec = Math.ceil(remain / 1000);
       
@@ -2283,14 +2283,6 @@ class SpermRaceGame {
         // Clear overview markers
         if (this.overviewCtx && this.overviewCanvas) this.overviewCtx.clearRect(0, 0, this.overviewCanvas.width, this.overviewCanvas.height);
       }
-    } else if (this.preStart && !isTournament) {
-      // Practice/solo: skip in-game countdown and start instantly
-      const cd = document.getElementById('prestart-countdown');
-      if (cd) cd.remove();
-      if (this.overviewCtx && this.overviewCanvas) {
-        this.overviewCtx.clearRect(0, 0, this.overviewCanvas.width, this.overviewCanvas.height);
-      }
-      this.preStart = null;
     }
     // Handle player input only after countdown
     if (!this.preStart) this.handlePlayerInput();
@@ -4970,7 +4962,7 @@ class SpermRaceGame {
     this.extraBots.forEach(b => resetCar(b));
     
     // Reset zone for new round (faster closing for urgency)
-  this.zone.startAtMs = Date.now() + 5000; // Start zone after countdown
+  this.zone.startAtMs = Date.now() + 3000; // Start zone after countdown
   this.zone.durationMs = 26000; // Later rounds stay fast but allow finale
     this.rectZone.left = -this.arena.width / 2;
     this.rectZone.right = this.arena.width / 2;
@@ -4997,7 +4989,7 @@ class SpermRaceGame {
     this.particles = [];
     
     // Start countdown
-    this.preStart = { startAt: Date.now(), durationMs: 5000 };
+    this.preStart = { startAt: Date.now(), durationMs: 3000 };
   }
 
   emitBoostEcho(x: number, y: number) {

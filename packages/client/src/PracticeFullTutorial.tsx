@@ -31,9 +31,11 @@ const SLIDES: Slide[] = [
 
 // Show tutorial for ~7 seconds total: 2s + 2s + 3s across the three slides
 const SLIDE_DURATIONS_MS: number[] = [2000, 2000, 3000];
+const TUTORIAL_SECONDS = 7;
 
 export function PracticeFullTutorial({ visible, onDone }: PracticeFullTutorialProps) {
   const [index, setIndex] = useState(0);
+  const [secondsLeft, setSecondsLeft] = useState<number>(TUTORIAL_SECONDS);
 
   useEffect(() => {
     if (!visible) return;
@@ -63,6 +65,22 @@ export function PracticeFullTutorial({ visible, onDone }: PracticeFullTutorialPr
     };
   }, [visible, onDone]);
 
+  // Simple countdown overlay for the 7s tutorial window
+  useEffect(() => {
+    if (!visible) return;
+    setSecondsLeft(TUTORIAL_SECONDS);
+    const startAt = Date.now();
+    const id = window.setInterval(() => {
+      const elapsedSec = Math.floor((Date.now() - startAt) / 1000);
+      const remain = Math.max(0, TUTORIAL_SECONDS - elapsedSec);
+      setSecondsLeft(remain);
+      if (remain <= 0) {
+        window.clearInterval(id);
+      }
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [visible]);
+
   if (!visible) return null;
 
   const slide = SLIDES[index] ?? SLIDES[0];
@@ -87,9 +105,15 @@ export function PracticeFullTutorial({ visible, onDone }: PracticeFullTutorialPr
           right: '16px',
           fontSize: 12,
           color: 'rgba(148,163,184,0.9)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'flex-end',
         }}
       >
-        Practice tips
+        <div>Practice tips</div>
+        <div style={{ marginTop: 4, fontSize: 11, opacity: 0.9 }}>
+          Race starts in {secondsLeft}s
+        </div>
       </div>
       <div
         style={{
