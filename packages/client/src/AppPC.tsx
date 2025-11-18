@@ -48,13 +48,7 @@ function AppInner() {
     window.setTimeout(() => setToast(null), duration);
   };
   const [showHelp, setShowHelp] = useState<boolean>(false);
-  const [showHowTo, setShowHowTo] = useState<boolean>(() => {
-    try {
-      return !localStorage.getItem('sr_howto_seen_v2');
-    } catch {
-      return true;
-    }
-  });
+  const [showHowTo, setShowHowTo] = useState<boolean>(false);
   
   // Loading progress for overlay (indefinite fill)
   const [loadProg, setLoadProg] = useState<number>(0);
