@@ -44,7 +44,7 @@ const RATE_LIMITS = {
   auth: { capacity: 3, refillPerMs: 3 / 60000 }, // 3/min
   join: { capacity: 10, refillPerMs: 10 / 60000 }, // 10/min
   tx: { capacity: 20, refillPerMs: 20 / 60000 }, // 20/min
-  input: { capacity: 25, refillPerMs: 25 / 1000 } // 25/sec
+  input: { capacity: 60, refillPerMs: 60 / 1000 } // 60/sec hard cap on playerInput
 } as const;
 
 // =================================================================================================
@@ -1091,11 +1091,11 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
       if (!take('input')) return;
       const playerId = socketToPlayerId.get(ws);
       if (!playerId) return;
-      // Clamp bursts: accept at most one input per 40ms (~25/s) in addition to token bucket
+      // Clamp bursts: accept at most one input per ~16ms (~60/s) in addition to token bucket
       const now = Date.now();
       const last = (socketRate as any).lastInputAt?.get?.(ws) as number | undefined;
       if (!(socketRate as any).lastInputAt) (socketRate as any).lastInputAt = new Map();
-      if (!last || (now - last) >= 40) {
+      if (!last || (now - last) >= 16) {
         (socketRate as any).lastInputAt.set(ws, now);
         gameWorld.handlePlayerInput(playerId, (message as any).payload);
       }

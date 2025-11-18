@@ -3097,24 +3097,53 @@ class SpermRaceGame {
       if (age <= 3.0) pts.push(p);
     }
     if (pts.length < 2) return;
-    
-    // Smooth quadratic path through midpoints for a fluent curve
+
+    // GHOST TAIL: Procedurally wiggle the trail visually (hitbox remains at server positions)
     const baseWidth = (car.type === 'player') ? 2 : 1.6; // thinner overall
     const alphaStart = 1.0;
-    // Build path from first midpoint
-    const p0 = pts[0];
-    const p1 = pts[1];
-    const m0x = (p0.x + p1.x) * 0.5;
-    const m0y = (p0.y + p1.y) * 0.5;
+
+    // Build ghost spine starting at head position, then backward through trail
+    const headX = car.x;
+    const headY = car.y;
+    const ghost: Array<{ x: number; y: number }> = [];
+    ghost.push({ x: headX, y: headY });
+
+    const time = now * 0.004; // global time factor
+    const amplitudeBase = isBot ? 4 : 6;
+    const speedMag = Math.hypot(car.vx, car.vy);
+    const speedFactor = 1.0 + Math.min(1.5, speedMag / 260); // faster wiggle when moving
+
+    for (let idx = pts.length - 1; idx >= 0; idx--) {
+      const p = pts[idx];
+      const prev = idx === pts.length - 1 ? { x: headX, y: headY } : pts[idx + 1];
+      const dirX = p.x - prev.x;
+      const dirY = p.y - prev.y;
+      const len = Math.hypot(dirX, dirY) || 1;
+      const nx = -dirY / len;
+      const ny = dirX / len;
+      const t = (pts.length - 1 - idx) / Math.max(1, pts.length - 1); // 0 at head → 1 at tail
+      const envelope = Math.pow(t, 1.6); // more motion toward tail
+      const phase = time * speedFactor + t * 4.0;
+      const offset = Math.sin(phase) * amplitudeBase * envelope;
+      ghost.push({ x: p.x + nx * offset, y: p.y + ny * offset });
+    }
+
+    if (ghost.length < 2) return;
+
+    // Draw smooth quadratic Bezier through ghost points
+    const g0 = ghost[0];
+    const g1 = ghost[1];
+    const m0x = (g0.x + g1.x) * 0.5;
+    const m0y = (g0.y + g1.y) * 0.5;
     trail.graphics.moveTo(m0x, m0y);
-    for (let i = 1; i < pts.length - 1; i++) {
-      const c = pts[i];
-      const n = pts[i + 1];
+    for (let i = 1; i < ghost.length - 1; i++) {
+      const c = ghost[i];
+      const n = ghost[i + 1];
       const mx = (c.x + n.x) * 0.5;
       const my = (c.y + n.y) * 0.5;
       trail.graphics.quadraticCurveTo(c.x, c.y, mx, my);
     }
-    // Stroke once with round caps/joins and alpha gradient approximation (single alpha for perf)
+
     trail.graphics.stroke({ width: baseWidth, color: trailColor, alpha: alphaStart, cap: 'round', join: 'round' });
 
     // Proximity glow (subtle, thinner) using segment checks

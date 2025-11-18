@@ -1,5 +1,6 @@
 // @ts-nocheck
 import * as PIXI from 'pixi.js';
+import GameEffects from './GameEffects';
 import { startSpermBackground, stopSpermBackground } from './spermBackground';
 import type { PlayerInput, GameStateUpdateMessage, TrailPoint } from 'shared';
 import { VersionedTransaction, Connection } from '@solana/web3.js';
@@ -60,11 +61,17 @@ const PRICE_API_URL = (import.meta as any).env?.VITE_PRICE_API_URL || '/api/sol-
 
 type PlayerRenderGroup = {
   container: PIXI.Container;
-  sperm: PIXI.Graphics;
-  trail: PIXI.Graphics;
-  trailGlow: PIXI.Graphics;
+  // Sperm body rendered as a textured sprite (tinted per-player)
+  sperm: PIXI.Sprite;
+  // Trails rendered as MeshRope instances for GPU-accelerated ribbons
+  trail: any;
+  trailGlow: any;
   boostGlow: PIXI.Graphics;
 };
+const TRAIL_SEGMENTS = 32;
+let spermTexture: PIXI.Texture | null = null;
+let spermAnchor: PIXI.Point | null = null;
+let trailTexture: PIXI.Texture | null = null;
 const playerGroups: Map<string, PlayerRenderGroup> = new Map();
 const playerInput: PlayerInput = {
   target: { x: 3000, y: 2000 }, // Start at center of map
@@ -85,6 +92,16 @@ let cachedWorldSize: { w: number; h: number } | null = null;
 type Puff = { g: PIXI.Graphics; vx: number; vy: number; life: number; maxLife: number };
 let exhaustPuffs: Puff[] = [];
 let screenLayer: PIXI.Container;
+let dangerTexture: PIXI.Texture | null = null;
+let dangerTop: PIXI.TilingSprite | null = null;
+let dangerBottom: PIXI.TilingSprite | null = null;
+let dangerLeft: PIXI.TilingSprite | null = null;
+let dangerRight: PIXI.TilingSprite | null = null;
+let arenaBorder: PIXI.Graphics | null = null;
+let arenaGrid: PIXI.Graphics | null = null;
+let lastWorldWidth: number | null = null;
+let zoneWarningTriggered = false;
+let gameEffects: GameEffects | null = null;
 // Camera zoom state
 let cameraZoom = 1.0;
 let targetZoom = 1.0;
@@ -94,6 +111,7 @@ let flashRect: PIXI.Graphics | null = null;
 let latestServerTimestamp = 0;
 let matchTimerStartMs: number | null = null;
 let gotGameStarting = false;
+let lastHeartbeatVibrationAt = 0;
 
 // Simple SFX via Web Audio API
 let audioCtx: AudioContext | null = null;
@@ -627,6 +645,17 @@ async function initializeGame(): Promise<void> {
   app.stage.addChild(rootContainer);
   rootContainer.addChild(worldContainer);
   app.stage.addChild(screenLayer);
+  // Reset arena caches and VFX helpers
+  cachedWorldSize = null;
+  lastWorldWidth = null;
+  zoneWarningTriggered = false;
+  dangerTop = dangerBottom = dangerLeft = dangerRight = null;
+  arenaBorder = arenaGrid = null;
+  // Instantiate game effects for screen glitches and warnings
+  gameEffects = new GameEffects(worldContainer);
+  // Generate shared textures used by player sprites and trail ropes
+  generateSpermTexture(app);
+  generateTrailTexture(app);
   // Start smooth interpolation renderer
   startInterpolatedRender();
   
@@ -662,6 +691,11 @@ async function initializeGame(): Promise<void> {
       e.preventDefault();
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'playerInput', payload: { ...playerInput, boost: true } }));
+        try {
+          if (typeof navigator !== 'undefined' && (navigator as any).vibrate) {
+            navigator.vibrate?.(30);
+          }
+        } catch {}
       }
     }
   });
@@ -685,6 +719,11 @@ async function initializeGame(): Promise<void> {
         e.preventDefault();
         if (ws && ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: 'playerInput', payload: { ...playerInput, boost: true } }));
+          try {
+            if (typeof navigator !== 'undefined' && (navigator as any).vibrate) {
+              navigator.vibrate?.(30);
+            }
+          } catch {}
         }
         break;
       // Keyboard accelerate disabled (mouse-only)
@@ -950,6 +989,17 @@ async function handleServerMessage(event: MessageEvent): Promise<void> {
         elements.killFeed.prepend(row);
         setTimeout(() => { row.remove(); }, 5000);
       }
+
+      // Haptics: strong buzz on death, double pulse on kill
+      try {
+        if (typeof navigator !== 'undefined' && (navigator as any).vibrate) {
+          if (playerId && playerId === state.playerId) {
+            try { navigator.vibrate?.(400); } catch {}
+          } else if (eliminatorId && eliminatorId === state.playerId) {
+            try { navigator.vibrate?.([50, 30, 50]); } catch {}
+          }
+        }
+      } catch {}
         break;
     }
 
@@ -1058,6 +1108,67 @@ async function joinLobby(): Promise<void> {
 // Game Rendering
 // =================================================================================================
 
+// Pre-rendered textures for sperm bodies and trails
+function generateSpermTexture(app: PIXI.Application): void {
+  if (spermTexture) return;
+
+  const g = new PIXI.Graphics();
+
+  // Sperm head (white, to be tinted per-player)
+  g.ellipse(0, 0, 8, 4).fill({ color: 0xffffff, alpha: 1.0 });
+  g.ellipse(0, 0, 8, 4).stroke({ width: 2, color: 0xffffff, alpha: 0.4 });
+
+  // Tail (simple wavy line)
+  g.moveTo(-8, 0)
+    .lineTo(-12, -1)
+    .lineTo(-16, 1)
+    .lineTo(-20, -1)
+    .lineTo(-24, 0)
+    .lineTo(-28, 1)
+    .lineTo(-32, 0)
+    .stroke({ width: 2, color: 0xffffff, alpha: 0.9 });
+
+  // Head nucleus
+  g.circle(2, 0, 2).fill({ color: 0xffffff, alpha: 0.9 });
+
+  const bounds = g.getLocalBounds();
+  const resolution = (window.devicePixelRatio || 1) as number;
+
+  spermTexture = app.renderer.generateTexture(g, {
+    resolution,
+    region: bounds,
+  } as any);
+  spermAnchor = new PIXI.Point(
+    -bounds.x / bounds.width,
+    -bounds.y / bounds.height,
+  );
+
+  g.destroy();
+}
+
+function generateTrailTexture(app: PIXI.Application): void {
+  if (trailTexture) return;
+
+  const g = new PIXI.Graphics();
+  const length = 128;
+  const thickness = 16;
+
+  // Soft outer glow
+  g.rect(0, (thickness - 10) / 2, length, 10).fill({ color: 0xffffff, alpha: 0.25 });
+  // Bright inner core
+  g.rect(0, (thickness - 4) / 2, length, 4).fill({ color: 0xffffff, alpha: 1.0 });
+
+  const bounds = g.getLocalBounds();
+  const resolution = (window.devicePixelRatio || 1) as number;
+
+  trailTexture = app.renderer.generateTexture(g, {
+    resolution,
+    region: bounds,
+  } as any);
+
+  g.destroy();
+}
+
 function renderGame(gameState: GameStateUpdateMessage['payload']): void {
   if (!app || !state.isInGame) return;
   
@@ -1069,6 +1180,45 @@ function renderGame(gameState: GameStateUpdateMessage['payload']): void {
   
   // Draw arena boundaries
   drawArena(world);
+  // Heartbeat haptics: pulse when the nearest enemy is very close
+  try {
+    const me = players.find(p => p.id === state.playerId && p.isAlive);
+    if (me && typeof navigator !== 'undefined' && (navigator as any).vibrate) {
+      let nearest = Infinity;
+      for (const p of players) {
+        if (!p.isAlive || p.id === me.id) continue;
+        const dx = p.sperm.position.x - me.sperm.position.x;
+        const dy = p.sperm.position.y - me.sperm.position.y;
+        const d = Math.hypot(dx, dy);
+        if (d < nearest) nearest = d;
+      }
+      const now = Date.now();
+      if (nearest < 300 && (now - lastHeartbeatVibrationAt) >= 500) {
+        try { navigator.vibrate?.([5, 50]); } catch {}
+        lastHeartbeatVibrationAt = now;
+      }
+    }
+  } catch {}
+
+  // Heartbeat haptics: pulse when the nearest enemy is very close
+  try {
+    const me = players.find(p => p.id === state.playerId && p.isAlive);
+    if (me && typeof navigator !== 'undefined' && (navigator as any).vibrate) {
+      let nearest = Infinity;
+      for (const p of players) {
+        if (!p.isAlive || p.id === me.id) continue;
+        const dx = p.sperm.position.x - me.sperm.position.x;
+        const dy = p.sperm.position.y - me.sperm.position.y;
+        const d = Math.hypot(dx, dy);
+        if (d < nearest) nearest = d;
+      }
+      const now = Date.now();
+      if (nearest < 300 && (now - lastHeartbeatVibrationAt) >= 500) {
+        try { navigator.vibrate?.([5, 50]); } catch {}
+        lastHeartbeatVibrationAt = now;
+      }
+    }
+  } catch {}
   
   // Update or create player groups and trails
   for (const player of players) {
@@ -1136,106 +1286,254 @@ function renderInterpolated(gameState: GameStateUpdateMessage['payload']): void 
   renderGame(gameState);
 }
 
+// Create a cached "biohazard" danger texture used for the void outside the arena
+function createDangerTexture(_app: PIXI.Application): void {
+  if (dangerTexture) return;
+  try {
+    if (typeof document === 'undefined') {
+      dangerTexture = PIXI.Texture.WHITE;
+      return;
+    }
+    const size = 64;
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      dangerTexture = PIXI.Texture.WHITE;
+      return;
+    }
+
+    // Dark red background
+    ctx.fillStyle = '#190009';
+    ctx.fillRect(0, 0, size, size);
+
+    // Diagonal hazard stripes
+    ctx.fillStyle = '#ff2745';
+    const stripeWidth = 10;
+    for (let offset = -size; offset < size * 2; offset += stripeWidth * 2) {
+      ctx.beginPath();
+      ctx.moveTo(offset, 0);
+      ctx.lineTo(offset + stripeWidth, 0);
+      ctx.lineTo(offset + stripeWidth + size, size);
+      ctx.lineTo(offset + size, size);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    dangerTexture = PIXI.Texture.from(canvas);
+  } catch {
+    dangerTexture = PIXI.Texture.WHITE;
+  }
+}
+
 function drawArena(world: { width: number; height: number }): void {
-  // Redraw only if world size changed
-  if (cachedWorldSize && cachedWorldSize.w === world.width && cachedWorldSize.h === world.height) return;
-  arenaLayer.removeChildren();
+  if (!arenaLayer) return;
+
+  const prevWidth = cachedWorldSize?.w ?? null;
+  const worldChanged = !cachedWorldSize || cachedWorldSize.w !== world.width || cachedWorldSize.h !== world.height;
   cachedWorldSize = { w: world.width, h: world.height };
 
-  // Neon border (cyan theme)
-  const border = new PIXI.Graphics();
-  border.rect(0, 0, world.width, world.height);
-  border.stroke({ width: 3, color: 0x00d4ff, alpha: 0.95 });
-  arenaLayer.addChild(border);
+  // Detect shrink: current width smaller than previous
+  const shrinkingNow = prevWidth !== null && world.width < prevWidth;
+  lastWorldWidth = world.width;
 
-  // Neon grid lines every 200px
-  const grid = new PIXI.Graphics();
-  grid.stroke({ width: 1, color: 0x0a6ea6, alpha: 0.35 });
-  for (let x = 200; x < world.width; x += 200) {
-    grid.moveTo(x, 0); grid.lineTo(x, world.height);
+  // Danger pattern texture (cached)
+  if (!dangerTexture) {
+    createDangerTexture(app);
   }
-  for (let y = 200; y < world.height; y += 200) {
-    grid.moveTo(0, y); grid.lineTo(world.width, y);
+
+  // Lazily create void sprites and arena primitives
+  if (!dangerTop || !dangerBottom || !dangerLeft || !dangerRight) {
+    dangerTop = new PIXI.TilingSprite({ texture: dangerTexture || PIXI.Texture.WHITE, width: 1, height: 1 });
+    dangerBottom = new PIXI.TilingSprite({ texture: dangerTexture || PIXI.Texture.WHITE, width: 1, height: 1 });
+    dangerLeft = new PIXI.TilingSprite({ texture: dangerTexture || PIXI.Texture.WHITE, width: 1, height: 1 });
+    dangerRight = new PIXI.TilingSprite({ texture: dangerTexture || PIXI.Texture.WHITE, width: 1, height: 1 });
+    arenaBorder = new PIXI.Graphics();
+    arenaGrid = new PIXI.Graphics();
+    arenaLayer.addChild(dangerTop, dangerBottom, dangerLeft, dangerRight, arenaBorder, arenaGrid);
   }
-  grid.stroke({ width: 1, color: 0x0aa67a, alpha: 0.35 });
-  arenaLayer.addChild(grid);
+
+  // Layout danger "void" around the safe world rectangle
+  const pad = Math.max(800, Math.max(world.width, world.height));
+  const totalWidth = world.width + pad * 2;
+
+  if (dangerTop && dangerBottom && dangerLeft && dangerRight) {
+    // Top strip
+    dangerTop.x = -pad;
+    dangerTop.y = -pad;
+    dangerTop.width = totalWidth;
+    dangerTop.height = pad;
+
+    // Bottom strip
+    dangerBottom.x = -pad;
+    dangerBottom.y = world.height;
+    dangerBottom.width = totalWidth;
+    dangerBottom.height = pad;
+
+    // Left strip
+    dangerLeft.x = -pad;
+    dangerLeft.y = 0;
+    dangerLeft.width = pad;
+    dangerLeft.height = world.height;
+
+    // Right strip
+    dangerRight.x = world.width;
+    dangerRight.y = 0;
+    dangerRight.width = pad;
+    dangerRight.height = world.height;
+  }
+
+  // Arena border with dynamic color/alpha when shrinking
+  if (arenaBorder) {
+    arenaBorder.clear();
+    const borderColor = shrinkingNow ? 0xff4444 : 0x00d4ff;
+    const alpha = shrinkingNow
+      ? 0.5 + Math.sin(Date.now() / 200) * 0.5
+      : 0.95;
+    arenaBorder.rect(0, 0, world.width, world.height);
+    arenaBorder.stroke({ width: 3, color: borderColor, alpha });
+  }
+
+  // Grid only needs to be recomputed when size changes
+  if (arenaGrid && worldChanged) {
+    arenaGrid.clear();
+    arenaGrid.stroke({ width: 1, color: 0x0a6ea6, alpha: 0.35 });
+    for (let x = 200; x < world.width; x += 200) {
+      arenaGrid.moveTo(x, 0); arenaGrid.lineTo(x, world.height);
+    }
+    for (let y = 200; y < world.height; y += 200) {
+      arenaGrid.moveTo(0, y); arenaGrid.lineTo(world.width, y);
+    }
+    arenaGrid.stroke({ width: 1, color: 0x0aa67a, alpha: 0.35 });
+  }
+
+  // Trigger cinematic zone warning only once when shrink begins
+  if (shrinkingNow && !zoneWarningTriggered && gameEffects) {
+    try { gameEffects.showZoneWarning(1); } catch {}
+    zoneWarningTriggered = true;
+  }
 }
 
 function ensurePlayerGroup(id: string): PlayerRenderGroup {
   let group = playerGroups.get(id);
   if (group) return group;
   const container = new PIXI.Container();
-            const sperm = new PIXI.Graphics();
-  const trail = new PIXI.Graphics();
-  const trailGlow = new PIXI.Graphics();
+
+  // Ensure textures exist before creating renderers
+  if (!spermTexture || !trailTexture) {
+    generateSpermTexture(app);
+    generateTrailTexture(app);
+  }
+
+  const sperm = new PIXI.Sprite(spermTexture || PIXI.Texture.WHITE);
+  if (spermAnchor) {
+    sperm.anchor.set(spermAnchor.x, spermAnchor.y);
+  } else {
+    sperm.anchor.set(0.5);
+  }
+  container.addChild(sperm);
+
+  // Preallocate rope geometry for trails (shared points array for main + glow ropes)
+  const ropePoints: PIXI.Point[] = [];
+  for (let i = 0; i < TRAIL_SEGMENTS; i++) {
+    ropePoints.push(new PIXI.Point(0, 0));
+  }
+
+  const trail = new (PIXI as any).MeshRope(trailTexture || PIXI.Texture.WHITE, ropePoints);
+  trail.autoUpdate = true;
+
+  const trailGlow = new (PIXI as any).MeshRope(trailTexture || PIXI.Texture.WHITE, ropePoints);
+  trailGlow.autoUpdate = true;
+  trailGlow.alpha = 0;
+  trailGlow.scale.y = 1.5;
+  trailGlow.blendMode = 'add';
+
   const boostGlow = new PIXI.Graphics();
   boostGlow.blendMode = 'add';
-  container.addChild(sperm);
+
   playersLayer.addChild(container);
   trailsLayer.addChild(trail);
   trailsLayer.addChild(trailGlow);
   vfxLayer.addChild(boostGlow);
+
   group = { container, sperm, trail, trailGlow, boostGlow };
   playerGroups.set(id, group);
   return group;
 }
 
 function updatePlayerGroup(group: PlayerRenderGroup, player: GameStateUpdateMessage['payload']['players'][0]): void {
-  // Trail
-  group.trail.clear();
-  group.trailGlow.clear();
-  const trail = player.trail as TrailPoint[];
-  if (trail && trail.length > 1) {
-    const speed = Math.hypot(player.sperm.velocity.x, player.sperm.velocity.y);
-    const width = 5 + Math.min(8, speed / 70);
-    const isSelf = player.id === state.playerId;
-    const color = isSelf ? 0x00d4ff : 0xff6b6b;
-    const alpha = (player as any).status?.boosting ? 1.0 : 0.85;
-    for (let i = 0; i < trail.length; i++) {
-      const p = trail[i];
-      if (i === 0) group.trail.moveTo(p.x, p.y); else group.trail.lineTo(p.x, p.y);
+  // Trails rendered as MeshRope ribbons
+  const trailHistory = player.trail as TrailPoint[];
+  const rope = group.trail as any;
+  const glowRope = group.trailGlow as any;
+  const isSelf = player.id === state.playerId;
+  const speed = Math.hypot(player.sperm.velocity.x, player.sperm.velocity.y);
+  const color = isSelf ? 0x00d4ff : 0xff6b6b;
+  const boosting = !!(player as any).status?.boosting;
+
+  if (!trailHistory || trailHistory.length < 2 || !rope || !rope.points) {
+    if (rope) rope.visible = false;
+    if (glowRope) glowRope.visible = false;
+  } else {
+    rope.visible = true;
+    rope.tint = color;
+
+    const points = rope.points as PIXI.Point[];
+    const maxPoints = points.length;
+    const srcLen = Math.min(trailHistory.length, maxPoints);
+
+    // Sample from latest trail points backwards into the rope geometry
+    const step = (trailHistory.length - 1) / Math.max(1, srcLen - 1);
+    const offset = maxPoints - srcLen;
+    for (let i = 0; i < srcLen; i++) {
+      const srcIndex = Math.floor(i * step);
+      const src = trailHistory[trailHistory.length - 1 - srcIndex]; // newest → head
+      const p = points[offset + i];
+      p.x = src.x;
+      p.y = src.y;
     }
-    group.trail.stroke({ width, color, alpha, cap: 'round', join: 'round' });
-    if (isSelf && (player as any).status?.boosting) {
-      for (let i = 0; i < trail.length; i++) {
-        const p = trail[i];
-        if (i === 0) group.trailGlow.moveTo(p.x, p.y); else group.trailGlow.lineTo(p.x, p.y);
-      }
-      group.trailGlow.stroke({ width: width + 6, color, alpha: 0.12, cap: 'round', join: 'round' });
-      group.trailGlow.blendMode = 'add';
+    // Extend the far tail with the oldest sampled point
+    for (let i = 0; i < offset; i++) {
+      points[i].x = points[offset].x;
+      points[i].y = points[offset].y;
+    }
+
+    // Apply lightweight sine-wave wiggle along the rope for organic motion
+    const now = performance.now() * 0.004;
+    const speedFactor = 1.0 + Math.min(1.5, speed / 280);
+    for (let i = 1; i < maxPoints - 1; i++) {
+      const prev = points[i - 1];
+      const curr = points[i];
+      const dx = curr.x - prev.x;
+      const dy = curr.y - prev.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len;
+      const ny = dx / len;
+      const tNorm = i / (maxPoints - 1); // 0 at head → 1 at tail
+      const ampBase = isSelf ? 6 : 4;
+      const amp = ampBase * tNorm;
+      const wave = Math.sin(now + tNorm * 5.0) * amp * speedFactor;
+      curr.x += nx * wave;
+      curr.y += ny * wave;
+    }
+
+    if (glowRope) {
+      glowRope.visible = isSelf && boosting;
+      glowRope.tint = color;
+      glowRope.alpha = boosting ? 0.22 : 0;
     }
   }
 
   // Player container/spermatozoide
   group.container.position.set(player.sperm.position.x, player.sperm.position.y);
   group.container.rotation = player.sperm.angle;
-  group.sperm.clear();
   const isOwnPlayer = player.id === state.playerId;
   const spermColor = isOwnPlayer ? 0x00ff88 : 0xff6b6b;
+  group.sperm.tint = spermColor;
 
-  // Sperm head (oval/round)
-  group.sperm.beginFill(spermColor);
-  group.sperm.drawEllipse(0, 0, 8, 4);
-  group.sperm.endFill();
-
-  // Sperm tail (wavy line)
-  group.sperm.lineStyle(2, spermColor, 0.9);
-  group.sperm.moveTo(-8, 0);
-  group.sperm.lineTo(-12, -1);
-  group.sperm.lineTo(-16, 1);
-  group.sperm.lineTo(-20, -1);
-  group.sperm.lineTo(-24, 0);
-  group.sperm.lineTo(-28, 1);
-  group.sperm.lineTo(-32, 0);
-
-  // Sperm head nucleus (smaller white circle)
-  group.sperm.beginFill(0xffffff);
-  group.sperm.drawCircle(2, 0, 2);
-  group.sperm.endFill();
-
-  // Propulsion glow
+  // Propulsion glow (small Graphics triangle behind head)
   group.boostGlow.clear();
-  if ((player as any).status?.boosting) {
+  if (boosting) {
     const hx = Math.cos(player.sperm.angle), hy = Math.sin(player.sperm.angle);
     const backX = -hx * 18, backY = -hy * 18;
     group.boostGlow.moveTo(backX, backY);
