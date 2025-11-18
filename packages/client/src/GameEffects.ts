@@ -29,6 +29,50 @@ export class GameEffects {
         ctx.fill();
       }
       this.circleTexture = PIXI.Texture.from(canvas);
+
+      // Inject cinematic VFX styles once (system-warning aesthetic)
+      if (!document.getElementById('vfx-message-styles')) {
+        const style = document.createElement('style');
+        style.id = 'vfx-message-styles';
+        style.textContent = `
+          .vfx-message {
+            position: fixed;
+            top: 32%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            pointer-events: none;
+            z-index: 9998;
+            font-family: 'Orbitron', system-ui, -apple-system, BlinkMacSystemFont, 'SF Mono', monospace;
+            text-transform: uppercase;
+            letter-spacing: 0.16em;
+            color: #f9fafb;
+            text-shadow: 0 0 12px rgba(248, 250, 252, 0.6);
+          }
+          .vfx-title {
+            font-size: 64px;
+            font-weight: 800;
+            animation: glitch-skew 0.24s ease-in-out infinite alternate;
+          }
+          .vfx-subtitle {
+            margin-top: 8px;
+            font-size: 24px;
+            opacity: 0.9;
+          }
+          @keyframes glitch-skew {
+            0% { transform: translate3d(0,0,0) skewX(0deg); }
+            25% { transform: translate3d(0,0,0) skewX(-4deg); }
+            50% { transform: translate3d(0,0,0) skewX(3deg); }
+            75% { transform: translate3d(0,0,0) skewX(-2deg); }
+            100% { transform: translate3d(0,0,0) skewX(0deg); }
+          }
+          @keyframes blink-warning {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+          }
+        `;
+        document.head.appendChild(style);
+      }
     } else {
       // Fallback for non-DOM environments (tests, SSR)
       this.circleTexture = PIXI.Texture.WHITE;
@@ -67,58 +111,70 @@ export class GameEffects {
    * Show big screen text (MEGA KILL!, etc)
    */
   showBigScreenText(text: string, color: string, duration: number = 2000) {
-    const textEl = document.createElement('div');
-    textEl.textContent = text;
-    textEl.style.cssText = `
-      position: fixed;
-      top: 30%;
-      left: 50%;
-      transform: translate(-50%, -50%) scale(0.5);
-      color: ${color};
-      font-size: 72px;
-      font-weight: 900;
-      text-align: center;
-      pointer-events: none;
-      z-index: 9998;
-      text-shadow: 
-        0 0 20px ${color},
-        0 0 40px ${color},
-        4px 4px 0 #000,
-        -4px -4px 0 #000,
-        4px -4px 0 #000,
-        -4px 4px 0 #000;
-      animation: bigTextPulse 0.3s ease-out forwards;
-      white-space: nowrap;
-    `;
+    if (typeof document === 'undefined') return;
 
-    // Add animation keyframes if not exists
-    if (!document.getElementById('bigTextAnimations')) {
-      const style = document.createElement('style');
-      style.id = 'bigTextAnimations';
-      style.textContent = `
-        @keyframes bigTextPulse {
-          0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
-          50% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
-          100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-        }
-        @keyframes bigTextFade {
-          to { opacity: 0; transform: translate(-50%, -50%) scale(1.5); }
-        }
-      `;
-      document.head.appendChild(style);
-    }
+    const wrapper = document.createElement('div');
+    wrapper.className = 'vfx-message';
 
-    document.body.appendChild(textEl);
+    const title = document.createElement('div');
+    title.className = 'vfx-title';
+    title.textContent = text;
+    title.style.color = color;
 
-    // Fade out
+    wrapper.appendChild(title);
+    document.body.appendChild(wrapper);
+
+    // Simple fade-out at the end of duration
     setTimeout(() => {
-      textEl.style.animation = `bigTextFade 0.5s ease-out forwards`;
-    }, duration - 500);
+      wrapper.style.transition = 'opacity 0.4s ease-out, transform 0.4s ease-out';
+      wrapper.style.opacity = '0';
+      wrapper.style.transform = 'translate(-50%, -50%) scale(1.06)';
+    }, Math.max(0, duration - 400));
 
-    // Remove
     setTimeout(() => {
-      textEl.remove();
+      wrapper.remove();
     }, duration);
+  }
+
+  /**
+   * Show cinematic zone warning when the arena begins collapsing.
+   * Early stages are yellow; late stages red.
+   */
+  showZoneWarning(stage: number = 1) {
+    if (typeof document === 'undefined') return;
+
+    const isFinal = stage >= 2;
+    const accentColor = isFinal ? '#ff4b4b' : '#facc15';
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'vfx-message';
+    wrapper.style.animation = 'blink-warning 0.9s ease-in-out infinite';
+
+    const title = document.createElement('div');
+    title.className = 'vfx-title';
+    title.textContent = '⚠ ZONE UNSTABLE';
+    title.style.color = accentColor;
+
+    const subtitle = document.createElement('div');
+    subtitle.className = 'vfx-subtitle';
+    subtitle.textContent = 'COLLAPSE IMMINENT';
+    subtitle.style.color = isFinal ? '#fecaca' : '#fef9c3';
+
+    wrapper.appendChild(title);
+    wrapper.appendChild(subtitle);
+    document.body.appendChild(wrapper);
+
+    // Subtle red flash overlay
+    this.flashScreen('rgba(255,0,0,0.3)', 200);
+
+    setTimeout(() => {
+      wrapper.style.transition = 'opacity 0.3s ease-out';
+      wrapper.style.opacity = '0';
+    }, 1200);
+
+    setTimeout(() => {
+      try { wrapper.remove(); } catch {}
+    }, 1600);
   }
 
   /**

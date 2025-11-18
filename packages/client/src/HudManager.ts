@@ -155,25 +155,31 @@ export class HudManager {
   updateZoneTimer(seconds: number) {
     if (!this.zoneTimerEl) return;
 
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+    const clampedSeconds = Math.max(0, Math.floor(seconds));
+    const mins = Math.floor(clampedSeconds / 60);
+    const secs = clampedSeconds % 60;
+    const timeLabel = mins > 0
+      ? `${mins}:${String(secs).padStart(2, '0')}`
+      : `${secs}s`;
 
-    if (mins > 0) {
-      this.zoneTimerEl.textContent = `⏱ ${mins}:${String(secs).padStart(2, '0')}`;
-    } else {
-      this.zoneTimerEl.textContent = `⏱ ${secs}s`;
+    if (clampedSeconds === 0) {
+      this.zoneTimerEl.innerHTML = '⚠ ZONE COLLAPSE';
+      this.zoneTimerEl.style.color = '#ef4444';
+      this.zoneTimerEl.style.textShadow = '0 0 10px rgba(239, 68, 68, 0.9)';
+      this.zoneTimerEl.style.animation = '';
+      return;
     }
 
-    // Color based on urgency
-    if (seconds <= 10) {
-      this.zoneTimerEl.style.color = '#ef4444'; // Red
-      this.zoneTimerEl.style.textShadow = '0 0 8px rgba(239, 68, 68, 0.8)';
-    } else if (seconds <= 30) {
-      this.zoneTimerEl.style.color = '#fbbf24'; // Yellow
-      this.zoneTimerEl.style.textShadow = '0 0 8px rgba(251, 191, 36, 0.6)';
+    if (clampedSeconds < 30) {
+      this.zoneTimerEl.innerHTML = `⚠ SHRINKING: <span>${timeLabel}</span>`;
+      this.zoneTimerEl.style.color = '#ef4444';
+      this.zoneTimerEl.style.textShadow = '0 0 10px rgba(239, 68, 68, 0.9)';
+      this.zoneTimerEl.style.animation = 'blink 1s ease-in-out infinite';
     } else {
-      this.zoneTimerEl.style.color = '#22d3ee'; // Cyan
-      this.zoneTimerEl.style.textShadow = 'none';
+      this.zoneTimerEl.innerHTML = `SAFE TIME: <span>${timeLabel}</span>`;
+      this.zoneTimerEl.style.color = '#22d3ee';
+      this.zoneTimerEl.style.textShadow = '0 0 6px rgba(34, 211, 238, 0.6)';
+      this.zoneTimerEl.style.animation = '';
     }
   }
 

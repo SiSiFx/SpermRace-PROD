@@ -1,5 +1,6 @@
 // @ts-nocheck
 import * as PIXI from 'pixi.js';
+import GameEffects from './GameEffects';
 import { startSpermBackground, stopSpermBackground } from './spermBackground';
 import type { PlayerInput, GameStateUpdateMessage, TrailPoint } from 'shared';
 import { VersionedTransaction, Connection } from '@solana/web3.js';
@@ -91,6 +92,16 @@ let cachedWorldSize: { w: number; h: number } | null = null;
 type Puff = { g: PIXI.Graphics; vx: number; vy: number; life: number; maxLife: number };
 let exhaustPuffs: Puff[] = [];
 let screenLayer: PIXI.Container;
+let dangerTexture: PIXI.Texture | null = null;
+let dangerTop: PIXI.TilingSprite | null = null;
+let dangerBottom: PIXI.TilingSprite | null = null;
+let dangerLeft: PIXI.TilingSprite | null = null;
+let dangerRight: PIXI.TilingSprite | null = null;
+let arenaBorder: PIXI.Graphics | null = null;
+let arenaGrid: PIXI.Graphics | null = null;
+let lastWorldWidth: number | null = null;
+let zoneWarningTriggered = false;
+let gameEffects: GameEffects | null = null;
 // Camera zoom state
 let cameraZoom = 1.0;
 let targetZoom = 1.0;
@@ -634,6 +645,14 @@ async function initializeGame(): Promise<void> {
   app.stage.addChild(rootContainer);
   rootContainer.addChild(worldContainer);
   app.stage.addChild(screenLayer);
+  // Reset arena caches and VFX helpers
+  cachedWorldSize = null;
+  lastWorldWidth = null;
+  zoneWarningTriggered = false;
+  dangerTop = dangerBottom = dangerLeft = dangerRight = null;
+  arenaBorder = arenaGrid = null;
+  // Instantiate game effects for screen glitches and warnings
+  gameEffects = new GameEffects(worldContainer);
   // Generate shared textures used by player sprites and trail ropes
   generateSpermTexture(app);
   generateTrailTexture(app);
@@ -1161,6 +1180,25 @@ function renderGame(gameState: GameStateUpdateMessage['payload']): void {
   
   // Draw arena boundaries
   drawArena(world);
+  // Heartbeat haptics: pulse when the nearest enemy is very close
+  try {
+    const me = players.find(p => p.id === state.playerId && p.isAlive);
+    if (me && typeof navigator !== 'undefined' && (navigator as any).vibrate) {
+      let nearest = Infinity;
+      for (const p of players) {
+        if (!p.isAlive || p.id === me.id) continue;
+        const dx = p.sperm.position.x - me.sperm.position.x;
+        const dy = p.sperm.position.y - me.sperm.position.y;
+        const d = Math.hypot(dx, dy);
+        if (d < nearest) nearest = d;
+      }
+      const now = Date.now();
+      if (nearest < 300 && (now - lastHeartbeatVibrationAt) >= 500) {
+        try { navigator.vibrate?.([5, 50]); } catch {}
+        lastHeartbeatVibrationAt = now;
+      }
+    }
+  } catch {}
 
   // Heartbeat haptics: pulse when the nearest enemy is very close
   try {
@@ -1248,29 +1286,132 @@ function renderInterpolated(gameState: GameStateUpdateMessage['payload']): void 
   renderGame(gameState);
 }
 
+// Create a cached "biohazard" danger texture used for the void outside the arena
+function createDangerTexture(_app: PIXI.Application): void {
+  if (dangerTexture) return;
+  try {
+    if (typeof document === 'undefined') {
+      dangerTexture = PIXI.Texture.WHITE;
+      return;
+    }
+    const size = 64;
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      dangerTexture = PIXI.Texture.WHITE;
+      return;
+    }
+
+    // Dark red background
+    ctx.fillStyle = '#190009';
+    ctx.fillRect(0, 0, size, size);
+
+    // Diagonal hazard stripes
+    ctx.fillStyle = '#ff2745';
+    const stripeWidth = 10;
+    for (let offset = -size; offset < size * 2; offset += stripeWidth * 2) {
+      ctx.beginPath();
+      ctx.moveTo(offset, 0);
+      ctx.lineTo(offset + stripeWidth, 0);
+      ctx.lineTo(offset + stripeWidth + size, size);
+      ctx.lineTo(offset + size, size);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    dangerTexture = PIXI.Texture.from(canvas);
+  } catch {
+    dangerTexture = PIXI.Texture.WHITE;
+  }
+}
+
 function drawArena(world: { width: number; height: number }): void {
-  // Redraw only if world size changed
-  if (cachedWorldSize && cachedWorldSize.w === world.width && cachedWorldSize.h === world.height) return;
-  arenaLayer.removeChildren();
+  if (!arenaLayer) return;
+
+  const prevWidth = cachedWorldSize?.w ?? null;
+  const worldChanged = !cachedWorldSize || cachedWorldSize.w !== world.width || cachedWorldSize.h !== world.height;
   cachedWorldSize = { w: world.width, h: world.height };
 
-  // Neon border (cyan theme)
-  const border = new PIXI.Graphics();
-  border.rect(0, 0, world.width, world.height);
-  border.stroke({ width: 3, color: 0x00d4ff, alpha: 0.95 });
-  arenaLayer.addChild(border);
+  // Detect shrink: current width smaller than previous
+  const shrinkingNow = prevWidth !== null && world.width < prevWidth;
+  lastWorldWidth = world.width;
 
-  // Neon grid lines every 200px
-  const grid = new PIXI.Graphics();
-  grid.stroke({ width: 1, color: 0x0a6ea6, alpha: 0.35 });
-  for (let x = 200; x < world.width; x += 200) {
-    grid.moveTo(x, 0); grid.lineTo(x, world.height);
+  // Danger pattern texture (cached)
+  if (!dangerTexture) {
+    createDangerTexture(app);
   }
-  for (let y = 200; y < world.height; y += 200) {
-    grid.moveTo(0, y); grid.lineTo(world.width, y);
+
+  // Lazily create void sprites and arena primitives
+  if (!dangerTop || !dangerBottom || !dangerLeft || !dangerRight) {
+    dangerTop = new PIXI.TilingSprite({ texture: dangerTexture || PIXI.Texture.WHITE, width: 1, height: 1 });
+    dangerBottom = new PIXI.TilingSprite({ texture: dangerTexture || PIXI.Texture.WHITE, width: 1, height: 1 });
+    dangerLeft = new PIXI.TilingSprite({ texture: dangerTexture || PIXI.Texture.WHITE, width: 1, height: 1 });
+    dangerRight = new PIXI.TilingSprite({ texture: dangerTexture || PIXI.Texture.WHITE, width: 1, height: 1 });
+    arenaBorder = new PIXI.Graphics();
+    arenaGrid = new PIXI.Graphics();
+    arenaLayer.addChild(dangerTop, dangerBottom, dangerLeft, dangerRight, arenaBorder, arenaGrid);
   }
-  grid.stroke({ width: 1, color: 0x0aa67a, alpha: 0.35 });
-  arenaLayer.addChild(grid);
+
+  // Layout danger "void" around the safe world rectangle
+  const pad = Math.max(800, Math.max(world.width, world.height));
+  const totalWidth = world.width + pad * 2;
+
+  if (dangerTop && dangerBottom && dangerLeft && dangerRight) {
+    // Top strip
+    dangerTop.x = -pad;
+    dangerTop.y = -pad;
+    dangerTop.width = totalWidth;
+    dangerTop.height = pad;
+
+    // Bottom strip
+    dangerBottom.x = -pad;
+    dangerBottom.y = world.height;
+    dangerBottom.width = totalWidth;
+    dangerBottom.height = pad;
+
+    // Left strip
+    dangerLeft.x = -pad;
+    dangerLeft.y = 0;
+    dangerLeft.width = pad;
+    dangerLeft.height = world.height;
+
+    // Right strip
+    dangerRight.x = world.width;
+    dangerRight.y = 0;
+    dangerRight.width = pad;
+    dangerRight.height = world.height;
+  }
+
+  // Arena border with dynamic color/alpha when shrinking
+  if (arenaBorder) {
+    arenaBorder.clear();
+    const borderColor = shrinkingNow ? 0xff4444 : 0x00d4ff;
+    const alpha = shrinkingNow
+      ? 0.5 + Math.sin(Date.now() / 200) * 0.5
+      : 0.95;
+    arenaBorder.rect(0, 0, world.width, world.height);
+    arenaBorder.stroke({ width: 3, color: borderColor, alpha });
+  }
+
+  // Grid only needs to be recomputed when size changes
+  if (arenaGrid && worldChanged) {
+    arenaGrid.clear();
+    arenaGrid.stroke({ width: 1, color: 0x0a6ea6, alpha: 0.35 });
+    for (let x = 200; x < world.width; x += 200) {
+      arenaGrid.moveTo(x, 0); arenaGrid.lineTo(x, world.height);
+    }
+    for (let y = 200; y < world.height; y += 200) {
+      arenaGrid.moveTo(0, y); arenaGrid.lineTo(world.width, y);
+    }
+    arenaGrid.stroke({ width: 1, color: 0x0aa67a, alpha: 0.35 });
+  }
+
+  // Trigger cinematic zone warning only once when shrink begins
+  if (shrinkingNow && !zoneWarningTriggered && gameEffects) {
+    try { gameEffects.showZoneWarning(1); } catch {}
+    zoneWarningTriggered = true;
+  }
 }
 
 function ensurePlayerGroup(id: string): PlayerRenderGroup {
