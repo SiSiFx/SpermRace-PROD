@@ -17,18 +17,18 @@
   /* 💎 PREMIUM OBSIDIAN PALETTE */
   
   /* Backgrounds - Rich & Deep */
-  --bg-primary: #030305;    /* Almost pure black */
+  --bg-primary: #030305;    /* Obsidian */
   --bg-secondary: #0E0E12;  /* Deep Charcoal */
-  --bg-glass: rgba(20, 20, 25, 0.6);
-  --bg-glass-hover: rgba(255, 255, 255, 0.03); 
+  --bg-glass: rgba(255, 255, 255, 0.03); /* Subtle frost layer */
+  --bg-glass-hover: rgba(255, 255, 255, 0.06);
   
   /* Borders - Fine & Precise */
-  --border-dim: rgba(255, 255, 255, 0.08);
-  --border-bright: rgba(255, 255, 255, 0.15);
+  --border-dim: rgba(255, 255, 255, 0.10);
+  --border-bright: rgba(255, 255, 255, 0.18);
   
   /* Accents */
   --primary: #FFFFFF;       /* Pure White */
-  --accent: #00F0FF;        /* Electric Cyan */
+  --accent: #00F0FF;        /* Electric Cyan (active states only) */
   --gold: #FFD700;          /* Winner state */
   --danger: #FF2E55;        /* Red */
 
@@ -239,8 +239,8 @@ html, body {
   width: 100%;
   height: 100%;
   background-image: 
-    linear-gradient(rgba(0, 212, 255, 0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 212, 255, 0.02) 1px, transparent 1px);
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
   background-size: 60px 60px;
   z-index: 0;
 }
@@ -315,7 +315,7 @@ html, body {
 }
 
 .feature-chip:hover {
-  background: var(--bg-card);
+  background: var(--bg-secondary);
   border-color: var(--border-bright);
   transform: translateY(-2px);
 }
@@ -517,18 +517,18 @@ html, body {
   gap: 20px;
   padding: 24px;
   width: 100%;
-  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  background: var(--bg-secondary);
   border: none;
   border-radius: var(--radius);
   cursor: pointer;
   transition: var(--transition);
   text-align: left;
-  box-shadow: 0 8px 32px rgba(0, 212, 255, 0.3);
+  box-shadow: var(--shadow-premium);
 }
 
 .wallet-connect-btn:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 12px 48px rgba(0, 212, 255, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.9);
 }
 
 .wallet-connect-btn:active {
@@ -620,19 +620,19 @@ html, body {
 }
 
 .mode-card:hover {
-  background: var(--bg-tertiary);
+  background: var(--bg-secondary);
   border-color: var(--border-bright);
   transform: translateY(-4px);
 }
 
 .mode-card.featured {
-  border-color: var(--primary);
-  background: linear-gradient(135deg, rgba(0, 212, 255, 0.1) 0%, var(--bg-glass) 100%);
+  border-color: var(--accent);
+  background: var(--bg-secondary);
 }
 
 .mode-card.selected {
-  border-color: var(--primary);
-  background: var(--bg-tertiary);
+  border-color: var(--accent);
+  background: var(--bg-secondary);
 }
 
 .mode-header {
@@ -714,8 +714,8 @@ html, body {
   top: 12px;
   right: -10px;
   transform: rotate(15deg);
-  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-  color: var(--bg-primary);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
   padding: 4px 10px;
   font-size: 0.7rem;
   font-weight: 700;
@@ -818,23 +818,23 @@ html, body {
 }
 
 .bronze-btn {
-  background: linear-gradient(135deg, #cd7f32, #b8722d);
-  color: white;
+  background: #3a2a12;
+  color: var(--primary);
 }
 
 .silver-btn {
-  background: linear-gradient(135deg, #c0c0c0, #a8a8a8);
-  color: var(--bg-primary);
+  background: #3b3b3f;
+  color: var(--primary);
 }
 
 .gold-btn {
-  background: linear-gradient(135deg, #ffd700, #e6c200);
-  color: var(--bg-primary);
+  background: #4a3a14;
+  color: var(--primary);
 }
 
 .diamond-btn {
-  background: linear-gradient(135deg, #b9f2ff, #00d4ff);
-  color: var(--bg-primary);
+  background: #12333a;
+  color: var(--primary);
 }
 
 .tournament-join-btn:hover {
@@ -843,7 +843,7 @@ html, body {
 }
 
 .tournament-info {
-  background: var(--bg-tertiary);
+  background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 16px;
@@ -1456,7 +1456,7 @@ button:focus-visible, a:focus-visible, .wallet-connect-btn:focus-visible, .tourn
 }
 
 .modal-card {
-  background: var(--bg-card);
+  background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 40px;
