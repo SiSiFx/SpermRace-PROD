@@ -17,7 +17,7 @@ const TRAIL_CONSTANTS = {
 const BOOST = {
   MULTIPLIER: 1.8,          // Slightly stronger boost
   DURATION_MS: 1400,        // Longer boost duration
-  COOLDOWN_MS: 2500,        // Faster cooldown for more dynamic gameplay
+  COOLDOWN_MS: 1200,        // Lunge rhythm cooldown (1.2s)
   TRAIL_LIFETIME_BONUS_MS: 1500,
   ENERGY_MAX: 100,
   ENERGY_REGEN_PER_S: 28,     // Faster regen when not boosting
@@ -52,6 +52,8 @@ export class PlayerEntity implements Player {
   private wasBoosting: boolean = false;
   // Current arena shrink factor (1..0.5); provided by GameWorld each tick
   private shrinkFactor: number = 1;
+  // Temporary speed multiplier from schooling (1..1.2)
+  private speedMultiplier: number = 1;
 
   constructor(id: string, spawnPosition: Vector2) {
     this.id = id;
@@ -96,6 +98,8 @@ export class PlayerEntity implements Player {
     // Sync shrink factor from GameWorld for trail lifetime logic
     this.shrinkFactor = shrinkFactor;
 
+    const drifting = !!this.input.drift;
+
     // --- 1. Smoothly Interpolate Angle (speed-scaled) ---
     let angleDiff = this.targetAngle - this.sperm.angle;
     while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
@@ -103,7 +107,8 @@ export class PlayerEntity implements Player {
     const speed = Math.hypot(this.sperm.velocity.x, this.sperm.velocity.y);
     const turnScale = 1 / (1 + (speed / (PHYSICS_CONSTANTS.MAX_SPEED)) * PHYSICS_CONSTANTS.SPEED_TURN_SCALE);
     const lowSpeedFactor = 1 + PHYSICS_CONSTANTS.LOW_SPEED_TURN_BONUS * (1 - Math.min(1, speed / PHYSICS_CONSTANTS.MAX_SPEED));
-    const desiredChange = angleDiff * PHYSICS_CONSTANTS.TURN_SPEED * turnScale * lowSpeedFactor * deltaTime;
+    const turnSpeed = PHYSICS_CONSTANTS.TURN_SPEED * (drifting ? 2.5 : 1);
+    const desiredChange = angleDiff * turnSpeed * turnScale * lowSpeedFactor * deltaTime;
     const maxChange = PHYSICS_CONSTANTS.MAX_TURN_RATE_RAD_PER_S * deltaTime;
     const appliedChange = Math.max(-maxChange, Math.min(maxChange, desiredChange));
     this.sperm.angle += appliedChange;
@@ -126,16 +131,19 @@ export class PlayerEntity implements Player {
     // Decompose velocity into forward (longitudinal) and sideways (lateral)
     const vForward = this.sperm.velocity.x * headingX + this.sperm.velocity.y * headingY;
     const vSide = -this.sperm.velocity.x * headingY + this.sperm.velocity.y * headingX;
-    const vForwardAfter = vForward * PHYSICS_CONSTANTS.LONGITUDINAL_DRAG;
-    const vSideAfter = vSide * PHYSICS_CONSTANTS.LATERAL_DRAG;
+    const longitudinalDrag = drifting ? 0.92 : PHYSICS_CONSTANTS.LONGITUDINAL_DRAG;
+    const lateralDrag = drifting ? 0.92 : PHYSICS_CONSTANTS.LATERAL_DRAG;
+    const vForwardAfter = vForward * longitudinalDrag;
+    const vSideAfter = vSide * lateralDrag;
     // Recompose
     this.sperm.velocity.x = vForwardAfter * headingX - vSideAfter * headingY;
     this.sperm.velocity.y = vForwardAfter * headingY + vSideAfter * headingX;
 
     // --- 4. Clamp to Max Speed (recompute after accel/drag) ---
     const speedNow = Math.hypot(this.sperm.velocity.x, this.sperm.velocity.y);
-    if (speedNow > PHYSICS_CONSTANTS.MAX_SPEED) {
-      const ratio = PHYSICS_CONSTANTS.MAX_SPEED / speedNow;
+    const maxSpeed = PHYSICS_CONSTANTS.MAX_SPEED * (this.speedMultiplier || 1);
+    if (speedNow > maxSpeed) {
+      const ratio = maxSpeed / speedNow;
       this.sperm.velocity.x *= ratio;
       this.sperm.velocity.y *= ratio;
     }
@@ -233,12 +241,41 @@ export class PlayerEntity implements Player {
   tryActivateBoost(): void {
     const now = Date.now();
     if (now < this.nextBoostAvailableAt) return;
-    if (this.boostEnergy < BOOST.MIN_START_ENERGY) return;
-    // Cap boost duration by available energy
-    const possibleMs = Math.floor((this.boostEnergy / BOOST.ENERGY_CONSUME_PER_S) * 1000);
-    const durationMs = Math.max(0, Math.min(BOOST.DURATION_MS, possibleMs));
-    if (durationMs <= 0) return;
-    this.boostUntil = now + durationMs;
+    const COST = 30;
+    if (this.boostEnergy < COST) return;
+
+    // Spend energy upfront
+    this.boostEnergy = Math.max(0, this.boostEnergy - COST);
+
+    // Apply instantaneous lunge impulse in facing direction
+    const impulse = 600;
+    const vxImpulse = Math.cos(this.sperm.angle) * impulse;
+    const vyImpulse = Math.sin(this.sperm.angle) * impulse;
+    this.sperm.velocity.x += vxImpulse;
+    this.sperm.velocity.y += vyImpulse;
+
+    // Set lunge rhythm cooldown
     this.nextBoostAvailableAt = now + BOOST.COOLDOWN_MS;
+  }
+
+  /** Temporary per-tick schooling buff: 1.0 (none) to 1.2 (max). */
+  setSpeedMultiplier(multiplier: number): void {
+    // Clamp to sane bounds to avoid exploits
+    const clamped = Math.max(0.5, Math.min(1.2, multiplier || 1));
+    this.speedMultiplier = clamped;
+  }
+
+  /** Apply rewards for absorbing a DNA fragment. */
+  absorbDNA(): void {
+    // Refill 25% of the boost tank instantly
+    const bonusEnergy = BOOST.ENERGY_MAX * 0.25;
+    this.boostEnergy = Math.min(BOOST.ENERGY_MAX, this.boostEnergy + bonusEnergy);
+
+    // Reduce remaining boost cooldown slightly to reward aggressive play
+    const now = Date.now();
+    if (this.nextBoostAvailableAt > now) {
+      const REDUCTION_MS = 500;
+      this.nextBoostAvailableAt = Math.max(now, this.nextBoostAvailableAt - REDUCTION_MS);
+    }
   }
 }

@@ -1,8 +1,8 @@
-import { GameState, PlayerInput, EntryFeeTier, Player } from 'shared';
+import { GameState, PlayerInput, EntryFeeTier, Player, GameItem } from 'shared';
 import { PlayerEntity } from './Player.js';
 import { CollisionSystem } from './CollisionSystem.js';
 import { SmartContractService } from './SmartContractService.js';
-import { WORLD as S_WORLD, TICK as S_TICK } from 'shared/dist/constants.js';
+import { WORLD as S_WORLD, TICK as S_TICK, COLLISION as S_COLLISION } from 'shared/dist/constants.js';
 import { v4 as uuidv4 } from 'uuid';
 
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -15,6 +15,14 @@ const WORLD_WIDTH = S_WORLD.WIDTH; // SYNCED WITH CLIENT gameConstants.ts
 const WORLD_HEIGHT = S_WORLD.HEIGHT; // SYNCED WITH CLIENT gameConstants.ts
 const ARENA_SHRINK_START_S = S_WORLD.ARENA_SHRINK_START_S; // start shrink near mid-game per plan pacing
 const ARENA_SHRINK_DURATION_S = S_WORLD.ARENA_SHRINK_DURATION_S; // shrink over 90s to 50%
+
+// Apex Predator DNA fragment settings
+const MAX_DNA_ON_MAP = 20;
+const DNA_RESPAWN_RATE_MS = 2000;
+const DNA_WALL_MARGIN = 200;
+const SPERM_COLLISION_RADIUS = S_COLLISION.SPERM_COLLISION_RADIUS;
+const DNA_ITEM_RADIUS = 10;
+const DNA_PICKUP_RADIUS = SPERM_COLLISION_RADIUS + DNA_ITEM_RADIUS;
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 // GameWorld Class
@@ -32,6 +40,8 @@ export class GameWorld {
   private roundStartedAtMs: number | null = null;
   private shrinkFactor: number = 1; // 1..0.5
   private lastDevAliveLogMs: number = 0;
+  private items: Map<string, GameItem> = new Map();
+  private lastItemSpawnTime: number = 0;
   public onPlayerEliminated: ((playerId: string) => void) | null = null;
   public onRoundEnd: ((winnerId: string, prizeAmountSol: number, payoutSignature?: string) => void) | null = null;
 
@@ -50,6 +60,7 @@ export class GameWorld {
         width: WORLD_WIDTH,
         height: WORLD_HEIGHT,
       },
+      items: {},
     };
   }
 
@@ -81,8 +92,15 @@ export class GameWorld {
 
   startRound(players: string[], entryFee: EntryFeeTier): void {
     this.players.clear();
+    this.items.clear();
+    this.lastItemSpawnTime = 0;
     this.currentLobby = { players, entryFee };
     players.forEach(playerId => this.spawnPlayer(playerId));
+    // Spawn an initial batch of DNA fragments to seed the map
+    for (let i = 0; i < 10 && this.items.size < MAX_DNA_ON_MAP; i++) {
+      this.spawnDNA();
+    }
+    this.lastItemSpawnTime = Date.now();
     this.gameState.status = 'in_progress';
     this.syncGameState();
     console.log(`🏁 Fertilization race started with ${players.length} spermatozoa. Entry fee: ${entryFee} USD.`);
@@ -142,6 +160,45 @@ export class GameWorld {
     if (this.gameState.status !== 'in_progress') return;
 
     const deltaTime = TICK_INTERVAL / 1000; // in seconds
+
+    // 0. Schooling (flocking buff) - compute per-player speed multipliers before physics
+    const playersArray = Array.from(this.players.values());
+    const count = playersArray.length;
+    const SCHOOL_RADIUS = 300;
+    const SCHOOL_RADIUS_SQ = SCHOOL_RADIUS * SCHOOL_RADIUS;
+    const ANGLE_THRESHOLD = 0.5; // radians
+    const neighborCounts: number[] = new Array(count).fill(0);
+
+    for (let i = 0; i < count; i++) {
+      const p1 = playersArray[i];
+      if (!p1.isAlive) continue;
+      const pos1 = p1.sperm.position;
+      const angle1 = p1.sperm.angle;
+      for (let j = i + 1; j < count; j++) {
+        const p2 = playersArray[j];
+        if (!p2.isAlive) continue;
+        const pos2 = p2.sperm.position;
+        const dx = pos1.x - pos2.x;
+        const dy = pos1.y - pos2.y;
+        const distSq = dx * dx + dy * dy;
+        if (distSq > SCHOOL_RADIUS_SQ) continue;
+        const angle2 = p2.sperm.angle;
+        const rawDiff = angle1 - angle2;
+        const angleDiff = Math.abs(Math.atan2(Math.sin(rawDiff), Math.cos(rawDiff)));
+        if (angleDiff < ANGLE_THRESHOLD) {
+          neighborCounts[i]++;
+          neighborCounts[j]++;
+        }
+      }
+    }
+
+    for (let i = 0; i < count; i++) {
+      const p = playersArray[i];
+      const neighbors = neighborCounts[i];
+      const bonusSteps = Math.min(neighbors, 4); // max +20%
+      const multiplier = 1 + bonusSteps * 0.05;
+      p.setSpeedMultiplier(multiplier);
+    }
 
     // 1. Update all players (pass shrink factor for trail lifetime logic)
     this.players.forEach(player => {
@@ -206,8 +263,34 @@ export class GameWorld {
         this.gameState.world.height = newH;
       }
     }
+    
+    // 5. Apex Predator DNA spawning (server-authoritative)
+    const nowMs = Date.now();
+    if (nowMs - this.lastItemSpawnTime >= DNA_RESPAWN_RATE_MS && this.items.size < MAX_DNA_ON_MAP) {
+      this.spawnDNA();
+      this.lastItemSpawnTime = nowMs;
+    }
 
-    // 5. Sync game state for broadcasting
+    // 6. DNA pickup detection
+    if (this.items.size > 0) {
+      const pickupRadiusSq = DNA_PICKUP_RADIUS * DNA_PICKUP_RADIUS;
+      this.players.forEach(player => {
+        if (!player.isAlive) return;
+        const px = player.sperm.position.x;
+        const py = player.sperm.position.y;
+        for (const [id, item] of this.items) {
+          const dx = px - item.x;
+          const dy = py - item.y;
+          if ((dx * dx + dy * dy) <= pickupRadiusSq) {
+            player.absorbDNA();
+            this.items.delete(id);
+            break;
+          }
+        }
+      });
+    }
+
+    // 7. Sync game state for broadcasting
     this.syncGameState();
   }
 
@@ -228,6 +311,27 @@ export class GameWorld {
       const boost = (input as any)?.boost as boolean | undefined;
       if (boost) player.tryActivateBoost();
     }
+  }
+
+  /** Spawn a single DNA fragment somewhere within the current world bounds. */
+  private spawnDNA(): void {
+    if (this.items.size >= MAX_DNA_ON_MAP) return;
+
+    const width = this.gameState.world.width || WORLD_WIDTH;
+    const height = this.gameState.world.height || WORLD_HEIGHT;
+    const margin = DNA_WALL_MARGIN;
+    const x = margin + Math.random() * Math.max(0, width - margin * 2);
+    const y = margin + Math.random() * Math.max(0, height - margin * 2);
+    const id = uuidv4();
+
+    const item: GameItem = {
+      id,
+      type: 'dna',
+      x,
+      y,
+    };
+
+    this.items.set(id, item);
   }
 
   private spawnPlayer(playerId: string): void {
@@ -262,5 +366,11 @@ export class GameWorld {
       };
     });
     this.gameState.players = newPlayersState;
+
+    const itemsState: Record<string, GameItem> = {};
+    this.items.forEach((item, id) => {
+      itemsState[id] = item;
+    });
+    this.gameState.items = itemsState;
   }
 }

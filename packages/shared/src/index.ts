@@ -14,6 +14,8 @@ export interface PlayerInput {
   accelerate: boolean;
   /** Optional momentary boost input */
   boost?: boolean;
+  /** Optional drift/brake input for tighter turning */
+  drift?: boolean;
 }
 
 /** Represents the physical state of a spermatozoide. */
@@ -30,6 +32,14 @@ export interface TrailPoint extends Vector2 {
   expiresAt: number; // timestamp
   /** Optional creation timestamp for time-based collision fairness. */
   createdAt?: number;
+}
+
+/** A collectible item present in the game world. */
+export interface GameItem {
+  id: string;
+  type: 'dna';
+  x: number;
+  y: number;
 }
 
 /** Represents a player in the game. */
@@ -55,6 +65,7 @@ export interface GameState {
     width: number;
     height: number;
   };
+  items: Record<string, GameItem>;
 }
 
 /** Represents the entry fee tiers in USD. */
