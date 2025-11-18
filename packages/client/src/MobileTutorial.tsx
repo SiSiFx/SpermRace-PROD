@@ -50,7 +50,10 @@ export function MobileTutorial({ countdown, onComplete }: MobileTutorialProps) {
   return (
     <div className="mobile-tutorial-overlay compact">
       <div className="tutorial-reminder">
-        <div className="reminder-text">{tip}</div>
+        <div className="reminder-text">
+          <span style={{ marginRight: 6 }}>🧬</span>
+          <span>{tip}</span>
+        </div>
       </div>
     </div>
   );
