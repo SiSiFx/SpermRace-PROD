@@ -455,6 +455,8 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
             <button className="mobile-btn-back" onClick={onBack}>← Back</button>
           </div>
         </div>
+        {/* Practice: show quick tips as slide during lobby countdown */}
+        <MobileTutorial countdown={countdown} context="practice" />
       </div>
     );
   }
@@ -495,7 +497,8 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
           canBoost={true}
           boostCooldownPct={1}
         />
-        <MobileTutorial countdown={gameCountdown} />
+        {/* Practice: continue quick tips during pre-start countdown */}
+        <MobileTutorial countdown={gameCountdown} context="practice" />
       </div>
     );
   }
