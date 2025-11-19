@@ -42,6 +42,12 @@
 }
 
 /* PC Landing */
+.pc-landing {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+}
+
 .pc-landing .landing-container {
   max-width: 1200px;
   padding: 60px 40px;

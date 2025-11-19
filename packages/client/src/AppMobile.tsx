@@ -297,6 +297,12 @@ function Landing({
   onLeaderboard,
 }: LandingProps) {
 
+  const [joinApi, setJoinApi] = useState<
+    { joinTier: (usd: number) => void; busy: boolean; disabled: boolean } | null
+  >(null);
+
+  const canEnterTournament = !!joinApi && !joinApi.busy && !joinApi.disabled;
+
   return (
     <div className="screen active mobile-landing" id="landing-screen">
       <div
@@ -370,7 +376,49 @@ function Landing({
         </header>
 
         <main>
-          <Modes />
+          <section
+            style={{
+              marginTop: 18,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+            }}
+          >
+            <button
+              type="button"
+              className="mobile-cta-primary"
+              disabled={!canEnterTournament}
+              onClick={() => {
+                if (!canEnterTournament || !joinApi) return;
+                joinApi.joinTier(1);
+              }}
+            >
+              <span className="icon">🏆</span>
+              <span>Enter $1 Micro Race</span>
+            </button>
+
+            <button
+              type="button"
+              className="mobile-btn-secondary"
+              onClick={onPractice}
+            >
+              <span className="icon">🎮</span>
+              <span>Practice (Free)</span>
+            </button>
+          </section>
+
+          <div
+            style={{
+              marginTop: 6,
+              fontSize: 10,
+              textAlign: 'center',
+              color: 'rgba(148,163,184,0.7)',
+            }}
+          >
+            Tap a tier below for higher stakes. No gas until your match is locked.
+          </div>
+
+          <Modes exposeJoin={setJoinApi} />
         </main>
 
         <footer

@@ -35,7 +35,17 @@ const TIERS: Tier[] = [
   { id: 'championship', name: 'Championship', usd: 100, maxPlayers: 16, duration: '5–8 min' },
 ];
 
-function Modes() {
+type ExposedJoinApi = {
+  joinTier: (usd: number) => void;
+  busy: boolean;
+  disabled: boolean;
+};
+
+type ModesProps = {
+  exposeJoin?: (api: ExposedJoinApi) => void;
+};
+
+function Modes({ exposeJoin }: ModesProps = {}) {
   const { publicKey, connect } = useWallet() as any;
   const { connectAndJoin, state: wsState } = useWs() as any;
   const [isJoining, setIsJoining] = useState(false);
@@ -75,6 +85,17 @@ function Modes() {
 
   const busy =
     isJoining || wsState.phase === 'connecting' || wsState.phase === 'authenticating';
+
+  useEffect(() => {
+    if (!exposeJoin) return;
+    exposeJoin({
+      joinTier: (usd: number) => {
+        void handleJoin(usd);
+      },
+      busy,
+      disabled: globalDisabled,
+    });
+  }, [exposeJoin, busy, globalDisabled]);
 
   const handleJoin = async (tierUsd: number) => {
     if (globalDisabled) return;

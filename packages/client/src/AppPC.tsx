@@ -425,6 +425,12 @@ function Landing({
   onLeaderboard,
 }: LandingProps) {
 
+  const [joinApi, setJoinApi] = useState<
+    { joinTier: (usd: number) => void; busy: boolean; disabled: boolean } | null
+  >(null);
+
+  const canEnterTournament = !!joinApi && !joinApi.busy && !joinApi.disabled;
+
   return (
     <div className="screen active pc-landing" id="landing-screen">
       <div
@@ -499,7 +505,60 @@ function Landing({
         </header>
 
         <main>
-          <Modes />
+          {/* Primary CTA row above the modes grid */}
+          <section
+            style={{
+              marginTop: 24,
+              display: 'flex',
+              justifyContent: 'center',
+              gap: 12,
+              flexWrap: 'wrap',
+            }}
+          >
+            <button
+              type="button"
+              className="cta-primary"
+              disabled={!canEnterTournament}
+              style={{
+                minWidth: 260,
+                position: 'relative',
+              }}
+              onClick={() => {
+                if (!canEnterTournament || !joinApi) return;
+                joinApi.joinTier(1); // default to $1 Micro Race
+              }}
+            >
+              <span className="cta-text">Enter $1 Micro Race</span>
+              <div className="cta-glow" />
+            </button>
+
+            <button
+              type="button"
+              className="btn-secondary"
+              style={{
+                padding: '10px 18px',
+                fontSize: 12,
+                textTransform: 'uppercase',
+                letterSpacing: '0.14em',
+              }}
+              onClick={onPractice}
+            >
+              Practice (Free)
+            </button>
+          </section>
+
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: 11,
+              textAlign: 'center',
+              color: 'rgba(148,163,184,0.7)',
+            }}
+          >
+            Single-elimination arena. No gas until match entry is confirmed.
+          </div>
+
+          <Modes exposeJoin={setJoinApi} />
         </main>
 
         <footer

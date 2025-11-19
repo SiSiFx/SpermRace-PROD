@@ -39,6 +39,7 @@
 		"mcp:svelte": "pnpm dlx @sveltejs/mcp --config mcp.config.json"
 	},
 	"devDependencies": {
+		"@playwright/test": "1.56.1",
 		"@sveltejs/mcp": "^0.1.0",
 		"concurrently": "^8.2.2",
 		"cross-env": "^7.0.3",
