@@ -499,7 +499,7 @@ function Landing({
         </header>
 
         <main>
-          {/* Hero CTAs: free practice and paid tournaments */}
+          {/* Hero CTAs: emphasize paid tournaments while keeping free option visible */}
           <section
             style={{
               marginTop: 24,
@@ -513,9 +513,9 @@ function Landing({
               type="button"
               className="cta-primary"
               style={{ minWidth: 260, position: 'relative' }}
-              onClick={onPractice}
+              onClick={() => onTournament?.()}
             >
-              <span className="cta-text">Race for Free</span>
+              <span className="cta-text">Play for SOL (from $1)</span>
               <div className="cta-glow" />
             </button>
 
@@ -528,9 +528,9 @@ function Landing({
                 textTransform: 'uppercase',
                 letterSpacing: '0.14em',
               }}
-              onClick={() => onTournament?.()}
+              onClick={onPractice}
             >
-              Play for SOL (from $1)
+              Race for Free
             </button>
           </section>
 

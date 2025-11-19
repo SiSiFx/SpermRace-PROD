@@ -381,19 +381,19 @@ function Landing({
             <button
               type="button"
               className="mobile-cta-primary"
-              onClick={onPractice}
+              onClick={() => onTournament?.()}
             >
-              <span className="icon">🎮</span>
-              <span>Race for Free</span>
+              <span className="icon">🏆</span>
+              <span>Play for SOL (from $1)</span>
             </button>
 
             <button
               type="button"
               className="mobile-btn-secondary"
-              onClick={() => onTournament?.()}
+              onClick={onPractice}
             >
-              <span className="icon">🏆</span>
-              <span>Play for SOL (from $1)</span>
+              <span className="icon">🎮</span>
+              <span>Race for Free</span>
             </button>
           </section>
 
