@@ -168,7 +168,64 @@ class SpermRaceGame {
   public boostPadsContainer!: PIXI.Container;
   public solanaTexture!: PIXI.Texture;
   public radar!: HTMLCanvasElement;
+  public radarCtx!: CanvasRenderingContext2D;
   public gameEffects!: GameEffects; // Instantiated in setupWorld
+
+  private container: HTMLElement;
+  private cleanupFunctions: (() => void)[] = [];
+  private combatHotspots: Hotspot[] = [];
+  private hotspotSchedule: Array<{ triggerMs: number; triggered: boolean }> = [];
+  private finalSurgeBannerShown: boolean = false;
+  private lastSpotlightPingAt: number = 0;
+  private overdriveBannerEl: HTMLDivElement | null = null;
+  private hotspotToastEl: HTMLDivElement | null = null;
+  private hotspotToastTimeout: number | undefined;
+  private finalSurgeTimeout: number | undefined;
+
+  // Theme colors loaded from CSS variables
+  private theme = {
+    accent: 0x22d3ee,
+    grid: 0x2a2f38,
+    gridAlpha: 0.08,
+    border: 0x22d3ee,
+    borderAlpha: 0.26,
+    enemy: 0xff00ff,
+    enemyGlow: 0xff6666,
+    text: '#c7d2de'
+  } as any;
+
+  // Visual toggles
+  public smallTailEnabled: boolean = false; // disable near-head tail; keep only big gameplay trail
+
+  // Battle Royale & Sonar system
+  public radarPings: RadarPing[] = [];
+  public echoPings: RadarPing[] = [];
+  public alivePlayers: number = 0;
+  public gamePhase: 'waiting' | 'active' | 'finished' = 'active';
+  public gameStartTime: number = Date.now();
+  public pickupsUnlocked: boolean = false;
+  public artifactsUnlocked: boolean = false;
+  // Pacing: powerups phase in early/mid game (measured from gameStartTime, includes pre-start countdown)
+  public unlockPickupsAfterMs: number = 18000;
+  public unlockArtifactsAfterMs: number = 12000;
+
+  // Round-based tournament system
+  public currentRound: number = 1;
+  public totalRounds: number = 3;
+  public roundWins: number = 0;
+  public roundLosses: number = 0;
+  public roundInProgress: boolean = false;
+  public roundEndTime: number = 0;
+
+  // UI container for game elements
+  public uiContainer!: HTMLDivElement;
+  public leaderboardContainer!: HTMLDivElement;
+  public killFeedContainer!: HTMLDivElement;
+
+  // Callbacks for navigation
+  public onReplay?: () => void;
+  public onExit?: () => void;
+  public notifiedServerEnd: boolean = false;
 
   constructor(container: HTMLElement, onReplay?: () => void, onExit?: () => void) {
     this.container = container;
@@ -198,6 +255,34 @@ class SpermRaceGame {
     } else {
       this.gameEffects?.triggerImpact(type);
     }
+  }
+
+  private loadThemeFromCSS() {
+    try {
+      const cs = getComputedStyle(document.documentElement);
+      const toHex = (s: string) => {
+        const ctx = document.createElement('canvas').getContext('2d');
+        if (!ctx) return null as any;
+        ctx.fillStyle = s;
+        const c = ctx.fillStyle as string;
+        const m = c.match(/^#([0-9a-f]{6})/i);
+        if (m) return parseInt(m[1], 16);
+        return null as any;
+      };
+      const accent = cs.getPropertyValue('--accent').trim() || cs.getPropertyValue('--primary').trim();
+      const text = cs.getPropertyValue('--text-primary').trim() || '#c7d2de';
+      const borderHex = toHex(accent) || this.theme.accent;
+      this.theme = {
+        accent: borderHex,
+        grid: 0x2a2f38,
+        gridAlpha: 0.08,
+        border: borderHex,
+        borderAlpha: 0.26,
+        enemy: 0xff00ff,
+        enemyGlow: 0xff6666,
+        text
+      } as any;
+    } catch {}
   }
 
 
