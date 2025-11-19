@@ -996,8 +996,30 @@ function Lobby({ onStart: _onStart, onBack, onRefund }: { onStart: () => void; o
   );
 }
 
+import { GameEffects } from './GameEffects'; // Import type for ref if needed, though NewGameView handles instantiation
+
+// ... inside Game component ...
+
 function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void; }) {
   const [gameCountdown, setGameCountdown] = useState<number>(6); // 6 seconds to match game engine preStart
+  const { state } = useWs();
+  const meId = state.playerId;
+  
+  // Effect to listen for high-impact events from server state and trigger haptics via GameEffects
+  // Note: Since GameEffects is inside NewGameView (pixi context), we can't easily call its methods directly here.
+  // BUT, NewGameView is responsible for rendering. 
+  // Actually, GameEffects is instantiated inside NewGameView. 
+  // Let's dispatch a custom event that GameEffects (inside NewGameView) can listen to, OR
+  // simpler: handle haptics right here if we want, but GameEffects has the visual context.
+  
+  // Better approach: NewGameView already instantiates GameEffects. We should let NewGameView handle
+  // the "business logic to visual/haptic" bridge.
+  // However, for *global* haptics like impacts, we can add a listener here if needed,
+  // but NewGameView is the authority on the game loop.
+  
+  // Let's stick to passing props/callbacks if we need to bridge, but `NewGameView` 
+  // is likely where the update loop is. Let's check NewGameView...
+  // NewGameView receives `wsState`. It can detect collisions/kills and trigger GameEffects.
   
   useEffect(() => {
     const timer = setInterval(() => {
@@ -1012,9 +1034,13 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void; 
   };
   
   const handleBoost = () => {
-    console.log('[AppMobile] Boost button clicked, countdown:', gameCountdown);
+    // console.log('[AppMobile] Boost button clicked, countdown:', gameCountdown);
     const event = new CustomEvent('mobile-boost');
     window.dispatchEvent(event);
+    
+    // Check cooldown locally for immediate feedback if needed
+    // But better to rely on NewGameView's state if possible or just fire the event.
+    // We added a listener in NewGameView to catch this event and trigger screenshake.
   };
   
   return (

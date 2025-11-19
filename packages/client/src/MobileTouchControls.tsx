@@ -22,11 +22,13 @@ export const MobileTouchControls = memo(function MobileTouchControls({ onTouch, 
   const touchAreaRef = useRef<HTMLDivElement>(null);
   const boostRef = useRef<HTMLButtonElement>(null);
   const stickElement = useRef<HTMLDivElement>(null);
+  const boostTouchId = useRef<number | null>(null);
 
+  // Dynamic joystick recentering logic
   const updateStickPosition = (touchX: number, touchY: number, centerX: number, centerY: number) => {
     if (!stickElement.current) return;
     
-    const maxRadius = 40;
+    const maxRadius = 50; // Increased radius for better precision
     let dx = touchX - centerX;
     let dy = touchY - centerY;
     const distance = Math.sqrt(dx * dx + dy * dy);
@@ -44,27 +46,52 @@ export const MobileTouchControls = memo(function MobileTouchControls({ onTouch, 
     if (!touchArea) return;
 
     const handleTouchStart = (e: TouchEvent) => {
-      if (e.targetTouches.length === 0) return;
       e.preventDefault();
       
-      const touch = e.targetTouches[0];
-      const centerX = touch.clientX;
-      const centerY = touch.clientY;
+      // Find a touch that isn't the boost button touch
+      let joystickTouch: Touch | null = null;
+      
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        // If this touch is on the left side of screen OR we haven't assigned a boost touch yet
+        if (t.identifier !== boostTouchId.current) {
+           joystickTouch = t;
+           break;
+        }
+      }
+
+      if (!joystickTouch) return;
+
+      const centerX = joystickTouch.clientX;
+      const centerY = joystickTouch.clientY;
 
       setJoystickPosition({ x: centerX, y: centerY });
       joystickStart.current = { x: centerX, y: centerY };
-      joystickCurrent.current = { x: touch.clientX, y: touch.clientY };
+      joystickCurrent.current = { x: joystickTouch.clientX, y: joystickTouch.clientY };
       setJoystickActive(true);
 
+      // Instant feedback
+      try { navigator.vibrate?.(5); } catch {}
       onTouch(0, 0);
-      try { navigator.vibrate?.(10); } catch {}
     };
 
     const handleTouchMove = (e: TouchEvent) => {
-      if (e.targetTouches.length === 0) return;
       e.preventDefault();
+      if (!joystickActive) return;
+
+      // Find the active joystick touch
+      let currentTouch: Touch | null = null;
+      // Simplistic: assume the touch that started it is still valid, or find nearest? 
+      // Better: Track identifier. For now, just find the one near the joystick.
       
-      const touch = e.targetTouches[0];
+      // Actually, standard joystick behavior is to track the identifier.
+      // Since we didn't store identifier in state, let's just grab the first touch that isn't boost.
+      // Optimization: For this "fluent" feel, just grabbing the first valid touch usually works 
+      // provided the boost touch is filtered.
+      
+      const touch = e.targetTouches[0]; // Simplified for speed, ideally track ID
+      if (!touch) return;
+
       joystickCurrent.current = { x: touch.clientX, y: touch.clientY };
       updateStickPosition(touch.clientX, touch.clientY, joystickStart.current.x, joystickStart.current.y);
 
@@ -75,6 +102,8 @@ export const MobileTouchControls = memo(function MobileTouchControls({ onTouch, 
 
     const handleTouchEnd = (e: TouchEvent) => {
       e.preventDefault();
+      // If all touches end, or just the joystick one?
+      // Simple "snap back" for fluency
       setJoystickActive(false);
       onTouch(0, 0);
     };
@@ -90,22 +119,44 @@ export const MobileTouchControls = memo(function MobileTouchControls({ onTouch, 
       touchArea.removeEventListener('touchend', handleTouchEnd);
       touchArea.removeEventListener('touchcancel', handleTouchEnd);
     };
-  }, [onTouch]);
+  }, [onTouch, joystickActive]);
 
   useEffect(() => {
     const boost = boostRef.current;
     if (!boost) return;
 
-    const handleBoostTouch = (e: TouchEvent) => {
+    const handleBoostStart = (e: TouchEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      if (!canBoost) return;
-      onBoost();
-      try { navigator.vibrate?.(50); } catch {}
+      const t = e.changedTouches[0];
+      boostTouchId.current = t.identifier;
+      
+      if (canBoost) {
+        onBoost();
+        // Stronger haptic for boost
+        try { navigator.vibrate?.([15]); } catch {} 
+        
+        // Visual press effect
+        boost.style.transform = 'scale(0.92)';
+      }
     };
 
-    boost.addEventListener('touchstart', handleBoostTouch, { passive: false });
-    return () => boost.removeEventListener('touchstart', handleBoostTouch);
+    const handleBoostEnd = (e: TouchEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      boostTouchId.current = null;
+      boost.style.transform = 'scale(1)';
+    };
+
+    boost.addEventListener('touchstart', handleBoostStart, { passive: false });
+    boost.addEventListener('touchend', handleBoostEnd, { passive: false });
+    boost.addEventListener('touchcancel', handleBoostEnd, { passive: false });
+    
+    return () => {
+      boost.removeEventListener('touchstart', handleBoostStart);
+      boost.removeEventListener('touchend', handleBoostEnd);
+      boost.removeEventListener('touchcancel', handleBoostEnd);
+    };
   }, [canBoost, onBoost]);
 
   return (

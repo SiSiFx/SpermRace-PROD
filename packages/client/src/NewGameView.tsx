@@ -168,252 +168,28 @@ class SpermRaceGame {
   public boostPadsContainer!: PIXI.Container;
   public solanaTexture!: PIXI.Texture;
   public radar!: HTMLCanvasElement;
-  public radarCtx!: CanvasRenderingContext2D;
-  private container: HTMLElement;
-  private cleanupFunctions: (() => void)[] = [];
-  private combatHotspots: Hotspot[] = [];
-  private hotspotSchedule: Array<{ triggerMs: number; triggered: boolean }> = [];
-  private finalSurgeBannerShown: boolean = false;
-  private lastSpotlightPingAt: number = 0;
-  private overdriveBannerEl: HTMLDivElement | null = null;
-  private hotspotToastEl: HTMLDivElement | null = null;
-  private hotspotToastTimeout: number | undefined;
-  private finalSurgeTimeout: number | undefined;
-  
-  // Visual toggles
-  public smallTailEnabled: boolean = false; // disable near-head tail; keep only big gameplay trail
-  
-  // Battle Royale & Sonar system
-  public radarPings: RadarPing[] = [];
-  public echoPings: RadarPing[] = [];
-  public alivePlayers: number = 0;
-  public gamePhase: 'waiting' | 'active' | 'finished' = 'active';
-  public gameStartTime: number = Date.now();
-  public pickupsUnlocked: boolean = false;
-  public artifactsUnlocked: boolean = false;
-  // Pacing: powerups phase in early/mid game
-  // Measured from gameStartTime (includes pre-start countdown)
-  public unlockPickupsAfterMs: number = 18000;  // ~10–12s into live play after countdown
-  public unlockArtifactsAfterMs: number = 12000; // ~5–7s into live play after countdown
-  
-  // Round-based tournament system
-  public currentRound: number = 1;
-  public totalRounds: number = 3;
-  public roundWins: number = 0;
-  public roundLosses: number = 0;
-  public roundInProgress: boolean = false;
-  public roundEndTime: number = 0;
-  
-  // UI container for game elements
-  public uiContainer!: HTMLDivElement;
-  public leaderboardContainer!: HTMLDivElement;
-  public killFeedContainer!: HTMLDivElement;
-  public hudManager!: HudManager;
-  public recentKills: Array<{ killer: string; victim: string; time: number }>=[];
-  private lastToastAt: number = 0;
-  public killStreak: number = 0;
-  public lastKillTime: number = 0;
-  public killStreakNotifications: Array<{ text: string; time: number; x: number; y: number }> = [];
-  
-  
-  // Near-miss detection for skill rewards
-  public nearMisses: Array<{ text: string; time: number; x: number; y: number }> = [];
-  
-  private easeOutBack(t: number): number { const c1 = 1.70158; const c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); }
-  public overviewCanvas: HTMLCanvasElement | null = null;
-  public overviewCtx: CanvasRenderingContext2D | null = null;
-  public emotes: Array<{ el: HTMLDivElement; car: Car; expiresAt: number }> = [];
-  public spawnQueue: Array<{ x: number; y: number; angle: number }> = [];
-  public spawnQueueIndex: number = 0;
-  public spawnBounds: { left: number; right: number; top: number; bottom: number } = { left: 0, right: 0, top: 0, bottom: 0 };
-  public preStart: { startAt: number; durationMs: number } | null = null;
-  // Debug
-  public debugEnabled: boolean = (() => {
-    try {
-      const qs = new URLSearchParams(window.location.search);
-      if (qs.get('debug') === '1') return true;
-      if (qs.get('debug') === '0') return false;
-      const ls = window.localStorage.getItem('SR_DEBUG');
-      if (ls === '1' || ls === 'true') return true;
-      if (ls === '0' || ls === 'false') return false;
-    } catch {}
-    return ((import.meta as any).env?.DEV === true);
-  })();
-  private lastVisCheckAt: number = 0;
-  
-  // Mobile FPS limiting (cap at 60 FPS to prevent overheating)
-  private lastFrameTime: number = 0;
-  private frameInterval: number = 1000 / 60; // 16.67ms per frame
-  
-  // Particle object pooling (prevent memory leaks)
-  private particlePool: PIXI.Graphics[] = [];
-  private maxPoolSize: number = 100;
-  
-  // Radar update throttling (mobile optimization)
-  private lastRadarUpdate: number = 0;
-  private radarUpdateInterval: number = 50; // Update every 50ms (~20fps) instead of 60fps
-  
-  // Seeded RNG for procedural generation
-  public seed: number = Math.floor(Math.random() * 1e9);
-  // rngState removed (unused)
-
-  // Tournament HUD data (from WsProvider)
-  public wsHud: {
-    active: boolean;
-    kills: Record<string, number>;
-    killFeed: Array<{ killerId?: string; victimId: string; ts: number }>;
-    playerId?: string | null;
-    idToName: Record<string, string>;
-    aliveSet: Set<string>;
-    eliminationOrder: string[];
-    // bounty removed
-  } | null = null;
-  public debugCollisions: Array<{ victimId: string; killerId?: string; hit: { x: number; y: number }; segment?: { from: { x: number; y: number }; to: { x: number; y: number } }; ts: number }> = [];
-
-  // Zone (BR shrink)
-  public zone = {
-    centerX: 0,
-    centerY: 0,
-    startRadius: 0,
-    endRadius: 140,
-    startAtMs: 0,
-    durationMs: 90000,
-  };
-  public zoneGraphics: PIXI.Graphics | null = null;
-  public borderGraphics: PIXI.Graphics | null = null;
-  public borderOverlay: PIXI.Graphics | null = null;
-  public gridGraphics: PIXI.Graphics | null = null;
-  public rectZone: {
-    left: number; right: number; top: number; bottom: number;
-    nextSliceAt: number; sliceIntervalMs: number; telegraphMs: number;
-    pendingSide: 'left' | 'right' | 'top' | 'bottom' | null;
-    lastSide: 'left' | 'right' | 'top' | 'bottom' | null;
-    minWidth: number; minHeight: number; sliceStep: number;
-  } = {
-    left: 0, right: 0, top: 0, bottom: 0,
-    nextSliceAt: 0, sliceIntervalMs: 2400, telegraphMs: 1400,
-    pendingSide: null, lastSide: null,
-    minWidth: 1200, minHeight: 1200, sliceStep: 300,
-  };
-  public firstSliceSide: 'left' | 'right' | 'top' | 'bottom' | null = null;
-  private sliceIndex: number = 0;
-  private daySeed: number = 0;
-  private slicePattern: Array<'left'|'right'|'top'|'bottom'> = [];
-
-  // JUICE METHODS - Make game feel amazing!
-  private screenShake(intensity: number = 1) {
-    // Reduced shake - less disorienting on mobile
-    this.camera.shakeX = (Math.random() - 0.5) * 8 * intensity;
-    this.camera.shakeY = (Math.random() - 0.5) * 8 * intensity;
-  }
-
-  private hapticFeedback(pattern: 'light' | 'medium' | 'heavy' | 'success' | 'warning') {
-    try {
-      if (!navigator.vibrate) return;
-      
-      switch (pattern) {
-        case 'light':
-          navigator.vibrate(10);
-          break;
-        case 'medium':
-          navigator.vibrate(30);
-          break;
-        case 'heavy':
-          navigator.vibrate([50, 30, 50]);
-          break;
-        case 'success':
-          navigator.vibrate([30, 20, 50]);
-          break;
-        case 'warning':
-          navigator.vibrate([20, 10, 20, 10, 20]);
-          break;
-      }
-    } catch {}
-  }
-
-  private showNearMiss(x: number, y: number, distance: number) {
-    const texts = distance < 15 ? '😱 INSANE DODGE!' : distance < 25 ? '🎯 CLOSE CALL' : '+DODGED';
-    this.nearMisses.push({ text: texts, time: Date.now(), x, y });
-    this.hapticFeedback('light');
-  }
-
-  private computeDaySeed(): number {
-    try {
-      const d = new Date();
-      const key = `${d.getUTCFullYear()}-${(d.getUTCMonth()+1).toString().padStart(2,'0')}-${d.getUTCDate().toString().padStart(2,'0')}`;
-      let h = 2166136261; // FNV-1a 32-bit
-      for (let i = 0; i < key.length; i++) { h ^= key.charCodeAt(i); h += (h<<1) + (h<<4) + (h<<7) + (h<<8) + (h<<24); }
-      return (h >>> 0) || Math.floor(Math.random()*1e9);
-    } catch { return Math.floor(Math.random()*1e9); }
-  }
-
-  private buildSlicePattern(seed: number): Array<'left'|'right'|'top'|'bottom'> {
-    // Deterministic, well-distributed pattern avoiding immediate repeats
-    const sides: Array<'left'|'right'|'top'|'bottom'> = ['left','right','top','bottom'];
-    // simple LCG
-    let st = (seed ^ 0x9e3779b9) >>> 0;
-    const rnd = () => { st = (1664525 * st + 1013904223) >>> 0; return st / 0xffffffff; };
-    const out: Array<'left'|'right'|'top'|'bottom'> = [];
-    let last: 'left'|'right'|'top'|'bottom' | null = null;
-    for (let i = 0; i < 64; i++) {
-      const opts: Array<'left'|'right'|'top'|'bottom'> = last
-        ? (sides.filter(s => s !== last) as Array<'left'|'right'|'top'|'bottom'>)
-        : (sides.slice() as Array<'left'|'right'|'top'|'bottom'>);
-      const pick: 'left'|'right'|'top'|'bottom' = opts[Math.floor(rnd() * opts.length)];
-      out.push(pick);
-      last = pick;
-    }
-    return out;
-  }
-  
-  // Theme colors loaded from CSS variables
-  private theme = {
-    accent: 0x22d3ee,
-    grid: 0x2a2f38,
-    gridAlpha: 0.08,
-    border: 0x22d3ee,
-    borderAlpha: 0.26,
-    enemy: 0xff00ff,
-    enemyGlow: 0xff6666,
-    text: '#c7d2de'
-  } as any;
-  private loadThemeFromCSS() {
-    try {
-      const cs = getComputedStyle(document.documentElement);
-      const toHex = (s: string) => {
-        const ctx = document.createElement('canvas').getContext('2d');
-        if (!ctx) return null as any;
-        ctx.fillStyle = s;
-        const c = ctx.fillStyle as string;
-        const m = c.match(/^#([0-9a-f]{6})/i);
-        if (m) return parseInt(m[1], 16);
-        return null as any;
-      };
-      const accent = cs.getPropertyValue('--accent').trim() || cs.getPropertyValue('--primary').trim();
-      const text = cs.getPropertyValue('--text-primary').trim() || '#c7d2de';
-      const borderHex = toHex(accent) || this.theme.accent;
-      this.theme = {
-        accent: borderHex,
-        grid: 0x2a2f38,
-        gridAlpha: 0.08,
-        border: borderHex,
-        borderAlpha: 0.26,
-        enemy: 0xff00ff,
-        enemyGlow: 0xff6666,
-        text
-      } as any;
-    } catch {}
-  }
-  
-  // Callbacks for navigation
-  public onReplay?: () => void;
-  public onExit?: () => void;
-  public notifiedServerEnd: boolean = false;
+  public gameEffects!: GameEffects; // Instantiated in setupWorld
 
   constructor(container: HTMLElement, onReplay?: () => void, onExit?: () => void) {
     this.container = container;
     this.onReplay = onReplay;
     this.onExit = onExit;
+    
+    // Listen for mobile boost events to trigger haptics
+    window.addEventListener('mobile-boost', this.handleMobileBoost.bind(this));
+  }
+  
+  private handleMobileBoost() {
+    // Check if boost actually happened
+    if (this.player?.isBoosting) {
+        // Haptic handled in MobileTouchControls, but we can add screen shake here
+        this.screenShake(0.2);
+    }
+  }
+  
+  // Public accessor for external haptic triggers
+  public triggerHaptic(type: 'light' | 'medium' | 'heavy') {
+    this.hapticFeedback(type);
   }
 
   private dbg(...args: any[]) {
@@ -505,6 +281,26 @@ class SpermRaceGame {
     } catch (e) {
       console.warn('[GAME] Could not add WebGL context handlers:', e);
     }
+
+    // *** MOBILE ORIENTATION & RESIZE FIX ***
+    // Explicitly handle orientation changes with a slight delay to allow browser UI to settle
+    const handleMobileResize = () => {
+        const nowTs = Date.now();
+        if (nowTs - __sr_lastResize < 100) return;
+        __sr_lastResize = nowTs;
+        
+        // Force strict match to visual viewport
+        const w = window.visualViewport ? window.visualViewport.width : window.innerWidth;
+        const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+        
+        if (this.app && this.app.renderer) {
+            this.app.renderer.resize(w, h);
+            try { this.drawArenaBorder(); } catch {}
+            this.updateCamera();
+        }
+    };
+    window.visualViewport?.addEventListener('resize', handleMobileResize);
+    this.cleanupFunctions.push(() => window.visualViewport?.removeEventListener('resize', handleMobileResize));
 
     // Create UI container for game-specific UI elements
     this.uiContainer = document.createElement('div');
@@ -1619,6 +1415,10 @@ class SpermRaceGame {
       this.worldContainer.scale.set(this.camera.zoom);
       try { this.drawBorderOverlay(); } catch {}
     } catch {}
+    
+    // Trigger spawn haptic
+    this.hapticFeedback('medium');
+    
     this.dbg('after createPlayer: stageChildren=', (this.app as any)?.stage?.children?.length, 'worldChildren=', this.worldContainer?.children?.length);
   }
 
