@@ -221,6 +221,52 @@ class SpermRaceGame {
   public uiContainer!: HTMLDivElement;
   public leaderboardContainer!: HTMLDivElement;
   public killFeedContainer!: HTMLDivElement;
+  public hudManager!: HudManager;
+  public recentKills: Array<{ killer: string; victim: string; time: number }> = [];
+  private lastToastAt: number = 0;
+  public killStreak: number = 0;
+  public lastKillTime: number = 0;
+  public killStreakNotifications: Array<{ text: string; time: number; x: number; y: number }> = [];
+
+  // Near-miss detection for skill rewards
+  public nearMisses: Array<{ text: string; time: number; x: number; y: number }> = [];
+
+  public overviewCanvas: HTMLCanvasElement | null = null;
+  public overviewCtx: CanvasRenderingContext2D | null = null;
+  public emotes: Array<{ el: HTMLDivElement; car: Car; expiresAt: number }> = [];
+  public spawnQueue: Array<{ x: number; y: number; angle: number }> = [];
+  public spawnQueueIndex: number = 0;
+  public spawnBounds: { left: number; right: number; top: number; bottom: number } = { left: 0, right: 0, top: 0, bottom: 0 };
+  public preStart: { startAt: number; durationMs: number } | null = null;
+
+  // Debug
+  public debugEnabled: boolean = (() => {
+    try {
+      const qs = new URLSearchParams(window.location.search);
+      if (qs.get('debug') === '1') return true;
+      if (qs.get('debug') === '0') return false;
+      const ls = window.localStorage.getItem('SR_DEBUG');
+      if (ls === '1' || ls === 'true') return true;
+      if (ls === '0' || ls === 'false') return false;
+    } catch {}
+    return ((import.meta as any).env?.DEV === true);
+  })();
+  private lastVisCheckAt: number = 0;
+
+  // Mobile FPS limiting (cap at 60 FPS to prevent overheating)
+  private lastFrameTime: number = 0;
+  private frameInterval: number = 1000 / 60; // 16.67ms per frame
+
+  // Particle object pooling (prevent memory leaks)
+  private particlePool: PIXI.Graphics[] = [];
+  private maxPoolSize: number = 100;
+
+  // Radar update throttling (mobile optimization)
+  private lastRadarUpdate: number = 0;
+  private radarUpdateInterval: number = 50; // Update every 50ms (~20fps) instead of 60fps
+
+  // Seeded RNG for procedural generation
+  public seed: number = Math.floor(Math.random() * 1e9);
 
   // Callbacks for navigation
   public onReplay?: () => void;
@@ -249,12 +295,33 @@ class SpermRaceGame {
     this.hapticFeedback(type);
   }
 
-  private hapticFeedback(type: 'light' | 'medium' | 'heavy' | 'success') {
-    if (type === 'success') {
-      try { navigator.vibrate?.([40, 50, 40]); } catch {}
-    } else {
-      this.gameEffects?.triggerImpact(type);
-    }
+  private hapticFeedback(type: 'light' | 'medium' | 'heavy' | 'success' | 'warning') {
+    try {
+      if (!navigator.vibrate && !this.gameEffects) return;
+
+      switch (type) {
+        case 'light':
+          this.gameEffects?.triggerImpact('light');
+          navigator.vibrate?.(10);
+          break;
+        case 'medium':
+          this.gameEffects?.triggerImpact('medium');
+          navigator.vibrate?.(30);
+          break;
+        case 'heavy':
+          this.gameEffects?.triggerImpact('heavy');
+          navigator.vibrate?.([50, 30, 50]);
+          break;
+        case 'success':
+          this.gameEffects?.triggerImpact('medium');
+          navigator.vibrate?.([40, 50, 40]);
+          break;
+        case 'warning':
+          this.gameEffects?.triggerImpact('heavy');
+          navigator.vibrate?.([20, 10, 20, 10, 20]);
+          break;
+      }
+    } catch {}
   }
 
   private loadThemeFromCSS() {
