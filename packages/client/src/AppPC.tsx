@@ -505,7 +505,8 @@ function Landing({
               marginTop: 24,
               display: 'flex',
               justifyContent: 'center',
-              gap: 12,
+              alignItems: 'stretch',
+              gap: 16,
               flexWrap: 'wrap',
             }}
           >
@@ -522,6 +523,7 @@ function Landing({
             <button
               type="button"
               className="cta-secondary"
+              style={{ minWidth: 260 }}
               onClick={onPractice}
             >
               Race for Free

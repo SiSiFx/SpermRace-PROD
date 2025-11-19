@@ -95,7 +95,7 @@ body {
 
 .tournament-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 24px;
   padding: 20px 0;
 }
@@ -382,7 +382,7 @@ html, body {
     rgba(3, 3, 7, 0.96);
   color: #f9fafb;
   font-weight: 800;
-  font-size: 11px;
+  font-size: 13px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   cursor: pointer;
@@ -438,7 +438,7 @@ html, body {
   border: 1px solid rgba(148, 163, 184, 0.6);
   background: rgba(10, 13, 20, 0.9);
   color: rgba(226, 232, 240, 0.9);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -742,6 +742,10 @@ html, body {
   position: relative;
   transition: var(--transition-fast);
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 260px;
 }
 
 /* Marketing ribbons */
