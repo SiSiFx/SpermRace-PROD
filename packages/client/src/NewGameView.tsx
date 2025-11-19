@@ -268,6 +268,54 @@ class SpermRaceGame {
   // Seeded RNG for procedural generation
   public seed: number = Math.floor(Math.random() * 1e9);
 
+  // Tournament HUD data (from WsProvider)
+  public wsHud: {
+    active: boolean;
+    kills: Record<string, number>;
+    killFeed: Array<{ killerId?: string; victimId: string; ts: number }>;
+    playerId?: string | null;
+    idToName: Record<string, string>;
+    aliveSet: Set<string>;
+    eliminationOrder: string[];
+  } | null = null;
+  public debugCollisions: Array<{
+    victimId: string;
+    killerId?: string;
+    hit: { x: number; y: number };
+    segment?: { from: { x: number; y: number }; to: { x: number; y: number } };
+    ts: number;
+  }> = [];
+
+  // Zone (BR shrink)
+  public zone = {
+    centerX: 0,
+    centerY: 0,
+    startRadius: 0,
+    endRadius: 140,
+    startAtMs: 0,
+    durationMs: 90000,
+  };
+  public zoneGraphics: PIXI.Graphics | null = null;
+  public borderGraphics: PIXI.Graphics | null = null;
+  public borderOverlay: PIXI.Graphics | null = null;
+  public gridGraphics: PIXI.Graphics | null = null;
+  public rectZone: {
+    left: number; right: number; top: number; bottom: number;
+    nextSliceAt: number; sliceIntervalMs: number; telegraphMs: number;
+    pendingSide: 'left' | 'right' | 'top' | 'bottom' | null;
+    lastSide: 'left' | 'right' | 'top' | 'bottom' | null;
+    minWidth: number; minHeight: number; sliceStep: number;
+  } = {
+    left: 0, right: 0, top: 0, bottom: 0,
+    nextSliceAt: 0, sliceIntervalMs: 2400, telegraphMs: 1400,
+    pendingSide: null, lastSide: null,
+    minWidth: 1200, minHeight: 1200, sliceStep: 300,
+  };
+  public firstSliceSide: 'left' | 'right' | 'top' | 'bottom' | null = null;
+  private sliceIndex: number = 0;
+  private daySeed: number = 0;
+  private slicePattern: Array<'left'|'right'|'top'|'bottom'> = [];
+
   // Callbacks for navigation
   public onReplay?: () => void;
   public onExit?: () => void;
@@ -281,12 +329,19 @@ class SpermRaceGame {
     // Listen for mobile boost events to trigger haptics
     window.addEventListener('mobile-boost', this.handleMobileBoost.bind(this));
   }
+
+  // JUICE METHODS - Make game feel amazing!
+  private screenShake(intensity: number = 1) {
+    // Reduced shake - less disorienting on mobile
+    this.camera.shakeX = (Math.random() - 0.5) * 8 * intensity;
+    this.camera.shakeY = (Math.random() - 0.5) * 8 * intensity;
+  }
   
   private handleMobileBoost() {
     // Check if boost actually happened
     if (this.player?.isBoosting) {
-        // Haptic handled in MobileTouchControls, but we can add screen shake here
-        this.screenShake(0.2);
+      // Haptic handled in MobileTouchControls, but we can add screen shake here
+      this.screenShake(0.2);
     }
   }
   
@@ -322,6 +377,47 @@ class SpermRaceGame {
           break;
       }
     } catch {}
+  }
+
+  private showNearMiss(x: number, y: number, distance: number) {
+    const texts = distance < 15 ? '😱 INSANE DODGE!' : distance < 25 ? '🎯 CLOSE CALL' : '+DODGED';
+    this.nearMisses.push({ text: texts, time: Date.now(), x, y });
+    this.hapticFeedback('light');
+  }
+
+  private easeOutBack(t: number): number {
+    const c1 = 1.70158;
+    const c3 = c1 + 1;
+    return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+  }
+
+  private computeDaySeed(): number {
+    try {
+      const d = new Date();
+      const key = `${d.getUTCFullYear()}-${(d.getUTCMonth()+1).toString().padStart(2,'0')}-${d.getUTCDate().toString().padStart(2,'0')}`;
+      let h = 2166136261; // FNV-1a 32-bit
+      for (let i = 0; i < key.length; i++) { h ^= key.charCodeAt(i); h += (h<<1) + (h<<4) + (h<<7) + (h<<8) + (h<<24); }
+      return (h >>> 0) || Math.floor(Math.random()*1e9);
+    } catch { return Math.floor(Math.random()*1e9); }
+  }
+
+  private buildSlicePattern(seed: number): Array<'left'|'right'|'top'|'bottom'> {
+    // Deterministic, well-distributed pattern avoiding immediate repeats
+    const sides: Array<'left'|'right'|'top'|'bottom'> = ['left','right','top','bottom'];
+    // simple LCG
+    let st = (seed ^ 0x9e3779b9) >>> 0;
+    const rnd = () => { st = (1664525 * st + 1013904223) >>> 0; return st / 0xffffffff; };
+    const out: Array<'left'|'right'|'top'|'bottom'> = [];
+    let last: 'left'|'right'|'top'|'bottom' | null = null;
+    for (let i = 0; i < 64; i++) {
+      const opts: Array<'left'|'right'|'top'|'bottom'> = last
+        ? (sides.filter(s => s !== last) as Array<'left'|'right'|'top'|'bottom'>)
+        : (sides.slice() as Array<'left'|'right'|'top'|'bottom'>);
+      const pick: 'left'|'right'|'top'|'bottom' = opts[Math.floor(rnd() * opts.length)];
+      out.push(pick);
+      last = pick;
+    }
+    return out;
   }
 
   private loadThemeFromCSS() {
