@@ -1,8 +1,15 @@
 import { useEffect, useState } from 'react';
-// Base URL for backend API; prefer env, else infer by hostname, else same-origin /api
+// Base URL for backend API; prefer same-origin /api for dev/preview, absolute for production domain
 const API_BASE: string = (() => {
+  // For any non-production host (localhost, Vercel preview, etc.) always hit same-origin /api
+  try {
+    const host = (window?.location?.hostname || '').toLowerCase();
+    if (!host.includes('spermrace.io')) return '/api';
+  } catch {}
+
   const env = (import.meta as any).env?.VITE_API_BASE as string | undefined;
   if (env && typeof env === 'string' && env.trim()) return env.trim();
+
   try {
     const host = (window?.location?.hostname || '').toLowerCase();
     if (host.includes('dev.spermrace.io')) return 'https://dev.spermrace.io/api';
