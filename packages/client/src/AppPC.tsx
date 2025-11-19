@@ -408,6 +408,7 @@ function HeaderWallet({
   const { publicKey, disconnect, connect } = useWallet() as any;
   const short = publicKey ? `${publicKey.slice(0, 4)}…${publicKey.slice(-4)}` : null;
   const isLanding = screen === 'landing';
+  const showStatusPill = status && status !== 'Not Connected' && status !== 'Connected';
 
   return (
     <header className="pc-header">
@@ -438,7 +439,7 @@ function HeaderWallet({
         )}
       </div>
       <div className="pc-header-right">
-        <span className="pc-status-pill">{status}</span>
+        {showStatusPill && <span className="pc-status-pill">{status}</span>}
         {short ? (
           <>
             <span className="pc-wallet-id">{short}</span>
