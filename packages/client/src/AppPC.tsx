@@ -166,18 +166,7 @@ function AppInner() {
       />
       <div id="bg-particles" />
       
-      {/* PC: Keyboard shortcuts hint */}
-      <div className="pc-shortcuts-hint">
-        <div className="shortcut-item">
-          <kbd>ESC</kbd> Back
-        </div>
-        <div className="shortcut-item">
-          <kbd>P</kbd> Practice
-        </div>
-        <div className="shortcut-item">
-          <kbd>T</kbd> Tournament
-        </div>
-      </div>
+
 
       {/* UNIFIED OVERLAY SYSTEM - Only ONE overlay shows at a time, priority: Error > Payment > Auth > Connecting */}
       {wsState.lastError ? (
@@ -342,22 +331,7 @@ function AppInner() {
         <Results onPlayAgain={() => setScreen('practice')} onChangeTier={() => setScreen('modes')} />
       )}
 
-      {/* Help toggle */}
-      <button
-        onClick={() => setShowHowTo(true)}
-        title="How to play"
-        style={{ position: 'fixed', top: 10, left: 10, zIndex: 60, padding: '6px 8px', borderRadius: 8, background: 'rgba(0,0,0,0.55)', color: '#c7d2de', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12, cursor: 'pointer' }}
-      >
-        ?
-      </button>
-      {showHelp && (
-        <div style={{ position: 'fixed', top: 44, left: 10, zIndex: 60, padding: '10px 12px', borderRadius: 10, background: 'rgba(0,0,0,0.80)', color: '#c7d2de', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12, maxWidth: 320 }}>
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>Controls</div>
-          <div>• Aim with mouse</div>
-          <div>• Boost: Space or B</div>
-          <div>• Back: ESC</div>
-        </div>
-      )}
+
 
       {/* Toast - appears ABOVE overlays for visibility */}
       {toast && (
@@ -489,12 +463,12 @@ function Landing({
           maxWidth: 1200,
           margin: '0 auto',
           minHeight: '100vh',
-          padding: '120px 40px 64px',
+          padding: '140px 40px 64px',
           display: 'flex',
           flexDirection: 'column',
-          alignItems: 'stretch',
-          justifyContent: 'flex-start',
-          gap: 32,
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 48,
         }}
       >
         <header style={{ textAlign: 'center' }}>
@@ -505,7 +479,7 @@ function Landing({
               fontSize: 12,
               textTransform: 'uppercase',
               color: 'rgba(148,163,184,0.9)',
-              marginBottom: 12,
+              marginBottom: 16,
             }}
           >
             BIO-ARENA PROTOCOL
@@ -515,9 +489,10 @@ function Landing({
               display: 'flex',
               justifyContent: 'center',
               alignItems: 'baseline',
-              gap: 12,
-              fontSize: 56,
+              gap: 16,
+              fontSize: 72,
               lineHeight: 1,
+              marginBottom: 20,
             }}
           >
             <span style={{ color: '#fff', fontWeight: 800 }}>SPERM</span>
@@ -533,7 +508,6 @@ function Landing({
           </h1>
           <p
             style={{
-              marginTop: 16,
               fontSize: 14,
               letterSpacing: '0.18em',
               textTransform: 'uppercase',
@@ -542,44 +516,33 @@ function Landing({
           >
             ON-CHAIN FERTILIZATION BATTLE ROYALE
           </p>
-          <div
-            style={{
-              marginTop: 10,
-              fontSize: 12,
-              color: 'rgba(148,163,184,0.75)',
-              fontFamily: 'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, monospace',
-            }}
-          >
-            SOL: {solPrice != null ? `$${solPrice.toFixed(2)}` : '--.--'}
-          </div>
         </header>
 
         <main>
-          {/* Hero CTAs: emphasize paid tournaments while keeping free option visible */}
+          {/* Hero CTAs */}
           <section
             style={{
-              marginTop: 24,
               display: 'flex',
               justifyContent: 'center',
               alignItems: 'stretch',
-              gap: 16,
+              gap: 20,
               flexWrap: 'wrap',
             }}
           >
             <button
               type="button"
               className="cta-primary"
-              style={{ minWidth: 260, position: 'relative' }}
+              style={{ minWidth: 280, position: 'relative', fontSize: 14, padding: '16px 36px' }}
               onClick={() => onTournament?.()}
             >
-              <span className="cta-text">Play for SOL (from $1)</span>
+              <span className="cta-text">Play for SOL</span>
               <div className="cta-glow" />
             </button>
 
             <button
               type="button"
               className="cta-secondary"
-              style={{ minWidth: 260 }}
+              style={{ minWidth: 280, fontSize: 14, padding: '16px 36px' }}
               onClick={onPractice}
             >
               Race for Free
@@ -588,56 +551,15 @@ function Landing({
 
           <div
             style={{
-              marginTop: 8,
-              fontSize: 11,
+              marginTop: 12,
+              fontSize: 12,
               textAlign: 'center',
               color: 'rgba(148,163,184,0.7)',
             }}
           >
-            Select your entry tier on the next screen. Micro races start at $1.
+            Tournament entry from $1 • Instant crypto payouts
           </div>
         </main>
-
-        <footer
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginTop: 8,
-            gap: 12,
-            fontSize: 12,
-            color: 'rgba(148,163,184,0.85)',
-          }}
-        >
-          <div style={{ display: 'flex', gap: 12 }}>
-            <button
-              type="button"
-              className="btn-secondary"
-              style={{ padding: '4px 10px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em' }}
-              onClick={onPractice}
-            >
-              Practice
-            </button>
-            {onLeaderboard && (
-              <button
-                type="button"
-                className="btn-secondary"
-                style={{ padding: '4px 10px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em' }}
-                onClick={onLeaderboard}
-              >
-                Leaderboard
-              </button>
-            )}
-          </div>
-          <button
-            type="button"
-            className="btn-secondary"
-            style={{ padding: '4px 10px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em' }}
-            onClick={onWallet}
-          >
-            Wallet
-          </button>
-        </footer>
       </div>
     </div>
   );
@@ -751,204 +673,211 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
   }, []);
 
   const tiers = [
-    { name: 'Micro Race', usd: 1, max: 16, dur: '2-3 min' },
-    { name: 'Nano Race', usd: 5, max: 32, dur: '3-4 min' },
-    { name: 'Mega Race', usd: 25, max: 32, dur: '4-6 min' },
-    { name: 'Championship', usd: 100, max: 16, dur: '5-8 min' },
+    { name: 'Micro Race', usd: 1, max: 16, dur: '2-3 min', icon: '🧬' },
+    { name: 'Nano Race', usd: 5, max: 32, dur: '3-4 min', icon: '⚡' },
+    { name: 'Mega Race', usd: 25, max: 32, dur: '4-6 min', icon: '💎' },
+    { name: 'Championship', usd: 100, max: 16, dur: '5-8 min', icon: '👑' },
   ];
 
   useEffect(() => {
     if (wsState.phase === 'lobby' || wsState.phase === 'game') setIsJoining(false);
   }, [wsState.phase]);
 
-  return (
-    <div className="screen active" id="mode-screen">
-      <div className="modes-sheet">
-        <div className="sheet-grip" />
-        <div className="modal-header"><h2 className="modal-title">Enter Sperm Race</h2><p className="modal-subtitle">Select a tier</p></div>
-        {preflightError && (
-          <div className="modal-subtitle" style={{ color: '#ff8080', marginBottom: 8 }}>Tournaments are temporarily unavailable (prize preflight issue).</div>
-        )}
+  const buttonGradients = [
+    'linear-gradient(135deg, #22d3ee, #14b8a6)',
+    'linear-gradient(135deg, #6366f1, #8b5cf6)',
+    'linear-gradient(135deg, #f43f5e, #fb923c)',
+    'linear-gradient(135deg, #fb923c, #fbbf24)'
+  ];
 
-        <div className="tournament-grid">
+  return (
+    <div className="screen active" id="mode-screen" style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '100px 40px 40px',
+    }}>
+      <div style={{
+        maxWidth: 1400,
+        width: '100%',
+      }}>
+        <div style={{ textAlign: 'center', marginBottom: 48 }}>
+          <h2 style={{
+            fontSize: 48,
+            fontWeight: 800,
+            color: '#fff',
+            marginBottom: 12,
+            letterSpacing: '0.02em'
+          }}>Select Your Entry Tier</h2>
+          <p style={{
+            fontSize: 16,
+            color: 'rgba(148,163,184,0.9)',
+            marginBottom: 8
+          }}>Tournament races • Winner takes 85% of prize pool</p>
+          {preflightError && (
+            <div style={{ color: '#ff8080', fontSize: 14, marginTop: 16 }}>
+              ⚠️ Tournaments temporarily unavailable
+            </div>
+          )}
+        </div>
+
+        {/* 2x2 Grid */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2, 1fr)',
+          gap: 32,
+          marginBottom: 40,
+        }}>
           {tiers.map((t, i) => {
             const prize = (t.usd * t.max * 0.85).toFixed(2);
-            const cardGradients = [
-              'linear-gradient(135deg, rgba(34,211,238,0.15) 0%, rgba(99,102,241,0.15) 100%)',
-              'linear-gradient(135deg, rgba(99,102,241,0.18) 0%, rgba(244,63,94,0.18) 100%)', 
-              'linear-gradient(135deg, rgba(244,63,94,0.20) 0%, rgba(251,146,60,0.20) 100%)',
-              'linear-gradient(135deg, rgba(251,146,60,0.22) 0%, rgba(34,211,238,0.22) 100%)'
-            ];
-            const prizeGradients = [
-              'linear-gradient(90deg, rgba(34,211,238,0.25), rgba(99,102,241,0.25))',
-              'linear-gradient(90deg, rgba(99,102,241,0.28), rgba(244,63,94,0.28))',
-              'linear-gradient(90deg, rgba(244,63,94,0.30), rgba(251,146,60,0.30))',
-              'linear-gradient(90deg, rgba(251,146,60,0.32), rgba(34,211,238,0.32))'
-            ];
-            const buttonGradients = [
-              'linear-gradient(90deg, #22d3ee 0%, #6366f1 100%)',
-              'linear-gradient(90deg, #6366f1 0%, #f43f5e 100%)',
-              'linear-gradient(90deg, #f43f5e 0%, #fb923c 100%)',
-              'linear-gradient(90deg, #fb923c 0%, #22d3ee 100%)'
-            ];
+            const disabled = isJoining || wsState.phase === 'connecting' || wsState.phase === 'authenticating' || preflightError || (!!preflight && (!preflight.configured || !preflight.address || preflight.sol == null));
+            
             return (
-              <div key={t.name} className="tournament-card" style={{
-                background: cardGradients[i],
-                border: '2px solid rgba(255,255,255,0.15)',
-                borderRadius: '20px',
-                padding: '24px',
+              <div key={t.name} style={{
+                background: 'rgba(14,14,18,0.85)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: 24,
+                padding: 32,
                 position: 'relative',
                 overflow: 'hidden',
-                backdropFilter: 'blur(10px)',
-                boxShadow: '0 20px 40px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.1)'
-              }} data-ribbon={i===0? '🔥 HOT' : i===1? '⭐ POPULAR' : i===2? '💎 VIP' : '👑 ELITE'}>
+                backdropFilter: 'blur(20px)',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+                transition: 'all 0.3s ease',
+                cursor: disabled ? 'not-allowed' : 'pointer',
+                opacity: disabled ? 0.6 : 1,
+              }}
+              onClick={async () => {
+                if (disabled) return;
+                setIsJoining(true);
+                const ok = publicKey ? true : await connect();
+                if (!ok) {
+                  setIsJoining(false);
+                  onNotify('Wallet not detected. Please install or unlock your wallet.');
+                  return;
+                }
+                await connectAndJoin({ entryFeeTier: t.usd as any, mode: 'tournament' });
+              }}
+              onMouseEnter={(e) => {
+                if (disabled) return;
+                e.currentTarget.style.borderColor = 'rgba(34,211,238,0.6)';
+                e.currentTarget.style.transform = 'translateY(-4px)';
+                e.currentTarget.style.boxShadow = '0 24px 70px rgba(0,0,0,0.5), 0 0 40px rgba(34,211,238,0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)';
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 20px 60px rgba(0,0,0,0.4)';
+              }}>
                 
-                {/* Animated background orb */}
-                <div style={{
-                  position: 'absolute',
-                  top: '-50%',
-                  right: '-30%',
-                  width: '200px',
-                  height: '200px',
-                  background: prizeGradients[i],
-                  borderRadius: '50%',
-                  opacity: 0.3,
-                  filter: 'blur(60px)',
-                  animation: 'float 6s ease-in-out infinite'
-                }} />
-                
-                <div className="tournament-header" style={{ position: 'relative', zIndex: 2 }}>
-                  <div className="tournament-icon" style={{ fontSize: '32px', marginBottom: '8px' }}>🧬</div>
-                  <h3 className="tournament-title" style={{ fontSize: '24px', fontWeight: 800, marginBottom: '4px' }}>{t.name}</h3>
-                  <div className="tournament-badge" style={{ 
-                    background: 'rgba(255,255,255,0.2)', 
-                    padding: '4px 12px', 
-                    borderRadius: '20px', 
-                    fontSize: '12px',
+                {/* Header */}
+                <div style={{ marginBottom: 24 }}>
+                  <div style={{ fontSize: 48, marginBottom: 12 }}>{t.icon}</div>
+                  <h3 style={{ fontSize: 28, fontWeight: 800, color: '#fff', marginBottom: 8 }}>{t.name}</h3>
+                  <div style={{
+                    display: 'inline-block',
+                    padding: '6px 14px',
+                    background: 'rgba(255,255,255,0.08)',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    borderRadius: 999,
+                    fontSize: 12,
                     fontWeight: 600,
-                    backdropFilter: 'blur(10px)'
+                    color: 'rgba(148,163,184,0.9)',
                   }}>Tier {i+1}</div>
                 </div>
-                
-                {/* Massive prize display */}
-                <div style={{ 
-                  textAlign: 'center', 
-                  margin: '20px 0', 
-                  position: 'relative', 
-                  zIndex: 2 
+
+                {/* Prize Display */}
+                <div style={{
+                  textAlign: 'center',
+                  padding: '24px 20px',
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 16,
+                  marginBottom: 24,
                 }}>
-                  <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.8)', marginBottom: '8px' }}>WIN UP TO</div>
-                  <div style={{ 
-                    fontSize: '48px', 
-                    fontWeight: 900, 
+                  <div style={{ fontSize: 13, color: 'rgba(148,163,184,0.8)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Prize Pool</div>
+                  <div style={{
+                    fontSize: 56,
+                    fontWeight: 900,
                     background: buttonGradients[i],
                     backgroundClip: 'text',
                     WebkitBackgroundClip: 'text',
                     WebkitTextFillColor: 'transparent',
-                    textShadow: '0 4px 20px rgba(255,255,255,0.3)',
                     lineHeight: 1,
-                    marginBottom: '4px'
+                    marginBottom: 8,
                   }}>${prize}</div>
-                  <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)' }}>Instant crypto payout</div>
+                  <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.7)' }}>Winner takes 85%</div>
                 </div>
 
-                <div className="tournament-details" style={{ position: 'relative', zIndex: 2 }}>
+                {/* Details Grid */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: 16,
+                  marginBottom: 24,
+                }}>
                   <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    background: 'rgba(255,255,255,0.1)',
-                    padding: '12px 16px',
-                    borderRadius: '12px',
-                    marginBottom: '16px',
-                    backdropFilter: 'blur(10px)'
+                    padding: 16,
+                    background: 'rgba(255,255,255,0.03)',
+                    borderRadius: 12,
+                    textAlign: 'center',
                   }}>
-                    <div>
-                      <div style={{ fontSize: '18px', fontWeight: 700 }}>${t.usd.toFixed(2)}</div>
-                      <div style={{ fontSize: '11px', opacity: 0.8 }}>Entry fee</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '14px', fontWeight: 600 }}>{t.max} players max</div>
-                      <div style={{ fontSize: '11px', opacity: 0.8 }}>{t.dur} duration</div>
-                    </div>
+                    <div style={{ fontSize: 24, fontWeight: 700, color: '#fff', marginBottom: 4 }}>${t.usd}</div>
+                    <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.7)' }}>Entry Fee</div>
+                  </div>
+                  <div style={{
+                    padding: 16,
+                    background: 'rgba(255,255,255,0.03)',
+                    borderRadius: 12,
+                    textAlign: 'center',
+                  }}>
+                    <div style={{ fontSize: 24, fontWeight: 700, color: '#fff', marginBottom: 4 }}>{t.max}</div>
+                    <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.7)' }}>Max Players</div>
                   </div>
                 </div>
 
+                {/* CTA Button */}
                 <button
                   style={{
                     width: '100%',
-                    padding: '16px 24px',
+                    padding: '18px 32px',
                     background: buttonGradients[i],
                     border: 'none',
-                    borderRadius: '16px',
-                    color: '#000',
-                    fontSize: '18px',
+                    borderRadius: 14,
+                    color: i === 1 ? '#fff' : '#000',
+                    fontSize: 16,
                     fontWeight: 800,
                     textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                    cursor: 'pointer',
-                    position: 'relative',
-                    zIndex: 2,
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.3)',
-                    // Disable transition when animating to avoid conflicts
-                    transition: (publicKey && !isJoining && wsState.phase !== 'connecting' && wsState.phase !== 'authenticating') ? 'none' : 'all 0.2s ease',
-                    // Only set transform when NOT animating (animation will handle it)
-                    ...(!(publicKey && !isJoining && wsState.phase !== 'connecting' && wsState.phase !== 'authenticating') && { transform: 'translateY(0px)' }),
-                    // Add glowing animation when wallet is connected and ready
-                    animation: publicKey && !isJoining && wsState.phase !== 'connecting' && wsState.phase !== 'authenticating'
-                      ? 'buttonGlow 2s ease-in-out infinite, buttonPulse 2s ease-in-out infinite'
-                      : 'none'
+                    letterSpacing: '0.08em',
+                    cursor: disabled ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+                    transition: 'all 0.2s ease',
+                    pointerEvents: 'none', // Let parent div handle clicks
                   }}
-                  disabled={
-                    isJoining ||
-                    wsState.phase === 'connecting' ||
-                    wsState.phase === 'authenticating' ||
-                    preflightError ||
-                    (!!preflight && (!preflight.configured || !preflight.address || preflight.sol == null))
-                  }
-                  onClick={async () => {
-                    setIsJoining(true);
-                    const ok = publicKey ? true : await connect();
-                    if (!ok) {
-                      setIsJoining(false);
-                      onNotify('Wallet not detected. Please install or unlock your wallet.');
-                      return;
-                    }
-                    await connectAndJoin({ entryFeeTier: t.usd as any, mode: 'tournament' });
-                  }}
-                  onMouseEnter={(e) => {
-                    if (publicKey && !isJoining && wsState.phase !== 'connecting' && wsState.phase !== 'authenticating') {
-                      e.currentTarget.style.animation = 'none';
-                      e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)';
-                      e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.4), 0 0 35px rgba(34,211,238,0.8)';
-                    } else {
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                      e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.4)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (publicKey && !isJoining && wsState.phase !== 'connecting' && wsState.phase !== 'authenticating') {
-                      e.currentTarget.style.animation = 'buttonGlow 2s ease-in-out infinite, buttonPulse 2s ease-in-out infinite';
-                      e.currentTarget.style.transform = 'translateY(0px)';
-                      e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.3)';
-                    } else {
-                      e.currentTarget.style.transform = 'translateY(0px)';
-                      e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.3)';
-                    }
-                  }}
+                  disabled={disabled}
                 >{
-                  preflightError ? 'Service unavailable'
-                  : (preflight && (!preflight.configured || !preflight.address || preflight.sol == null)) ? 'Temporarily unavailable'
+                  preflightError ? 'Service Unavailable'
+                  : (preflight && (!preflight.configured || !preflight.address || preflight.sol == null)) ? 'Temporarily Unavailable'
                   : (isJoining || wsState.phase === 'connecting' || wsState.phase === 'authenticating') ? 'Joining…'
-                  : publicKey ? `🚀 ENTER RACE - READY!` : `ENTER RACE`
+                  : publicKey ? `🚀 Enter Race` : `Connect & Enter`
                 }</button>
+
+                <div style={{ textAlign: 'center', marginTop: 12, fontSize: 11, color: 'rgba(148,163,184,0.6)' }}>
+                  {t.dur} duration
+                </div>
               </div>
             );
           })}
         </div>
 
-        <div className="mode-footer">
-          <button className="btn-secondary" onClick={onClose}>Back</button>
+        {/* Back Button */}
+        <div style={{ textAlign: 'center' }}>
+          <button
+            className="btn-secondary"
+            style={{ padding: '12px 32px', fontSize: 15 }}
+            onClick={onClose}
+          >
+            ← Back to Menu
+          </button>
         </div>
       </div>
     </div>
