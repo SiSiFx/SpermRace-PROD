@@ -19,6 +19,7 @@ export const MobileTouchControls = memo(function MobileTouchControls({ onTouch, 
   
   const joystickStart = useRef<TouchPosition>({ x: 0, y: 0 });
   const joystickCurrent = useRef<TouchPosition>({ x: 0, y: 0 });
+  const joystickTouchId = useRef<number | null>(null);
   const touchAreaRef = useRef<HTMLDivElement>(null);
   const boostRef = useRef<HTMLButtonElement>(null);
   const stickElement = useRef<HTMLDivElement>(null);
@@ -46,6 +47,11 @@ export const MobileTouchControls = memo(function MobileTouchControls({ onTouch, 
     if (!touchArea) return;
 
     const handleTouchStart = (e: TouchEvent) => {
+      // If we already have an active joystick, ignore new touches in this area
+      // unless we want to allow "re-grabbing" which can be complex. 
+      // For simple robust controls, one joystick touch at a time.
+      if (joystickTouchId.current !== null) return;
+
       e.preventDefault();
       
       // Find a touch that isn't the boost button touch
@@ -62,6 +68,7 @@ export const MobileTouchControls = memo(function MobileTouchControls({ onTouch, 
 
       if (!joystickTouch) return;
 
+      joystickTouchId.current = joystickTouch.identifier;
       const centerX = joystickTouch.clientX;
       const centerY = joystickTouch.clientY;
 
@@ -77,35 +84,45 @@ export const MobileTouchControls = memo(function MobileTouchControls({ onTouch, 
 
     const handleTouchMove = (e: TouchEvent) => {
       e.preventDefault();
-      if (!joystickActive) return;
+      if (joystickTouchId.current === null) return;
 
-      // Find the active joystick touch
+      // Find the active joystick touch by ID
       let currentTouch: Touch | null = null;
-      // Simplistic: assume the touch that started it is still valid, or find nearest? 
-      // Better: Track identifier. For now, just find the one near the joystick.
-      
-      // Actually, standard joystick behavior is to track the identifier.
-      // Since we didn't store identifier in state, let's just grab the first touch that isn't boost.
-      // Optimization: For this "fluent" feel, just grabbing the first valid touch usually works 
-      // provided the boost touch is filtered.
-      
-      const touch = e.targetTouches[0]; // Simplified for speed, ideally track ID
-      if (!touch) return;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === joystickTouchId.current) {
+          currentTouch = e.changedTouches[i];
+          break;
+        }
+      }
 
-      joystickCurrent.current = { x: touch.clientX, y: touch.clientY };
-      updateStickPosition(touch.clientX, touch.clientY, joystickStart.current.x, joystickStart.current.y);
+      if (!currentTouch) return;
 
-      const dx = touch.clientX - joystickStart.current.x;
-      const dy = touch.clientY - joystickStart.current.y;
+      joystickCurrent.current = { x: currentTouch.clientX, y: currentTouch.clientY };
+      updateStickPosition(currentTouch.clientX, currentTouch.clientY, joystickStart.current.x, joystickStart.current.y);
+
+      const dx = currentTouch.clientX - joystickStart.current.x;
+      const dy = currentTouch.clientY - joystickStart.current.y;
       onTouch(dx, dy);
     };
 
     const handleTouchEnd = (e: TouchEvent) => {
       e.preventDefault();
-      // If all touches end, or just the joystick one?
-      // Simple "snap back" for fluency
-      setJoystickActive(false);
-      onTouch(0, 0);
+      if (joystickTouchId.current === null) return;
+
+      // Check if our joystick touch ended
+      let joystickEnded = false;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === joystickTouchId.current) {
+          joystickEnded = true;
+          break;
+        }
+      }
+
+      if (joystickEnded) {
+        setJoystickActive(false);
+        joystickTouchId.current = null;
+        onTouch(0, 0);
+      }
     };
 
     touchArea.addEventListener('touchstart', handleTouchStart, { passive: false });
@@ -119,7 +136,7 @@ export const MobileTouchControls = memo(function MobileTouchControls({ onTouch, 
       touchArea.removeEventListener('touchend', handleTouchEnd);
       touchArea.removeEventListener('touchcancel', handleTouchEnd);
     };
-  }, [onTouch, joystickActive]);
+  }, [onTouch]);
 
   useEffect(() => {
     const boost = boostRef.current;

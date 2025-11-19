@@ -192,6 +192,15 @@ class SpermRaceGame {
     this.hapticFeedback(type);
   }
 
+  private hapticFeedback(type: 'light' | 'medium' | 'heavy' | 'success') {
+    if (type === 'success') {
+      try { navigator.vibrate?.([40, 50, 40]); } catch {}
+    } else {
+      this.gameEffects?.triggerImpact(type);
+    }
+  }
+
+
   private dbg(...args: any[]) {
     if (!this.debugEnabled) return;
     try { console.log('[GAME][DBG]', ...args); } catch {}
@@ -3125,7 +3134,7 @@ class SpermRaceGame {
       this.lastKillTime = now;
 
       // Simple haptic feedback
-      this.hapticFeedback('medium');
+      this.hapticFeedback('heavy');
       
       // Mild screen shake
       this.screenShake(0.3);
@@ -3197,7 +3206,7 @@ class SpermRaceGame {
 
     // Haptic feedback on death (mobile)
     if (car === this.player) {
-      try { navigator.vibrate?.([100, 50, 100]); } catch {}
+      this.hapticFeedback('heavy');
       
       // RESET KILL STREAK WHEN PLAYER DIES
       this.killStreak = 0;

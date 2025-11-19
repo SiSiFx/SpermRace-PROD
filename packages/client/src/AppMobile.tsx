@@ -797,39 +797,44 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
             );
           })}
         </div>
-        
-        {/* Small floating back button - fixed at bottom center */}
-        <div style={{ 
-          position: 'fixed',
-          bottom: 'calc(40px + env(safe-area-inset-bottom, 0px))',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 1000,
-          pointerEvents: 'none'
-        }}>
-          <button 
-            onClick={onClose}
-            style={{
-              padding: '10px 20px',
-              borderRadius: '24px',
-              background: 'rgba(0, 0, 0, 0.9)',
-              color: '#fff',
-              border: '1.5px solid rgba(255, 255, 255, 0.3)',
-              fontSize: '14px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.6)',
-              backdropFilter: 'blur(10px)',
-              WebkitBackdropFilter: 'blur(10px)',
-              pointerEvents: 'auto'
-            }}
-          >
-            <span style={{ fontSize: '16px' }}>←</span> Back
-          </button>
-        </div>
+      </div>
+      
+      {/* Floating Back Button - Fixed at bottom */}
+      <div style={{ 
+        position: 'absolute',
+        bottom: 'calc(32px + env(safe-area-inset-bottom, 0px))',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 1000,
+        width: '100%',
+        display: 'flex',
+        justifyContent: 'center',
+        pointerEvents: 'none'
+      }}>
+        <button 
+          onClick={onClose}
+          style={{
+            padding: '12px 32px',
+            borderRadius: '30px',
+            background: 'rgba(15, 23, 42, 0.95)',
+            color: '#fff',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            fontSize: '15px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            pointerEvents: 'auto',
+            letterSpacing: '0.05em',
+            textTransform: 'uppercase'
+          }}
+        >
+          <span style={{ fontSize: '18px' }}>←</span> Back to Menu
+        </button>
       </div>
     </div>
   );
