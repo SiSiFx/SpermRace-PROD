@@ -2860,22 +2860,24 @@ class SpermRaceGame {
     car.sprite.x = car.x;
     car.sprite.y = car.y;
     car.sprite.rotation = car.angle;
-    // Animate sperm tail (tapered ribbon) and head (static oval)
+
+    // Animate sperm tail (tapered ribbon) and head (static oval) with kill-based growth
     try {
+      const sizeMul = this.getSizeMultiplierForCar(car);
       if (this.smallTailEnabled && car.tailGraphics) {
         car.tailWaveT = (car.tailWaveT || 0) + deltaTime * (car.isBoosting ? 18 : 10); // Faster wave animation
         const segs = Math.max(8, car.tailSegments || 16);
-        const len = (car.tailLength || 48);
+        const len = (car.tailLength || 48) * sizeMul;
         const speedMag = Math.hypot(car.vx, car.vy);
         const speedScale = 0.5 + Math.min(1, speedMag / 350);
-        const ampBase = (car.tailAmplitude || 6) * (car.isBoosting ? 1.5 : 1.0); // More dramatic boost wave
+        const ampBase = (car.tailAmplitude || 6) * (car.isBoosting ? 1.5 : 1.0) * sizeMul; // More dramatic boost wave
         const amp = ampBase;
-        const baseWidth = 3 * (0.75 + 0.25 * speedScale);
+        const baseWidth = 3 * (0.75 + 0.25 * speedScale) * sizeMul;
         const step = len / segs;
         const g = car.tailGraphics;
         g.clear();
         // Tail anchor slightly behind head center
-        const headR = 8;
+        const headR = 8 * sizeMul;
         const dirX = Math.cos(car.angle);
         const dirY = Math.sin(car.angle);
         const latX = Math.cos(car.angle + Math.PI / 2);
@@ -2907,9 +2909,11 @@ class SpermRaceGame {
         g.poly(poly).fill({ color: car.color, alpha: car.isBoosting ? 0.95 : 0.8 }); // Brighter when boosting
       }
       if (car.headGraphics) {
-        // Dynamic head with boost pulsation
-        const rx = car.isBoosting ? 10 : 9; // Larger when boosting
-        const ry = car.isBoosting ? 7 : 6;
+        // Dynamic head with boost pulsation + growth per kill
+        const baseRx = car.isBoosting ? 10 : 9; // Larger when boosting
+        const baseRy = car.isBoosting ? 7 : 6;
+        const rx = baseRx * sizeMul;
+        const ry = baseRy * sizeMul;
         car.headGraphics.clear();
         car.headGraphics.ellipse(0, 0, rx, ry).fill({ color: car.color, alpha: 1.0 }).stroke({ width: car.isBoosting ? 3 : 2, color: car.color, alpha: car.isBoosting ? 0.7 : 0.3 });
         
@@ -3387,6 +3391,23 @@ class SpermRaceGame {
       // Mild screen shake
       this.screenShake(0.3);
     }
+  }
+
+  // Effective kill count for size scaling (practice uses local kills; tournament uses server HUD for the local player)
+  private getEffectiveKillsForCar(car: Car): number {
+    let kills = car.kills || 0;
+    if (car === this.player && this.wsHud?.active && this.wsHud.playerId) {
+      const srvKills = this.wsHud.kills?.[this.wsHud.playerId];
+      if (typeof srvKills === 'number' && srvKills > kills) kills = srvKills;
+    }
+    return kills;
+  }
+
+  // Map kills → visual size multiplier (caps at ~+60% size so things stay readable)
+  private getSizeMultiplierForCar(car: Car): number {
+    const kills = this.getEffectiveKillsForCar(car);
+    const clamped = Math.max(0, Math.min(6, kills));
+    return 1 + clamped * 0.12;
   }
 
   showKillStreakNotification(streak: number, x: number, y: number) {

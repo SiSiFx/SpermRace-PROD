@@ -27,8 +27,8 @@ test('landing + practice game load and capture screenshots with browser logs', a
     await page.reload({ waitUntil: 'networkidle' });
   }
 
-  // Basic smoke check that the app mounted
-  await expect(page.locator('text=SPERM')).toBeVisible({ timeout: 15000 });
+  // Basic smoke check that the app mounted (use unique heading instead of loose text match)
+  await expect(page.getByRole('heading', { name: /SPERM\s+RACE/i })).toBeVisible({ timeout: 15000 });
 
   const screenshotsDir = path.join(process.cwd(), 'playwright-screenshots');
   fs.mkdirSync(screenshotsDir, { recursive: true });

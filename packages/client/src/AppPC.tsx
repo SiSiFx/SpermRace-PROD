@@ -123,6 +123,8 @@ function AppInner() {
   const onPractice = () => setScreen('practice');
   const onTournament = () => setScreen('modes');
   const onWallet = () => setScreen('wallet');
+  const openLeaderboard = () => setShowLeaderboard(true);
+  const openHowTo = () => setShowHowTo(true);
 
   useEffect(() => {
     if (wsState.phase === 'lobby') setScreen('lobby');
@@ -153,8 +155,15 @@ function AppInner() {
 
   return (
     <div id="app-root" className="pc-optimized">
-      {/* Header wallet + status */}
-      <HeaderWallet screen={screen} status={statusText} />
+      {/* PC top bar: brand + nav + wallet */}
+      <HeaderWallet
+        screen={screen}
+        status={statusText}
+        onPractice={onPractice}
+        onTournament={onTournament}
+        onLeaderboard={openLeaderboard}
+        onShowHowTo={openHowTo}
+      />
       <div id="bg-particles" />
       
       {/* PC: Keyboard shortcuts hint */}
@@ -311,7 +320,7 @@ function AppInner() {
           onPractice={onPractice}
           onTournament={onTournament}
           onWallet={onWallet}
-          onLeaderboard={() => setShowLeaderboard(true)}
+          onLeaderboard={openLeaderboard}
         />
       )}
       {screen === 'practice' && (
@@ -381,39 +390,78 @@ function AppInner() {
   );
 }
 
-function HeaderWallet({ screen, status }: { screen: string; status: string }) {
-  const { publicKey, disconnect } = useWallet() as any;
-  const style: React.CSSProperties = {
-    position: 'fixed',
-    top: 16,
-    right: 16,
-    zIndex: 60,
-    background: 'rgba(0,0,0,0.65)',
-    padding: '10px 16px',
-    borderRadius: 10,
-    fontSize: 13,
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    border: '1px solid rgba(255,255,255,0.15)'
-  };
+function HeaderWallet({
+  screen,
+  status,
+  onPractice,
+  onTournament,
+  onLeaderboard,
+  onShowHowTo,
+}: {
+  screen: string;
+  status: string;
+  onPractice: () => void;
+  onTournament: () => void;
+  onLeaderboard?: () => void;
+  onShowHowTo?: () => void;
+}) {
+  const { publicKey, disconnect, connect } = useWallet() as any;
+  const short = publicKey ? `${publicKey.slice(0, 4)}…${publicKey.slice(-4)}` : null;
+  const isLanding = screen === 'landing';
 
-  if (publicKey) {
-    const short = `${publicKey.slice(0,6)}…${publicKey.slice(-6)}`;
-    return (
-      <div style={style}>
-        <span style={{ color: '#c7d2de', opacity: 0.7, fontSize: 12 }}>{status}</span>
-        <span style={{ color: 'rgba(255,255,255,0.3)' }}>•</span>
-        <span style={{ fontFamily: 'JetBrains Mono, monospace', color: '#00ffff' }}>{short}</span>
-        <button className="btn-secondary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => disconnect?.()}>Disconnect</button>
+  return (
+    <header className="pc-header">
+      <div className="pc-header-left">
+        <button
+          type="button"
+          className="pc-logo"
+          onClick={() => {
+            if (screen !== 'landing') {
+              try { window.location.href = '/'; } catch {}
+            }
+          }}
+        >
+          <span className="pc-logo-main">SPERM</span>
+          <span className="pc-logo-sub">RACE</span>
+        </button>
+        {isLanding && (
+          <nav className="pc-nav">
+            <button type="button" className="pc-nav-link" onClick={onPractice}>Practice</button>
+            <button type="button" className="pc-nav-link" onClick={onTournament}>Tournaments</button>
+            {onLeaderboard && (
+              <button type="button" className="pc-nav-link" onClick={onLeaderboard}>Leaderboard</button>
+            )}
+            {onShowHowTo && (
+              <button type="button" className="pc-nav-link" onClick={onShowHowTo}>How to Play</button>
+            )}
+          </nav>
+        )}
       </div>
-    );
-  }
-  if (screen === 'game') {
-    return <div style={style}>🎮 Simulation mode (no wallet)</div>;
-  }
-  // Show status even when not connected
-  return <div style={{ ...style, color: '#c7d2de' }}>{status}</div>;
+      <div className="pc-header-right">
+        <span className="pc-status-pill">{status}</span>
+        {short ? (
+          <>
+            <span className="pc-wallet-id">{short}</span>
+            <button
+              type="button"
+              className="btn-secondary pc-wallet-btn"
+              onClick={() => disconnect?.()}
+            >
+              Disconnect
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="btn-primary pc-wallet-btn"
+            onClick={() => connect?.()}
+          >
+            Connect Wallet
+          </button>
+        )}
+      </div>
+    </header>
+  );
 }
 
 interface LandingProps {
@@ -440,11 +488,11 @@ function Landing({
           maxWidth: 1200,
           margin: '0 auto',
           minHeight: '100vh',
-          padding: '48px 24px',
+          padding: '120px 40px 64px',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'stretch',
-          justifyContent: 'center',
+          justifyContent: 'flex-start',
           gap: 32,
         }}
       >
