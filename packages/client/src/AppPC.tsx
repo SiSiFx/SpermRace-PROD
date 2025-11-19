@@ -521,13 +521,7 @@ function Landing({
 
             <button
               type="button"
-              className="btn-secondary"
-              style={{
-                padding: '10px 18px',
-                fontSize: 12,
-                textTransform: 'uppercase',
-                letterSpacing: '0.14em',
-              }}
+              className="cta-secondary"
               onClick={onPractice}
             >
               Race for Free

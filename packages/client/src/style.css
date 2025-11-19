@@ -367,31 +367,43 @@ html, body {
   gap: 10px;
 }
 
-/* 💎 PREMIUM BUTTONS */
+/* 💎 PREMIUM HERO BUTTONS (used on landing & key CTAs) */
 .cta-primary {
-    background: var(--text-primary);
-    color: #000;
-    border: none;
-    font-weight: 800;
-    letter-spacing: 1px;
-    box-shadow: 0 0 25px rgba(255, 255, 255, 0.1);
-    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-    text-transform: uppercase;
-    padding: 15px 30px;
-    border-radius: var(--radius);
-    cursor: pointer;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 32px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.7);
+  background:
+    radial-gradient(130% 220% at 0% 0%, rgba(34, 211, 238, 0.24), transparent 55%),
+    radial-gradient(130% 200% at 100% 100%, rgba(15, 118, 110, 0.35), transparent 60%),
+    rgba(3, 3, 7, 0.96);
+  color: #f9fafb;
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow:
+    0 18px 45px rgba(15, 23, 42, 0.95),
+    0 0 32px rgba(56, 189, 248, 0.35);
+  transition: all 0.22s ease-out;
 }
 
 .cta-primary:hover:not(:disabled) {
-    background: var(--accent);
-    box-shadow: 0 0 40px rgba(0, 240, 255, 0.4);
-    transform: translateY(-2px);
+  border-color: rgba(56, 189, 248, 0.9);
+  box-shadow:
+    0 22px 55px rgba(15, 23, 42, 1),
+    0 0 42px rgba(56, 189, 248, 0.55);
+  transform: translateY(-1px);
 }
 
 .cta-primary:disabled {
-    background: var(--text-muted);
-    color: var(--bg-primary);
-    cursor: not-allowed;
+  opacity: 0.6;
+  box-shadow: none;
+  cursor: not-allowed;
 }
 
 .cta-glow {
@@ -415,6 +427,31 @@ html, body {
 .cta-description {
   color: var(--text-muted);
   font-size: 14px;
+}
+
+.cta-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 26px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  background: rgba(10, 13, 20, 0.9);
+  color: rgba(226, 232, 240, 0.9);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.18s ease-out;
+}
+
+.cta-secondary:hover {
+  border-color: var(--accent);
+  color: #f9fafb;
+  background: rgba(15, 23, 42, 0.98);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.85);
+  transform: translateY(-1px);
 }
 
 .live-sol-price {
