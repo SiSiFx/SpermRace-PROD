@@ -541,11 +541,12 @@ function Landing({
 
             <button
               type="button"
-              className="cta-secondary"
-              style={{ minWidth: 280, fontSize: 14, padding: '16px 36px' }}
+              className="cta-primary"
+              style={{ minWidth: 280, position: 'relative', fontSize: 14, padding: '16px 36px' }}
               onClick={onPractice}
             >
-              Race for Free
+              <span className="cta-text">Race for Free</span>
+              <div className="cta-glow" />
             </button>
           </section>
 
