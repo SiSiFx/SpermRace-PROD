@@ -25,7 +25,6 @@ import { WsProvider, useWs } from './WsProvider';
 import NewGameView from './NewGameView';
 import HowToPlayOverlay from './HowToPlayOverlay';
 import { Leaderboard } from './Leaderboard';
-import { Modes } from './components/Modes';
 
 type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
 
@@ -421,15 +420,10 @@ interface LandingProps {
 function Landing({
   solPrice,
   onPractice,
+  onTournament,
   onWallet,
   onLeaderboard,
 }: LandingProps) {
-
-  const [joinApi, setJoinApi] = useState<
-    { joinTier: (usd: number) => void; busy: boolean; disabled: boolean } | null
-  >(null);
-
-  const canEnterTournament = !!joinApi && !joinApi.busy && !joinApi.disabled;
 
   return (
     <div className="screen active pc-landing" id="landing-screen">
@@ -505,7 +499,7 @@ function Landing({
         </header>
 
         <main>
-          {/* Primary CTA row above the modes grid */}
+          {/* Hero CTAs: free practice and paid tournaments */}
           <section
             style={{
               marginTop: 24,
@@ -518,17 +512,10 @@ function Landing({
             <button
               type="button"
               className="cta-primary"
-              disabled={!canEnterTournament}
-              style={{
-                minWidth: 260,
-                position: 'relative',
-              }}
-              onClick={() => {
-                if (!canEnterTournament || !joinApi) return;
-                joinApi.joinTier(1); // default to $1 Micro Race
-              }}
+              style={{ minWidth: 260, position: 'relative' }}
+              onClick={onPractice}
             >
-              <span className="cta-text">Enter $1 Micro Race</span>
+              <span className="cta-text">Race for Free</span>
               <div className="cta-glow" />
             </button>
 
@@ -541,9 +528,9 @@ function Landing({
                 textTransform: 'uppercase',
                 letterSpacing: '0.14em',
               }}
-              onClick={onPractice}
+              onClick={() => onTournament?.()}
             >
-              Practice (Free)
+              Play for SOL (from $1)
             </button>
           </section>
 
@@ -555,10 +542,8 @@ function Landing({
               color: 'rgba(148,163,184,0.7)',
             }}
           >
-            Single-elimination arena. No gas until match entry is confirmed.
+            Select your entry tier on the next screen. Micro races start at $1.
           </div>
-
-          <Modes exposeJoin={setJoinApi} />
         </main>
 
         <footer

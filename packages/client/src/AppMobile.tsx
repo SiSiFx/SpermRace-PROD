@@ -31,7 +31,6 @@ import { WsProvider, useWs } from './WsProvider';
 import NewGameView from './NewGameView';
 import { Leaderboard } from './Leaderboard';
 import HowToPlayOverlay from './HowToPlayOverlay';
-import { Modes } from './components/Modes';
 import './leaderboard.css';
 
 type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
@@ -293,15 +292,10 @@ interface LandingProps {
 function Landing({
   solPrice,
   onPractice,
+  onTournament,
   onWallet,
   onLeaderboard,
 }: LandingProps) {
-
-  const [joinApi, setJoinApi] = useState<
-    { joinTier: (usd: number) => void; busy: boolean; disabled: boolean } | null
-  >(null);
-
-  const canEnterTournament = !!joinApi && !joinApi.busy && !joinApi.disabled;
 
   return (
     <div className="screen active mobile-landing" id="landing-screen">
@@ -387,23 +381,19 @@ function Landing({
             <button
               type="button"
               className="mobile-cta-primary"
-              disabled={!canEnterTournament}
-              onClick={() => {
-                if (!canEnterTournament || !joinApi) return;
-                joinApi.joinTier(1);
-              }}
+              onClick={onPractice}
             >
-              <span className="icon">🏆</span>
-              <span>Enter $1 Micro Race</span>
+              <span className="icon">🎮</span>
+              <span>Race for Free</span>
             </button>
 
             <button
               type="button"
               className="mobile-btn-secondary"
-              onClick={onPractice}
+              onClick={() => onTournament?.()}
             >
-              <span className="icon">🎮</span>
-              <span>Practice (Free)</span>
+              <span className="icon">🏆</span>
+              <span>Play for SOL (from $1)</span>
             </button>
           </section>
 
@@ -415,10 +405,8 @@ function Landing({
               color: 'rgba(148,163,184,0.7)',
             }}
           >
-            Tap a tier below for higher stakes. No gas until your match is locked.
+            Choose your entry tier next. Micro races start at $1.
           </div>
-
-          <Modes exposeJoin={setJoinApi} />
         </main>
 
         <footer
