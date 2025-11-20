@@ -401,13 +401,9 @@ function HeaderWallet({
         </button>
         {isLanding && (
           <nav className="pc-nav">
-            <button type="button" className="pc-nav-link" onClick={onPractice}>Practice</button>
             <button type="button" className="pc-nav-link" onClick={onTournament}>Tournaments</button>
             {onLeaderboard && (
               <button type="button" className="pc-nav-link" onClick={onLeaderboard}>Leaderboard</button>
-            )}
-            {onShowHowTo && (
-              <button type="button" className="pc-nav-link" onClick={onShowHowTo}>How to Play</button>
             )}
           </nav>
         )}
@@ -575,114 +571,6 @@ function Landing({
           >
             Tournament entry from $1 • Instant crypto payouts
           </div>
-
-          {/* Bio-Arena map preview */}
-          <section
-            style={{
-              marginTop: 28,
-              maxWidth: 760,
-              marginLeft: 'auto',
-              marginRight: 'auto',
-            }}
-          >
-            <div
-              style={{
-                fontSize: 12,
-                textTransform: 'uppercase',
-                letterSpacing: '0.16em',
-                color: 'rgba(148,163,184,0.9)',
-                marginBottom: 10,
-              }}
-            >
-              Bio-Arena Map
-            </div>
-            <div
-              style={{
-                position: 'relative',
-                padding: '18px 20px 20px',
-                borderRadius: 24,
-                background: 'radial-gradient(circle at 0 0, rgba(56,189,248,0.18), transparent 55%), rgba(15,23,42,0.96)',
-                border: '1px solid rgba(148,163,184,0.5)',
-                boxShadow: '0 18px 45px rgba(0,0,0,0.7)',
-                overflow: 'hidden',
-              }}
-            >
-              {/* Horizontal path */}
-              <div
-                style={{
-                  position: 'absolute',
-                  left: 40,
-                  right: 40,
-                  top: '52%',
-                  height: 2,
-                  background: 'linear-gradient(90deg, rgba(34,211,238,0.9), rgba(129,140,248,0.7))',
-                  opacity: 0.9,
-                }}
-              />
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: 16,
-                  position: 'relative',
-                  zIndex: 1,
-                }}
-              >
-                {[
-                  { name: 'Micro Race', usd: 1, max: 16, dur: '2–3 min', icon: '🧬' },
-                  { name: 'Nano Race', usd: 5, max: 32, dur: '3–4 min', icon: '⚡' },
-                  { name: 'Mega Race', usd: 25, max: 32, dur: '4–6 min', icon: '💎' },
-                  { name: 'Championship', usd: 100, max: 16, dur: '5–8 min', icon: '👑' },
-                ].map((t, i) => {
-                  const difficulty = i + 1;
-                  return (
-                    <div
-                      key={t.name}
-                      style={{
-                        flex: 1,
-                        minWidth: 0,
-                        padding: '10px 10px',
-                        borderRadius: 16,
-                        background: 'rgba(15,23,42,0.96)',
-                        border: '1px solid rgba(51,65,85,0.95)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'flex-start',
-                        gap: 6,
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: 18 }}>{t.icon}</span>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: '#e5e7eb' }}>{t.name}</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{ display: 'flex', gap: 3 }}>
-                          {Array.from({ length: 4 }).map((_, idx) => (
-                            <span
-                              key={idx}
-                              style={{
-                                width: 5,
-                                height: 5,
-                                borderRadius: '999px',
-                                background:
-                                  idx < difficulty
-                                    ? 'linear-gradient(135deg, #fb923c, #f97316)'
-                                    : 'rgba(55,65,81,0.9)',
-                              }}
-                            />
-                          ))}
-                        </div>
-                        <span style={{ fontSize: 11, color: 'rgba(148,163,184,0.9)' }}>
-                          ${t.usd} • {t.max}p • {t.dur}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </section>
 
           {totalGames > 0 && (
             <section style={{ marginTop: 32 }}>
