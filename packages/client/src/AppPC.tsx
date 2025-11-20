@@ -455,6 +455,21 @@ function Landing({
   onLeaderboard,
 }: LandingProps) {
 
+  const getPlayerStats = () => {
+    try {
+      const stored = localStorage.getItem('spermrace_stats');
+      if (stored) {
+        return JSON.parse(stored) as { totalGames?: number; wins?: number; totalKills?: number };
+      }
+    } catch {}
+    return { totalGames: 0, wins: 0, totalKills: 0 };
+  };
+
+  const stats = getPlayerStats();
+  const totalGames = stats.totalGames || 0;
+  const totalKills = stats.totalKills || 0;
+  const winRate = totalGames > 0 ? ((stats.wins || 0) / totalGames * 100).toFixed(1) : '0.0';
+
   return (
     <div className="screen active pc-landing" id="landing-screen">
       <div
@@ -535,7 +550,7 @@ function Landing({
               style={{ minWidth: 280, position: 'relative', fontSize: 14, padding: '16px 36px' }}
               onClick={() => onTournament?.()}
             >
-              <span className="cta-text">Play for SOL</span>
+              <span className="cta-text">Enter Tournament</span>
               <div className="cta-glow" />
             </button>
 
@@ -545,7 +560,7 @@ function Landing({
               style={{ minWidth: 280, position: 'relative', fontSize: 14, padding: '16px 36px' }}
               onClick={onPractice}
             >
-              <span className="cta-text">Race for Free</span>
+              <span className="cta-text">Practice Mode (Free)</span>
               <div className="cta-glow" />
             </button>
           </section>
@@ -560,6 +575,25 @@ function Landing({
           >
             Tournament entry from $1 • Instant crypto payouts
           </div>
+
+          {totalGames > 0 && (
+            <section style={{ marginTop: 32 }}>
+              <div className="pc-stats-grid">
+                <div className="pc-stat-card">
+                  <div className="stat-label">Games</div>
+                  <div className="stat-value">{totalGames}</div>
+                </div>
+                <div className="pc-stat-card highlight">
+                  <div className="stat-label">Win%</div>
+                  <div className="stat-value">{winRate}%</div>
+                </div>
+                <div className="pc-stat-card">
+                  <div className="stat-label">Kills</div>
+                  <div className="stat-value">{totalKills}</div>
+                </div>
+              </div>
+            </section>
+          )}
         </main>
       </div>
     </div>
@@ -674,10 +708,10 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
   }, []);
 
   const tiers = [
-    { name: 'Micro Race', usd: 1, max: 16, dur: '2-3 min', icon: '🧬' },
-    { name: 'Nano Race', usd: 5, max: 32, dur: '3-4 min', icon: '⚡' },
-    { name: 'Mega Race', usd: 25, max: 32, dur: '4-6 min', icon: '💎' },
-    { name: 'Championship', usd: 100, max: 16, dur: '5-8 min', icon: '👑' },
+    { name: 'Micro Race', usd: 1, max: 16, dur: '2–3 min', icon: '🧬' },
+    { name: 'Nano Race', usd: 5, max: 32, dur: '3–4 min', icon: '⚡' },
+    { name: 'Mega Race', usd: 25, max: 32, dur: '4–6 min', icon: '💎' },
+    { name: 'Championship', usd: 100, max: 16, dur: '5–8 min', icon: '👑' },
   ];
 
   useEffect(() => {
@@ -735,10 +769,10 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
             
             return (
               <div key={t.name} style={{
-                background: 'rgba(14,14,18,0.85)',
-                border: '1px solid rgba(255,255,255,0.12)',
-                borderRadius: 24,
-                padding: 32,
+                background: 'rgba(14,14,18,0.9)',
+                border: '1px solid rgba(255,255,255,0.14)',
+                borderRadius: 20,
+                padding: 24,
                 position: 'relative',
                 overflow: 'hidden',
                 backdropFilter: 'blur(20px)',
@@ -770,10 +804,12 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
                 e.currentTarget.style.boxShadow = '0 20px 60px rgba(0,0,0,0.4)';
               }}>
                 
-                {/* Header */}
-                <div style={{ marginBottom: 24 }}>
-                  <div style={{ fontSize: 48, marginBottom: 12 }}>{t.icon}</div>
-                  <h3 style={{ fontSize: 28, fontWeight: 800, color: '#fff', marginBottom: 8 }}>{t.name}</h3>
+                {/* Header: tier name */}
+                <div style={{ marginBottom: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ fontSize: 32 }}>{t.icon}</div>
+                    <h3 style={{ fontSize: 22, fontWeight: 800, color: '#fff' }}>{t.name}</h3>
+                  </div>
                   <div style={{
                     display: 'inline-block',
                     padding: '6px 14px',
@@ -786,18 +822,18 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
                   }}>Tier {i+1}</div>
                 </div>
 
-                {/* Prize Display */}
+                {/* Max gain */}
                 <div style={{
                   textAlign: 'center',
-                  padding: '24px 20px',
+                  padding: '16px 18px',
                   background: 'rgba(255,255,255,0.03)',
                   border: '1px solid rgba(255,255,255,0.1)',
                   borderRadius: 16,
                   marginBottom: 24,
                 }}>
-                  <div style={{ fontSize: 13, color: 'rgba(148,163,184,0.8)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Prize Pool</div>
+                  <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.85)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.12em' }}>Win up to</div>
                   <div style={{
-                    fontSize: 56,
+                    fontSize: 40,
                     fontWeight: 900,
                     background: buttonGradients[i],
                     backgroundClip: 'text',
@@ -806,15 +842,15 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
                     lineHeight: 1,
                     marginBottom: 8,
                   }}>${prize}</div>
-                  <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.7)' }}>Winner takes 85%</div>
+                  <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.75)' }}>Winner takes ~85% of pool</div>
                 </div>
 
-                {/* Details Grid */}
+                {/* Buy-in / players / duration */}
                 <div style={{
                   display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: 16,
-                  marginBottom: 24,
+                  gridTemplateColumns: 'repeat(3, minmax(0,1fr))',
+                  gap: 12,
+                  marginBottom: 20,
                 }}>
                   <div style={{
                     padding: 16,
@@ -822,8 +858,8 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
                     borderRadius: 12,
                     textAlign: 'center',
                   }}>
-                    <div style={{ fontSize: 24, fontWeight: 700, color: '#fff', marginBottom: 4 }}>${t.usd}</div>
-                    <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.7)' }}>Entry Fee</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: '#fff', marginBottom: 2 }}>${t.usd}</div>
+                    <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.8)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Buy-in</div>
                   </div>
                   <div style={{
                     padding: 16,
@@ -831,8 +867,17 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
                     borderRadius: 12,
                     textAlign: 'center',
                   }}>
-                    <div style={{ fontSize: 24, fontWeight: 700, color: '#fff', marginBottom: 4 }}>{t.max}</div>
-                    <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.7)' }}>Max Players</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: '#fff', marginBottom: 2 }}>{t.max}</div>
+                    <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.8)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Players max</div>
+                  </div>
+                  <div style={{
+                    padding: 16,
+                    background: 'rgba(255,255,255,0.03)',
+                    borderRadius: 12,
+                    textAlign: 'center',
+                  }}>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: '#fff', marginBottom: 2 }}>{t.dur}</div>
+                    <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.8)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Duration</div>
                   </div>
                 </div>
 
@@ -840,13 +885,13 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
                 <button
                   style={{
                     width: '100%',
-                    padding: '18px 32px',
+                    padding: '14px 28px',
                     background: buttonGradients[i],
                     border: 'none',
                     borderRadius: 14,
                     color: i === 1 ? '#fff' : '#000',
-                    fontSize: 16,
-                    fontWeight: 800,
+                    fontSize: 15,
+                    fontWeight: 700,
                     textTransform: 'uppercase',
                     letterSpacing: '0.08em',
                     cursor: disabled ? 'not-allowed' : 'pointer',
@@ -862,9 +907,11 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
                   : publicKey ? `🚀 Enter Race` : `Connect & Enter`
                 }</button>
 
-                <div style={{ textAlign: 'center', marginTop: 12, fontSize: 11, color: 'rgba(148,163,184,0.6)' }}>
-                  {t.dur} duration
-                </div>
+                {(preflightError || (preflight && (!preflight.configured || !preflight.address || preflight.sol == null))) && (
+                  <div style={{ textAlign: 'center', marginTop: 8, fontSize: 11, color: '#f97373' }}>
+                    Service unavailable • please try again later
+                  </div>
+                )}
               </div>
             );
           })}

@@ -1364,6 +1364,13 @@ button:focus-visible, a:focus-visible, .wallet-connect-btn:focus-visible, .tourn
   z-index: 10;
 }
 
+/* In-game emote buttons - make them more compact so they don't cover the screen */
+#emote-buttons button {
+  width: 42px !important;
+  height: 42px !important;
+  font-size: 20px !important;
+}
+
 .hud-top {
   position: absolute;
   top: 20px;

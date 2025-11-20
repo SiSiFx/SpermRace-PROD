@@ -28,7 +28,7 @@ export class HudManager {
     this.topBar.id = 'unified-top-bar';
     Object.assign(this.topBar.style, {
       position: 'absolute',
-      top: '12px',
+      top: 'calc(10px + env(safe-area-inset-top, 0px))',
       left: '50%',
       transform: 'translateX(-50%)',
       display: 'flex',

@@ -84,15 +84,16 @@ export function HowToPlayOverlay({ mode, onClose }: HowToPlayOverlayProps) {
             onClick={onClose}
             style={{
               borderRadius: 999,
-              border: '1px solid rgba(148,163,184,0.65)',
-              padding: isMobile ? '4px 10px' : '4px 12px',
-              background: 'rgba(15,23,42,0.9)',
-              color: '#e5e7eb',
+              border: '1px solid rgba(248,113,113,0.8)',
+              padding: isMobile ? '6px 12px' : '6px 14px',
+              background: 'rgba(15,23,42,0.95)',
+              color: '#fee2e2',
               cursor: 'pointer',
               fontSize: isMobile ? 12 : 13,
               display: 'flex',
               alignItems: 'center',
-              gap: 4
+              gap: 6,
+              fontWeight: 600
             }}
           >
             <span style={{ fontSize: 14 }}>✕</span>
@@ -169,25 +170,25 @@ export function HowToPlayOverlay({ mode, onClose }: HowToPlayOverlayProps) {
                   opacity: isMobile ? 0.55 : 0.95
                 }}
               >
-                <div style={{ fontWeight: 700, marginBottom: 2 }}>PC</div>
-                <div style={{ fontSize: 12 }}>
-                  • Aim with mouse cursor
-                  <br />• Move with <strong>WASD</strong>
-                  <br />• Boost with <strong>Space</strong> or <strong>B</strong>
-                  <br />• <strong>ESC</strong> to go back
-                </div>
+                <div style={{ fontWeight: 700, marginBottom: 4 }}>PC</div>
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
+                  <li>Aim with the mouse cursor</li>
+                  <li>Move with <strong>WASD</strong></li>
+                  <li>Boost with <strong>Space</strong> or <strong>B</strong></li>
+                  <li>Press <strong>ESC</strong> to go back to menus</li>
+                </ul>
               </div>
               <div
                 style={{
                   opacity: isMobile ? 0.95 : 0.7
                 }}
               >
-                <div style={{ fontWeight: 700, marginBottom: 2 }}>Mobile</div>
-                <div style={{ fontSize: 12 }}>
-                  • Drag left side of screen to steer
-                  <br />• Tap the <strong>⚡ BOOST</strong> button to dash
-                  <br />• A short countdown shows before control starts
-                </div>
+                <div style={{ fontWeight: 700, marginBottom: 4 }}>Mobile</div>
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
+                  <li>Drag the left side of the screen to steer</li>
+                  <li>Tap the <strong>⚡ BOOST</strong> button to dash</li>
+                  <li>A short on-field countdown appears before you can move</li>
+                </ul>
               </div>
             </div>
           </section>

@@ -1451,13 +1451,13 @@ class SpermRaceGame {
     const isMobileDevice = window.innerWidth <= 768 && window.matchMedia('(orientation: portrait)').matches;
     Object.assign(this.leaderboardContainer.style, {
       position: 'absolute',
-      top: '70px',
-      right: '20px',
-      width: '260px',
-      background: 'rgba(0,0,0,0.55)',
-      border: '1px solid rgba(255,255,255,0.12)',
-      borderRadius: '12px',
-      padding: '10px',
+      top: '72px',
+      right: '18px',
+      width: '220px',
+      background: 'rgba(0,0,0,0.65)',
+      border: '1px solid rgba(255,255,255,0.16)',
+      borderRadius: '10px',
+      padding: '8px',
       zIndex: '10',
       display: isMobileDevice ? 'none' : 'block'
     });
@@ -1516,9 +1516,9 @@ class SpermRaceGame {
       btn.textContent = emote.emoji;
       btn.title = emote.label;
       Object.assign(btn.style, {
-        width: '50px',
-        height: '50px',
-        fontSize: '24px',
+        width: '46px',
+        height: '46px',
+        fontSize: '20px',
         background: 'rgba(0, 0, 0, 0.7)',
         border: '2px solid rgba(34, 211, 238, 0.5)',
         borderRadius: '50%',
