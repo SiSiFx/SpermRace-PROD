@@ -576,6 +576,114 @@ function Landing({
             Tournament entry from $1 • Instant crypto payouts
           </div>
 
+          {/* Bio-Arena map preview */}
+          <section
+            style={{
+              marginTop: 28,
+              maxWidth: 760,
+              marginLeft: 'auto',
+              marginRight: 'auto',
+            }}
+          >
+            <div
+              style={{
+                fontSize: 12,
+                textTransform: 'uppercase',
+                letterSpacing: '0.16em',
+                color: 'rgba(148,163,184,0.9)',
+                marginBottom: 10,
+              }}
+            >
+              Bio-Arena Map
+            </div>
+            <div
+              style={{
+                position: 'relative',
+                padding: '18px 20px 20px',
+                borderRadius: 24,
+                background: 'radial-gradient(circle at 0 0, rgba(56,189,248,0.18), transparent 55%), rgba(15,23,42,0.96)',
+                border: '1px solid rgba(148,163,184,0.5)',
+                boxShadow: '0 18px 45px rgba(0,0,0,0.7)',
+                overflow: 'hidden',
+              }}
+            >
+              {/* Horizontal path */}
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 40,
+                  right: 40,
+                  top: '52%',
+                  height: 2,
+                  background: 'linear-gradient(90deg, rgba(34,211,238,0.9), rgba(129,140,248,0.7))',
+                  opacity: 0.9,
+                }}
+              />
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: 16,
+                  position: 'relative',
+                  zIndex: 1,
+                }}
+              >
+                {[
+                  { name: 'Micro Race', usd: 1, max: 16, dur: '2–3 min', icon: '🧬' },
+                  { name: 'Nano Race', usd: 5, max: 32, dur: '3–4 min', icon: '⚡' },
+                  { name: 'Mega Race', usd: 25, max: 32, dur: '4–6 min', icon: '💎' },
+                  { name: 'Championship', usd: 100, max: 16, dur: '5–8 min', icon: '👑' },
+                ].map((t, i) => {
+                  const difficulty = i + 1;
+                  return (
+                    <div
+                      key={t.name}
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        padding: '10px 10px',
+                        borderRadius: 16,
+                        background: 'rgba(15,23,42,0.96)',
+                        border: '1px solid rgba(51,65,85,0.95)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'flex-start',
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 18 }}>{t.icon}</span>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: '#e5e7eb' }}>{t.name}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ display: 'flex', gap: 3 }}>
+                          {Array.from({ length: 4 }).map((_, idx) => (
+                            <span
+                              key={idx}
+                              style={{
+                                width: 5,
+                                height: 5,
+                                borderRadius: '999px',
+                                background:
+                                  idx < difficulty
+                                    ? 'linear-gradient(135deg, #fb923c, #f97316)'
+                                    : 'rgba(55,65,81,0.9)',
+                              }}
+                            />
+                          ))}
+                        </div>
+                        <span style={{ fontSize: 11, color: 'rgba(148,163,184,0.9)' }}>
+                          ${t.usd} • {t.max}p • {t.dur}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+
           {totalGames > 0 && (
             <section style={{ marginTop: 32 }}>
               <div className="pc-stats-grid">
@@ -779,254 +887,322 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
           )}
         </div>
 
-        {/* Tier selector chips */}
+        {/* Bio-Arena Map layout: left = arenas, right = detail drawer */}
         <div
           style={{
-            display: 'flex',
-            justifyContent: 'center',
-            gap: 12,
-            flexWrap: 'wrap',
-            marginBottom: 28,
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 420px) minmax(0, 1fr)',
+            gap: 32,
+            alignItems: 'stretch',
+            marginBottom: 40,
           }}
         >
-          {tiers.map((t, i) => {
-            const active = i === selectedIndex;
-            return (
-              <button
-                key={t.name}
-                type="button"
-                onClick={() => setSelectedIndex(i)}
+          {/* Left: stylized map with arena nodes */}
+          <div
+            style={{
+              position: 'relative',
+              padding: 24,
+              borderRadius: 24,
+              background: 'radial-gradient(circle at 0 0, rgba(56,189,248,0.16), transparent 55%), rgba(15,23,42,0.96)',
+              border: '1px solid rgba(148,163,184,0.5)',
+              boxShadow: '0 18px 50px rgba(0,0,0,0.7)',
+              overflow: 'hidden',
+            }}
+          >
+            {/* Vertical path line */}
+            <div
+              style={{
+                position: 'absolute',
+                left: 40,
+                top: 28,
+                bottom: 28,
+                width: 3,
+                background: 'linear-gradient(to bottom, rgba(34,211,238,0.9), rgba(129,140,248,0.7))',
+                opacity: 0.8,
+              }}
+            />
+            <div
+              style={{
+                position: 'absolute',
+                left: 34,
+                top: 34,
+                bottom: 34,
+                width: 14,
+                borderRadius: 999,
+                background: 'radial-gradient(circle, rgba(15,23,42,0.8), transparent 70%)',
+              }}
+            />
+
+            <div style={{ position: 'relative', zIndex: 1, marginBottom: 16 }}>
+              <div
                 style={{
-                  padding: '10px 16px',
-                  borderRadius: 999,
-                  border: active ? '1px solid rgba(34,211,238,0.8)' : '1px solid rgba(148,163,184,0.6)',
-                  background: active ? 'rgba(15,23,42,0.95)' : 'rgba(15,23,42,0.7)',
-                  color: '#e5e7eb',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  cursor: 'pointer',
-                  fontSize: 12,
+                  fontSize: 11,
                   textTransform: 'uppercase',
-                  letterSpacing: '0.12em',
-                  boxShadow: active ? '0 0 24px rgba(34,211,238,0.45)' : 'none',
-                  opacity: preflightError ? 0.6 : 1,
+                  letterSpacing: '0.18em',
+                  color: 'rgba(148,163,184,0.9)',
+                  marginBottom: 6,
                 }}
               >
-                <span style={{ fontSize: 18 }}>{t.icon}</span>
-                <span style={{ fontWeight: 600 }}>{t.name}</span>
-                <span style={{ fontSize: 11, opacity: 0.8 }}>{badgeLabels[i]}</span>
-              </button>
-            );
-          })}
-        </div>
+                Bio-Arena Map
+              </div>
+              <div style={{ fontSize: 18, fontWeight: 600, color: '#e5e7eb' }}>
+                Choose your arena along the fertilization route
+              </div>
+            </div>
 
-        {/* Single hero ticket */}
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 40 }}>
+            <div
+              style={{
+                position: 'relative',
+                zIndex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 14,
+                marginTop: 6,
+              }}
+            >
+              {tiers.map((t, i) => {
+                const active = i === selectedIndex;
+                const difficulty = i + 1; // 1–4
+                return (
+                  <button
+                    key={t.name}
+                    type="button"
+                    onClick={() => setSelectedIndex(i)}
+                    style={{
+                      position: 'relative',
+                      marginLeft: 32,
+                      padding: '10px 14px',
+                      borderRadius: 14,
+                      border: active ? '1px solid rgba(34,211,238,0.9)' : '1px solid rgba(51,65,85,0.9)',
+                      background: active ? 'rgba(15,23,42,0.95)' : 'rgba(15,23,42,0.85)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      cursor: 'pointer',
+                      boxShadow: active ? '0 0 24px rgba(34,211,238,0.45)' : '0 8px 22px rgba(0,0,0,0.7)',
+                      transform: active ? 'translateX(2px)' : 'translateX(0)',
+                      transition: 'all 0.18s ease-out',
+                      opacity: preflightError ? 0.7 : 1,
+                    }}
+                  >
+                    {/* Node dot */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        left: -19,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        width: 14,
+                        height: 14,
+                        borderRadius: '999px',
+                        background: active
+                          ? 'radial-gradient(circle, #22d3ee, #0ea5e9)'
+                          : 'radial-gradient(circle, #4b5563, #020617)',
+                        boxShadow: active ? '0 0 18px rgba(34,211,238,0.9)' : '0 0 6px rgba(15,23,42,1)',
+                        border: '2px solid rgba(15,23,42,0.95)',
+                      }}
+                    />
+
+                    <div style={{ fontSize: 24 }}>{t.icon}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: '#e5e7eb' }}>{t.name}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                        {/* Difficulty dots */}
+                        <div style={{ display: 'flex', gap: 3 }}>
+                          {Array.from({ length: 4 }).map((_, idx) => (
+                            <span
+                              key={idx}
+                              style={{
+                                width: 6,
+                                height: 6,
+                                borderRadius: '999px',
+                                background:
+                                  idx < difficulty
+                                    ? 'linear-gradient(135deg, #fb923c, #f97316)'
+                                    : 'rgba(55,65,81,0.9)',
+                              }}
+                            />
+                          ))}
+                        </div>
+                        <span style={{ fontSize: 11, color: 'rgba(148,163,184,0.9)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>
+                          {badgeLabels[i]}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.9)', marginTop: 4 }}>
+                        ${t.usd} • {t.max}p • {t.dur}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Right: arena detail panel (drawer style) */}
           <div
             style={{
               width: '100%',
-              maxWidth: 900,
-              background: 'rgba(14,14,18,0.95)',
+              background: 'rgba(14,14,18,0.96)',
               borderRadius: 24,
-              border: '1px solid rgba(255,255,255,0.16)',
+              border: '1px solid rgba(255,255,255,0.12)',
               position: 'relative',
               overflow: 'hidden',
-              padding: 28,
-              boxShadow: '0 22px 70px rgba(0,0,0,0.65)',
+              padding: 26,
+              boxShadow: '0 22px 70px rgba(0,0,0,0.7)',
               backdropFilter: 'blur(24px)',
             }}
           >
-            {/* Glow stripe */}
             <div
               style={{
                 position: 'absolute',
                 inset: 0,
                 background: `${buttonGradients[selectedIndex]}`,
-                opacity: 0.16,
+                opacity: 0.12,
                 mixBlendMode: 'screen',
                 pointerEvents: 'none',
               }}
             />
 
-            <div
-              style={{
-                position: 'relative',
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: 24,
-                alignItems: 'stretch',
-              }}
-            >
-              {/* Left: tier summary */}
-              <div
-                style={{
-                  flex: '1 1 260px',
-                  minWidth: 0,
-                  paddingRight: 24,
-                  borderRight: '1px dashed rgba(148,163,184,0.5)',
-                }}
-              >
+            <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
                 <div
                   style={{
                     fontSize: 11,
                     textTransform: 'uppercase',
-                    letterSpacing: '0.14em',
+                    letterSpacing: '0.16em',
                     color: 'rgba(148,163,184,0.9)',
-                    marginBottom: 10,
+                    marginBottom: 6,
                   }}
                 >
-                  Entry Tier
+                  Arena Details
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-                  <div style={{ fontSize: 34 }}>{selectedTier.icon}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ fontSize: 30 }}>{selectedTier.icon}</div>
                   <div>
-                    <div style={{ fontSize: 24, fontWeight: 800, color: '#fff' }}>{selectedTier.name}</div>
-                    <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.9)' }}>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: '#fff' }}>{selectedTier.name}</div>
+                    <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.95)' }}>
                       Tier {selectedIndex + 1} • {badgeLabels[selectedIndex]}
                     </div>
                   </div>
                 </div>
-                <div style={{ marginTop: 8, fontSize: 18, fontWeight: 600, color: '#e5e7eb' }}>
-                  ${selectedTier.usd.toFixed(2)} buy-in
+              </div>
+
+              <div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: 'rgba(148,163,184,0.85)',
+                    marginBottom: 4,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.14em',
+                  }}
+                >
+                  Win up to
                 </div>
-                <div style={{ marginTop: 6, fontSize: 13, color: 'rgba(148,163,184,0.9)' }}>
-                  {selectedTier.max} players • {selectedTier.dur} per match
+                <div
+                  style={{
+                    fontSize: 44,
+                    fontWeight: 900,
+                    background: buttonGradients[selectedIndex],
+                    backgroundClip: 'text',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    lineHeight: 1,
+                    textShadow: '0 4px 18px rgba(0,0,0,0.8)',
+                    marginBottom: 4,
+                  }}
+                >
+                  ${selectedPrize}
+                </div>
+                <div style={{ fontSize: 13, color: 'rgba(148,163,184,0.9)' }}>
+                  Winner takes ~85% of the prize pool
                 </div>
               </div>
 
-              {/* Right: prize + details + CTA */}
               <div
                 style={{
-                  flex: '1 1 260px',
-                  minWidth: 0,
-                  paddingLeft: 24,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 16,
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, minmax(0,1fr))',
+                  gap: 10,
+                  marginTop: 4,
                 }}
               >
                 <div
                   style={{
-                    textAlign: 'left',
+                    padding: 12,
+                    borderRadius: 10,
+                    background: 'rgba(15,23,42,0.9)',
+                    border: '1px solid rgba(148,163,184,0.4)',
+                    textAlign: 'center',
                   }}
                 >
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: 'rgba(148,163,184,0.85)',
-                      marginBottom: 6,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.14em',
-                    }}
-                  >
-                    Win up to
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 46,
-                      fontWeight: 900,
-                      background: buttonGradients[selectedIndex],
-                      backgroundClip: 'text',
-                      WebkitBackgroundClip: 'text',
-                      WebkitTextFillColor: 'transparent',
-                      lineHeight: 1,
-                      textShadow: '0 4px 18px rgba(0,0,0,0.8)',
-                      marginBottom: 6,
-                    }}
-                  >
-                    ${selectedPrize}
-                  </div>
-                  <div style={{ fontSize: 13, color: 'rgba(148,163,184,0.9)' }}>
-                    Winner takes ~85% of the prize pool
-                  </div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>${selectedTier.usd}</div>
+                  <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.85)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Buy-in</div>
                 </div>
-
                 <div
                   style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(3, minmax(0,1fr))',
-                    gap: 10,
-                    marginTop: 4,
+                    padding: 12,
+                    borderRadius: 10,
+                    background: 'rgba(15,23,42,0.9)',
+                    border: '1px solid rgba(148,163,184,0.4)',
+                    textAlign: 'center',
                   }}
                 >
-                  <div
-                    style={{
-                      padding: 12,
-                      borderRadius: 10,
-                      background: 'rgba(15,23,42,0.9)',
-                      border: '1px solid rgba(148,163,184,0.4)',
-                      textAlign: 'center',
-                    }}
-                  >
-                    <div style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>${selectedTier.usd}</div>
-                    <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.85)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Buy-in</div>
-                  </div>
-                  <div
-                    style={{
-                      padding: 12,
-                      borderRadius: 10,
-                      background: 'rgba(15,23,42,0.9)',
-                      border: '1px solid rgba(148,163,184,0.4)',
-                      textAlign: 'center',
-                    }}
-                  >
-                    <div style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>{selectedTier.max}</div>
-                    <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.85)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Players max</div>
-                  </div>
-                  <div
-                    style={{
-                      padding: 12,
-                      borderRadius: 10,
-                      background: 'rgba(15,23,42,0.9)',
-                      border: '1px solid rgba(148,163,184,0.4)',
-                      textAlign: 'center',
-                    }}
-                  >
-                    <div style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>{selectedTier.dur}</div>
-                    <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.85)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Duration</div>
-                  </div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>{selectedTier.max}</div>
+                  <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.85)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Players max</div>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={handleJoinSelected}
-                  disabled={disabledSelected}
+                <div
                   style={{
-                    marginTop: 16,
-                    width: '100%',
-                    padding: '14px 28px',
-                    borderRadius: 999,
-                    border: 'none',
-                    background: buttonGradients[selectedIndex],
-                    color: selectedIndex === 1 ? '#fff' : '#000',
-                    fontSize: 15,
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.1em',
-                    cursor: disabledSelected ? 'not-allowed' : 'pointer',
-                    boxShadow: disabledSelected ? 'none' : '0 10px 30px rgba(0,0,0,0.6)',
-                    opacity: disabledSelected ? 0.7 : 1,
-                    transition: 'all 0.2s ease',
+                    padding: 12,
+                    borderRadius: 10,
+                    background: 'rgba(15,23,42,0.9)',
+                    border: '1px solid rgba(148,163,184,0.4)',
+                    textAlign: 'center',
                   }}
                 >
-                  {preflightError
-                    ? 'Service Unavailable'
-                    : (preflight && (!preflight.configured || !preflight.address || preflight.sol == null))
-                    ? 'Temporarily Unavailable'
-                    : (isJoining || wsState.phase === 'connecting' || wsState.phase === 'authenticating')
-                    ? 'Joining…'
-                    : publicKey
-                    ? '🚀 Enter Race'
-                    : 'Connect & Enter'}
-                </button>
-
-                {(preflightError || (preflight && (!preflight.configured || !preflight.address || preflight.sol == null))) && (
-                  <div style={{ textAlign: 'left', marginTop: 8, fontSize: 11, color: '#f97373' }}>
-                    Service unavailable • please try again later
-                  </div>
-                )}
+                  <div style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>{selectedTier.dur}</div>
+                  <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.85)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Duration</div>
+                </div>
               </div>
+
+              <button
+                type="button"
+                onClick={handleJoinSelected}
+                disabled={disabledSelected}
+                style={{
+                  marginTop: 16,
+                  width: '100%',
+                  padding: '14px 28px',
+                  borderRadius: 999,
+                  border: 'none',
+                  background: buttonGradients[selectedIndex],
+                  color: selectedIndex === 1 ? '#fff' : '#000',
+                  fontSize: 15,
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.1em',
+                  cursor: disabledSelected ? 'not-allowed' : 'pointer',
+                  boxShadow: disabledSelected ? 'none' : '0 10px 30px rgba(0,0,0,0.6)',
+                  opacity: disabledSelected ? 0.7 : 1,
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                {preflightError
+                  ? 'Service Unavailable'
+                  : (preflight && (!preflight.configured || !preflight.address || preflight.sol == null))
+                  ? 'Temporarily Unavailable'
+                  : (isJoining || wsState.phase === 'connecting' || wsState.phase === 'authenticating')
+                  ? 'Joining…'
+                  : publicKey
+                  ? '🚀 Enter Race'
+                  : 'Connect & Enter'}
+              </button>
+
+              {(preflightError || (preflight && (!preflight.configured || !preflight.address || preflight.sol == null))) && (
+                <div style={{ textAlign: 'left', marginTop: 8, fontSize: 11, color: '#f97373' }}>
+                  Service unavailable • please try again later
+                </div>
+              )}
             </div>
           </div>
         </div>

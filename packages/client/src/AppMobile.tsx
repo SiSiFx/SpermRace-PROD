@@ -460,8 +460,109 @@ function Landing({
               color: 'rgba(148,163,184,0.7)',
             }}
           >
-            Choose your entry tier next. Micro races start at $1.
+            Choose your arena on the Bio-Arena map next. Micro races start at $1.
           </div>
+
+          <section
+            style={{
+              marginTop: 14,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 10,
+                textTransform: 'uppercase',
+                letterSpacing: '0.16em',
+                color: 'rgba(148,163,184,0.9)',
+                marginBottom: 8,
+                textAlign: 'center',
+              }}
+            >
+              Bio-Arena Map
+            </div>
+            <div
+              style={{
+                position: 'relative',
+                padding: '14px 10px 16px',
+                borderRadius: 18,
+                background: 'radial-gradient(circle at 0 0, rgba(56,189,248,0.18), transparent 55%), rgba(15,23,42,0.96)',
+                border: '1px solid rgba(51,65,85,0.95)',
+                boxShadow: '0 14px 32px rgba(0,0,0,0.7)',
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 26,
+                  right: 26,
+                  top: '54%',
+                  height: 2,
+                  background: 'linear-gradient(90deg, rgba(34,211,238,0.9), rgba(129,140,248,0.7))',
+                  opacity: 0.9,
+                }}
+              />
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: 8,
+                  position: 'relative',
+                  zIndex: 1,
+                }}
+              >
+                {[
+                  { name: 'Micro Race', usd: 1, max: 16, dur: '2–3 min', icon: '🧬' },
+                  { name: 'Nano Race', usd: 5, max: 32, dur: '3–4 min', icon: '⚡' },
+                  { name: 'Mega Race', usd: 25, max: 32, dur: '4–6 min', icon: '💎' },
+                  { name: 'Championship', usd: 100, max: 16, dur: '5–8 min', icon: '👑' },
+                ].map((t, i) => {
+                  const difficulty = i + 1;
+                  return (
+                    <div
+                      key={t.name}
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        padding: '8px 6px',
+                        borderRadius: 14,
+                        background: 'rgba(15,23,42,0.96)',
+                        border: '1px solid rgba(51,65,85,0.95)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: 4,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ fontSize: 16 }}>{t.icon}</span>
+                        <span style={{ fontSize: 10, fontWeight: 600, color: '#e5e7eb' }}>{t.name.split(' ')[0]}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <div style={{ display: 'flex', gap: 2 }}>
+                          {Array.from({ length: 4 }).map((_, idx) => (
+                            <span
+                              key={idx}
+                              style={{
+                                width: 4,
+                                height: 4,
+                                borderRadius: '999px',
+                                background:
+                                  idx < difficulty
+                                    ? 'linear-gradient(135deg, #fb923c, #f97316)'
+                                    : 'rgba(55,65,81,0.9)',
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
         </main>
 
         <footer
@@ -738,51 +839,106 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
           <div className="modal-subtitle" style={{ color: '#ff8080', marginBottom: 8 }}>Tournaments are temporarily unavailable (prize preflight issue).</div>
         )}
 
-        {/* Tier selector chips */}
+        {/* Bio-Arena Map: horizontal path with arena nodes */}
         <div
           style={{
-            display: 'flex',
-            gap: 8,
-            padding: '0 4px',
+            position: 'relative',
+            marginTop: 14,
             marginBottom: 18,
-            overflowX: 'auto',
-            WebkitOverflowScrolling: 'touch',
+            padding: '12px 8px 18px',
           }}
         >
-          {tiers.map((t, i) => {
-            const active = i === selectedIndex;
-            return (
-              <button
-                key={t.name}
-                type="button"
-                onClick={() => setSelectedIndex(i)}
-                style={{
-                  flexShrink: 0,
-                  padding: '8px 12px',
-                  borderRadius: 999,
-                  border: active ? '1px solid rgba(34,211,238,0.9)' : '1px solid rgba(148,163,184,0.7)',
-                  background: active ? 'rgba(15,23,42,0.98)' : 'rgba(15,23,42,0.8)',
-                  color: '#e5e7eb',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  fontSize: 11,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.12em',
-                  cursor: 'pointer',
-                  boxShadow: active ? '0 0 16px rgba(34,211,238,0.55)' : 'none',
-                  opacity: preflightError ? 0.6 : 1,
-                }}
-              >
-                <span style={{ fontSize: 16 }}>🧬</span>
-                <span style={{ fontWeight: 600 }}>{t.name}</span>
-                <span style={{ fontSize: 10, opacity: 0.8 }}>{badgeLabels[i]}</span>
-              </button>
-            );
-          })}
+          {/* Horizontal path */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: 32,
+              right: 32,
+              height: 2,
+              background: 'linear-gradient(90deg, rgba(34,211,238,0.9), rgba(129,140,248,0.7))',
+              opacity: 0.9,
+            }}
+          />
+
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 8,
+              position: 'relative',
+              zIndex: 1,
+            }}
+          >
+            {tiers.map((t, i) => {
+              const active = i === selectedIndex;
+              const difficulty = i + 1;
+              return (
+                <button
+                  key={t.name}
+                  type="button"
+                  onClick={() => setSelectedIndex(i)}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    padding: '10px 8px 10px',
+                    borderRadius: 14,
+                    border: active ? '1px solid rgba(34,211,238,0.9)' : '1px solid rgba(51,65,85,0.95)',
+                    background: active ? 'rgba(15,23,42,0.98)' : 'rgba(15,23,42,0.92)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 4,
+                    cursor: 'pointer',
+                    boxShadow: active ? '0 0 16px rgba(34,211,238,0.75)' : '0 6px 18px rgba(0,0,0,0.7)',
+                    transform: active ? 'translateY(-2px)' : 'translateY(0)',
+                    transition: 'all 0.18s ease-out',
+                    opacity: preflightError ? 0.7 : 1,
+                  }}
+                >
+                  {/* Node dot */}
+                  <div
+                    style={{
+                      width: 16,
+                      height: 16,
+                      borderRadius: '999px',
+                      background: active
+                        ? 'radial-gradient(circle, #22d3ee, #0ea5e9)'
+                        : 'radial-gradient(circle, #4b5563, #020617)',
+                      boxShadow: active ? '0 0 16px rgba(34,211,238,0.9)' : '0 0 6px rgba(15,23,42,1)',
+                      border: '2px solid rgba(15,23,42,0.95)',
+                    }}
+                  />
+                  <div style={{ fontSize: 18 }}>{t.name.split(' ')[0]}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <div style={{ display: 'flex', gap: 2 }}>
+                      {Array.from({ length: 4 }).map((_, idx) => (
+                        <span
+                          key={idx}
+                          style={{
+                            width: 5,
+                            height: 5,
+                            borderRadius: '999px',
+                            background:
+                              idx < difficulty
+                                ? 'linear-gradient(135deg, #fb923c, #f97316)'
+                                : 'rgba(55,65,81,0.9)',
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 9, color: 'rgba(148,163,184,0.9)', marginTop: 2 }}>
+                    ${t.usd} • {t.max}p • {t.dur}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        {/* Single hero ticket card */}
+        {/* Arena detail drawer (within sheet) */}
         <div className="tournament-grid" style={{ marginBottom: '20px' }}>
           <div
             className="tournament-card"
@@ -790,7 +946,7 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
               background: cardGradients[selectedIndex],
               border: '1px solid rgba(255,255,255,0.18)',
               borderRadius: '20px',
-              padding: '20px 16px 18px',
+              padding: '18px 14px 16px',
               position: 'relative',
               overflow: 'hidden',
               backdropFilter: 'blur(16px)',
@@ -808,7 +964,7 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
                 height: '220px',
                 background: prizeGradients[selectedIndex],
                 borderRadius: '50%',
-                opacity: 0.35,
+                opacity: 0.32,
                 filter: 'blur(70px)',
                 animation: 'float 6s ease-in-out infinite',
               }}
@@ -816,10 +972,10 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
 
             {/* Header: tier name + badge */}
             <div className="tournament-header" style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div className="tournament-icon" style={{ fontSize: '24px' }}>🧬</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div className="tournament-icon" style={{ fontSize: '22px' }}>🧬</div>
                 <div>
-                  <h3 className="tournament-title" style={{ fontSize: '20px', fontWeight: 800, marginBottom: 2 }}>{selectedTier.name}</h3>
+                  <h3 className="tournament-title" style={{ fontSize: '18px', fontWeight: 800, marginBottom: 2 }}>{selectedTier.name}</h3>
                   <div style={{ fontSize: 11, color: 'rgba(226,232,240,0.9)' }}>Tier {selectedIndex + 1} • {badgeLabels[selectedIndex]}</div>
                 </div>
               </div>
@@ -842,15 +998,15 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
             <div
               style={{
                 textAlign: 'center',
-                margin: '16px 0 12px',
+                margin: '14px 0 10px',
                 position: 'relative',
                 zIndex: 2,
               }}
             >
-              <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.75)', marginBottom: 4, letterSpacing: '0.12em', textTransform: 'uppercase' }}>Win up to</div>
+              <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.75)', marginBottom: 4, letterSpacing: '0.12em', textTransform: 'uppercase' }}>Win up to</div>
               <div
                 style={{
-                  fontSize: '34px',
+                  fontSize: '32px',
                   fontWeight: 900,
                   background: buttonGradients[selectedIndex],
                   backgroundClip: 'text',
