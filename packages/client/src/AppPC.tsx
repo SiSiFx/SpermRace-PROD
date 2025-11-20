@@ -31,6 +31,7 @@ import { WalletProvider, useWallet } from './WalletProvider';
 import { WsProvider, useWs } from './WsProvider';
 import NewGameView from './NewGameView';
 import HowToPlayOverlay from './HowToPlayOverlay';
+import PracticeFullTutorial from './PracticeFullTutorial';
 import { Leaderboard } from './Leaderboard';
 
 type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
@@ -179,9 +180,6 @@ function AppInner() {
             boxShadow: '0 20px 60px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1)'
           }}>
             <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-              <div style={{ fontSize: '52px', marginBottom: '8px' }}>
-                {wsState.lastError.toLowerCase().includes('insufficient') ? '💸' : '⚠️'}
-              </div>
               <div className="modal-title" style={{ fontSize: '26px', fontWeight: 800 }}>
                 {wsState.lastError.toLowerCase().includes('insufficient') ? 'Insufficient Funds' : 'Something Went Wrong'}
               </div>
@@ -208,8 +206,8 @@ function AppInner() {
                 lineHeight: '1.5'
               }}>
                 {publicKey
-                  ? '🚀 Top up your wallet with SOL to continue racing'
-                  : '🔗 Connect a wallet or buy SOL to get started'}
+                  ? 'Top up your wallet with SOL to continue racing'
+                  : 'Connect a wallet or buy SOL to get started'}
               </div>
             )}
 
@@ -245,7 +243,7 @@ function AppInner() {
                         window.open('https://www.moonpay.com/buy/sol', '_blank');
                       }
                     }}
-                  >💳 Buy SOL</button>
+                  >Buy SOL</button>
                   <button
                     className="btn-secondary"
                     style={{
@@ -353,12 +351,14 @@ function AppInner() {
       )}
 
       {showLeaderboard && (
-        <Leaderboard
-          onClose={() => setShowLeaderboard(false)}
-          apiBase={API_BASE}
-          myWallet={publicKey || null}
-          isMobile={false}
-        />
+        <div style={{ position: 'fixed', inset: 0, zIndex: 11000 }}>
+          <Leaderboard
+            onClose={() => setShowLeaderboard(false)}
+            apiBase={API_BASE}
+            myWallet={publicKey || null}
+            isMobile={false}
+          />
+        </div>
       )}
     </div>
   );
@@ -603,13 +603,21 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
   const [countdown, setCountdown] = useState<number>(5);
   const countdownTotal = 5;
 
+  const [showPracticeIntro, setShowPracticeIntro] = useState<boolean>(() => {
+    try {
+      return !localStorage.getItem('sr_practice_full_tuto_seen');
+    } catch {
+      return true;
+    }
+  });
+
   useEffect(() => {
     if (step === 'lobby') {
       const base = [meId];
       const bots = Array.from({ length: 7 }, (_, i) => `BOT_${i.toString(36)}${Math.random().toString(36).slice(2,4)}`);
       setPlayers([...base, ...bots]);
-      
       setCountdown(countdownTotal);
+      if (showPracticeIntro) return;
       let currentCountdown = countdownTotal;
       
       const t = setInterval(() => {
@@ -624,7 +632,7 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
       
       return () => clearInterval(t);
     }
-  }, [step, meId]);
+  }, [step, meId, showPracticeIntro]);
 
   if (step === 'lobby') {
     const maxPlayers = 8;
@@ -633,7 +641,7 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
       <div className="screen active pc-lobby" id="lobby-screen">
         <div className="lobby-container pc-lobby-container">
           <div className="lobby-header">
-            <div className="lobby-title">🎮 Practice Lobby</div>
+            <div className="lobby-title">Practice Lobby</div>
             <div className="lobby-status">{players.length}/{maxPlayers}</div>
           </div>
           <div className="queue-bar pc-queue">
@@ -662,6 +670,15 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
             <button className="btn-secondary pc-btn" onClick={onBack}>← Back to Menu</button>
           </div>
         </div>
+        <PracticeFullTutorial
+          visible={showPracticeIntro}
+          onDone={() => {
+            setShowPracticeIntro(false);
+            try {
+              localStorage.setItem('sr_practice_full_tuto_seen', '1');
+            } catch {}
+          }}
+        />
       </div>
     );
   }
@@ -704,10 +721,10 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
   }, []);
 
   const tiers = [
-    { name: 'Micro Race', usd: 1, max: 16, dur: '2–3 min', icon: '🧬' },
-    { name: 'Nano Race', usd: 5, max: 32, dur: '3–4 min', icon: '⚡' },
-    { name: 'Mega Race', usd: 25, max: 32, dur: '4–6 min', icon: '💎' },
-    { name: 'Championship', usd: 100, max: 16, dur: '5–8 min', icon: '👑' },
+    { name: 'Micro Race', usd: 1, max: 16, dur: '2–3 min' },
+    { name: 'Nano Race', usd: 5, max: 32, dur: '3–4 min' },
+    { name: 'Mega Race', usd: 25, max: 32, dur: '4–6 min' },
+    { name: 'Championship', usd: 100, max: 16, dur: '5–8 min' },
   ];
 
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -770,7 +787,7 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
           }}>Tournament races • Winner takes 85% of prize pool</p>
           {preflightError && (
             <div style={{ color: '#ff8080', fontSize: 14, marginTop: 16 }}>
-              ⚠️ Tournaments temporarily unavailable
+              Tournaments temporarily unavailable
             </div>
           )}
         </div>
@@ -891,7 +908,23 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
                       }}
                     />
 
-                    <div style={{ fontSize: 24 }}>{t.icon}</div>
+                    <div
+                      style={{
+                        width: 26,
+                        height: 26,
+                        borderRadius: '999px',
+                        border: '1px solid rgba(148,163,184,0.7)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 11,
+                        fontWeight: 800,
+                        letterSpacing: '0.08em',
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      SR
+                    </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontWeight: 700, color: '#e5e7eb' }}>{t.name}</div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
@@ -965,7 +998,23 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
                   Arena Details
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ fontSize: 30 }}>{selectedTier.icon}</div>
+                  <div
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: '999px',
+                      border: '1px solid rgba(148,163,184,0.7)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 12,
+                      fontWeight: 800,
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    SR
+                  </div>
                   <div>
                     <div style={{ fontSize: 22, fontWeight: 800, color: '#fff' }}>{selectedTier.name}</div>
                     <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.95)' }}>
@@ -1082,7 +1131,7 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
                   : (isJoining || wsState.phase === 'connecting' || wsState.phase === 'authenticating')
                   ? 'Joining…'
                   : publicKey
-                  ? '🚀 Enter Race'
+                  ? 'Enter Race'
                   : 'Connect & Enter'}
               </button>
 
@@ -1120,13 +1169,13 @@ function Wallet({ onConnected, onClose }: { onConnected: () => void; onClose: ()
     <div className="screen active pc-wallet" id="wallet-screen">
       <div className="pc-wallet-container">
         <div className="modal-header">
-          <h2 className="modal-title">🔐 Connect Wallet</h2>
+          <h2 className="modal-title">Connect Wallet</h2>
           <p className="modal-subtitle">Sign in with Solana to continue</p>
         </div>
         
         <div className="pc-wallet-options">
           <button className="pc-wallet-btn" onClick={tryConnect}>
-            <div className="wallet-icon">🔗</div>
+            <div className="wallet-icon">SR</div>
             <div className="wallet-text">
               <div className="wallet-title">Connect Wallet</div>
               <div className="wallet-subtitle">Phantom / Solflare / Coinbase • build wallet-refactor</div>
@@ -1134,7 +1183,7 @@ function Wallet({ onConnected, onClose }: { onConnected: () => void; onClose: ()
           </button>
           {publicKey && (
             <div className="pc-connected-badge">
-              ✅ Connected: {publicKey.slice(0,6)}…{publicKey.slice(-6)}
+              Connected: {publicKey.slice(0,6)}…{publicKey.slice(-6)}
             </div>
           )}
         </div>
@@ -1155,7 +1204,7 @@ function Lobby({ onStart: _onStart, onBack }: { onStart: () => void; onBack: () 
     <div className="screen active pc-lobby" id="lobby-screen">
       <div className="lobby-container pc-lobby-container">
         <div className="lobby-header">
-          <div className="lobby-title">🏆 Tournament Lobby</div>
+          <div className="lobby-title">Tournament Lobby</div>
           <div className="lobby-status">{players.length}/{state.lobby?.maxPlayers ?? 16}</div>
         </div>
         
@@ -1359,7 +1408,7 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
       <div className="modal-card pc-results-card">
         <div className="modal-header">
           <h2 className={`round-result ${isWinner ? 'victory' : 'defeat'}`}>
-            {isWinner ? '🏆 Victory! Fertilization!' : '💀 Eliminated'}
+            {isWinner ? 'Victory! Fertilization!' : 'Eliminated'}
           </h2>
           <p className="round-description">
             Winner: {winner ? `${winner.slice(0,6)}…${winner.slice(-6)}` : '—'}
@@ -1370,7 +1419,7 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
         {solscan && (
           <div className="pc-solscan-link">
             <a href={solscan} target="_blank" rel="noreferrer">
-              🔗 View payout on Solscan →
+              View payout on Solscan →
             </a>
           </div>
         )}
@@ -1384,10 +1433,10 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
         
         <div className="round-actions pc-actions">
           <button className="btn-primary pc-btn-large" onClick={onPlayAgain}>
-            🔄 Play Again
+            Play Again
           </button>
           <button className="btn-secondary pc-btn" onClick={onChangeTier}>
-            🏠 Main Menu
+            Main Menu
           </button>
         </div>
       </div>

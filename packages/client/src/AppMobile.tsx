@@ -872,7 +872,24 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
             {/* Header: tier name + badge */}
             <div className="tournament-header" style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div className="tournament-icon" style={{ fontSize: '22px' }}>🧬</div>
+                <div
+                  className="tournament-icon"
+                  style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: '999px',
+                    border: '1px solid rgba(148,163,184,0.7)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 10,
+                    fontWeight: 800,
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  SR
+                </div>
                 <div>
                   <h3 className="tournament-title" style={{ fontSize: '18px', fontWeight: 800, marginBottom: 2 }}>{selectedTier.name}</h3>
                   <div style={{ fontSize: 11, color: 'rgba(226,232,240,0.9)' }}>Tier {selectedIndex + 1} • {badgeLabels[selectedIndex]}</div>
