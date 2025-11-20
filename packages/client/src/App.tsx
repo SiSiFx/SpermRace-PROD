@@ -23,7 +23,8 @@ const SOLANA_CLUSTER: 'devnet' | 'mainnet' = (() => {
 import { WalletProvider, useWallet } from './WalletProvider';
 import { WsProvider, useWs } from './WsProvider';
 import NewGameView from './NewGameView';
-import { Leaderboard } from './Leaderboard';
+import HowToPlayOverlay from './HowToPlayOverlay';
+import { WarningCircle, CreditCard, LinkSimple } from 'phosphor-react';
 import { Modes } from './components/Modes';
 import './leaderboard.css';
 
@@ -109,10 +110,8 @@ function AppInner() {
             boxShadow: '0 24px 80px rgba(0,0,0,0.9)'
           }}>
             <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-              <div style={{ fontSize: '48px', marginBottom: '8px' }}>
-                {wsState.lastError.toLowerCase().includes('insufficient') ? '💸' : '⚠️'}
-              </div>
-              <div className="modal-title" style={{ fontSize: '24px', fontWeight: 800 }}>
+              <div className="modal-title" style={{ fontSize: '24px', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <WarningCircle size={24} weight="fill" />
                 {wsState.lastError.toLowerCase().includes('insufficient') ? 'Insufficient Funds' : 'Something Went Wrong'}
               </div>
             </div>
@@ -138,8 +137,8 @@ function AppInner() {
                 lineHeight: '1.5'
               }}>
                 {publicKey
-                  ? '🚀 Top up your wallet with SOL to continue racing'
-                  : '🔗 Connect a wallet or buy SOL to get started'}
+                  ? 'Top up your wallet with SOL to continue racing'
+                  : 'Connect a wallet or buy SOL to get started'}
               </div>
             )}
 
@@ -175,7 +174,10 @@ function AppInner() {
                         window.open('https://www.moonpay.com/buy/sol', '_blank');
                       }
                     }}
-                  >💳 Buy SOL</button>
+                  >
+                    <CreditCard size={18} weight="fill" style={{ marginRight: 8 }} />
+                    Buy SOL
+                  </button>
                   <button
                     className="btn-secondary"
                     style={{
@@ -498,7 +500,15 @@ function Wallet({ onConnected, onClose }: { onConnected: () => void; onClose: ()
       <div className="modal-container">
         <div className="modal-header"><h2 className="modal-title">Connect Wallet</h2><p className="modal-subtitle">Sign in with Solana to continue</p></div>
         <div className="wallet-connect-section">
-          <button className="wallet-connect-btn" onClick={tryConnect}><div className="wallet-icon">🔗</div><div className="wallet-text"><div className="wallet-title">Connect</div><div className="wallet-subtitle">Phantom / Solflare / Coinbase • build wallet-refactor</div></div></button>
+          <button className="wallet-connect-btn" onClick={tryConnect}>
+            <div className="wallet-icon">
+              <LinkSimple size={18} weight="bold" />
+            </div>
+            <div className="wallet-text">
+              <div className="wallet-title">Connect</div>
+              <div className="wallet-subtitle">Phantom / Solflare / Coinbase • build wallet-refactor</div>
+            </div>
+          </button>
           {publicKey && <div className="practice-hint">Connected: {publicKey.slice(0,4)}…{publicKey.slice(-4)}</div>}
         </div>
         <button className="btn-secondary" onClick={onClose}>Back</button>

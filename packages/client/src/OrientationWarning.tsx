@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { isPortrait } from './deviceDetection';
+import { DeviceMobile, ArrowClockwise } from 'phosphor-react';
 
 export function OrientationWarning() {
   const [showWarning, setShowWarning] = useState(false);
@@ -28,7 +29,10 @@ export function OrientationWarning() {
 
   return (
     <div className="orientation-warning">
-      <div className="orientation-icon">📱→🔄</div>
+      <div className="orientation-icon">
+        <DeviceMobile size={20} weight="fill" style={{ marginRight: 4 }} />
+        <ArrowClockwise size={18} weight="bold" />
+      </div>
       <div className="orientation-message">
         Please rotate to portrait
       </div>

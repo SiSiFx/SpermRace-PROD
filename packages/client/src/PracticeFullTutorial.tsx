@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, ReactNode } from 'react';
+import { GameController, Skull, WarningCircle } from 'phosphor-react';
 
 interface PracticeFullTutorialProps {
   visible: boolean;
@@ -8,24 +9,24 @@ interface PracticeFullTutorialProps {
 interface Slide {
   title: string;
   body: string;
-  icon: string;
+  icon: ReactNode;
 }
 
 const SLIDES: Slide[] = [
   {
     title: 'PILOT SYSTEMS',
     body: 'Drift to survive. Precision is your only defense against the void.',
-    icon: '🕹️',
+    icon: <GameController size={28} weight="fill" />,
   },
   {
     title: 'LETHAL WAKE',
     body: 'Your tail is a weapon. Cut off enemies to secure the kill.',
-    icon: '💀',
+    icon: <Skull size={28} weight="fill" />,
   },
   {
     title: 'ZONE COLLAPSE',
     body: 'The arena is dying. Force the fight into the center or perish.',
-    icon: '☢️', // Changed to radioactive sign for impact
+    icon: <WarningCircle size={28} weight="fill" />,
   },
 ];
 

@@ -33,7 +33,7 @@ import NewGameView from './NewGameView';
 import HowToPlayOverlay from './HowToPlayOverlay';
 import PracticeFullTutorial from './PracticeFullTutorial';
 import { Leaderboard } from './Leaderboard';
-import { CrownSimple } from 'phosphor-react';
+import { CrownSimple, Lightning, Diamond } from 'phosphor-react';
 
 type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
 
@@ -728,6 +728,8 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
     { name: 'Championship', usd: 100, max: 16, dur: '5–8 min' },
   ];
 
+  const tierIcons = [Lightning, Lightning, Diamond, CrownSimple] as const;
+
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   useEffect(() => {
@@ -851,8 +853,10 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
               >
                 Bio-Arena Map
               </div>
-              <div style={{ fontSize: 18, fontWeight: 600, color: '#e5e7eb' }}>
-                Choose your arena along the fertilization route
+              <div style={{ fontSize: 18, fontWeight: 600, color: '#e5e7eb', lineHeight: 1.4 }}>
+                Choose your arena
+                <br />
+                along the fertilization route
               </div>
             </div>
 
@@ -869,6 +873,7 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
               {tiers.map((t, i) => {
                 const active = i === selectedIndex;
                 const difficulty = i + 1; // 1–4
+                const Icon = tierIcons[i];
                 return (
                   <button
                     key={t.name}
@@ -921,7 +926,7 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
                         background: 'radial-gradient(circle at 30% 20%, #22d3ee, #0f172a)',
                       }}
                     >
-                      <CrownSimple size={14} weight="fill" color="#e5e7eb" />
+                      <Icon size={14} weight="fill" color="#e5e7eb" />
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontWeight: 700, color: '#e5e7eb' }}>{t.name}</div>
@@ -996,20 +1001,25 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
                   Arena Details
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div
-                    style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: '999px',
-                      border: '1px solid rgba(148,163,184,0.7)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      background: 'radial-gradient(circle at 30% 20%, #22d3ee, #0f172a)',
-                    }}
-                  >
-                    <CrownSimple size={18} weight="fill" color="#e5e7eb" />
-                  </div>
+                  {(() => {
+                    const DetailIcon = tierIcons[selectedIndex];
+                    return (
+                      <div
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: '999px',
+                          border: '1px solid rgba(148,163,184,0.7)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          background: 'radial-gradient(circle at 30% 20%, #22d3ee, #0f172a)',
+                        }}
+                      >
+                        <DetailIcon size={18} weight="fill" color="#e5e7eb" />
+                      </div>
+                    );
+                  })()}
                   <div>
                     <div style={{ fontSize: 22, fontWeight: 800, color: '#fff' }}>{selectedTier.name}</div>
                     <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.95)' }}>

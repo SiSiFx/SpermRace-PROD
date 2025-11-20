@@ -38,7 +38,19 @@ import { WsProvider, useWs } from './WsProvider';
 import NewGameView from './NewGameView';
 import { Leaderboard } from './Leaderboard';
 import HowToPlayOverlay from './HowToPlayOverlay';
-import { CrownSimple } from 'phosphor-react';
+import {
+  CrownSimple,
+  Lightning,
+  Diamond,
+  WarningCircle,
+  GameController,
+  Trophy,
+  Skull,
+  LinkSimple,
+  ArrowClockwise,
+  House,
+  CheckCircle,
+} from 'phosphor-react';
 import './leaderboard.css';
 
 type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
@@ -173,9 +185,17 @@ function AppInner() {
       {wsState.lastError && (
         <div className="loading-overlay mobile-overlay" style={{ display: 'flex', background: 'rgba(0,0,0,0.85)' }}>
           <div className="modal-card mobile-modal">
-            <div className="modal-title">⚠️ Error</div>
+            <div
+              className="modal-title"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            >
+              <WarningCircle size={20} weight="fill" />
+              <span>Error</span>
+            </div>
             <div className="modal-subtitle" style={{ marginTop: 8 }}>{wsState.lastError}</div>
-            <button className="btn-primary mobile-btn-large" style={{ marginTop: 16 }} onClick={() => location.reload()}>Reload App</button>
+            <button className="btn-primary mobile-btn-large" style={{ marginTop: 16 }} onClick={() => location.reload()}>
+              Reload App
+            </button>
           </div>
         </div>
       )}
@@ -284,7 +304,12 @@ function HeaderWallet({ screen }: { screen: string }) {
     );
   }
   if (screen === 'game') {
-    return <div className="mobile-wallet-badge">🎮 Practice</div>;
+    return (
+      <div className="mobile-wallet-badge">
+        <GameController size={16} weight="fill" style={{ marginRight: 6 }} />
+        <span>Practice</span>
+      </div>
+    );
   }
   return null;
 }
@@ -439,7 +464,9 @@ function Landing({
               className="mobile-cta-primary"
               onClick={() => onTournament?.()}
             >
-              <span className="icon">🏆</span>
+              <span className="icon">
+                <Trophy size={18} weight="fill" />
+              </span>
               <span>Enter Tournament</span>
             </button>
 
@@ -448,7 +475,9 @@ function Landing({
               className="mobile-btn-secondary"
               onClick={onPractice}
             >
-              <span className="icon">🎮</span>
+              <span className="icon">
+                <GameController size={18} weight="fill" />
+              </span>
               <span>Practice Mode (Free)</span>
             </button>
           </section>
@@ -562,7 +591,10 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
       <div className="screen active mobile-lobby-screen">
         <div className="mobile-lobby-container">
           <div className="mobile-lobby-header">
-            <h2 className="mobile-lobby-title">🎮 Practice Lobby</h2>
+            <h2 className="mobile-lobby-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <GameController size={18} weight="fill" />
+              <span>Practice Lobby</span>
+            </h2>
             <div className="mobile-lobby-count">{players.length}/{maxPlayers}</div>
           </div>
           
@@ -680,6 +712,8 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
     { name: 'Mega Race', usd: 25, max: 32, dur: '4–6 min' },
     { name: 'Championship', usd: 100, max: 16, dur: '5–8 min' },
   ];
+
+  const tierIcons = [Lightning, Lightning, Diamond, CrownSimple] as const;
 
   const [selectedIndex, setSelectedIndex] = useState(0);
 
@@ -873,21 +907,26 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
             {/* Header: tier name + badge */}
             <div className="tournament-header" style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div
-                  className="tournament-icon"
-                  style={{
-                    width: 24,
-                    height: 24,
-                    borderRadius: '999px',
-                    border: '1px solid rgba(148,163,184,0.7)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    background: 'radial-gradient(circle at 30% 20%, #22d3ee, #0f172a)',
-                  }}
-                >
-                  <CrownSimple size={14} weight="fill" color="#e5e7eb" />
-                </div>
+                {(() => {
+                  const Icon = tierIcons[selectedIndex];
+                  return (
+                    <div
+                      className="tournament-icon"
+                      style={{
+                        width: 24,
+                        height: 24,
+                        borderRadius: '999px',
+                        border: '1px solid rgba(148,163,184,0.7)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: 'radial-gradient(circle at 30% 20%, #22d3ee, #0f172a)',
+                      }}
+                    >
+                      <Icon size={14} weight="fill" color="#e5e7eb" />
+                    </div>
+                  );
+                })()}
                 <div>
                   <h3 className="tournament-title" style={{ fontSize: '18px', fontWeight: 800, marginBottom: 2 }}>{selectedTier.name}</h3>
                   <div style={{ fontSize: 11, color: 'rgba(226,232,240,0.9)' }}>Tier {selectedIndex + 1} • {badgeLabels[selectedIndex]}</div>
@@ -1085,7 +1124,8 @@ function Wallet({ onConnected, onClose }: { onConnected: () => void; onClose: ()
         
         {publicKey && (
           <div className="mobile-connected-status">
-            ✅ {publicKey.slice(0,8)}...{publicKey.slice(-8)}
+            <CheckCircle size={16} weight="fill" style={{ marginRight: 6 }} />
+            Connected: {publicKey.slice(0,8)}...{publicKey.slice(-8)}
           </div>
         )}
 
@@ -1140,7 +1180,10 @@ function Lobby({ onStart: _onStart, onBack, onRefund }: { onStart: () => void; o
     <div className="screen active mobile-lobby-screen">
       <div className="mobile-lobby-container">
         <div className="mobile-lobby-header">
-          <h2 className="mobile-lobby-title">🏆 Lobby</h2>
+          <h2 className="mobile-lobby-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Trophy size={18} weight="fill" />
+            <span>Lobby</span>
+          </h2>
           <div className="mobile-lobby-count">{players.length}/{state.lobby?.maxPlayers ?? 16}</div>
         </div>
         
@@ -1302,7 +1345,17 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
       <div className="mobile-results-container">
         <div className="mobile-result-header">
           <h1 className={`mobile-result-title ${isWinner ? 'win' : 'lose'}`}>
-            {isWinner ? '🏆 Victory!' : '💀 Eliminated'}
+            {isWinner ? (
+              <>
+                <Trophy size={22} weight="fill" style={{ marginRight: 6 }} />
+                Victory!
+              </>
+            ) : (
+              <>
+                <Skull size={22} weight="fill" style={{ marginRight: 6 }} />
+                Eliminated
+              </>
+            )}
           </h1>
           <p className="mobile-result-subtitle">
             Winner: {winner ? `${winner.slice(0,4)}…${winner.slice(-4)}` : '—'}
@@ -1314,7 +1367,8 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
         
         {solscan && (
           <a href={solscan} target="_blank" rel="noreferrer" className="mobile-solscan-btn">
-            🔗 View on Solscan
+            <LinkSimple size={16} weight="bold" style={{ marginRight: 6 }} />
+            View on Solscan
           </a>
         )}
         
@@ -1325,10 +1379,12 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
         
         <div className="mobile-result-actions">
           <button className="mobile-btn-primary" onClick={onPlayAgain}>
-            🔄 Play Again
+            <ArrowClockwise size={18} weight="bold" style={{ marginRight: 6 }} />
+            Play Again
           </button>
           <button className="mobile-btn-secondary" onClick={onChangeTier}>
-            🏠 Menu
+            <House size={18} weight="fill" style={{ marginRight: 6 }} />
+            Menu
           </button>
         </div>
       </div>

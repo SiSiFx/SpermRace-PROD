@@ -220,7 +220,7 @@ export const MobileTouchControls = memo(function MobileTouchControls({ onTouch, 
         className={`mobile-boost-button ${canBoost ? 'ready' : 'cooldown'}`}
         disabled={!canBoost}
       >
-        <div className="boost-icon">⚡</div>
+        <div className="boost-icon">BOOST</div>
         <div className="boost-label">BOOST</div>
         <svg className="boost-cooldown-ring" viewBox="0 0 100 100">
           <circle cx="50" cy="50" r="45" className="cooldown-bg" />

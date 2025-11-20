@@ -186,7 +186,7 @@ export function HowToPlayOverlay({ mode, onClose }: HowToPlayOverlayProps) {
                 <div style={{ fontWeight: 700, marginBottom: 4 }}>Mobile</div>
                 <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
                   <li>Drag the left side of the screen to steer</li>
-                  <li>Tap the <strong>⚡ BOOST</strong> button to dash</li>
+                  <li>Tap the <strong>BOOST</strong> button to dash</li>
                   <li>A short on-field countdown appears before you can move</li>
                 </ul>
               </div>
