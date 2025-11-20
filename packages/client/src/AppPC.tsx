@@ -714,6 +714,8 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
     { name: 'Championship', usd: 100, max: 16, dur: '5–8 min', icon: '👑' },
   ];
 
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
   useEffect(() => {
     if (wsState.phase === 'lobby' || wsState.phase === 'game') setIsJoining(false);
   }, [wsState.phase]);
@@ -724,6 +726,27 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
     'linear-gradient(135deg, #f43f5e, #fb923c)',
     'linear-gradient(135deg, #fb923c, #fbbf24)'
   ];
+
+  const badgeLabels = ['Warmup', 'Blitz', 'Apex', 'Grand Final'];
+  const selectedTier = tiers[selectedIndex];
+  const selectedPrize = (selectedTier.usd * selectedTier.max * 0.85).toFixed(2);
+  const disabledSelected = isJoining
+    || wsState.phase === 'connecting'
+    || wsState.phase === 'authenticating'
+    || preflightError
+    || (!!preflight && (!preflight.configured || !preflight.address || preflight.sol == null));
+
+  const handleJoinSelected = async () => {
+    if (disabledSelected) return;
+    setIsJoining(true);
+    const ok = publicKey ? true : await connect();
+    if (!ok) {
+      setIsJoining(false);
+      onNotify('Wallet not detected. Please install or unlock your wallet.');
+      return;
+    }
+    await connectAndJoin({ entryFeeTier: selectedTier.usd as any, mode: 'tournament' });
+  };
 
   return (
     <div className="screen active" id="mode-screen" style={{
@@ -756,165 +779,256 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
           )}
         </div>
 
-        {/* 2x2 Grid */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(2, 1fr)',
-          gap: 32,
-          marginBottom: 40,
-        }}>
+        {/* Tier selector chips */}
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            gap: 12,
+            flexWrap: 'wrap',
+            marginBottom: 28,
+          }}
+        >
           {tiers.map((t, i) => {
-            const prize = (t.usd * t.max * 0.85).toFixed(2);
-            const disabled = isJoining || wsState.phase === 'connecting' || wsState.phase === 'authenticating' || preflightError || (!!preflight && (!preflight.configured || !preflight.address || preflight.sol == null));
-            
+            const active = i === selectedIndex;
             return (
-              <div key={t.name} style={{
-                background: 'rgba(14,14,18,0.9)',
-                border: '1px solid rgba(255,255,255,0.14)',
-                borderRadius: 20,
-                padding: 24,
+              <button
+                key={t.name}
+                type="button"
+                onClick={() => setSelectedIndex(i)}
+                style={{
+                  padding: '10px 16px',
+                  borderRadius: 999,
+                  border: active ? '1px solid rgba(34,211,238,0.8)' : '1px solid rgba(148,163,184,0.6)',
+                  background: active ? 'rgba(15,23,42,0.95)' : 'rgba(15,23,42,0.7)',
+                  color: '#e5e7eb',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.12em',
+                  boxShadow: active ? '0 0 24px rgba(34,211,238,0.45)' : 'none',
+                  opacity: preflightError ? 0.6 : 1,
+                }}
+              >
+                <span style={{ fontSize: 18 }}>{t.icon}</span>
+                <span style={{ fontWeight: 600 }}>{t.name}</span>
+                <span style={{ fontSize: 11, opacity: 0.8 }}>{badgeLabels[i]}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Single hero ticket */}
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 40 }}>
+          <div
+            style={{
+              width: '100%',
+              maxWidth: 900,
+              background: 'rgba(14,14,18,0.95)',
+              borderRadius: 24,
+              border: '1px solid rgba(255,255,255,0.16)',
+              position: 'relative',
+              overflow: 'hidden',
+              padding: 28,
+              boxShadow: '0 22px 70px rgba(0,0,0,0.65)',
+              backdropFilter: 'blur(24px)',
+            }}
+          >
+            {/* Glow stripe */}
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: `${buttonGradients[selectedIndex]}`,
+                opacity: 0.16,
+                mixBlendMode: 'screen',
+                pointerEvents: 'none',
+              }}
+            />
+
+            <div
+              style={{
                 position: 'relative',
-                overflow: 'hidden',
-                backdropFilter: 'blur(20px)',
-                boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
-                transition: 'all 0.3s ease',
-                cursor: disabled ? 'not-allowed' : 'pointer',
-                opacity: disabled ? 0.6 : 1,
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 24,
+                alignItems: 'stretch',
               }}
-              onClick={async () => {
-                if (disabled) return;
-                setIsJoining(true);
-                const ok = publicKey ? true : await connect();
-                if (!ok) {
-                  setIsJoining(false);
-                  onNotify('Wallet not detected. Please install or unlock your wallet.');
-                  return;
-                }
-                await connectAndJoin({ entryFeeTier: t.usd as any, mode: 'tournament' });
-              }}
-              onMouseEnter={(e) => {
-                if (disabled) return;
-                e.currentTarget.style.borderColor = 'rgba(34,211,238,0.6)';
-                e.currentTarget.style.transform = 'translateY(-4px)';
-                e.currentTarget.style.boxShadow = '0 24px 70px rgba(0,0,0,0.5), 0 0 40px rgba(34,211,238,0.2)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)';
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 20px 60px rgba(0,0,0,0.4)';
-              }}>
-                
-                {/* Header: tier name */}
-                <div style={{ marginBottom: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ fontSize: 32 }}>{t.icon}</div>
-                    <h3 style={{ fontSize: 22, fontWeight: 800, color: '#fff' }}>{t.name}</h3>
-                  </div>
-                  <div style={{
-                    display: 'inline-block',
-                    padding: '6px 14px',
-                    background: 'rgba(255,255,255,0.08)',
-                    border: '1px solid rgba(255,255,255,0.15)',
-                    borderRadius: 999,
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: 'rgba(148,163,184,0.9)',
-                  }}>Tier {i+1}</div>
-                </div>
-
-                {/* Max gain */}
-                <div style={{
-                  textAlign: 'center',
-                  padding: '16px 18px',
-                  background: 'rgba(255,255,255,0.03)',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  borderRadius: 16,
-                  marginBottom: 24,
-                }}>
-                  <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.85)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.12em' }}>Win up to</div>
-                  <div style={{
-                    fontSize: 40,
-                    fontWeight: 900,
-                    background: buttonGradients[i],
-                    backgroundClip: 'text',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    lineHeight: 1,
-                    marginBottom: 8,
-                  }}>${prize}</div>
-                  <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.75)' }}>Winner takes ~85% of pool</div>
-                </div>
-
-                {/* Buy-in / players / duration */}
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(3, minmax(0,1fr))',
-                  gap: 12,
-                  marginBottom: 20,
-                }}>
-                  <div style={{
-                    padding: 16,
-                    background: 'rgba(255,255,255,0.03)',
-                    borderRadius: 12,
-                    textAlign: 'center',
-                  }}>
-                    <div style={{ fontSize: 20, fontWeight: 700, color: '#fff', marginBottom: 2 }}>${t.usd}</div>
-                    <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.8)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Buy-in</div>
-                  </div>
-                  <div style={{
-                    padding: 16,
-                    background: 'rgba(255,255,255,0.03)',
-                    borderRadius: 12,
-                    textAlign: 'center',
-                  }}>
-                    <div style={{ fontSize: 20, fontWeight: 700, color: '#fff', marginBottom: 2 }}>{t.max}</div>
-                    <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.8)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Players max</div>
-                  </div>
-                  <div style={{
-                    padding: 16,
-                    background: 'rgba(255,255,255,0.03)',
-                    borderRadius: 12,
-                    textAlign: 'center',
-                  }}>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: '#fff', marginBottom: 2 }}>{t.dur}</div>
-                    <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.8)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Duration</div>
-                  </div>
-                </div>
-
-                {/* CTA Button */}
-                <button
+            >
+              {/* Left: tier summary */}
+              <div
+                style={{
+                  flex: '1 1 260px',
+                  minWidth: 0,
+                  paddingRight: 24,
+                  borderRight: '1px dashed rgba(148,163,184,0.5)',
+                }}
+              >
+                <div
                   style={{
+                    fontSize: 11,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.14em',
+                    color: 'rgba(148,163,184,0.9)',
+                    marginBottom: 10,
+                  }}
+                >
+                  Entry Tier
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                  <div style={{ fontSize: 34 }}>{selectedTier.icon}</div>
+                  <div>
+                    <div style={{ fontSize: 24, fontWeight: 800, color: '#fff' }}>{selectedTier.name}</div>
+                    <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.9)' }}>
+                      Tier {selectedIndex + 1} • {badgeLabels[selectedIndex]}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ marginTop: 8, fontSize: 18, fontWeight: 600, color: '#e5e7eb' }}>
+                  ${selectedTier.usd.toFixed(2)} buy-in
+                </div>
+                <div style={{ marginTop: 6, fontSize: 13, color: 'rgba(148,163,184,0.9)' }}>
+                  {selectedTier.max} players • {selectedTier.dur} per match
+                </div>
+              </div>
+
+              {/* Right: prize + details + CTA */}
+              <div
+                style={{
+                  flex: '1 1 260px',
+                  minWidth: 0,
+                  paddingLeft: 24,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 16,
+                }}
+              >
+                <div
+                  style={{
+                    textAlign: 'left',
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: 'rgba(148,163,184,0.85)',
+                      marginBottom: 6,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.14em',
+                    }}
+                  >
+                    Win up to
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 46,
+                      fontWeight: 900,
+                      background: buttonGradients[selectedIndex],
+                      backgroundClip: 'text',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      lineHeight: 1,
+                      textShadow: '0 4px 18px rgba(0,0,0,0.8)',
+                      marginBottom: 6,
+                    }}
+                  >
+                    ${selectedPrize}
+                  </div>
+                  <div style={{ fontSize: 13, color: 'rgba(148,163,184,0.9)' }}>
+                    Winner takes ~85% of the prize pool
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, minmax(0,1fr))',
+                    gap: 10,
+                    marginTop: 4,
+                  }}
+                >
+                  <div
+                    style={{
+                      padding: 12,
+                      borderRadius: 10,
+                      background: 'rgba(15,23,42,0.9)',
+                      border: '1px solid rgba(148,163,184,0.4)',
+                      textAlign: 'center',
+                    }}
+                  >
+                    <div style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>${selectedTier.usd}</div>
+                    <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.85)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Buy-in</div>
+                  </div>
+                  <div
+                    style={{
+                      padding: 12,
+                      borderRadius: 10,
+                      background: 'rgba(15,23,42,0.9)',
+                      border: '1px solid rgba(148,163,184,0.4)',
+                      textAlign: 'center',
+                    }}
+                  >
+                    <div style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>{selectedTier.max}</div>
+                    <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.85)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Players max</div>
+                  </div>
+                  <div
+                    style={{
+                      padding: 12,
+                      borderRadius: 10,
+                      background: 'rgba(15,23,42,0.9)',
+                      border: '1px solid rgba(148,163,184,0.4)',
+                      textAlign: 'center',
+                    }}
+                  >
+                    <div style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>{selectedTier.dur}</div>
+                    <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.85)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Duration</div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleJoinSelected}
+                  disabled={disabledSelected}
+                  style={{
+                    marginTop: 16,
                     width: '100%',
                     padding: '14px 28px',
-                    background: buttonGradients[i],
+                    borderRadius: 999,
                     border: 'none',
-                    borderRadius: 14,
-                    color: i === 1 ? '#fff' : '#000',
+                    background: buttonGradients[selectedIndex],
+                    color: selectedIndex === 1 ? '#fff' : '#000',
                     fontSize: 15,
                     fontWeight: 700,
                     textTransform: 'uppercase',
-                    letterSpacing: '0.08em',
-                    cursor: disabled ? 'not-allowed' : 'pointer',
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+                    letterSpacing: '0.1em',
+                    cursor: disabledSelected ? 'not-allowed' : 'pointer',
+                    boxShadow: disabledSelected ? 'none' : '0 10px 30px rgba(0,0,0,0.6)',
+                    opacity: disabledSelected ? 0.7 : 1,
                     transition: 'all 0.2s ease',
-                    pointerEvents: 'none', // Let parent div handle clicks
                   }}
-                  disabled={disabled}
-                >{
-                  preflightError ? 'Service Unavailable'
-                  : (preflight && (!preflight.configured || !preflight.address || preflight.sol == null)) ? 'Temporarily Unavailable'
-                  : (isJoining || wsState.phase === 'connecting' || wsState.phase === 'authenticating') ? 'Joining…'
-                  : publicKey ? `🚀 Enter Race` : `Connect & Enter`
-                }</button>
+                >
+                  {preflightError
+                    ? 'Service Unavailable'
+                    : (preflight && (!preflight.configured || !preflight.address || preflight.sol == null))
+                    ? 'Temporarily Unavailable'
+                    : (isJoining || wsState.phase === 'connecting' || wsState.phase === 'authenticating')
+                    ? 'Joining…'
+                    : publicKey
+                    ? '🚀 Enter Race'
+                    : 'Connect & Enter'}
+                </button>
 
                 {(preflightError || (preflight && (!preflight.configured || !preflight.address || preflight.sol == null))) && (
-                  <div style={{ textAlign: 'center', marginTop: 8, fontSize: 11, color: '#f97373' }}>
+                  <div style={{ textAlign: 'left', marginTop: 8, fontSize: 11, color: '#f97373' }}>
                     Service unavailable • please try again later
                   </div>
                 )}
               </div>
-            );
-          })}
+            </div>
+          </div>
         </div>
 
         {/* Back Button */}

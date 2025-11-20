@@ -680,9 +680,51 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
     { name: 'Championship', usd: 100, max: 16, dur: '5–8 min' },
   ];
 
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
   useEffect(() => {
     if (wsState.phase === 'lobby' || wsState.phase === 'game') setIsJoining(false);
   }, [wsState.phase]);
+
+  const badgeLabels = ['Warmup', 'Blitz', 'Apex', 'Grand Final'];
+  const buttonGradients = [
+    'linear-gradient(90deg, #22d3ee 0%, #6366f1 100%)',
+    'linear-gradient(90deg, #6366f1 0%, #f43f5e 100%)',
+    'linear-gradient(90deg, #f43f5e 0%, #fb923c 100%)',
+    'linear-gradient(90deg, #fb923c 0%, #22d3ee 100%)'
+  ];
+  const cardGradients = [
+    'linear-gradient(135deg, rgba(34,211,238,0.15) 0%, rgba(99,102,241,0.15) 100%)',
+    'linear-gradient(135deg, rgba(99,102,241,0.18) 0%, rgba(244,63,94,0.18) 100%)', 
+    'linear-gradient(135deg, rgba(244,63,94,0.20) 0%, rgba(251,146,60,0.20) 100%)',
+    'linear-gradient(135deg, rgba(251,146,60,0.22) 0%, rgba(34,211,238,0.22) 100%)'
+  ];
+  const prizeGradients = [
+    'linear-gradient(90deg, rgba(34,211,238,0.25), rgba(99,102,241,0.25))',
+    'linear-gradient(90deg, rgba(99,102,241,0.28), rgba(244,63,94,0.28))',
+    'linear-gradient(90deg, rgba(244,63,94,0.30), rgba(251,146,60,0.30))',
+    'linear-gradient(90deg, rgba(251,146,60,0.32), rgba(34,211,238,0.32))'
+  ];
+
+  const selectedTier = tiers[selectedIndex];
+  const selectedPrize = (selectedTier.usd * selectedTier.max * 0.85).toFixed(2);
+  const disabledSelected = isJoining ||
+    wsState.phase === 'connecting' ||
+    wsState.phase === 'authenticating' ||
+    preflightError ||
+    (!!preflight && (!preflight.configured || !preflight.address || preflight.sol == null));
+
+  const handleJoinSelected = async () => {
+    if (disabledSelected) return;
+    setIsJoining(true);
+    const ok = publicKey ? true : await connect();
+    if (!ok) {
+      setIsJoining(false);
+      onNotify('Wallet not detected. Please install or unlock your wallet.');
+      return;
+    }
+    await connectAndJoin({ entryFeeTier: selectedTier.usd as any, mode: 'tournament' });
+  };
 
   return (
     <div className="screen active" id="mode-screen" style={{ position: 'relative', overflow: 'hidden', height: '100vh' }}>
@@ -695,168 +737,197 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
         {preflightError && (
           <div className="modal-subtitle" style={{ color: '#ff8080', marginBottom: 8 }}>Tournaments are temporarily unavailable (prize preflight issue).</div>
         )}
-        
-        <div className="tournament-grid" style={{ marginBottom: '20px' }}>
+
+        {/* Tier selector chips */}
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            padding: '0 4px',
+            marginBottom: 18,
+            overflowX: 'auto',
+            WebkitOverflowScrolling: 'touch',
+          }}
+        >
           {tiers.map((t, i) => {
-            const prize = (t.usd * t.max * 0.85).toFixed(2);
-            const cardGradients = [
-              'linear-gradient(135deg, rgba(34,211,238,0.15) 0%, rgba(99,102,241,0.15) 100%)',
-              'linear-gradient(135deg, rgba(99,102,241,0.18) 0%, rgba(244,63,94,0.18) 100%)', 
-              'linear-gradient(135deg, rgba(244,63,94,0.20) 0%, rgba(251,146,60,0.20) 100%)',
-              'linear-gradient(135deg, rgba(251,146,60,0.22) 0%, rgba(34,211,238,0.22) 100%)'
-            ];
-            const prizeGradients = [
-              'linear-gradient(90deg, rgba(34,211,238,0.25), rgba(99,102,241,0.25))',
-              'linear-gradient(90deg, rgba(99,102,241,0.28), rgba(244,63,94,0.28))',
-              'linear-gradient(90deg, rgba(244,63,94,0.30), rgba(251,146,60,0.30))',
-              'linear-gradient(90deg, rgba(251,146,60,0.32), rgba(34,211,238,0.32))'
-            ];
-            
-            const buttonGradients = [
-              'linear-gradient(90deg, #22d3ee 0%, #6366f1 100%)',
-              'linear-gradient(90deg, #6366f1 0%, #f43f5e 100%)',
-              'linear-gradient(90deg, #f43f5e 0%, #fb923c 100%)',
-              'linear-gradient(90deg, #fb923c 0%, #22d3ee 100%)'
-            ];
+            const active = i === selectedIndex;
             return (
-              <div key={t.name} className="tournament-card" style={{
-                background: cardGradients[i],
-                border: '1px solid rgba(255,255,255,0.16)',
-                borderRadius: '18px',
-                padding: '18px 16px',
-                position: 'relative',
-                overflow: 'hidden',
-                backdropFilter: 'blur(10px)',
-                boxShadow: '0 14px 32px rgba(0,0,0,0.35)',
-                minHeight: '0',
-              }} data-ribbon={i===0? '🔥 HOT' : i===1? '⭐ POPULAR' : i===2? '💎 VIP' : '👑 ELITE'}>
-                
-                {/* Animated background orb */}
-                <div style={{
-                  position: 'absolute',
-                  top: '-50%',
-                  right: '-30%',
-                  width: '200px',
-                  height: '200px',
-                  background: prizeGradients[i],
-                  borderRadius: '50%',
-                  opacity: 0.3,
-                  filter: 'blur(60px)',
-                  animation: 'float 6s ease-in-out infinite'
-                }} />
-                
-                <div className="tournament-header" style={{ position: 'relative', zIndex: 2 }}>
-                  <div className="tournament-icon" style={{ fontSize: '24px', marginBottom: '4px' }}>🧬</div>
-                  <h3 className="tournament-title" style={{ fontSize: '20px', fontWeight: 800, marginBottom: '2px' }}>{t.name}</h3>
-                  <div className="tournament-badge" style={{ 
-                    background: 'rgba(255,255,255,0.2)', 
-                    padding: '4px 12px', 
-                    borderRadius: '20px', 
-                    fontSize: '10px',
-                    fontWeight: 600,
-                    backdropFilter: 'blur(10px)'
-                  }}>Tier {i+1}</div>
-                </div>
-                
-                {/* Max gain */}
-                <div style={{ 
-                  textAlign: 'center', 
-                  margin: '14px 0', 
-                  position: 'relative', 
-                  zIndex: 2 
-                }}>
-                  <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.75)', marginBottom: '4px', letterSpacing: '0.12em', textTransform: 'uppercase' }}>Win up to</div>
-                  <div style={{ 
-                    fontSize: '32px', 
-                    fontWeight: 900, 
-                    background: buttonGradients[i],
-                    backgroundClip: 'text',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    textShadow: '0 3px 14px rgba(255,255,255,0.3)',
-                    lineHeight: 1,
-                    marginBottom: '2px'
-                  }}>${prize}</div>
-                  <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.7)' }}>Winner takes ~85% of pool</div>
-                </div>
-
-                <div className="tournament-details" style={{ position: 'relative', zIndex: 2 }}>
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    background: 'rgba(0,0,0,0.35)',
-                    padding: '10px 14px',
-                    borderRadius: '12px',
-                    marginBottom: '10px',
-                    backdropFilter: 'blur(10px)'
-                  }}>
-                    <div>
-                      <div style={{ fontSize: '16px', fontWeight: 700 }}>${t.usd.toFixed(2)}</div>
-                      <div style={{ fontSize: '10px', opacity: 0.8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Buy-in</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '13px', fontWeight: 600 }}>{t.max} players max</div>
-                      <div style={{ fontSize: '11px', opacity: 0.8 }}>{t.dur}</div>
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  style={{
-                    width: '100%',
-                    padding: '12px 20px',
-                    background: buttonGradients[i],
-                    border: 'none',
-                    borderRadius: '14px',
-                    color: '#000',
-                    fontSize: '15px',
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.08em',
-                    cursor: 'pointer',
-                    position: 'relative',
-                    zIndex: 2,
-                    boxShadow: '0 6px 20px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.25)',
-                    transition: 'all 0.2s ease',
-                    transform: 'translateY(0px)'
-                  }}
-                  disabled={
-                    isJoining ||
-                    wsState.phase === 'connecting' ||
-                    wsState.phase === 'authenticating' ||
-                    preflightError ||
-                    (!!preflight && (!preflight.configured || !preflight.address || preflight.sol == null))
-                  }
-                  onClick={async () => {
-                    setIsJoining(true);
-                    const ok = publicKey ? true : await connect();
-                    if (!ok) {
-                      setIsJoining(false);
-                      onNotify('Wallet not detected. Please install or unlock your wallet.');
-                      return;
-                    }
-                    
-                    // ✅ FIX #1: Check balance BEFORE attempting payment
-                    // TODO: Re-enable after fixing connection reference
-                    // For now, skip balance check and let payment flow handle it
-                    
-                    await connectAndJoin({ entryFeeTier: t.usd as any, mode: 'tournament' });
-                  }}
-                >{
-                  preflightError ? 'Service unavailable'
-                  : (preflight && (!preflight.configured || !preflight.address || preflight.sol == null)) ? 'Temporarily unavailable'
-                  : (isJoining || wsState.phase === 'connecting' || wsState.phase === 'authenticating') ? 'Joining…'
-                  : `ENTER RACE`
-                }</button>
-                {(preflightError || (preflight && (!preflight.configured || !preflight.address || preflight.sol == null))) && (
-                  <div style={{ marginTop: 6, fontSize: 11, color: 'rgba(248,113,113,0.9)' }}>
-                    Service unavailable • please try again later
-                  </div>
-                )}
-              </div>
+              <button
+                key={t.name}
+                type="button"
+                onClick={() => setSelectedIndex(i)}
+                style={{
+                  flexShrink: 0,
+                  padding: '8px 12px',
+                  borderRadius: 999,
+                  border: active ? '1px solid rgba(34,211,238,0.9)' : '1px solid rgba(148,163,184,0.7)',
+                  background: active ? 'rgba(15,23,42,0.98)' : 'rgba(15,23,42,0.8)',
+                  color: '#e5e7eb',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontSize: 11,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.12em',
+                  cursor: 'pointer',
+                  boxShadow: active ? '0 0 16px rgba(34,211,238,0.55)' : 'none',
+                  opacity: preflightError ? 0.6 : 1,
+                }}
+              >
+                <span style={{ fontSize: 16 }}>🧬</span>
+                <span style={{ fontWeight: 600 }}>{t.name}</span>
+                <span style={{ fontSize: 10, opacity: 0.8 }}>{badgeLabels[i]}</span>
+              </button>
             );
           })}
+        </div>
+
+        {/* Single hero ticket card */}
+        <div className="tournament-grid" style={{ marginBottom: '20px' }}>
+          <div
+            className="tournament-card"
+            style={{
+              background: cardGradients[selectedIndex],
+              border: '1px solid rgba(255,255,255,0.18)',
+              borderRadius: '20px',
+              padding: '20px 16px 18px',
+              position: 'relative',
+              overflow: 'hidden',
+              backdropFilter: 'blur(16px)',
+              boxShadow: '0 18px 40px rgba(0,0,0,0.55)',
+              minHeight: '0',
+            }}
+          >
+            {/* Animated background orb */}
+            <div
+              style={{
+                position: 'absolute',
+                top: '-55%',
+                right: '-35%',
+                width: '220px',
+                height: '220px',
+                background: prizeGradients[selectedIndex],
+                borderRadius: '50%',
+                opacity: 0.35,
+                filter: 'blur(70px)',
+                animation: 'float 6s ease-in-out infinite',
+              }}
+            />
+
+            {/* Header: tier name + badge */}
+            <div className="tournament-header" style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div className="tournament-icon" style={{ fontSize: '24px' }}>🧬</div>
+                <div>
+                  <h3 className="tournament-title" style={{ fontSize: '20px', fontWeight: 800, marginBottom: 2 }}>{selectedTier.name}</h3>
+                  <div style={{ fontSize: 11, color: 'rgba(226,232,240,0.9)' }}>Tier {selectedIndex + 1} • {badgeLabels[selectedIndex]}</div>
+                </div>
+              </div>
+              <div
+                className="tournament-badge"
+                style={{
+                  background: 'rgba(15,23,42,0.9)',
+                  padding: '4px 10px',
+                  borderRadius: '999px',
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  border: '1px solid rgba(148,163,184,0.7)',
+                }}
+              >
+                {badgeLabels[selectedIndex]}
+              </div>
+            </div>
+
+            {/* Max gain */}
+            <div
+              style={{
+                textAlign: 'center',
+                margin: '16px 0 12px',
+                position: 'relative',
+                zIndex: 2,
+              }}
+            >
+              <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.75)', marginBottom: 4, letterSpacing: '0.12em', textTransform: 'uppercase' }}>Win up to</div>
+              <div
+                style={{
+                  fontSize: '34px',
+                  fontWeight: 900,
+                  background: buttonGradients[selectedIndex],
+                  backgroundClip: 'text',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  textShadow: '0 3px 14px rgba(0,0,0,0.85)',
+                  lineHeight: 1,
+                  marginBottom: 2,
+                }}
+              >
+                ${selectedPrize}
+              </div>
+              <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.7)' }}>Winner takes ~85% of pool</div>
+            </div>
+
+            {/* Buy-in / players / duration */}
+            <div className="tournament-details" style={{ position: 'relative', zIndex: 2 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  background: 'rgba(0,0,0,0.45)',
+                  padding: '10px 14px',
+                  borderRadius: '12px',
+                  marginBottom: '10px',
+                  backdropFilter: 'blur(10px)',
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: '16px', fontWeight: 700 }}>${selectedTier.usd.toFixed(2)}</div>
+                  <div style={{ fontSize: '10px', opacity: 0.8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Buy-in</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600 }}>{selectedTier.max} players max</div>
+                  <div style={{ fontSize: '11px', opacity: 0.8 }}>{selectedTier.dur}</div>
+                </div>
+              </div>
+            </div>
+
+            <button
+              style={{
+                width: '100%',
+                padding: '12px 20px',
+                background: buttonGradients[selectedIndex],
+                border: 'none',
+                borderRadius: '18px',
+                color: '#000',
+                fontSize: '15px',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                cursor: disabledSelected ? 'not-allowed' : 'pointer',
+                position: 'relative',
+                zIndex: 2,
+                boxShadow: disabledSelected ? 'none' : '0 8px 24px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.25)',
+                transition: 'all 0.2s ease',
+                transform: 'translateY(0px)',
+                opacity: disabledSelected ? 0.7 : 1,
+              }}
+              disabled={disabledSelected}
+              onClick={handleJoinSelected}
+            >
+              {preflightError
+                ? 'Service unavailable'
+                : (preflight && (!preflight.configured || !preflight.address || preflight.sol == null))
+                ? 'Temporarily unavailable'
+                : (isJoining || wsState.phase === 'connecting' || wsState.phase === 'authenticating')
+                ? 'Joining…'
+                : 'ENTER RACE'}
+            </button>
+            {(preflightError || (preflight && (!preflight.configured || !preflight.address || preflight.sol == null))) && (
+              <div style={{ marginTop: 6, fontSize: 11, color: 'rgba(248,113,113,0.9)' }}>
+                Service unavailable • please try again later
+              </div>
+            )}
+          </div>
         </div>
       </div>
       

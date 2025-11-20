@@ -39,6 +39,54 @@ test('landing + practice game load and capture screenshots with browser logs', a
   await page.screenshot({ path: landingPath, fullPage: true });
   console.log(`Saved Playwright landing screenshot for ${testInfo.project.name} to ${landingPath}`);
 
+  // 1b) PC header nav smoke tests (top buttons) – ensure they navigate correctly
+  if (!isMobileProject) {
+    // Header Practice nav → Practice Lobby → Back to Menu
+    const headerPractice = page.getByRole('button', { name: /^Practice$/i });
+    if (await headerPractice.isVisible().catch(() => false)) {
+      await headerPractice.click();
+      await expect(page.getByText(/Practice Lobby/i)).toBeVisible({ timeout: 10000 });
+      await page.getByRole('button', { name: /Back to Menu/i }).click();
+      await expect(page.getByRole('heading', { name: /SPERM\s+RACE/i })).toBeVisible({ timeout: 10000 });
+      console.log('[test] Header Practice nav navigates to Practice Lobby and back');
+    } else {
+      console.log('[test] Header Practice nav not visible on PC landing – skipping');
+    }
+
+    // Header Tournaments nav → Tier selection → Back to Menu
+    const headerTournaments = page.getByRole('button', { name: /Tournaments/i });
+    if (await headerTournaments.isVisible().catch(() => false)) {
+      await headerTournaments.click();
+      await expect(page.getByRole('heading', { name: /Select Your Entry Tier/i })).toBeVisible({ timeout: 10000 });
+      console.log('[test] Header Tournaments nav navigates to tier selection');
+    } else {
+      console.log('[test] Header Tournaments nav not visible on PC landing – skipping');
+    }
+
+    // Header Leaderboard nav → Leaderboard overlay
+    const headerLeaderboard = page.getByRole('button', { name: /Leaderboard/i });
+    if (await headerLeaderboard.isVisible().catch(() => false)) {
+      await headerLeaderboard.click();
+      await expect(page.getByRole('heading', { name: /Leaderboard/i })).toBeVisible({ timeout: 10000 });
+      // Close via ✕ button
+      await page.getByRole('button', { name: /✕/ }).click();
+      console.log('[test] Header Leaderboard nav opens and closes leaderboard overlay');
+    } else {
+      console.log('[test] Header Leaderboard nav not visible on PC landing – skipping');
+    }
+
+    // Header How to Play nav → How-to overlay
+    const headerHowTo = page.getByRole('button', { name: /How to Play/i });
+    if (await headerHowTo.isVisible().catch(() => false)) {
+      await headerHowTo.click();
+      await expect(page.getByText(/Objective/i)).toBeVisible({ timeout: 10000 });
+      await page.getByRole('button', { name: /Close/i }).click();
+      console.log('[test] Header How to Play nav opens and closes how-to overlay');
+    } else {
+      console.log('[test] Header How to Play nav not visible on PC landing – skipping');
+    }
+  }
+
   // 2) Try to enter free Practice/Race mode and capture what happens
   // Prefer the main CTA text, then fall back to generic Practice buttons
   const practiceLocators = [
