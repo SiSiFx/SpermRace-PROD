@@ -38,6 +38,7 @@ import { WsProvider, useWs } from './WsProvider';
 import NewGameView from './NewGameView';
 import { Leaderboard } from './Leaderboard';
 import HowToPlayOverlay from './HowToPlayOverlay';
+import { CrownSimple } from 'phosphor-react';
 import './leaderboard.css';
 
 type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
@@ -882,13 +883,10 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: 10,
-                    fontWeight: 800,
-                    letterSpacing: '0.08em',
-                    textTransform: 'uppercase',
+                    background: 'radial-gradient(circle at 30% 20%, #22d3ee, #0f172a)',
                   }}
                 >
-                  SR
+                  <CrownSimple size={14} weight="fill" color="#e5e7eb" />
                 </div>
                 <div>
                   <h3 className="tournament-title" style={{ fontSize: '18px', fontWeight: 800, marginBottom: 2 }}>{selectedTier.name}</h3>

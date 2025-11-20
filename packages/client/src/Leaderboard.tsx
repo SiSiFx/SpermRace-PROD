@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Trophy, Medal, Coins, GameController } from 'phosphor-react';
 
 interface LeaderboardEntry {
   wallet_address: string;
@@ -93,7 +94,10 @@ export function Leaderboard({ onClose, apiBase = '/api', myWallet, isMobile = fa
       <div className={`leaderboard-modal ${isMobile ? 'mobile' : ''}`}>
         {/* Header */}
         <div className="leaderboard-header">
-          <h2>Leaderboard</h2>
+          <h2>
+            <Trophy size={20} weight="fill" style={{ marginRight: 8 }} />
+            Leaderboard
+          </h2>
           <button className="close-btn" onClick={onClose}>✕</button>
         </div>
 
@@ -128,12 +132,14 @@ export function Leaderboard({ onClose, apiBase = '/api', myWallet, isMobile = fa
             className={`tab ${activeTab === 'wins' ? 'active' : ''}`}
             onClick={() => setActiveTab('wins')}
           >
+            <Medal size={16} weight="fill" style={{ marginRight: 6 }} />
             Most Wins
           </button>
           <button
             className={`tab ${activeTab === 'earnings' ? 'active' : ''}`}
             onClick={() => setActiveTab('earnings')}
           >
+            <Coins size={16} weight="fill" style={{ marginRight: 6 }} />
             Top Earners
           </button>
         </div>
@@ -153,7 +159,10 @@ export function Leaderboard({ onClose, apiBase = '/api', myWallet, isMobile = fa
 
           {!loading && !error && data.length === 0 && (
             <div className="empty-state">
-              <p>No games played yet.</p>
+              <p style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <GameController size={18} weight="fill" />
+                <span>No games played yet.</span>
+              </p>
               <p style={{ fontSize: '14px', opacity: 0.7 }}>Be the first to win and claim the top spot!</p>
             </div>
           )}

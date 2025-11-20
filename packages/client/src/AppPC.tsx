@@ -33,6 +33,7 @@ import NewGameView from './NewGameView';
 import HowToPlayOverlay from './HowToPlayOverlay';
 import PracticeFullTutorial from './PracticeFullTutorial';
 import { Leaderboard } from './Leaderboard';
+import { CrownSimple } from 'phosphor-react';
 
 type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
 
@@ -917,13 +918,10 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        fontSize: 11,
-                        fontWeight: 800,
-                        letterSpacing: '0.08em',
-                        textTransform: 'uppercase',
+                        background: 'radial-gradient(circle at 30% 20%, #22d3ee, #0f172a)',
                       }}
                     >
-                      SR
+                      <CrownSimple size={14} weight="fill" color="#e5e7eb" />
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontWeight: 700, color: '#e5e7eb' }}>{t.name}</div>
@@ -1007,13 +1005,10 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      fontSize: 12,
-                      fontWeight: 800,
-                      letterSpacing: '0.08em',
-                      textTransform: 'uppercase',
+                      background: 'radial-gradient(circle at 30% 20%, #22d3ee, #0f172a)',
                     }}
                   >
-                    SR
+                    <CrownSimple size={18} weight="fill" color="#e5e7eb" />
                   </div>
                   <div>
                     <div style={{ fontSize: 22, fontWeight: 800, color: '#fff' }}>{selectedTier.name}</div>
@@ -1175,7 +1170,9 @@ function Wallet({ onConnected, onClose }: { onConnected: () => void; onClose: ()
         
         <div className="pc-wallet-options">
           <button className="pc-wallet-btn" onClick={tryConnect}>
-            <div className="wallet-icon">SR</div>
+            <div className="wallet-icon">
+              <CrownSimple size={18} weight="fill" />
+            </div>
             <div className="wallet-text">
               <div className="wallet-title">Connect Wallet</div>
               <div className="wallet-subtitle">Phantom / Solflare / Coinbase • build wallet-refactor</div>
