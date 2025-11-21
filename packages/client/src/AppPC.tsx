@@ -1,8 +1,15 @@
 import { useEffect, useState } from 'react';
-// Base URL for backend API; prefer env, else infer by hostname, else same-origin /api
+// Base URL for backend API; prefer same-origin /api for dev/preview, absolute for production domain
 const API_BASE: string = (() => {
+  // For any non-production host (localhost, Vercel preview, etc.) always hit same-origin /api
+  try {
+    const host = (window?.location?.hostname || '').toLowerCase();
+    if (!host.includes('spermrace.io')) return '/api';
+  } catch {}
+
   const env = (import.meta as any).env?.VITE_API_BASE as string | undefined;
   if (env && typeof env === 'string' && env.trim()) return env.trim();
+
   try {
     const host = (window?.location?.hostname || '').toLowerCase();
     if (host.includes('dev.spermrace.io')) return 'https://dev.spermrace.io/api';
@@ -24,6 +31,9 @@ import { WalletProvider, useWallet } from './WalletProvider';
 import { WsProvider, useWs } from './WsProvider';
 import NewGameView from './NewGameView';
 import HowToPlayOverlay from './HowToPlayOverlay';
+import PracticeFullTutorial from './PracticeFullTutorial';
+import { Leaderboard } from './Leaderboard';
+import { CrownSimple, Lightning, Diamond } from 'phosphor-react';
 
 type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
 
@@ -47,8 +57,9 @@ function AppInner() {
     setToast(msg);
     window.setTimeout(() => setToast(null), duration);
   };
-  const [showHelp, setShowHelp] = useState<boolean>(false);
+  const [showHelp] = useState<boolean>(false);
   const [showHowTo, setShowHowTo] = useState<boolean>(false);
+  const [showLeaderboard, setShowLeaderboard] = useState<boolean>(false);
   
   // Loading progress for overlay (indefinite fill)
   const [loadProg, setLoadProg] = useState<number>(0);
@@ -113,6 +124,9 @@ function AppInner() {
 
   const onPractice = () => setScreen('practice');
   const onTournament = () => setScreen('modes');
+  const onWallet = () => setScreen('wallet');
+  const openLeaderboard = () => setShowLeaderboard(true);
+  const openHowTo = () => setShowHowTo(true);
 
   useEffect(() => {
     if (wsState.phase === 'lobby') setScreen('lobby');
@@ -143,22 +157,18 @@ function AppInner() {
 
   return (
     <div id="app-root" className="pc-optimized">
-      {/* Header wallet + status */}
-      <HeaderWallet screen={screen} status={statusText} />
+      {/* PC top bar: brand + nav + wallet */}
+      <HeaderWallet
+        screen={screen}
+        status={statusText}
+        onPractice={onPractice}
+        onTournament={onTournament}
+        onLeaderboard={openLeaderboard}
+        onShowHowTo={openHowTo}
+      />
       <div id="bg-particles" />
       
-      {/* PC: Keyboard shortcuts hint */}
-      <div className="pc-shortcuts-hint">
-        <div className="shortcut-item">
-          <kbd>ESC</kbd> Back
-        </div>
-        <div className="shortcut-item">
-          <kbd>P</kbd> Practice
-        </div>
-        <div className="shortcut-item">
-          <kbd>T</kbd> Tournament
-        </div>
-      </div>
+
 
       {/* UNIFIED OVERLAY SYSTEM - Only ONE overlay shows at a time, priority: Error > Payment > Auth > Connecting */}
       {wsState.lastError ? (
@@ -171,9 +181,6 @@ function AppInner() {
             boxShadow: '0 20px 60px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1)'
           }}>
             <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-              <div style={{ fontSize: '52px', marginBottom: '8px' }}>
-                {wsState.lastError.toLowerCase().includes('insufficient') ? '💸' : '⚠️'}
-              </div>
               <div className="modal-title" style={{ fontSize: '26px', fontWeight: 800 }}>
                 {wsState.lastError.toLowerCase().includes('insufficient') ? 'Insufficient Funds' : 'Something Went Wrong'}
               </div>
@@ -200,8 +207,8 @@ function AppInner() {
                 lineHeight: '1.5'
               }}>
                 {publicKey
-                  ? '🚀 Top up your wallet with SOL to continue racing'
-                  : '🔗 Connect a wallet or buy SOL to get started'}
+                  ? 'Top up your wallet with SOL to continue racing'
+                  : 'Connect a wallet or buy SOL to get started'}
               </div>
             )}
 
@@ -237,7 +244,7 @@ function AppInner() {
                         window.open('https://www.moonpay.com/buy/sol', '_blank');
                       }
                     }}
-                  >💳 Buy SOL</button>
+                  >Buy SOL</button>
                   <button
                     className="btn-secondary"
                     style={{
@@ -300,13 +307,15 @@ function AppInner() {
           solPrice={solPrice}
           onPractice={onPractice}
           onTournament={onTournament}
+          onWallet={onWallet}
+          onLeaderboard={openLeaderboard}
         />
       )}
       {screen === 'practice' && (
         <Practice onFinish={() => setScreen('results')} onBack={() => setScreen('landing')} />
       )}
       {screen === 'modes' && (
-        <Modes onSelect={() => setScreen('wallet')} onClose={() => setScreen('landing')} onNotify={showToast} />
+        <TournamentModesScreen onSelect={() => setScreen('wallet')} onClose={() => setScreen('landing')} onNotify={showToast} />
       )}
       {screen === 'wallet' && (
         <Wallet onConnected={() => setScreen('lobby')} onClose={() => setScreen('modes')} />
@@ -321,22 +330,7 @@ function AppInner() {
         <Results onPlayAgain={() => setScreen('practice')} onChangeTier={() => setScreen('modes')} />
       )}
 
-      {/* Help toggle */}
-      <button
-        onClick={() => setShowHowTo(true)}
-        title="How to play"
-        style={{ position: 'fixed', top: 10, left: 10, zIndex: 60, padding: '6px 8px', borderRadius: 8, background: 'rgba(0,0,0,0.55)', color: '#c7d2de', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12, cursor: 'pointer' }}
-      >
-        ?
-      </button>
-      {showHelp && (
-        <div style={{ position: 'fixed', top: 44, left: 10, zIndex: 60, padding: '10px 12px', borderRadius: 10, background: 'rgba(0,0,0,0.80)', color: '#c7d2de', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12, maxWidth: 320 }}>
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>Controls</div>
-          <div>• Aim with mouse</div>
-          <div>• Boost: Space or B</div>
-          <div>• Back: ESC</div>
-        </div>
-      )}
+
 
       {/* Toast - appears ABOVE overlays for visibility */}
       {toast && (
@@ -356,119 +350,248 @@ function AppInner() {
           }}
         />
       )}
+
+      {showLeaderboard && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 11000 }}>
+          <Leaderboard
+            onClose={() => setShowLeaderboard(false)}
+            apiBase={API_BASE}
+            myWallet={publicKey || null}
+            isMobile={false}
+          />
+        </div>
+      )}
     </div>
   );
 }
 
-function HeaderWallet({ screen, status }: { screen: string; status: string }) {
-  const { publicKey, disconnect } = useWallet() as any;
-  const style: React.CSSProperties = {
-    position: 'fixed',
-    top: 16,
-    right: 16,
-    zIndex: 60,
-    background: 'rgba(0,0,0,0.65)',
-    padding: '10px 16px',
-    borderRadius: 10,
-    fontSize: 13,
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    border: '1px solid rgba(255,255,255,0.15)'
-  };
+function HeaderWallet({
+  screen,
+  status,
+  onPractice,
+  onTournament,
+  onLeaderboard,
+  onShowHowTo,
+}: {
+  screen: string;
+  status: string;
+  onPractice: () => void;
+  onTournament: () => void;
+  onLeaderboard?: () => void;
+  onShowHowTo?: () => void;
+}) {
+  const { publicKey, disconnect, connect } = useWallet() as any;
+  const short = publicKey ? `${publicKey.slice(0, 4)}…${publicKey.slice(-4)}` : null;
+  const isLanding = screen === 'landing';
+  const showStatusPill = status && status !== 'Not Connected' && status !== 'Connected';
 
-  if (publicKey) {
-    const short = `${publicKey.slice(0,6)}…${publicKey.slice(-6)}`;
-    return (
-      <div style={style}>
-        <span style={{ color: '#c7d2de', opacity: 0.7, fontSize: 12 }}>{status}</span>
-        <span style={{ color: 'rgba(255,255,255,0.3)' }}>•</span>
-        <span style={{ fontFamily: 'JetBrains Mono, monospace', color: '#00ffff' }}>{short}</span>
-        <button className="btn-secondary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => disconnect?.()}>Disconnect</button>
+  return (
+    <header className="pc-header">
+      <div className="pc-header-left">
+        <button
+          type="button"
+          className="pc-logo"
+          onClick={() => {
+            if (screen !== 'landing') {
+              try { window.location.href = '/'; } catch {}
+            }
+          }}
+        >
+          <span className="pc-logo-main">SPERM</span>
+          <span className="pc-logo-sub">RACE</span>
+        </button>
+        {isLanding && (
+          <nav className="pc-nav">
+            <button type="button" className="pc-nav-link" onClick={onTournament}>Tournaments</button>
+            {onLeaderboard && (
+              <button type="button" className="pc-nav-link" onClick={onLeaderboard}>Leaderboard</button>
+            )}
+          </nav>
+        )}
       </div>
-    );
-  }
-  if (screen === 'game') {
-    return <div style={style}>🎮 Simulation mode (no wallet)</div>;
-  }
-  // Show status even when not connected
-  return <div style={{ ...style, color: '#c7d2de' }}>{status}</div>;
+      <div className="pc-header-right">
+        {showStatusPill && <span className="pc-status-pill">{status}</span>}
+        {short ? (
+          <>
+            <span className="pc-wallet-id">{short}</span>
+            <button
+              type="button"
+              className="btn-secondary pc-wallet-btn"
+              onClick={() => disconnect?.()}
+            >
+              Disconnect
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="btn-primary pc-wallet-btn"
+            onClick={() => connect?.()}
+          >
+            Connect Wallet
+          </button>
+        )}
+      </div>
+    </header>
+  );
 }
 
-function Landing({ solPrice, onPractice, onTournament }: { solPrice: number | null; onPractice: () => void; onTournament: () => void; }) {
-  const { publicKey, isConnecting } = useWallet();
-  const sendAnalytic = async (type: string, payload: any) => { try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, payload }) }); } catch {} };
-  
-  const handleTournament = async () => {
-    sendAnalytic('landing_cta_click', { publicKey: publicKey || null });
-    onTournament();
-  };
+interface LandingProps {
+  solPrice: number | null;
+  onPractice: () => void;
+  onTournament?: () => void;
+  onWallet: () => void;
+  onLeaderboard?: () => void;
+}
 
-  // Get player stats from localStorage
+function Landing({
+  solPrice,
+  onPractice,
+  onTournament,
+  onWallet,
+  onLeaderboard,
+}: LandingProps) {
+
   const getPlayerStats = () => {
     try {
       const stored = localStorage.getItem('spermrace_stats');
-      if (stored) return JSON.parse(stored);
+      if (stored) {
+        return JSON.parse(stored) as { totalGames?: number; wins?: number; totalKills?: number };
+      }
     } catch {}
-    return { totalGames: 0, wins: 0, losses: 0, totalPrizes: 0, totalKills: 0, history: [] };
+    return { totalGames: 0, wins: 0, totalKills: 0 };
   };
+
   const stats = getPlayerStats();
-  const winRate = stats.totalGames > 0 ? ((stats.wins / stats.totalGames) * 100).toFixed(1) : '0.0';
+  const totalGames = stats.totalGames || 0;
+  const totalKills = stats.totalKills || 0;
+  const winRate = totalGames > 0 ? ((stats.wins || 0) / totalGames * 100).toFixed(1) : '0.0';
 
   return (
     <div className="screen active pc-landing" id="landing-screen">
-      <div className="landing-container pc-container">
-        <div className="brand-section">
-          <div className="pc-badge">🖥️ PC EDITION</div>
-          <h1 className="brand-title pc-title">
-            <span className="text-gradient">SPERM</span>
-            <span className="text-accent">RACE</span>
-            <span className="text-gradient">.IO</span>
-          </h1>
-          <p className="brand-punchline">Battle Royale starts at birth 💥</p>
-          
-          {stats.totalGames > 0 && (
-            <div className="pc-stats-grid">
-              <div className="pc-stat-card">
-                <div className="stat-label">Total Games</div>
-                <div className="stat-value">{stats.totalGames}</div>
-              </div>
-              <div className="pc-stat-card">
-                <div className="stat-label">Win Rate</div>
-                <div className="stat-value">{winRate}%</div>
-              </div>
-              <div className="pc-stat-card">
-                <div className="stat-label">Total Kills</div>
-                <div className="stat-value">{stats.totalKills}</div>
-              </div>
-              {stats.totalPrizes > 0 && (
-                <div className="pc-stat-card highlight">
-                  <div className="stat-label">💰 Prizes Won</div>
-                  <div className="stat-value">{stats.totalPrizes.toFixed(4)} SOL</div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        
-        <div className="cta-section pc-cta">
-          <button className="cta-primary pc-btn-large" onClick={handleTournament} disabled={isConnecting}>
-            <span className="cta-text">
-              {isConnecting ? 'Opening wallet…' : 'Enter Tournament'}
-            </span>
-            <div className="cta-glow"/>
-          </button>
-          
-          <button className="btn-secondary pc-btn-secondary" onClick={onPractice}>
-            🎮 Practice Mode (Free)
-          </button>
-          
-          <div className="live-sol-price pc-price">
-            <span className="price-label">SOLANA</span>
-            <span className="price-value">${solPrice?.toFixed(2) ?? '--'}</span>
-            <span className="price-updated">Live</span>
+      <div
+        className="landing-container"
+        style={{
+          maxWidth: 1200,
+          margin: '0 auto',
+          minHeight: '100vh',
+          padding: '140px 40px 64px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 48,
+        }}
+      >
+        <header style={{ textAlign: 'center' }}>
+          <div
+            style={{
+              fontFamily: 'Orbitron, system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
+              letterSpacing: '0.22em',
+              fontSize: 12,
+              textTransform: 'uppercase',
+              color: 'rgba(148,163,184,0.9)',
+              marginBottom: 16,
+            }}
+          >
+            BIO-ARENA PROTOCOL
           </div>
-        </div>
+          <h1
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'baseline',
+              gap: 16,
+              fontSize: 72,
+              lineHeight: 1,
+              marginBottom: 20,
+            }}
+          >
+            <span style={{ color: '#fff', fontWeight: 800 }}>SPERM</span>
+            <span
+              style={{
+                fontWeight: 800,
+                color: 'transparent',
+                WebkitTextStroke: '1px rgba(148,163,184,0.9)',
+              }}
+            >
+              RACE
+            </span>
+          </h1>
+          <p
+            style={{
+              fontSize: 14,
+              letterSpacing: '0.18em',
+              textTransform: 'uppercase',
+              color: 'rgba(148,163,184,0.9)',
+            }}
+          >
+            ON-CHAIN FERTILIZATION BATTLE ROYALE
+          </p>
+        </header>
+
+        <main>
+          {/* Hero CTAs */}
+          <section
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'stretch',
+              gap: 20,
+              flexWrap: 'wrap',
+            }}
+          >
+            <button
+              type="button"
+              className="cta-primary"
+              style={{ minWidth: 280, position: 'relative', fontSize: 14, padding: '16px 36px' }}
+              onClick={() => onTournament?.()}
+            >
+              <span className="cta-text">Enter Tournament</span>
+              <div className="cta-glow" />
+            </button>
+
+            <button
+              type="button"
+              className="cta-primary"
+              style={{ minWidth: 280, position: 'relative', fontSize: 14, padding: '16px 36px' }}
+              onClick={onPractice}
+            >
+              <span className="cta-text">Practice Mode (Free)</span>
+              <div className="cta-glow" />
+            </button>
+          </section>
+
+          <div
+            style={{
+              marginTop: 12,
+              fontSize: 12,
+              textAlign: 'center',
+              color: 'rgba(148,163,184,0.7)',
+            }}
+          >
+            Tournament entry from $1 • Instant crypto payouts
+          </div>
+
+          {totalGames > 0 && (
+            <section style={{ marginTop: 32 }}>
+              <div className="pc-stats-grid">
+                <div className="pc-stat-card">
+                  <div className="stat-label">Games</div>
+                  <div className="stat-value">{totalGames}</div>
+                </div>
+                <div className="pc-stat-card highlight">
+                  <div className="stat-label">Win%</div>
+                  <div className="stat-value">{winRate}%</div>
+                </div>
+                <div className="pc-stat-card">
+                  <div className="stat-label">Kills</div>
+                  <div className="stat-value">{totalKills}</div>
+                </div>
+              </div>
+            </section>
+          )}
+        </main>
       </div>
     </div>
   );
@@ -481,13 +604,21 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
   const [countdown, setCountdown] = useState<number>(5);
   const countdownTotal = 5;
 
+  const [showPracticeIntro, setShowPracticeIntro] = useState<boolean>(() => {
+    try {
+      return !localStorage.getItem('sr_practice_full_tuto_seen');
+    } catch {
+      return true;
+    }
+  });
+
   useEffect(() => {
     if (step === 'lobby') {
       const base = [meId];
       const bots = Array.from({ length: 7 }, (_, i) => `BOT_${i.toString(36)}${Math.random().toString(36).slice(2,4)}`);
       setPlayers([...base, ...bots]);
-      
       setCountdown(countdownTotal);
+      if (showPracticeIntro) return;
       let currentCountdown = countdownTotal;
       
       const t = setInterval(() => {
@@ -502,7 +633,7 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
       
       return () => clearInterval(t);
     }
-  }, [step, meId]);
+  }, [step, meId, showPracticeIntro]);
 
   if (step === 'lobby') {
     const maxPlayers = 8;
@@ -511,7 +642,7 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
       <div className="screen active pc-lobby" id="lobby-screen">
         <div className="lobby-container pc-lobby-container">
           <div className="lobby-header">
-            <div className="lobby-title">🎮 Practice Lobby</div>
+            <div className="lobby-title">Practice Lobby</div>
             <div className="lobby-status">{players.length}/{maxPlayers}</div>
           </div>
           <div className="queue-bar pc-queue">
@@ -540,6 +671,15 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
             <button className="btn-secondary pc-btn" onClick={onBack}>← Back to Menu</button>
           </div>
         </div>
+        <PracticeFullTutorial
+          visible={showPracticeIntro}
+          onDone={() => {
+            setShowPracticeIntro(false);
+            try {
+              localStorage.setItem('sr_practice_full_tuto_seen', '1');
+            } catch {}
+          }}
+        />
       </div>
     );
   }
@@ -559,7 +699,7 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
   return null;
 }
 
-function Modes({ onSelect: _onSelect, onClose, onNotify }: { onSelect: () => void; onClose: () => void; onNotify: (msg: string, duration?: number) => void }) {
+function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onSelect: () => void; onClose: () => void; onNotify: (msg: string, duration?: number) => void }) {
   const { publicKey, connect } = useWallet();
   const { connectAndJoin, state: wsState } = useWs();
   const [isJoining, setIsJoining] = useState<boolean>(false);
@@ -582,204 +722,442 @@ function Modes({ onSelect: _onSelect, onClose, onNotify }: { onSelect: () => voi
   }, []);
 
   const tiers = [
-    { name: 'Micro Race', usd: 1, max: 16, dur: '2-3 min' },
-    { name: 'Nano Race', usd: 5, max: 32, dur: '3-4 min' },
-    { name: 'Mega Race', usd: 25, max: 32, dur: '4-6 min' },
-    { name: 'Championship', usd: 100, max: 16, dur: '5-8 min' },
+    { name: 'Micro Race', usd: 1, max: 16, dur: '2–3 min' },
+    { name: 'Nano Race', usd: 5, max: 32, dur: '3–4 min' },
+    { name: 'Mega Race', usd: 25, max: 32, dur: '4–6 min' },
+    { name: 'Championship', usd: 100, max: 16, dur: '5–8 min' },
   ];
+
+  const tierIcons = [Lightning, Lightning, Diamond, CrownSimple] as const;
+
+  const [selectedIndex, setSelectedIndex] = useState(0);
 
   useEffect(() => {
     if (wsState.phase === 'lobby' || wsState.phase === 'game') setIsJoining(false);
   }, [wsState.phase]);
 
+  const buttonGradients = [
+    'linear-gradient(135deg, #22d3ee, #14b8a6)',
+    'linear-gradient(135deg, #6366f1, #8b5cf6)',
+    'linear-gradient(135deg, #f43f5e, #fb923c)',
+    'linear-gradient(135deg, #fb923c, #fbbf24)'
+  ];
+
+  const badgeLabels = ['Warmup', 'Blitz', 'Apex', 'Grand Final'];
+  const selectedTier = tiers[selectedIndex];
+  const selectedPrize = (selectedTier.usd * selectedTier.max * 0.85).toFixed(2);
+  const disabledSelected = isJoining
+    || wsState.phase === 'connecting'
+    || wsState.phase === 'authenticating'
+    || preflightError
+    || (!!preflight && (!preflight.configured || !preflight.address || preflight.sol == null));
+
+  const handleJoinSelected = async () => {
+    if (disabledSelected) return;
+    setIsJoining(true);
+    const ok = publicKey ? true : await connect();
+    if (!ok) {
+      setIsJoining(false);
+      onNotify('Wallet not detected. Please install or unlock your wallet.');
+      return;
+    }
+    await connectAndJoin({ entryFeeTier: selectedTier.usd as any, mode: 'tournament' });
+  };
+
   return (
-    <div className="screen active" id="mode-screen">
-      <div className="modes-sheet">
-        <div className="sheet-grip" />
-        <div className="modal-header"><h2 className="modal-title">Enter Sperm Race</h2><p className="modal-subtitle">Select a tier</p></div>
-        {preflightError && (
-          <div className="modal-subtitle" style={{ color: '#ff8080', marginBottom: 8 }}>Tournaments are temporarily unavailable (prize preflight issue).</div>
-        )}
+    <div className="screen active" id="mode-screen" style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '100px 40px 40px',
+    }}>
+      <div style={{
+        maxWidth: 1400,
+        width: '100%',
+      }}>
+        <div style={{ textAlign: 'center', marginBottom: 48 }}>
+          <h2 style={{
+            fontSize: 48,
+            fontWeight: 800,
+            color: '#fff',
+            marginBottom: 12,
+            letterSpacing: '0.02em'
+          }}>Select Your Entry Tier</h2>
+          <p style={{
+            fontSize: 16,
+            color: 'rgba(148,163,184,0.9)',
+            marginBottom: 8
+          }}>Tournament races • Winner takes 85% of prize pool</p>
+          {preflightError && (
+            <div style={{ color: '#ff8080', fontSize: 14, marginTop: 16 }}>
+              Tournaments temporarily unavailable
+            </div>
+          )}
+        </div>
 
-        <div className="tournament-grid">
-          {tiers.map((t, i) => {
-            const prize = (t.usd * t.max * 0.85).toFixed(2);
-            const cardGradients = [
-              'linear-gradient(135deg, rgba(34,211,238,0.15) 0%, rgba(99,102,241,0.15) 100%)',
-              'linear-gradient(135deg, rgba(99,102,241,0.18) 0%, rgba(244,63,94,0.18) 100%)', 
-              'linear-gradient(135deg, rgba(244,63,94,0.20) 0%, rgba(251,146,60,0.20) 100%)',
-              'linear-gradient(135deg, rgba(251,146,60,0.22) 0%, rgba(34,211,238,0.22) 100%)'
-            ];
-            const prizeGradients = [
-              'linear-gradient(90deg, rgba(34,211,238,0.25), rgba(99,102,241,0.25))',
-              'linear-gradient(90deg, rgba(99,102,241,0.28), rgba(244,63,94,0.28))',
-              'linear-gradient(90deg, rgba(244,63,94,0.30), rgba(251,146,60,0.30))',
-              'linear-gradient(90deg, rgba(251,146,60,0.32), rgba(34,211,238,0.32))'
-            ];
-            const buttonGradients = [
-              'linear-gradient(90deg, #22d3ee 0%, #6366f1 100%)',
-              'linear-gradient(90deg, #6366f1 0%, #f43f5e 100%)',
-              'linear-gradient(90deg, #f43f5e 0%, #fb923c 100%)',
-              'linear-gradient(90deg, #fb923c 0%, #22d3ee 100%)'
-            ];
-            return (
-              <div key={t.name} className="tournament-card" style={{
-                background: cardGradients[i],
-                border: '2px solid rgba(255,255,255,0.15)',
-                borderRadius: '20px',
-                padding: '24px',
+        {/* Bio-Arena Map layout: left = arenas, right = detail drawer */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 420px) minmax(0, 1fr)',
+            gap: 32,
+            alignItems: 'stretch',
+            marginBottom: 40,
+          }}
+        >
+          {/* Left: stylized map with arena nodes */}
+          <div
+            style={{
+              position: 'relative',
+              padding: 24,
+              borderRadius: 24,
+              background: 'radial-gradient(circle at 0 0, rgba(56,189,248,0.16), transparent 55%), rgba(15,23,42,0.96)',
+              border: '1px solid rgba(148,163,184,0.5)',
+              boxShadow: '0 18px 50px rgba(0,0,0,0.7)',
+              overflow: 'hidden',
+            }}
+          >
+            {/* Vertical path line */}
+            <div
+              style={{
+                position: 'absolute',
+                left: 40,
+                top: 28,
+                bottom: 28,
+                width: 3,
+                background: 'linear-gradient(to bottom, rgba(34,211,238,0.9), rgba(129,140,248,0.7))',
+                opacity: 0.8,
+              }}
+            />
+            <div
+              style={{
+                position: 'absolute',
+                left: 34,
+                top: 34,
+                bottom: 34,
+                width: 14,
+                borderRadius: 999,
+                background: 'radial-gradient(circle, rgba(15,23,42,0.8), transparent 70%)',
+              }}
+            />
+
+            <div style={{ position: 'relative', zIndex: 1, marginBottom: 16 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.18em',
+                  color: 'rgba(148,163,184,0.9)',
+                  marginBottom: 6,
+                }}
+              >
+                Bio-Arena Map
+              </div>
+              <div style={{ fontSize: 18, fontWeight: 600, color: '#e5e7eb', lineHeight: 1.4 }}>
+                Choose your arena
+                <br />
+                along the fertilization route
+              </div>
+            </div>
+
+            <div
+              style={{
                 position: 'relative',
-                overflow: 'hidden',
-                backdropFilter: 'blur(10px)',
-                boxShadow: '0 20px 40px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.1)'
-              }} data-ribbon={i===0? '🔥 HOT' : i===1? '⭐ POPULAR' : i===2? '💎 VIP' : '👑 ELITE'}>
-                
-                {/* Animated background orb */}
-                <div style={{
-                  position: 'absolute',
-                  top: '-50%',
-                  right: '-30%',
-                  width: '200px',
-                  height: '200px',
-                  background: prizeGradients[i],
-                  borderRadius: '50%',
-                  opacity: 0.3,
-                  filter: 'blur(60px)',
-                  animation: 'float 6s ease-in-out infinite'
-                }} />
-                
-                <div className="tournament-header" style={{ position: 'relative', zIndex: 2 }}>
-                  <div className="tournament-icon" style={{ fontSize: '32px', marginBottom: '8px' }}>🧬</div>
-                  <h3 className="tournament-title" style={{ fontSize: '24px', fontWeight: 800, marginBottom: '4px' }}>{t.name}</h3>
-                  <div className="tournament-badge" style={{ 
-                    background: 'rgba(255,255,255,0.2)', 
-                    padding: '4px 12px', 
-                    borderRadius: '20px', 
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    backdropFilter: 'blur(10px)'
-                  }}>Tier {i+1}</div>
-                </div>
-                
-                {/* Massive prize display */}
-                <div style={{ 
-                  textAlign: 'center', 
-                  margin: '20px 0', 
-                  position: 'relative', 
-                  zIndex: 2 
-                }}>
-                  <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.8)', marginBottom: '8px' }}>WIN UP TO</div>
-                  <div style={{ 
-                    fontSize: '48px', 
-                    fontWeight: 900, 
-                    background: buttonGradients[i],
-                    backgroundClip: 'text',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    textShadow: '0 4px 20px rgba(255,255,255,0.3)',
-                    lineHeight: 1,
-                    marginBottom: '4px'
-                  }}>${prize}</div>
-                  <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)' }}>Instant crypto payout</div>
-                </div>
+                zIndex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 14,
+                marginTop: 6,
+              }}
+            >
+              {tiers.map((t, i) => {
+                const active = i === selectedIndex;
+                const difficulty = i + 1; // 1–4
+                const Icon = tierIcons[i];
+                return (
+                  <button
+                    key={t.name}
+                    type="button"
+                    onClick={() => setSelectedIndex(i)}
+                    style={{
+                      position: 'relative',
+                      marginLeft: 32,
+                      padding: '10px 14px',
+                      borderRadius: 14,
+                      border: active ? '1px solid rgba(34,211,238,0.9)' : '1px solid rgba(51,65,85,0.9)',
+                      background: active ? 'rgba(15,23,42,0.95)' : 'rgba(15,23,42,0.85)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      cursor: 'pointer',
+                      boxShadow: active ? '0 0 24px rgba(34,211,238,0.45)' : '0 8px 22px rgba(0,0,0,0.7)',
+                      transform: active ? 'translateX(2px)' : 'translateX(0)',
+                      transition: 'all 0.18s ease-out',
+                      opacity: preflightError ? 0.7 : 1,
+                    }}
+                  >
+                    {/* Node dot */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        left: -19,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        width: 14,
+                        height: 14,
+                        borderRadius: '999px',
+                        background: active
+                          ? 'radial-gradient(circle, #22d3ee, #0ea5e9)'
+                          : 'radial-gradient(circle, #4b5563, #020617)',
+                        boxShadow: active ? '0 0 18px rgba(34,211,238,0.9)' : '0 0 6px rgba(15,23,42,1)',
+                        border: '2px solid rgba(15,23,42,0.95)',
+                      }}
+                    />
 
-                <div className="tournament-details" style={{ position: 'relative', zIndex: 2 }}>
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    background: 'rgba(255,255,255,0.1)',
-                    padding: '12px 16px',
-                    borderRadius: '12px',
-                    marginBottom: '16px',
-                    backdropFilter: 'blur(10px)'
-                  }}>
-                    <div>
-                      <div style={{ fontSize: '18px', fontWeight: 700 }}>${t.usd.toFixed(2)}</div>
-                      <div style={{ fontSize: '11px', opacity: 0.8 }}>Entry fee</div>
+                    <div
+                      style={{
+                        width: 26,
+                        height: 26,
+                        borderRadius: '999px',
+                        border: '1px solid rgba(148,163,184,0.7)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: 'radial-gradient(circle at 30% 20%, #22d3ee, #0f172a)',
+                      }}
+                    >
+                      <Icon size={14} weight="fill" color="#e5e7eb" />
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '14px', fontWeight: 600 }}>{t.max} players max</div>
-                      <div style={{ fontSize: '11px', opacity: 0.8 }}>{t.dur} duration</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: '#e5e7eb' }}>{t.name}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                        {/* Difficulty dots */}
+                        <div style={{ display: 'flex', gap: 3 }}>
+                          {Array.from({ length: 4 }).map((_, idx) => (
+                            <span
+                              key={idx}
+                              style={{
+                                width: 6,
+                                height: 6,
+                                borderRadius: '999px',
+                                background:
+                                  idx < difficulty
+                                    ? 'linear-gradient(135deg, #fb923c, #f97316)'
+                                    : 'rgba(55,65,81,0.9)',
+                              }}
+                            />
+                          ))}
+                        </div>
+                        <span style={{ fontSize: 11, color: 'rgba(148,163,184,0.9)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>
+                          {badgeLabels[i]}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.9)', marginTop: 4 }}>
+                        ${t.usd} • {t.max}p • {t.dur}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Right: arena detail panel (drawer style) */}
+          <div
+            style={{
+              width: '100%',
+              background: 'rgba(14,14,18,0.96)',
+              borderRadius: 24,
+              border: '1px solid rgba(255,255,255,0.12)',
+              position: 'relative',
+              overflow: 'hidden',
+              padding: 26,
+              boxShadow: '0 22px 70px rgba(0,0,0,0.7)',
+              backdropFilter: 'blur(24px)',
+            }}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: `${buttonGradients[selectedIndex]}`,
+                opacity: 0.12,
+                mixBlendMode: 'screen',
+                pointerEvents: 'none',
+              }}
+            />
+
+            <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.16em',
+                    color: 'rgba(148,163,184,0.9)',
+                    marginBottom: 6,
+                  }}
+                >
+                  Arena Details
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  {(() => {
+                    const DetailIcon = tierIcons[selectedIndex];
+                    return (
+                      <div
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: '999px',
+                          border: '1px solid rgba(148,163,184,0.7)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          background: 'radial-gradient(circle at 30% 20%, #22d3ee, #0f172a)',
+                        }}
+                      >
+                        <DetailIcon size={18} weight="fill" color="#e5e7eb" />
+                      </div>
+                    );
+                  })()}
+                  <div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: '#fff' }}>{selectedTier.name}</div>
+                    <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.95)' }}>
+                      Tier {selectedIndex + 1} • {badgeLabels[selectedIndex]}
                     </div>
                   </div>
                 </div>
-
-                <button
-                  style={{
-                    width: '100%',
-                    padding: '16px 24px',
-                    background: buttonGradients[i],
-                    border: 'none',
-                    borderRadius: '16px',
-                    color: '#000',
-                    fontSize: '18px',
-                    fontWeight: 800,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                    cursor: 'pointer',
-                    position: 'relative',
-                    zIndex: 2,
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.3)',
-                    // Disable transition when animating to avoid conflicts
-                    transition: (publicKey && !isJoining && wsState.phase !== 'connecting' && wsState.phase !== 'authenticating') ? 'none' : 'all 0.2s ease',
-                    // Only set transform when NOT animating (animation will handle it)
-                    ...(!(publicKey && !isJoining && wsState.phase !== 'connecting' && wsState.phase !== 'authenticating') && { transform: 'translateY(0px)' }),
-                    // Add glowing animation when wallet is connected and ready
-                    animation: publicKey && !isJoining && wsState.phase !== 'connecting' && wsState.phase !== 'authenticating'
-                      ? 'buttonGlow 2s ease-in-out infinite, buttonPulse 2s ease-in-out infinite'
-                      : 'none'
-                  }}
-                  disabled={
-                    isJoining ||
-                    wsState.phase === 'connecting' ||
-                    wsState.phase === 'authenticating' ||
-                    preflightError ||
-                    (!!preflight && (!preflight.configured || !preflight.address || preflight.sol == null))
-                  }
-                  onClick={async () => {
-                    setIsJoining(true);
-                    const ok = publicKey ? true : await connect();
-                    if (!ok) {
-                      setIsJoining(false);
-                      onNotify('Wallet not detected. Please install or unlock your wallet.');
-                      return;
-                    }
-                    await connectAndJoin({ entryFeeTier: t.usd as any, mode: 'tournament' });
-                  }}
-                  onMouseEnter={(e) => {
-                    if (publicKey && !isJoining && wsState.phase !== 'connecting' && wsState.phase !== 'authenticating') {
-                      e.currentTarget.style.animation = 'none';
-                      e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)';
-                      e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.4), 0 0 35px rgba(34,211,238,0.8)';
-                    } else {
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                      e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.4)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (publicKey && !isJoining && wsState.phase !== 'connecting' && wsState.phase !== 'authenticating') {
-                      e.currentTarget.style.animation = 'buttonGlow 2s ease-in-out infinite, buttonPulse 2s ease-in-out infinite';
-                      e.currentTarget.style.transform = 'translateY(0px)';
-                      e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.3)';
-                    } else {
-                      e.currentTarget.style.transform = 'translateY(0px)';
-                      e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.3)';
-                    }
-                  }}
-                >{
-                  preflightError ? 'Service unavailable'
-                  : (preflight && (!preflight.configured || !preflight.address || preflight.sol == null)) ? 'Temporarily unavailable'
-                  : (isJoining || wsState.phase === 'connecting' || wsState.phase === 'authenticating') ? 'Joining…'
-                  : publicKey ? `🚀 ENTER RACE - READY!` : `ENTER RACE`
-                }</button>
               </div>
-            );
-          })}
+
+              <div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: 'rgba(148,163,184,0.85)',
+                    marginBottom: 4,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.14em',
+                  }}
+                >
+                  Win up to
+                </div>
+                <div
+                  style={{
+                    fontSize: 44,
+                    fontWeight: 900,
+                    background: buttonGradients[selectedIndex],
+                    backgroundClip: 'text',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    lineHeight: 1,
+                    textShadow: '0 4px 18px rgba(0,0,0,0.8)',
+                    marginBottom: 4,
+                  }}
+                >
+                  ${selectedPrize}
+                </div>
+                <div style={{ fontSize: 13, color: 'rgba(148,163,184,0.9)' }}>
+                  Winner takes ~85% of the prize pool
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, minmax(0,1fr))',
+                  gap: 10,
+                  marginTop: 4,
+                }}
+              >
+                <div
+                  style={{
+                    padding: 12,
+                    borderRadius: 10,
+                    background: 'rgba(15,23,42,0.9)',
+                    border: '1px solid rgba(148,163,184,0.4)',
+                    textAlign: 'center',
+                  }}
+                >
+                  <div style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>${selectedTier.usd}</div>
+                  <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.85)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Buy-in</div>
+                </div>
+                <div
+                  style={{
+                    padding: 12,
+                    borderRadius: 10,
+                    background: 'rgba(15,23,42,0.9)',
+                    border: '1px solid rgba(148,163,184,0.4)',
+                    textAlign: 'center',
+                  }}
+                >
+                  <div style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>{selectedTier.max}</div>
+                  <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.85)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Players max</div>
+                </div>
+                <div
+                  style={{
+                    padding: 12,
+                    borderRadius: 10,
+                    background: 'rgba(15,23,42,0.9)',
+                    border: '1px solid rgba(148,163,184,0.4)',
+                    textAlign: 'center',
+                  }}
+                >
+                  <div style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>{selectedTier.dur}</div>
+                  <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.85)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Duration</div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleJoinSelected}
+                disabled={disabledSelected}
+                style={{
+                  marginTop: 16,
+                  width: '100%',
+                  padding: '14px 28px',
+                  borderRadius: 999,
+                  border: 'none',
+                  background: buttonGradients[selectedIndex],
+                  color: selectedIndex === 1 ? '#fff' : '#000',
+                  fontSize: 15,
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.1em',
+                  cursor: disabledSelected ? 'not-allowed' : 'pointer',
+                  boxShadow: disabledSelected ? 'none' : '0 10px 30px rgba(0,0,0,0.6)',
+                  opacity: disabledSelected ? 0.7 : 1,
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                {preflightError
+                  ? 'Service Unavailable'
+                  : (preflight && (!preflight.configured || !preflight.address || preflight.sol == null))
+                  ? 'Temporarily Unavailable'
+                  : (isJoining || wsState.phase === 'connecting' || wsState.phase === 'authenticating')
+                  ? 'Joining…'
+                  : publicKey
+                  ? 'Enter Race'
+                  : 'Connect & Enter'}
+              </button>
+
+              {(preflightError || (preflight && (!preflight.configured || !preflight.address || preflight.sol == null))) && (
+                <div style={{ textAlign: 'left', marginTop: 8, fontSize: 11, color: '#f97373' }}>
+                  Service unavailable • please try again later
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
-        <div className="mode-footer">
-          <button className="btn-secondary" onClick={onClose}>Back</button>
+        {/* Back Button */}
+        <div style={{ textAlign: 'center' }}>
+          <button
+            className="btn-secondary"
+            style={{ padding: '12px 32px', fontSize: 15 }}
+            onClick={onClose}
+          >
+            ← Back to Menu
+          </button>
         </div>
       </div>
     </div>
@@ -796,13 +1174,15 @@ function Wallet({ onConnected, onClose }: { onConnected: () => void; onClose: ()
     <div className="screen active pc-wallet" id="wallet-screen">
       <div className="pc-wallet-container">
         <div className="modal-header">
-          <h2 className="modal-title">🔐 Connect Wallet</h2>
+          <h2 className="modal-title">Connect Wallet</h2>
           <p className="modal-subtitle">Sign in with Solana to continue</p>
         </div>
         
         <div className="pc-wallet-options">
           <button className="pc-wallet-btn" onClick={tryConnect}>
-            <div className="wallet-icon">🔗</div>
+            <div className="wallet-icon">
+              <CrownSimple size={18} weight="fill" />
+            </div>
             <div className="wallet-text">
               <div className="wallet-title">Connect Wallet</div>
               <div className="wallet-subtitle">Phantom / Solflare / Coinbase • build wallet-refactor</div>
@@ -810,7 +1190,7 @@ function Wallet({ onConnected, onClose }: { onConnected: () => void; onClose: ()
           </button>
           {publicKey && (
             <div className="pc-connected-badge">
-              ✅ Connected: {publicKey.slice(0,6)}…{publicKey.slice(-6)}
+              Connected: {publicKey.slice(0,6)}…{publicKey.slice(-6)}
             </div>
           )}
         </div>
@@ -831,7 +1211,7 @@ function Lobby({ onStart: _onStart, onBack }: { onStart: () => void; onBack: () 
     <div className="screen active pc-lobby" id="lobby-screen">
       <div className="lobby-container pc-lobby-container">
         <div className="lobby-header">
-          <div className="lobby-title">🏆 Tournament Lobby</div>
+          <div className="lobby-title">Tournament Lobby</div>
           <div className="lobby-status">{players.length}/{state.lobby?.maxPlayers ?? 16}</div>
         </div>
         
@@ -1035,7 +1415,7 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
       <div className="modal-card pc-results-card">
         <div className="modal-header">
           <h2 className={`round-result ${isWinner ? 'victory' : 'defeat'}`}>
-            {isWinner ? '🏆 Victory! Fertilization!' : '💀 Eliminated'}
+            {isWinner ? 'Victory! Fertilization!' : 'Eliminated'}
           </h2>
           <p className="round-description">
             Winner: {winner ? `${winner.slice(0,6)}…${winner.slice(-6)}` : '—'}
@@ -1046,7 +1426,7 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
         {solscan && (
           <div className="pc-solscan-link">
             <a href={solscan} target="_blank" rel="noreferrer">
-              🔗 View payout on Solscan →
+              View payout on Solscan →
             </a>
           </div>
         )}
@@ -1060,10 +1440,10 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
         
         <div className="round-actions pc-actions">
           <button className="btn-primary pc-btn-large" onClick={onPlayAgain}>
-            🔄 Play Again
+            Play Again
           </button>
           <button className="btn-secondary pc-btn" onClick={onChangeTier}>
-            🏠 Main Menu
+            Main Menu
           </button>
         </div>
       </div>

@@ -44,6 +44,7 @@ export class PlayerEntity implements Player {
   status?: { boosting: boolean; boostCooldownMs: number; boostMaxCooldownMs: number };
   spawnAtMs: number;
   lastBounceAt: number;
+  lastLungeAt: number;
 
   private timeSinceLastTrailEmit: number;
   private targetAngle: number;
@@ -77,6 +78,7 @@ export class PlayerEntity implements Player {
     this.targetAngle = this.sperm.angle;
     this.spawnAtMs = Date.now();
     this.lastBounceAt = 0;
+    this.lastLungeAt = 0;
   }
 
   /**
@@ -267,7 +269,7 @@ export class PlayerEntity implements Player {
     this.boostEnergy = Math.max(0, this.boostEnergy - COST);
 
     // Apply instantaneous lunge impulse in facing direction
-    const impulse = 600;
+    const impulse = 750;
     const vxImpulse = Math.cos(this.sperm.angle) * impulse;
     const vyImpulse = Math.sin(this.sperm.angle) * impulse;
     this.sperm.velocity.x += vxImpulse;
@@ -275,6 +277,12 @@ export class PlayerEntity implements Player {
 
     // Set lunge rhythm cooldown
     this.nextBoostAvailableAt = now + BOOST.COOLDOWN_MS;
+    this.lastLungeAt = now;
+  }
+
+  /** Returns true if the player is currently in the aggressive lunge phase. */
+  isLunging(): boolean {
+    return Date.now() - this.lastLungeAt < 350;
   }
 
   /** Read-only view of remaining boost energy for AI/telemetry. */

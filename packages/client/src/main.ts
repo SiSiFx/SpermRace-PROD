@@ -230,8 +230,8 @@ function startInterpolatedRender(): void {
       const maxY = 0;
       rootContainer.scale.set(s);
       rootContainer.position.set(
-        Math.max(minX, Math.min(maxX, Math.round(desiredX))),
-        Math.max(minY, Math.min(maxY, Math.round(desiredY)))
+        Math.max(minX, Math.min(maxX, desiredX)), // no rounding for smooth camera
+        Math.max(minY, Math.min(maxY, desiredY))
       );
     }
   });

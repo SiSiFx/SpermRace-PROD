@@ -23,8 +23,9 @@ const SOLANA_CLUSTER: 'devnet' | 'mainnet' = (() => {
 import { WalletProvider, useWallet } from './WalletProvider';
 import { WsProvider, useWs } from './WsProvider';
 import NewGameView from './NewGameView';
-import { Leaderboard } from './Leaderboard';
-import Modes from './components/Modes';
+import HowToPlayOverlay from './HowToPlayOverlay';
+import { WarningCircle, CreditCard, LinkSimple } from 'phosphor-react';
+import { Modes } from './components/Modes';
 import './leaderboard.css';
 
 type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
@@ -44,11 +45,7 @@ function AppInner() {
   const [solPrice, setSolPrice] = useState<number | null>(null);
   const { state: wsState, signAuthentication, leave } = useWs() as any;
   const { publicKey } = useWallet() as any;
-  const [toast, setToast] = useState<string | null>(null);
-  const showToast = (msg: string, duration = 1800) => {
-    setToast(msg);
-    window.setTimeout(() => setToast(null), duration);
-  };
+  const [toast] = useState<string | null>(null);
   const [showLeaderboard, setShowLeaderboard] = useState<boolean>(false);
   // Loading progress for overlay (indefinite fill)
   const [loadProg, setLoadProg] = useState<number>(0);
@@ -91,7 +88,6 @@ function AppInner() {
   }, []);
 
   const onPractice = () => setScreen('practice');
-  const onTournament = () => setScreen('modes');
 
   useEffect(() => {
     if (wsState.phase === 'lobby') setScreen('lobby');
@@ -109,15 +105,13 @@ function AppInner() {
           <div className="modal-card" style={{
             padding: '28px 24px',
             maxWidth: '420px',
-            background: 'linear-gradient(135deg, rgba(239,68,68,0.12) 0%, rgba(251,146,60,0.12) 100%)',
-            border: '2px solid rgba(239,68,68,0.3)',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1)'
+            background: 'rgba(3,3,5,0.96)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            boxShadow: '0 24px 80px rgba(0,0,0,0.9)'
           }}>
             <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-              <div style={{ fontSize: '48px', marginBottom: '8px' }}>
-                {wsState.lastError.toLowerCase().includes('insufficient') ? '💸' : '⚠️'}
-              </div>
-              <div className="modal-title" style={{ fontSize: '24px', fontWeight: 800 }}>
+              <div className="modal-title" style={{ fontSize: '24px', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <WarningCircle size={24} weight="fill" />
                 {wsState.lastError.toLowerCase().includes('insufficient') ? 'Insufficient Funds' : 'Something Went Wrong'}
               </div>
             </div>
@@ -143,8 +137,8 @@ function AppInner() {
                 lineHeight: '1.5'
               }}>
                 {publicKey
-                  ? '🚀 Top up your wallet with SOL to continue racing'
-                  : '🔗 Connect a wallet or buy SOL to get started'}
+                  ? 'Top up your wallet with SOL to continue racing'
+                  : 'Connect a wallet or buy SOL to get started'}
               </div>
             )}
 
@@ -159,8 +153,8 @@ function AppInner() {
                       padding: '14px 20px',
                       fontSize: '15px',
                       fontWeight: 700,
-                      background: 'linear-gradient(90deg, #22d3ee 0%, #6366f1 100%)',
-                      boxShadow: '0 8px 20px rgba(34,211,238,0.3)',
+                    background: '#00F0FF',
+                    boxShadow: '0 8px 26px rgba(0,240,255,0.45)',
                       transition: 'all 0.2s ease'
                     }}
                     onMouseEnter={(e) => {
@@ -180,7 +174,10 @@ function AppInner() {
                         window.open('https://www.moonpay.com/buy/sol', '_blank');
                       }
                     }}
-                  >💳 Buy SOL</button>
+                  >
+                    <CreditCard size={18} weight="fill" style={{ marginRight: 8 }} />
+                    Buy SOL
+                  </button>
                   <button
                     className="btn-secondary"
                     style={{
@@ -217,8 +214,8 @@ function AppInner() {
             : 'Connecting…'
           }</div>
           {/* Smooth loading bar */}
-          <div style={{ width: 280, height: 8, borderRadius: 6, overflow: 'hidden', marginTop: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.08)' }}>
-            <div style={{ width: `${loadProg}%`, height: '100%', background: 'linear-gradient(90deg, #22d3ee, #14b8a6)', transition: 'width 100ms linear' }}></div>
+          <div style={{ width: 280, height: 8, borderRadius: 6, overflow: 'hidden', marginTop: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.04)' }}>
+            <div style={{ width: `${loadProg}%`, height: '100%', background: '#00F0FF', transition: 'width 100ms linear' }}></div>
           </div>
           {/* Only show auth buttons when ACTUALLY in auth phase (not during payment) */}
           {wsState.phase === 'authenticating' && !wsState.entryFee.pending && (
@@ -233,32 +230,24 @@ function AppInner() {
         <Landing
           solPrice={solPrice}
           onPractice={onPractice}
-          onTournament={onTournament}
+          onWallet={() => setScreen('wallet')}
           onLeaderboard={() => setShowLeaderboard(true)}
         />
       )}
       {screen === 'practice' && (
         <Practice onFinish={() => setScreen('results')} onBack={() => setScreen('landing')} />
       )}
-      {screen === 'modes' && (
-        <Modes
-          onSelect={() => setScreen('wallet')}
-          onClose={() => setScreen('landing')}
-          onNotify={showToast}
-          apiBase={API_BASE}
-        />
-      )}
       {screen === 'wallet' && (
-        <Wallet onConnected={() => setScreen('lobby')} onClose={() => setScreen('modes')} />
+        <Wallet onConnected={() => setScreen('lobby')} onClose={() => setScreen('landing')} />
       )}
       {screen === 'lobby' && (
-        <Lobby onStart={() => setScreen('game')} onBack={() => setScreen('modes')} />
+        <Lobby onStart={() => setScreen('game')} onBack={() => setScreen('landing')} />
       )}
       {screen === 'game' && (
         <Game onEnd={() => setScreen('results')} onRestart={() => setScreen('game')} />
       )}
       {screen === 'results' && (
-        <Results onPlayAgain={() => setScreen('practice')} onChangeTier={() => setScreen('modes')} />
+        <Results onPlayAgain={() => setScreen('practice')} onChangeTier={() => setScreen('landing')} />
       )}
       {/* Toast - appears ABOVE overlays for visibility */}
       {toast && (
@@ -282,7 +271,21 @@ function AppInner() {
 
 function HeaderWallet({ screen }: { screen: string }) {
   const { publicKey, disconnect } = useWallet() as any;
-  const style: React.CSSProperties = { position: 'fixed', top: 8, right: 12, zIndex: 50, background: 'rgba(0,0,0,0.4)', padding: '6px 10px', borderRadius: 8, color: '#00ffff', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 };
+  const style: React.CSSProperties = {
+    position: 'fixed',
+    top: 12,
+    right: 16,
+    zIndex: 50,
+    background: 'rgba(3,3,5,0.9)',
+    padding: '6px 10px',
+    borderRadius: 999,
+    border: '1px solid rgba(255,255,255,0.12)',
+    color: 'var(--text-secondary)',
+    fontSize: 12,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+  };
   if (publicKey) {
     const short = `${publicKey.slice(0,4)}…${publicKey.slice(-4)}`;
     return (
@@ -298,97 +301,112 @@ function HeaderWallet({ screen }: { screen: string }) {
   return null;
 }
 
-function Landing({ solPrice, onPractice, onTournament, onLeaderboard }: { solPrice: number | null; onPractice: () => void; onTournament: () => void; onLeaderboard?: () => void; }) {
-  const { publicKey, isConnecting } = useWallet();
-  const sendAnalytic = async (type: string, payload: any) => { try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, payload }) }); } catch {} };
-  const handleTournament = async () => {
-    // Go to tier selection first; wallet prompt will occur on Join
-    sendAnalytic('landing_cta_click', { publicKey: publicKey || null });
-    onTournament();
-  };
-
-  // Get player stats from localStorage
-  const getPlayerStats = () => {
-    try {
-      const stored = localStorage.getItem('spermrace_stats');
-      if (stored) return JSON.parse(stored);
-    } catch {}
-    return { totalGames: 0, wins: 0, losses: 0, totalPrizes: 0, totalKills: 0, history: [] };
-  };
-  const stats = getPlayerStats();
-  const winRate = stats.totalGames > 0 ? ((stats.wins / stats.totalGames) * 100).toFixed(1) : '0.0';
-
+function Landing({
+  solPrice,
+  onPractice,
+  onWallet,
+  onLeaderboard,
+}: {
+  solPrice: number | null;
+  onPractice: () => void;
+  onWallet: () => void;
+  onLeaderboard?: () => void;
+}) {
   return (
     <div className="screen active" id="landing-screen">
-      <div className="landing-container">
-        <div className="brand-section">
-          <h1 className="brand-title"><span className="text-gradient">SPERM</span><span className="text-accent">RACE</span><span className="text-gradient">.IO</span></h1>
-          <p className="brand-punchline">Battle Royale starts at birth 💥</p>
-          {stats.totalGames > 0 && (
-            <div style={{
-              display: 'flex',
-              gap: '12px',
-              justifyContent: 'center',
-              marginTop: '16px',
-              flexWrap: 'wrap'
-            }}>
-              <div style={{
-                background: 'rgba(34,211,238,0.15)',
-                border: '1px solid rgba(34,211,238,0.4)',
-                borderRadius: '8px',
-                padding: '8px 12px',
-                fontSize: '12px',
-                color: '#ffffff'
-              }}>
-                <div style={{ opacity: 0.7 }}>Games</div>
-                <div style={{ fontWeight: 700, fontSize: '16px' }}>{stats.totalGames}</div>
-              </div>
-              <div style={{
-                background: 'rgba(34,211,238,0.15)',
-                border: '1px solid rgba(34,211,238,0.4)',
-                borderRadius: '8px',
-                padding: '8px 12px',
-                fontSize: '12px',
-                color: '#ffffff'
-              }}>
-                <div style={{ opacity: 0.7 }}>Win Rate</div>
-                <div style={{ fontWeight: 700, fontSize: '16px' }}>{winRate}%</div>
-              </div>
-              <div style={{
-                background: 'rgba(34,211,238,0.15)',
-                border: '1px solid rgba(34,211,238,0.4)',
-                borderRadius: '8px',
-                padding: '8px 12px',
-                fontSize: '12px',
-                color: '#ffffff'
-              }}>
-                <div style={{ opacity: 0.7 }}>Kills</div>
-                <div style={{ fontWeight: 700, fontSize: '16px' }}>{stats.totalKills}</div>
-              </div>
-              {stats.totalPrizes > 0 && (
-                <div style={{
-                  background: 'linear-gradient(135deg, rgba(251,146,60,0.2), rgba(34,211,238,0.2))',
-                  border: '1px solid rgba(251,146,60,0.5)',
-                  borderRadius: '8px',
-                  padding: '8px 12px',
-                  fontSize: '12px',
-                  color: '#ffffff'
-                }}>
-                  <div style={{ opacity: 0.7 }}>💰 Prizes Won</div>
-                  <div style={{ fontWeight: 700, fontSize: '16px' }}>{stats.totalPrizes.toFixed(4)} SOL</div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        <div className="cta-section">
-          <button className="cta-primary" onClick={handleTournament} disabled={isConnecting}><span className="cta-text">{isConnecting ? 'Opening wallet…' : 'Enter Tournament'}</span><div className="cta-glow"/></button>
-          <button className="btn-secondary btn-small" onClick={onPractice}>Practice (Free)</button>
-          {onLeaderboard && <button className="btn-secondary btn-small" onClick={onLeaderboard} style={{ marginTop: '8px' }}>🏆 Leaderboard</button>}
-          <div className="live-sol-price"><span className="price-label">SOL</span><span className="price-value">${solPrice?.toFixed(2) ?? '--'}</span></div>
-        </div>
+      <div
+        className="landing-container"
+        style={{
+          maxWidth: 960,
+          padding: '48px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '100vh',
+          gap: 32,
+        }}
+      >
+        {/* Hero Title */}
+        <header style={{ textAlign: 'center' }}>
+          <h1
+            className="brand-title"
+            style={{
+              fontSize: 'clamp(3rem, 10vw, 5.4rem)',
+              letterSpacing: '0.3em',
+              textTransform: 'uppercase',
+            }}
+          >
+            <span style={{ color: 'var(--text-primary)' }}>SPERM</span>
+            <span
+              style={{
+                marginLeft: 16,
+                color: 'transparent',
+                WebkitTextStroke: '1px rgba(255,255,255,0.7)',
+              }}
+            >
+              RACE
+            </span>
+          </h1>
+          <p
+            style={{
+              marginTop: 16,
+              fontSize: 13,
+              textTransform: 'uppercase',
+              letterSpacing: 6,
+              color: 'var(--text-secondary)',
+            }}
+          >
+            BIO-ARENA PROTOCOL
+          </p>
+        </header>
+
+        {/* Modes Grid */}
+        <Modes />
+
+        {/* Footer */}
+        <footer
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 8,
+            marginTop: 16,
+          }}
+        >
+          <div style={{ display: 'flex', gap: 16 }}>
+            <button
+              type="button"
+              className="btn-secondary"
+              style={{ background: 'transparent', border: 'none', padding: 0 }}
+              onClick={onPractice}
+            >
+              Practice
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              style={{ background: 'transparent', border: 'none', padding: 0 }}
+              onClick={onWallet}
+            >
+              Wallet
+            </button>
+            {onLeaderboard && (
+              <button
+                type="button"
+                className="btn-secondary"
+                style={{ background: 'transparent', border: 'none', padding: 0 }}
+                onClick={onLeaderboard}
+              >
+                Leaderboard
+              </button>
+            )}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+            SOL: {solPrice != null ? `$${solPrice.toFixed(2)}` : '--'}
+          </div>
+        </footer>
       </div>
-      {/* Removed separate landing wallet overlay - handled by global overlay system */}
     </div>
   );
 }
@@ -447,8 +465,8 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
           </div>
           {/* Progress bar mirrors countdown to make waiting easier */}
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
-            <div style={{ width: 320, height: 10, borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.08)' }}>
-              <div style={{ width: `${progressPct}%`, height: '100%', background: 'linear-gradient(90deg, #22d3ee, #14b8a6)', transition: 'width 300ms ease' }}></div>
+            <div style={{ width: 320, height: 10, borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.04)' }}>
+              <div style={{ width: `${progressPct}%`, height: '100%', background: '#00F0FF', transition: 'width 300ms ease' }}></div>
             </div>
           </div>
           <div className="lobby-footer"><button className="btn-secondary" onClick={onBack}>Back</button></div>
@@ -482,7 +500,15 @@ function Wallet({ onConnected, onClose }: { onConnected: () => void; onClose: ()
       <div className="modal-container">
         <div className="modal-header"><h2 className="modal-title">Connect Wallet</h2><p className="modal-subtitle">Sign in with Solana to continue</p></div>
         <div className="wallet-connect-section">
-          <button className="wallet-connect-btn" onClick={tryConnect}><div className="wallet-icon">🔗</div><div className="wallet-text"><div className="wallet-title">Connect</div><div className="wallet-subtitle">Phantom / Solflare / Coinbase • build wallet-refactor</div></div></button>
+          <button className="wallet-connect-btn" onClick={tryConnect}>
+            <div className="wallet-icon">
+              <LinkSimple size={18} weight="bold" />
+            </div>
+            <div className="wallet-text">
+              <div className="wallet-title">Connect</div>
+              <div className="wallet-subtitle">Phantom / Solflare / Coinbase • build wallet-refactor</div>
+            </div>
+          </button>
           {publicKey && <div className="practice-hint">Connected: {publicKey.slice(0,4)}…{publicKey.slice(-4)}</div>}
         </div>
         <button className="btn-secondary" onClick={onClose}>Back</button>

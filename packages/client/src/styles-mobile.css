@@ -60,12 +60,19 @@
 }
 
 /* Mobile Landing */
+.mobile-landing {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .mobile-landing-container {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  height: 100vh;
-  height: 100dvh;
+  justify-content: center;
+  min-height: 100vh;
+  min-height: 100dvh;
   padding: 20px var(--mobile-padding);
   padding-top: calc(60px + env(safe-area-inset-top, 0px));
   padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));

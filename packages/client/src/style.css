@@ -17,18 +17,18 @@
   /* 💎 PREMIUM OBSIDIAN PALETTE */
   
   /* Backgrounds - Rich & Deep */
-  --bg-primary: #030305;    /* Almost pure black */
+  --bg-primary: #030305;    /* Obsidian */
   --bg-secondary: #0E0E12;  /* Deep Charcoal */
-  --bg-glass: rgba(20, 20, 25, 0.6);
-  --bg-glass-hover: rgba(255, 255, 255, 0.03); 
+  --bg-glass: rgba(255, 255, 255, 0.03); /* Subtle frost layer */
+  --bg-glass-hover: rgba(255, 255, 255, 0.06);
   
   /* Borders - Fine & Precise */
-  --border-dim: rgba(255, 255, 255, 0.08);
-  --border-bright: rgba(255, 255, 255, 0.15);
+  --border-dim: rgba(255, 255, 255, 0.10);
+  --border-bright: rgba(255, 255, 255, 0.18);
   
   /* Accents */
   --primary: #FFFFFF;       /* Pure White */
-  --accent: #00F0FF;        /* Electric Cyan */
+  --accent: #00F0FF;        /* Electric Cyan (active states only) */
   --gold: #FFD700;          /* Winner state */
   --danger: #FF2E55;        /* Red */
 
@@ -95,7 +95,7 @@ body {
 
 .tournament-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 24px;
   padding: 20px 0;
 }
@@ -239,8 +239,8 @@ html, body {
   width: 100%;
   height: 100%;
   background-image: 
-    linear-gradient(rgba(0, 212, 255, 0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 212, 255, 0.02) 1px, transparent 1px);
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
   background-size: 60px 60px;
   z-index: 0;
 }
@@ -315,7 +315,7 @@ html, body {
 }
 
 .feature-chip:hover {
-  background: var(--bg-card);
+  background: var(--bg-secondary);
   border-color: var(--border-bright);
   transform: translateY(-2px);
 }
@@ -367,31 +367,43 @@ html, body {
   gap: 10px;
 }
 
-/* 💎 PREMIUM BUTTONS */
+/* 💎 PREMIUM HERO BUTTONS (used on landing & key CTAs) */
 .cta-primary {
-    background: var(--text-primary);
-    color: #000;
-    border: none;
-    font-weight: 800;
-    letter-spacing: 1px;
-    box-shadow: 0 0 25px rgba(255, 255, 255, 0.1);
-    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-    text-transform: uppercase;
-    padding: 15px 30px;
-    border-radius: var(--radius);
-    cursor: pointer;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 32px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.7);
+  background:
+    radial-gradient(130% 220% at 0% 0%, rgba(34, 211, 238, 0.24), transparent 55%),
+    radial-gradient(130% 200% at 100% 100%, rgba(15, 118, 110, 0.35), transparent 60%),
+    rgba(3, 3, 7, 0.96);
+  color: #f9fafb;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow:
+    0 18px 45px rgba(15, 23, 42, 0.95),
+    0 0 32px rgba(56, 189, 248, 0.35);
+  transition: all 0.22s ease-out;
 }
 
 .cta-primary:hover:not(:disabled) {
-    background: var(--accent);
-    box-shadow: 0 0 40px rgba(0, 240, 255, 0.4);
-    transform: translateY(-2px);
+  border-color: rgba(56, 189, 248, 0.9);
+  box-shadow:
+    0 22px 55px rgba(15, 23, 42, 1),
+    0 0 42px rgba(56, 189, 248, 0.55);
+  transform: translateY(-1px);
 }
 
 .cta-primary:disabled {
-    background: var(--text-muted);
-    color: var(--bg-primary);
-    cursor: not-allowed;
+  opacity: 0.6;
+  box-shadow: none;
+  cursor: not-allowed;
 }
 
 .cta-glow {
@@ -415,6 +427,31 @@ html, body {
 .cta-description {
   color: var(--text-muted);
   font-size: 14px;
+}
+
+.cta-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 26px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  background: rgba(10, 13, 20, 0.9);
+  color: rgba(226, 232, 240, 0.9);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.18s ease-out;
+}
+
+.cta-secondary:hover {
+  border-color: var(--accent);
+  color: #f9fafb;
+  background: rgba(15, 23, 42, 0.98);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.85);
+  transform: translateY(-1px);
 }
 
 .live-sol-price {
@@ -517,18 +554,18 @@ html, body {
   gap: 20px;
   padding: 24px;
   width: 100%;
-  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  background: var(--bg-secondary);
   border: none;
   border-radius: var(--radius);
   cursor: pointer;
   transition: var(--transition);
   text-align: left;
-  box-shadow: 0 8px 32px rgba(0, 212, 255, 0.3);
+  box-shadow: var(--shadow-premium);
 }
 
 .wallet-connect-btn:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 12px 48px rgba(0, 212, 255, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.9);
 }
 
 .wallet-connect-btn:active {
@@ -620,19 +657,19 @@ html, body {
 }
 
 .mode-card:hover {
-  background: var(--bg-tertiary);
+  background: var(--bg-secondary);
   border-color: var(--border-bright);
   transform: translateY(-4px);
 }
 
 .mode-card.featured {
-  border-color: var(--primary);
-  background: linear-gradient(135deg, rgba(0, 212, 255, 0.1) 0%, var(--bg-glass) 100%);
+  border-color: var(--accent);
+  background: var(--bg-secondary);
 }
 
 .mode-card.selected {
-  border-color: var(--primary);
-  background: var(--bg-tertiary);
+  border-color: var(--accent);
+  background: var(--bg-secondary);
 }
 
 .mode-header {
@@ -705,6 +742,10 @@ html, body {
   position: relative;
   transition: var(--transition-fast);
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 260px;
 }
 
 /* Marketing ribbons */
@@ -714,8 +755,8 @@ html, body {
   top: 12px;
   right: -10px;
   transform: rotate(15deg);
-  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-  color: var(--bg-primary);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
   padding: 4px 10px;
   font-size: 0.7rem;
   font-weight: 700;
@@ -818,23 +859,23 @@ html, body {
 }
 
 .bronze-btn {
-  background: linear-gradient(135deg, #cd7f32, #b8722d);
-  color: white;
+  background: #3a2a12;
+  color: var(--primary);
 }
 
 .silver-btn {
-  background: linear-gradient(135deg, #c0c0c0, #a8a8a8);
-  color: var(--bg-primary);
+  background: #3b3b3f;
+  color: var(--primary);
 }
 
 .gold-btn {
-  background: linear-gradient(135deg, #ffd700, #e6c200);
-  color: var(--bg-primary);
+  background: #4a3a14;
+  color: var(--primary);
 }
 
 .diamond-btn {
-  background: linear-gradient(135deg, #b9f2ff, #00d4ff);
-  color: var(--bg-primary);
+  background: #12333a;
+  color: var(--primary);
 }
 
 .tournament-join-btn:hover {
@@ -843,7 +884,7 @@ html, body {
 }
 
 .tournament-info {
-  background: var(--bg-tertiary);
+  background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 16px;
@@ -1323,6 +1364,13 @@ button:focus-visible, a:focus-visible, .wallet-connect-btn:focus-visible, .tourn
   z-index: 10;
 }
 
+/* In-game emote buttons - make them more compact so they don't cover the screen */
+#emote-buttons button {
+  width: 42px !important;
+  height: 42px !important;
+  font-size: 20px !important;
+}
+
 .hud-top {
   position: absolute;
   top: 20px;
@@ -1456,7 +1504,7 @@ button:focus-visible, a:focus-visible, .wallet-connect-btn:focus-visible, .tourn
 }
 
 .modal-card {
-  background: var(--bg-card);
+  background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 40px;

@@ -70,7 +70,6 @@ export function MobileTutorial({ countdown, onComplete, context = 'tournament' }
     <div className="mobile-tutorial-overlay compact">
       <div className="tutorial-reminder" style={context === 'practice' ? { pointerEvents: 'auto' } : undefined}>
         <div className="reminder-text">
-          <span style={{ marginRight: 6 }}>🧬</span>
           <span>{tip}</span>
         </div>
         {context === 'practice' && (

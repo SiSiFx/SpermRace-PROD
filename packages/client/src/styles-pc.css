@@ -8,19 +8,120 @@
   --pc-header-height: 70px;
 }
 
+/* PC Top Header */
+.pc-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--pc-header-height);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 32px;
+  background: linear-gradient(to bottom, rgba(3,3,5,0.96), rgba(3,3,5,0.82));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(18px);
+}
+
+.pc-header-left {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.pc-logo {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.05);
+  background: rgba(0,0,0,0.4);
+  color: #e5e7eb;
+  font-size: 14px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.pc-logo-main {
+  font-weight: 800;
+}
+
+.pc-logo-sub {
+  font-weight: 800;
+  color: transparent;
+  -webkit-text-stroke: 1px rgba(148,163,184,0.9);
+}
+
+.pc-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pc-nav-link {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(148,163,184,0.35);
+  background: transparent;
+  color: #cbd5f5;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pc-nav-link:hover {
+  background: rgba(15,23,42,0.9);
+  border-color: rgba(34,211,238,0.65);
+  color: #e5f9ff;
+}
+
+.pc-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pc-status-pill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(15,23,42,0.8);
+  border: 1px solid rgba(148,163,184,0.4);
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.pc-wallet-id {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: #22d3ee;
+}
+
+.pc-wallet-btn {
+  padding-inline: 14px;
+  height: 34px;
+  font-size: 12px;
+}
+
 /* PC Keyboard Shortcuts Hint */
 .pc-shortcuts-hint {
   position: fixed;
   bottom: 20px;
   left: 20px;
   z-index: 40;
-  background: rgba(0, 0, 0, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(148, 163, 184, 0.4);
   border-radius: 10px;
-  padding: 12px 16px;
+  padding: 8px 12px;
   display: flex;
   gap: 16px;
   backdrop-filter: blur(10px);
+  opacity: 0.85;
 }
 
 .shortcut-item {
@@ -42,6 +143,12 @@
 }
 
 /* PC Landing */
+.pc-landing {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+}
+
 .pc-landing .landing-container {
   max-width: 1200px;
   padding: 60px 40px;

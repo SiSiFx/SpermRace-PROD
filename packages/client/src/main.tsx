@@ -12,12 +12,29 @@ if (typeof globalThis !== 'undefined' && !(globalThis as any).Buffer) {
 
 // Lightweight client error ingestion to backend analytics (no third-party)
 // Only enable if API endpoint is configured
-const API_BASE = (import.meta as any).env?.VITE_API_BASE;
-if ((import.meta as any).env?.PROD === true && API_BASE) {
+const ANALYTICS_API_BASE: string | null = (() => {
+  // For non-production hosts (localhost, Vercel preview, etc.) go through same-origin /api
+  try {
+    const host = (window?.location?.hostname || '').toLowerCase();
+    if (!host.includes('spermrace.io')) return '/api';
+  } catch {}
+
+  const env = (import.meta as any).env?.VITE_API_BASE as string | undefined;
+  if (env && typeof env === 'string' && env.trim()) return env.trim();
+
+  try {
+    const host = (window?.location?.hostname || '').toLowerCase();
+    if (host.includes('dev.spermrace.io')) return 'https://dev.spermrace.io/api';
+    if (host.includes('spermrace.io')) return 'https://spermrace.io/api';
+  } catch {}
+  return '/api';
+})();
+
+if ((import.meta as any).env?.PROD === true && ANALYTICS_API_BASE) {
   try {
     const send = (type: string, payload: any) => {
       try {
-        fetch(`${API_BASE}/analytics`, {
+        fetch(`${ANALYTICS_API_BASE}/analytics`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ type, payload })
@@ -35,7 +52,7 @@ if ((import.meta as any).env?.PROD === true && API_BASE) {
       send('client_unhandled_rejection', { reason });
     });
   } catch {}
-} else if ((import.meta as any).env?.PROD === true && !API_BASE) {
+} else if ((import.meta as any).env?.PROD === true && !ANALYTICS_API_BASE) {
   console.log('[Analytics] Disabled - VITE_API_BASE not configured');
 }
 

@@ -108,6 +108,26 @@ export class GameEffects {
   }
 
   /**
+   * Trigger impact haptics for mobile
+   */
+  triggerImpact(intensity: 'light' | 'medium' | 'heavy') {
+    if (typeof navigator === 'undefined' || !navigator.vibrate) return;
+    
+    switch (intensity) {
+      case 'light':
+        navigator.vibrate(10);
+        break;
+      case 'medium':
+        navigator.vibrate(30);
+        break;
+      case 'heavy':
+        // Double pulse for heavy hits (kills/crashes)
+        navigator.vibrate([50, 30, 50]);
+        break;
+    }
+  }
+
+  /**
    * Show big screen text (MEGA KILL!, etc)
    */
   showBigScreenText(text: string, color: string, duration: number = 2000) {
@@ -240,10 +260,14 @@ export class GameEffects {
     color: number,
     particleCount: number = 50
   ): PIXI.Sprite[] {
+    // Optimize particle count for mobile (if detected or generally safer default)
+    // Since we don't have direct isMobile flag here, we'll be conservative
+    // The caller can pass a lower count if needed
+    const finalCount = Math.min(particleCount, 30); 
     const particles: PIXI.Sprite[] = [];
 
-    for (let i = 0; i < particleCount; i++) {
-      const angle = (Math.PI * 2 / particleCount) * i + (Math.random() - 0.5) * 0.5;
+    for (let i = 0; i < finalCount; i++) {
+      const angle = (Math.PI * 2 / finalCount) * i + (Math.random() - 0.5) * 0.5;
       const speed = 200 + Math.random() * 300;
       const size = 3 + Math.random() * 8;
 
@@ -389,9 +413,10 @@ export class GameEffects {
    * Create confetti burst
    */
   createConfetti(x: number, y: number, count: number = 30) {
+    const finalCount = Math.min(count, 20);
     const colors = [0xFF0000, 0x00FF00, 0x0000FF, 0xFFFF00, 0xFF00FF, 0x00FFFF];
 
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < finalCount; i++) {
       const angle = Math.random() * Math.PI * 2;
       const speed = 150 + Math.random() * 200;
       const size = 4 + Math.random() * 6;

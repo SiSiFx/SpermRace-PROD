@@ -3,10 +3,17 @@ import { OrientationWarning } from './OrientationWarning';
 import { MobileTouchControls } from './MobileTouchControls';
 import MobileTutorial from './MobileTutorial';
 import PracticeFullTutorial from './PracticeFullTutorial';
-// Base URL for backend API; prefer env, else infer by hostname, else same-origin /api
+// Base URL for backend API; prefer same-origin /api for dev/preview, absolute for production domain
 const API_BASE: string = (() => {
+  // For any non-production host (localhost, Vercel preview, etc.) always hit same-origin /api
+  try {
+    const host = (window?.location?.hostname || '').toLowerCase();
+    if (!host.includes('spermrace.io')) return '/api';
+  } catch {}
+
   const env = (import.meta as any).env?.VITE_API_BASE as string | undefined;
   if (env && typeof env === 'string' && env.trim()) return env.trim();
+
   try {
     const host = (window?.location?.hostname || '').toLowerCase();
     if (host.includes('dev.spermrace.io')) return 'https://dev.spermrace.io/api';
@@ -31,6 +38,19 @@ import { WsProvider, useWs } from './WsProvider';
 import NewGameView from './NewGameView';
 import { Leaderboard } from './Leaderboard';
 import HowToPlayOverlay from './HowToPlayOverlay';
+import {
+  CrownSimple,
+  Lightning,
+  Diamond,
+  WarningCircle,
+  GameController,
+  Trophy,
+  Skull,
+  LinkSimple,
+  ArrowClockwise,
+  House,
+  CheckCircle,
+} from 'phosphor-react';
 import './leaderboard.css';
 
 type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
@@ -56,7 +76,6 @@ function AppInner() {
   };
   const wallet = useWallet();
   const { publicKey } = wallet;
-  const [showHelp] = useState<boolean>(false);
   const [showLeaderboard, setShowLeaderboard] = useState<boolean>(false);
   const [showHowTo, setShowHowTo] = useState<boolean>(false);
   
@@ -104,6 +123,7 @@ function AppInner() {
 
   const onPractice = () => setScreen('practice');
   const onTournament = () => setScreen('modes');
+  const onWallet = () => setScreen('wallet');
 
   useEffect(() => {
     if (wsState.phase === 'lobby') setScreen('lobby');
@@ -165,9 +185,17 @@ function AppInner() {
       {wsState.lastError && (
         <div className="loading-overlay mobile-overlay" style={{ display: 'flex', background: 'rgba(0,0,0,0.85)' }}>
           <div className="modal-card mobile-modal">
-            <div className="modal-title">⚠️ Error</div>
+            <div
+              className="modal-title"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            >
+              <WarningCircle size={20} weight="fill" />
+              <span>Error</span>
+            </div>
             <div className="modal-subtitle" style={{ marginTop: 8 }}>{wsState.lastError}</div>
-            <button className="btn-primary mobile-btn-large" style={{ marginTop: 16 }} onClick={() => location.reload()}>Reload App</button>
+            <button className="btn-primary mobile-btn-large" style={{ marginTop: 16 }} onClick={() => location.reload()}>
+              Reload App
+            </button>
           </div>
         </div>
       )}
@@ -205,6 +233,7 @@ function AppInner() {
           solPrice={solPrice}
           onPractice={onPractice}
           onTournament={onTournament}
+          onWallet={onWallet}
           onLeaderboard={() => setShowLeaderboard(true)}
         />
       )}
@@ -212,7 +241,7 @@ function AppInner() {
         <Practice onFinish={() => setScreen('results')} onBack={() => setScreen('landing')} />
       )}
       {screen === 'modes' && (
-        <Modes onSelect={() => setScreen('wallet')} onClose={() => setScreen('landing')} onNotify={showToast} />
+        <TournamentModesScreen onSelect={() => setScreen('wallet')} onClose={() => setScreen('landing')} onNotify={showToast} />
       )}
       {screen === 'wallet' && (
         <Wallet onConnected={() => setScreen('lobby')} onClose={() => setScreen('modes')} />
@@ -275,90 +304,236 @@ function HeaderWallet({ screen }: { screen: string }) {
     );
   }
   if (screen === 'game') {
-    return <div className="mobile-wallet-badge">🎮 Practice</div>;
+    return (
+      <div className="mobile-wallet-badge">
+        <GameController size={16} weight="fill" style={{ marginRight: 6 }} />
+        <span>Practice</span>
+      </div>
+    );
   }
   return null;
 }
 
-function Landing({ solPrice, onPractice, onTournament, onLeaderboard }: { solPrice: number | null; onPractice: () => void; onTournament: () => void; onLeaderboard?: () => void; }) {
-  const { publicKey, isConnecting } = useWallet();
-  const sendAnalytic = async (type: string, payload: any) => { try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, payload }) }); } catch {} };
-  
-  const handleTournament = async () => {
-    sendAnalytic('landing_cta_click', { publicKey: publicKey || null });
-    onTournament();
-  };
+interface LandingProps {
+  solPrice: number | null;
+  onPractice: () => void;
+  onTournament?: () => void;
+  onWallet: () => void;
+  onLeaderboard?: () => void;
+}
+
+function Landing({
+  solPrice,
+  onPractice,
+  onTournament,
+  onWallet,
+  onLeaderboard,
+}: LandingProps) {
 
   const getPlayerStats = () => {
     try {
       const stored = localStorage.getItem('spermrace_stats');
-      if (stored) return JSON.parse(stored);
+      if (stored) return JSON.parse(stored) as { totalGames?: number; wins?: number; totalKills?: number };
     } catch {}
-    return { totalGames: 0, wins: 0, losses: 0, totalPrizes: 0, totalKills: 0, history: [] };
+    return { totalGames: 0, wins: 0, totalKills: 0 };
   };
+
   const stats = getPlayerStats();
-  const winRate = stats.totalGames > 0 ? ((stats.wins / stats.totalGames) * 100).toFixed(1) : '0.0';
+  const totalGames = stats.totalGames || 0;
+  const totalKills = stats.totalKills || 0;
+  const winRate = totalGames > 0 ? ((stats.wins || 0) / totalGames * 100).toFixed(1) : '0.0';
 
   return (
     <div className="screen active mobile-landing" id="landing-screen">
-      <div className="mobile-landing-container">
-        <div className="mobile-brand-section">
-          <h1 className="mobile-brand-title">
-            <span className="text-gradient">SPERM</span>
-            <span className="text-accent">RACE</span>
-            <span className="text-gradient">.IO</span>
+      <div
+        className="mobile-landing-container"
+        style={{
+          maxWidth: 960,
+          margin: '0 auto',
+          minHeight: '100vh',
+          padding: '32px 16px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          gap: 24,
+        }}
+      >
+        <header style={{ textAlign: 'center' }}>
+          <div
+            style={{
+              fontFamily: 'Orbitron, system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
+              letterSpacing: '0.24em',
+              fontSize: 10,
+              textTransform: 'uppercase',
+              color: 'rgba(148,163,184,0.9)',
+              marginBottom: 10,
+            }}
+          >
+            BIO-ARENA PROTOCOL
+          </div>
+          <h1
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'baseline',
+              gap: 8,
+              fontSize: 34,
+              lineHeight: 1,
+            }}
+          >
+            <span style={{ color: '#fff', fontWeight: 800 }}>SPERM</span>
+            <span
+              style={{
+                fontWeight: 800,
+                color: 'transparent',
+                WebkitTextStroke: '1px rgba(148,163,184,0.9)',
+              }}
+            >
+              RACE
+            </span>
           </h1>
-          <p className="mobile-brand-subtitle">Battle Royale 💥</p>
-          
-          {stats.totalGames > 0 && (
-            <div className="mobile-stats-row">
-              <div className="mobile-stat">
-                <div className="label">Games</div>
-                <div className="value">{stats.totalGames}</div>
-              </div>
-              <div className="mobile-stat">
-                <div className="label">Win%</div>
-                <div className="value">{winRate}%</div>
-              </div>
-              <div className="mobile-stat">
-                <div className="label">Kills</div>
-                <div className="value">{stats.totalKills}</div>
-              </div>
-              {stats.totalPrizes > 0 && (
-                <div className="mobile-stat highlight">
-                  <div className="label">💰 Won</div>
-                  <div className="value">{stats.totalPrizes.toFixed(3)}</div>
+          <p
+            style={{
+              marginTop: 10,
+              fontSize: 11,
+              letterSpacing: '0.2em',
+              textTransform: 'uppercase',
+              color: 'rgba(148,163,184,0.9)',
+            }}
+          >
+            ON-CHAIN FERTILIZATION BATTLE ROYALE
+          </p>
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: 11,
+              color: 'rgba(148,163,184,0.78)',
+              fontFamily: 'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, monospace',
+            }}
+          >
+            SOL: {solPrice != null ? `$${solPrice.toFixed(2)}` : '--.--'}
+          </div>
+
+          {totalGames > 0 && (
+            <div
+              style={{
+                marginTop: 16,
+                display: 'flex',
+                justifyContent: 'center',
+              }}
+            >
+              <div
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: 12,
+                  background: 'rgba(15,23,42,0.9)',
+                  border: '1px solid rgba(148,163,184,0.45)',
+                  display: 'flex',
+                  gap: 10,
+                  minWidth: 0,
+                }}
+              >
+                <div className="mobile-stat">
+                  <div className="label">Games</div>
+                  <div className="value">{totalGames}</div>
                 </div>
-              )}
+                <div className="mobile-stat">
+                  <div className="label">Win%</div>
+                  <div className="value">{winRate}%</div>
+                </div>
+                <div className="mobile-stat">
+                  <div className="label">Kills</div>
+                  <div className="value">{totalKills}</div>
+                </div>
+              </div>
             </div>
           )}
-        </div>
-        
-        <div className="mobile-cta-section">
-          <button className="mobile-cta-primary" onClick={handleTournament} disabled={isConnecting}>
-            <span className="icon">🏆</span>
-            <span className="text">
-              {isConnecting ? 'Opening Wallet...' : 'Enter Tournament'}
-            </span>
-          </button>
-          
-          <button className="mobile-btn-secondary" onClick={onPractice}>
-            <span className="icon">🎮</span>
-            <span className="text">Practice (Free)</span>
-          </button>
+        </header>
 
-          {onLeaderboard && (
-            <button className="mobile-btn-secondary" onClick={onLeaderboard} style={{ marginTop: '12px' }}>
-              <span className="icon">🏆</span>
-              <span className="text">Leaderboard</span>
+        <main>
+          <section
+            style={{
+              marginTop: 18,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+            }}
+          >
+            <button
+              type="button"
+              className="mobile-cta-primary"
+              onClick={() => onTournament?.()}
+            >
+              <span className="icon">
+                <Trophy size={18} weight="fill" />
+              </span>
+              <span>Enter Tournament</span>
             </button>
-          )}
-          
-          <div className="mobile-sol-price">
-            <span className="label">SOL</span>
-            <span className="price">${solPrice?.toFixed(2) ?? '--'}</span>
+
+            <button
+              type="button"
+              className="mobile-btn-secondary"
+              onClick={onPractice}
+            >
+              <span className="icon">
+                <GameController size={18} weight="fill" />
+              </span>
+              <span>Practice Mode (Free)</span>
+            </button>
+          </section>
+
+          <div
+            style={{
+              marginTop: 6,
+              fontSize: 10,
+              textAlign: 'center',
+              color: 'rgba(148,163,184,0.7)',
+            }}
+          >
+            Battle royale tournaments. Micro races start at $1.
           </div>
-        </div>
+        </main>
+
+        <footer
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginTop: 4,
+            gap: 12,
+            fontSize: 11,
+            color: 'rgba(148,163,184,0.85)',
+          }}
+        >
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              className="mobile-btn-secondary"
+              style={{ padding: '4px 8px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em' }}
+              onClick={onPractice}
+            >
+              Practice
+            </button>
+            {onLeaderboard && (
+              <button
+                type="button"
+                className="mobile-btn-secondary"
+                style={{ padding: '4px 8px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em' }}
+                onClick={onLeaderboard}
+              >
+                Leaderboard
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            className="mobile-btn-secondary"
+            style={{ padding: '4px 8px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em' }}
+            onClick={onWallet}
+          >
+            Wallet
+          </button>
+        </footer>
       </div>
     </div>
   );
@@ -368,8 +543,6 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
   const [step, setStep] = useState<'lobby' | 'game'>('lobby');
   const [meId] = useState<string>('PLAYER_' + Math.random().toString(36).slice(2, 8));
   const [players, setPlayers] = useState<string[]>([]);
-  const [countdown, setCountdown] = useState<number>(0);
-  const countdownTotal = 0;
   const [showPracticeIntro, setShowPracticeIntro] = useState<boolean>(() => {
     try {
       return !localStorage.getItem('sr_practice_full_tuto_seen');
@@ -418,7 +591,10 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
       <div className="screen active mobile-lobby-screen">
         <div className="mobile-lobby-container">
           <div className="mobile-lobby-header">
-            <h2 className="mobile-lobby-title">🎮 Practice Lobby</h2>
+            <h2 className="mobile-lobby-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <GameController size={18} weight="fill" />
+              <span>Practice Lobby</span>
+            </h2>
             <div className="mobile-lobby-count">{players.length}/{maxPlayers}</div>
           </div>
           
@@ -508,7 +684,7 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
   return null;
 }
 
-function Modes({ onSelect: _onSelect, onClose, onNotify }: { onSelect: () => void; onClose: () => void; onNotify: (msg: string, duration?: number) => void }) {
+function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onSelect: () => void; onClose: () => void; onNotify: (msg: string, duration?: number) => void }) {
   const { publicKey, connect } = useWallet();
   const { connectAndJoin, state: wsState } = useWs();
   const [isJoining, setIsJoining] = useState<boolean>(false);
@@ -531,15 +707,59 @@ function Modes({ onSelect: _onSelect, onClose, onNotify }: { onSelect: () => voi
   }, []);
 
   const tiers = [
-    { name: 'Micro Race', usd: 1, max: 16, dur: '2-3 min' },
-    { name: 'Nano Race', usd: 5, max: 32, dur: '3-4 min' },
-    { name: 'Mega Race', usd: 25, max: 32, dur: '4-6 min' },
-    { name: 'Championship', usd: 100, max: 16, dur: '5-8 min' },
+    { name: 'Micro Race', usd: 1, max: 16, dur: '2–3 min' },
+    { name: 'Nano Race', usd: 5, max: 32, dur: '3–4 min' },
+    { name: 'Mega Race', usd: 25, max: 32, dur: '4–6 min' },
+    { name: 'Championship', usd: 100, max: 16, dur: '5–8 min' },
   ];
+
+  const tierIcons = [Lightning, Lightning, Diamond, CrownSimple] as const;
+
+  const [selectedIndex, setSelectedIndex] = useState(0);
 
   useEffect(() => {
     if (wsState.phase === 'lobby' || wsState.phase === 'game') setIsJoining(false);
   }, [wsState.phase]);
+
+  const badgeLabels = ['Warmup', 'Blitz', 'Apex', 'Grand Final'];
+  const buttonGradients = [
+    'linear-gradient(90deg, #22d3ee 0%, #6366f1 100%)',
+    'linear-gradient(90deg, #6366f1 0%, #f43f5e 100%)',
+    'linear-gradient(90deg, #f43f5e 0%, #fb923c 100%)',
+    'linear-gradient(90deg, #fb923c 0%, #22d3ee 100%)'
+  ];
+  const cardGradients = [
+    'linear-gradient(135deg, rgba(34,211,238,0.15) 0%, rgba(99,102,241,0.15) 100%)',
+    'linear-gradient(135deg, rgba(99,102,241,0.18) 0%, rgba(244,63,94,0.18) 100%)', 
+    'linear-gradient(135deg, rgba(244,63,94,0.20) 0%, rgba(251,146,60,0.20) 100%)',
+    'linear-gradient(135deg, rgba(251,146,60,0.22) 0%, rgba(34,211,238,0.22) 100%)'
+  ];
+  const prizeGradients = [
+    'linear-gradient(90deg, rgba(34,211,238,0.25), rgba(99,102,241,0.25))',
+    'linear-gradient(90deg, rgba(99,102,241,0.28), rgba(244,63,94,0.28))',
+    'linear-gradient(90deg, rgba(244,63,94,0.30), rgba(251,146,60,0.30))',
+    'linear-gradient(90deg, rgba(251,146,60,0.32), rgba(34,211,238,0.32))'
+  ];
+
+  const selectedTier = tiers[selectedIndex];
+  const selectedPrize = (selectedTier.usd * selectedTier.max * 0.85).toFixed(2);
+  const disabledSelected = isJoining ||
+    wsState.phase === 'connecting' ||
+    wsState.phase === 'authenticating' ||
+    preflightError ||
+    (!!preflight && (!preflight.configured || !preflight.address || preflight.sol == null));
+
+  const handleJoinSelected = async () => {
+    if (disabledSelected) return;
+    setIsJoining(true);
+    const ok = publicKey ? true : await connect();
+    if (!ok) {
+      setIsJoining(false);
+      onNotify('Wallet not detected. Please install or unlock your wallet.');
+      return;
+    }
+    await connectAndJoin({ entryFeeTier: selectedTier.usd as any, mode: 'tournament' });
+  };
 
   return (
     <div className="screen active" id="mode-screen" style={{ position: 'relative', overflow: 'hidden', height: '100vh' }}>
@@ -552,196 +772,310 @@ function Modes({ onSelect: _onSelect, onClose, onNotify }: { onSelect: () => voi
         {preflightError && (
           <div className="modal-subtitle" style={{ color: '#ff8080', marginBottom: 8 }}>Tournaments are temporarily unavailable (prize preflight issue).</div>
         )}
-        
-        <div className="tournament-grid" style={{ marginBottom: '20px' }}>
-          {tiers.map((t, i) => {
-            const prize = (t.usd * t.max * 0.85).toFixed(2);
-            const cardGradients = [
-              'linear-gradient(135deg, rgba(34,211,238,0.15) 0%, rgba(99,102,241,0.15) 100%)',
-              'linear-gradient(135deg, rgba(99,102,241,0.18) 0%, rgba(244,63,94,0.18) 100%)', 
-              'linear-gradient(135deg, rgba(244,63,94,0.20) 0%, rgba(251,146,60,0.20) 100%)',
-              'linear-gradient(135deg, rgba(251,146,60,0.22) 0%, rgba(34,211,238,0.22) 100%)'
-            ];
-            const prizeGradients = [
-              'linear-gradient(90deg, rgba(34,211,238,0.25), rgba(99,102,241,0.25))',
-              'linear-gradient(90deg, rgba(99,102,241,0.28), rgba(244,63,94,0.28))',
-              'linear-gradient(90deg, rgba(244,63,94,0.30), rgba(251,146,60,0.30))',
-              'linear-gradient(90deg, rgba(251,146,60,0.32), rgba(34,211,238,0.32))'
-            ];
-            
-            const buttonGradients = [
-              'linear-gradient(90deg, #22d3ee 0%, #6366f1 100%)',
-              'linear-gradient(90deg, #6366f1 0%, #f43f5e 100%)',
-              'linear-gradient(90deg, #f43f5e 0%, #fb923c 100%)',
-              'linear-gradient(90deg, #fb923c 0%, #22d3ee 100%)'
-            ];
-            return (
-              <div key={t.name} className="tournament-card" style={{
-                background: cardGradients[i],
-                border: '2px solid rgba(255,255,255,0.15)',
-                borderRadius: '20px',
-                padding: '24px',
-                position: 'relative',
-                overflow: 'hidden',
-                backdropFilter: 'blur(10px)',
-                boxShadow: '0 20px 40px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.1)'
-              }} data-ribbon={i===0? '🔥 HOT' : i===1? '⭐ POPULAR' : i===2? '💎 VIP' : '👑 ELITE'}>
-                
-                {/* Animated background orb */}
-                <div style={{
-                  position: 'absolute',
-                  top: '-50%',
-                  right: '-30%',
-                  width: '200px',
-                  height: '200px',
-                  background: prizeGradients[i],
-                  borderRadius: '50%',
-                  opacity: 0.3,
-                  filter: 'blur(60px)',
-                  animation: 'float 6s ease-in-out infinite'
-                }} />
-                
-                <div className="tournament-header" style={{ position: 'relative', zIndex: 2 }}>
-                  <div className="tournament-icon" style={{ fontSize: '32px', marginBottom: '8px' }}>🧬</div>
-                  <h3 className="tournament-title" style={{ fontSize: '24px', fontWeight: 800, marginBottom: '4px' }}>{t.name}</h3>
-                  <div className="tournament-badge" style={{ 
-                    background: 'rgba(255,255,255,0.2)', 
-                    padding: '4px 12px', 
-                    borderRadius: '20px', 
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    backdropFilter: 'blur(10px)'
-                  }}>Tier {i+1}</div>
-                </div>
-                
-                {/* Massive prize display */}
-                <div style={{ 
-                  textAlign: 'center', 
-                  margin: '20px 0', 
-                  position: 'relative', 
-                  zIndex: 2 
-                }}>
-                  <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.8)', marginBottom: '8px' }}>WIN UP TO</div>
-                  <div style={{ 
-                    fontSize: '48px', 
-                    fontWeight: 900, 
-                    background: buttonGradients[i],
-                    backgroundClip: 'text',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    textShadow: '0 4px 20px rgba(255,255,255,0.3)',
-                    lineHeight: 1,
-                    marginBottom: '4px'
-                  }}>${prize}</div>
-                  <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)' }}>Instant crypto payout</div>
-                </div>
 
-                <div className="tournament-details" style={{ position: 'relative', zIndex: 2 }}>
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    background: 'rgba(255,255,255,0.1)',
-                    padding: '12px 16px',
-                    borderRadius: '12px',
-                    marginBottom: '16px',
-                    backdropFilter: 'blur(10px)'
-                  }}>
-                    <div>
-                      <div style={{ fontSize: '18px', fontWeight: 700 }}>${t.usd.toFixed(2)}</div>
-                      <div style={{ fontSize: '11px', opacity: 0.8 }}>Entry fee</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '14px', fontWeight: 600 }}>{t.max} players max</div>
-                      <div style={{ fontSize: '11px', opacity: 0.8 }}>{t.dur} duration</div>
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  style={{
-                    width: '100%',
-                    padding: '16px 24px',
-                    background: buttonGradients[i],
-                    border: 'none',
-                    borderRadius: '16px',
-                    color: '#000',
-                    fontSize: '18px',
-                    fontWeight: 800,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                    cursor: 'pointer',
-                    position: 'relative',
-                    zIndex: 2,
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.3)',
-                    transition: 'all 0.2s ease',
-                    transform: 'translateY(0px)'
-                  }}
-                  disabled={
-                    isJoining ||
-                    wsState.phase === 'connecting' ||
-                    wsState.phase === 'authenticating' ||
-                    preflightError ||
-                    (!!preflight && (!preflight.configured || !preflight.address || preflight.sol == null))
-                  }
-                  onClick={async () => {
-                    setIsJoining(true);
-                    const ok = publicKey ? true : await connect();
-                    if (!ok) {
-                      setIsJoining(false);
-                      onNotify('Wallet not detected. Please install or unlock your wallet.');
-                      return;
-                    }
-                    
-                    // ✅ FIX #1: Check balance BEFORE attempting payment
-                    // TODO: Re-enable after fixing connection reference
-                    // For now, skip balance check and let payment flow handle it
-                    
-                    await connectAndJoin({ entryFeeTier: t.usd as any, mode: 'tournament' });
-                  }}
-                >{
-                  preflightError ? 'Service unavailable'
-                  : (preflight && (!preflight.configured || !preflight.address || preflight.sol == null)) ? 'Temporarily unavailable'
-                  : (isJoining || wsState.phase === 'connecting' || wsState.phase === 'authenticating') ? 'Joining…'
-                  : `ENTER RACE`
-                }</button>
-              </div>
-            );
-          })}
-        </div>
-        
-        {/* Small floating back button - fixed at bottom center */}
-        <div style={{ 
-          position: 'fixed',
-          bottom: 'calc(40px + env(safe-area-inset-bottom, 0px))',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 1000,
-          pointerEvents: 'none'
-        }}>
-          <button 
-            onClick={onClose}
+        {/* Bio-Arena Map: horizontal path with arena nodes */}
+        <div
+          style={{
+            position: 'relative',
+            marginTop: 14,
+            marginBottom: 18,
+            padding: '12px 8px 18px',
+          }}
+        >
+          {/* Horizontal path */}
+          <div
             style={{
-              padding: '10px 20px',
-              borderRadius: '24px',
-              background: 'rgba(0, 0, 0, 0.9)',
-              color: '#fff',
-              border: '1.5px solid rgba(255, 255, 255, 0.3)',
-              fontSize: '14px',
-              fontWeight: 600,
-              cursor: 'pointer',
+              position: 'absolute',
+              top: '50%',
+              left: 32,
+              right: 32,
+              height: 2,
+              background: 'linear-gradient(90deg, rgba(34,211,238,0.9), rgba(129,140,248,0.7))',
+              opacity: 0.9,
+            }}
+          />
+
+          <div
+            style={{
               display: 'flex',
+              justifyContent: 'space-between',
               alignItems: 'center',
-              gap: '6px',
-              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.6)',
-              backdropFilter: 'blur(10px)',
-              WebkitBackdropFilter: 'blur(10px)',
-              pointerEvents: 'auto'
+              gap: 8,
+              position: 'relative',
+              zIndex: 1,
             }}
           >
-            <span style={{ fontSize: '16px' }}>←</span> Back
-          </button>
+            {tiers.map((t, i) => {
+              const active = i === selectedIndex;
+              const difficulty = i + 1;
+              return (
+                <button
+                  key={t.name}
+                  type="button"
+                  onClick={() => setSelectedIndex(i)}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    padding: '10px 8px 10px',
+                    borderRadius: 14,
+                    border: active ? '1px solid rgba(34,211,238,0.9)' : '1px solid rgba(51,65,85,0.95)',
+                    background: active ? 'rgba(15,23,42,0.98)' : 'rgba(15,23,42,0.92)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 4,
+                    cursor: 'pointer',
+                    boxShadow: active ? '0 0 16px rgba(34,211,238,0.75)' : '0 6px 18px rgba(0,0,0,0.7)',
+                    transform: active ? 'translateY(-2px)' : 'translateY(0)',
+                    transition: 'all 0.18s ease-out',
+                    opacity: preflightError ? 0.7 : 1,
+                  }}
+                >
+                  {/* Node dot */}
+                  <div
+                    style={{
+                      width: 16,
+                      height: 16,
+                      borderRadius: '999px',
+                      background: active
+                        ? 'radial-gradient(circle, #22d3ee, #0ea5e9)'
+                        : 'radial-gradient(circle, #4b5563, #020617)',
+                      boxShadow: active ? '0 0 16px rgba(34,211,238,0.9)' : '0 0 6px rgba(15,23,42,1)',
+                      border: '2px solid rgba(15,23,42,0.95)',
+                    }}
+                  />
+                  <div style={{ fontSize: 18 }}>{t.name.split(' ')[0]}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <div style={{ display: 'flex', gap: 2 }}>
+                      {Array.from({ length: 4 }).map((_, idx) => (
+                        <span
+                          key={idx}
+                          style={{
+                            width: 5,
+                            height: 5,
+                            borderRadius: '999px',
+                            background:
+                              idx < difficulty
+                                ? 'linear-gradient(135deg, #fb923c, #f97316)'
+                                : 'rgba(55,65,81,0.9)',
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 9, color: 'rgba(148,163,184,0.9)', marginTop: 2 }}>
+                    ${t.usd} • {t.max}p • {t.dur}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
+
+        {/* Arena detail drawer (within sheet) */}
+        <div className="tournament-grid" style={{ marginBottom: '20px' }}>
+          <div
+            className="tournament-card"
+            style={{
+              background: cardGradients[selectedIndex],
+              border: '1px solid rgba(255,255,255,0.18)',
+              borderRadius: '20px',
+              padding: '18px 14px 16px',
+              position: 'relative',
+              overflow: 'hidden',
+              backdropFilter: 'blur(16px)',
+              boxShadow: '0 18px 40px rgba(0,0,0,0.55)',
+              minHeight: '0',
+            }}
+          >
+            {/* Animated background orb */}
+            <div
+              style={{
+                position: 'absolute',
+                top: '-55%',
+                right: '-35%',
+                width: '220px',
+                height: '220px',
+                background: prizeGradients[selectedIndex],
+                borderRadius: '50%',
+                opacity: 0.32,
+                filter: 'blur(70px)',
+                animation: 'float 6s ease-in-out infinite',
+              }}
+            />
+
+            {/* Header: tier name + badge */}
+            <div className="tournament-header" style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {(() => {
+                  const Icon = tierIcons[selectedIndex];
+                  return (
+                    <div
+                      className="tournament-icon"
+                      style={{
+                        width: 24,
+                        height: 24,
+                        borderRadius: '999px',
+                        border: '1px solid rgba(148,163,184,0.7)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: 'radial-gradient(circle at 30% 20%, #22d3ee, #0f172a)',
+                      }}
+                    >
+                      <Icon size={14} weight="fill" color="#e5e7eb" />
+                    </div>
+                  );
+                })()}
+                <div>
+                  <h3 className="tournament-title" style={{ fontSize: '18px', fontWeight: 800, marginBottom: 2 }}>{selectedTier.name}</h3>
+                  <div style={{ fontSize: 11, color: 'rgba(226,232,240,0.9)' }}>Tier {selectedIndex + 1} • {badgeLabels[selectedIndex]}</div>
+                </div>
+              </div>
+              <div
+                className="tournament-badge"
+                style={{
+                  background: 'rgba(15,23,42,0.9)',
+                  padding: '4px 10px',
+                  borderRadius: '999px',
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  border: '1px solid rgba(148,163,184,0.7)',
+                }}
+              >
+                {badgeLabels[selectedIndex]}
+              </div>
+            </div>
+
+            {/* Max gain */}
+            <div
+              style={{
+                textAlign: 'center',
+                margin: '14px 0 10px',
+                position: 'relative',
+                zIndex: 2,
+              }}
+            >
+              <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.75)', marginBottom: 4, letterSpacing: '0.12em', textTransform: 'uppercase' }}>Win up to</div>
+              <div
+                style={{
+                  fontSize: '32px',
+                  fontWeight: 900,
+                  background: buttonGradients[selectedIndex],
+                  backgroundClip: 'text',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  textShadow: '0 3px 14px rgba(0,0,0,0.85)',
+                  lineHeight: 1,
+                  marginBottom: 2,
+                }}
+              >
+                ${selectedPrize}
+              </div>
+              <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.7)' }}>Winner takes ~85% of pool</div>
+            </div>
+
+            {/* Buy-in / players / duration */}
+            <div className="tournament-details" style={{ position: 'relative', zIndex: 2 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  background: 'rgba(0,0,0,0.45)',
+                  padding: '10px 14px',
+                  borderRadius: '12px',
+                  marginBottom: '10px',
+                  backdropFilter: 'blur(10px)',
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: '16px', fontWeight: 700 }}>${selectedTier.usd.toFixed(2)}</div>
+                  <div style={{ fontSize: '10px', opacity: 0.8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Buy-in</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600 }}>{selectedTier.max} players max</div>
+                  <div style={{ fontSize: '11px', opacity: 0.8 }}>{selectedTier.dur}</div>
+                </div>
+              </div>
+            </div>
+
+            <button
+              style={{
+                width: '100%',
+                padding: '12px 20px',
+                background: buttonGradients[selectedIndex],
+                border: 'none',
+                borderRadius: '18px',
+                color: '#000',
+                fontSize: '15px',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                cursor: disabledSelected ? 'not-allowed' : 'pointer',
+                position: 'relative',
+                zIndex: 2,
+                boxShadow: disabledSelected ? 'none' : '0 8px 24px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.25)',
+                transition: 'all 0.2s ease',
+                transform: 'translateY(0px)',
+                opacity: disabledSelected ? 0.7 : 1,
+              }}
+              disabled={disabledSelected}
+              onClick={handleJoinSelected}
+            >
+              {preflightError
+                ? 'Service unavailable'
+                : (preflight && (!preflight.configured || !preflight.address || preflight.sol == null))
+                ? 'Temporarily unavailable'
+                : (isJoining || wsState.phase === 'connecting' || wsState.phase === 'authenticating')
+                ? 'Joining…'
+                : 'ENTER RACE'}
+            </button>
+            {(preflightError || (preflight && (!preflight.configured || !preflight.address || preflight.sol == null))) && (
+              <div style={{ marginTop: 6, fontSize: 11, color: 'rgba(248,113,113,0.9)' }}>
+                Service unavailable • please try again later
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+      
+      {/* Floating Back Button - Fixed at bottom */}
+      <div style={{ 
+        position: 'absolute',
+        bottom: 'calc(32px + env(safe-area-inset-bottom, 0px))',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 1000,
+        width: '100%',
+        display: 'flex',
+        justifyContent: 'center',
+        pointerEvents: 'none'
+      }}>
+        <button 
+          onClick={onClose}
+          style={{
+            padding: '12px 32px',
+            borderRadius: '30px',
+            background: 'rgba(15, 23, 42, 0.95)',
+            color: '#fff',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            fontSize: '15px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            pointerEvents: 'auto',
+            letterSpacing: '0.05em',
+            textTransform: 'uppercase'
+          }}
+        >
+          <span style={{ fontSize: '18px' }}>←</span> Back to Menu
+        </button>
       </div>
     </div>
   );
@@ -790,7 +1124,8 @@ function Wallet({ onConnected, onClose }: { onConnected: () => void; onClose: ()
         
         {publicKey && (
           <div className="mobile-connected-status">
-            ✅ {publicKey.slice(0,8)}...{publicKey.slice(-8)}
+            <CheckCircle size={16} weight="fill" style={{ marginRight: 6 }} />
+            Connected: {publicKey.slice(0,8)}...{publicKey.slice(-8)}
           </div>
         )}
 
@@ -845,7 +1180,10 @@ function Lobby({ onStart: _onStart, onBack, onRefund }: { onStart: () => void; o
     <div className="screen active mobile-lobby-screen">
       <div className="mobile-lobby-container">
         <div className="mobile-lobby-header">
-          <h2 className="mobile-lobby-title">🏆 Lobby</h2>
+          <h2 className="mobile-lobby-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Trophy size={18} weight="fill" />
+            <span>Lobby</span>
+          </h2>
           <div className="mobile-lobby-count">{players.length}/{state.lobby?.maxPlayers ?? 16}</div>
         </div>
         
@@ -908,8 +1246,30 @@ function Lobby({ onStart: _onStart, onBack, onRefund }: { onStart: () => void; o
   );
 }
 
+import { GameEffects } from './GameEffects'; // Import type for ref if needed, though NewGameView handles instantiation
+
+// ... inside Game component ...
+
 function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void; }) {
   const [gameCountdown, setGameCountdown] = useState<number>(6); // 6 seconds to match game engine preStart
+  const { state } = useWs();
+  const meId = state.playerId;
+  
+  // Effect to listen for high-impact events from server state and trigger haptics via GameEffects
+  // Note: Since GameEffects is inside NewGameView (pixi context), we can't easily call its methods directly here.
+  // BUT, NewGameView is responsible for rendering. 
+  // Actually, GameEffects is instantiated inside NewGameView. 
+  // Let's dispatch a custom event that GameEffects (inside NewGameView) can listen to, OR
+  // simpler: handle haptics right here if we want, but GameEffects has the visual context.
+  
+  // Better approach: NewGameView already instantiates GameEffects. We should let NewGameView handle
+  // the "business logic to visual/haptic" bridge.
+  // However, for *global* haptics like impacts, we can add a listener here if needed,
+  // but NewGameView is the authority on the game loop.
+  
+  // Let's stick to passing props/callbacks if we need to bridge, but `NewGameView` 
+  // is likely where the update loop is. Let's check NewGameView...
+  // NewGameView receives `wsState`. It can detect collisions/kills and trigger GameEffects.
   
   useEffect(() => {
     const timer = setInterval(() => {
@@ -924,9 +1284,13 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void; 
   };
   
   const handleBoost = () => {
-    console.log('[AppMobile] Boost button clicked, countdown:', gameCountdown);
+    // console.log('[AppMobile] Boost button clicked, countdown:', gameCountdown);
     const event = new CustomEvent('mobile-boost');
     window.dispatchEvent(event);
+    
+    // Check cooldown locally for immediate feedback if needed
+    // But better to rely on NewGameView's state if possible or just fire the event.
+    // We added a listener in NewGameView to catch this event and trigger screenshake.
   };
   
   return (
@@ -981,7 +1345,17 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
       <div className="mobile-results-container">
         <div className="mobile-result-header">
           <h1 className={`mobile-result-title ${isWinner ? 'win' : 'lose'}`}>
-            {isWinner ? '🏆 Victory!' : '💀 Eliminated'}
+            {isWinner ? (
+              <>
+                <Trophy size={22} weight="fill" style={{ marginRight: 6 }} />
+                Victory!
+              </>
+            ) : (
+              <>
+                <Skull size={22} weight="fill" style={{ marginRight: 6 }} />
+                Eliminated
+              </>
+            )}
           </h1>
           <p className="mobile-result-subtitle">
             Winner: {winner ? `${winner.slice(0,4)}…${winner.slice(-4)}` : '—'}
@@ -993,7 +1367,8 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
         
         {solscan && (
           <a href={solscan} target="_blank" rel="noreferrer" className="mobile-solscan-btn">
-            🔗 View on Solscan
+            <LinkSimple size={16} weight="bold" style={{ marginRight: 6 }} />
+            View on Solscan
           </a>
         )}
         
@@ -1004,10 +1379,12 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
         
         <div className="mobile-result-actions">
           <button className="mobile-btn-primary" onClick={onPlayAgain}>
-            🔄 Play Again
+            <ArrowClockwise size={18} weight="bold" style={{ marginRight: 6 }} />
+            Play Again
           </button>
           <button className="mobile-btn-secondary" onClick={onChangeTier}>
-            🏠 Menu
+            <House size={18} weight="fill" style={{ marginRight: 6 }} />
+            Menu
           </button>
         </div>
       </div>

@@ -230,7 +230,10 @@ export class GameWorld {
       player.cleanExpiredTrails();
     });
 
-    // 2. Detect collisions
+    // 1.5. Resolve player-vs-player collisions (bump/bounce logic)
+    this.collisionSystem.checkPlayerCollisions(this.players);
+
+    // 2. Detect collisions (walls & trails)
     const eliminated = this.collisionSystem.update(this.players);
     eliminated.forEach(({ victimId, killerId, debug }) => {
       if (this.players.has(victimId)) {

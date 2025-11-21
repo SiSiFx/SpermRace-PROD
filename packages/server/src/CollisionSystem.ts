@@ -181,4 +181,116 @@ export class CollisionSystem {
     }
     return eliminated;
   }
+
+  /**
+   * Checks and resolves direct body collisions between players.
+   * - Pushes players apart to prevent overlap.
+   * - Transfers momentum (elastic collision).
+   * - Applies knockback if one player is lunging (combat mechanic).
+   */
+  checkPlayerCollisions(players: Map<string, PlayerEntity>): void {
+    const playerList = Array.from(players.values()).filter(p => p.isAlive);
+    const count = playerList.length;
+    if (count < 2) return;
+
+    // OPTIMIZATION: Use local Spatial Hashing to reduce complexity from O(N^2) to O(N)
+    // This scales efficiently even with high player/bot counts.
+    const grid = new Map<string, PlayerEntity[]>();
+    const cellSize = GRID_CELL_SIZE; // Uses existing 100px cell size
+
+    // 1. Build localized grid
+    for (const p of playerList) {
+      const cx = Math.floor(p.sperm.position.x / cellSize);
+      const cy = Math.floor(p.sperm.position.y / cellSize);
+      const key = `${cx},${cy}`;
+      let cell = grid.get(key);
+      if (!cell) {
+        cell = [];
+        grid.set(key, cell);
+      }
+      cell.push(p);
+    }
+
+    // 2. Check collisions with neighbors
+    const radiusSum = SPERM_COLLISION_RADIUS * 2.5; 
+    const radiusSumSq = radiusSum * radiusSum;
+
+    for (const p1 of playerList) {
+      const cx = Math.floor(p1.sperm.position.x / cellSize);
+      const cy = Math.floor(p1.sperm.position.y / cellSize);
+
+      // Check 3x3 grid neighborhood
+      for (let x = cx - 1; x <= cx + 1; x++) {
+        for (let y = cy - 1; y <= cy + 1; y++) {
+          const key = `${x},${y}`;
+          const cell = grid.get(key);
+          if (!cell) continue;
+
+          for (const p2 of cell) {
+            // Optimization: Ensure unique pairs (A vs B, not B vs A) and skip self
+            if (p1.id >= p2.id) continue;
+        
+            const dx = p2.sperm.position.x - p1.sperm.position.x;
+            const dy = p2.sperm.position.y - p1.sperm.position.y;
+            const distSq = dx * dx + dy * dy;
+            
+            if (distSq < radiusSumSq) {
+              const dist = Math.sqrt(distSq);
+              if (dist < 0.001) continue; // Avoid div by zero
+              
+              // 1. Resolve Overlap (Push apart)
+              const overlap = radiusSum - dist;
+              const nx = dx / dist;
+              const ny = dy / dist;
+              
+              const pushX = nx * overlap * 0.5;
+              const pushY = ny * overlap * 0.5;
+              
+              p1.sperm.position.x -= pushX;
+              p1.sperm.position.y -= pushY;
+              p2.sperm.position.x += pushX;
+              p2.sperm.position.y += pushY;
+              
+              // 2. Momentum Transfer (Elastic-ish)
+              const v1n = p1.sperm.velocity.x * nx + p1.sperm.velocity.y * ny;
+              const v2n = p2.sperm.velocity.x * nx + p2.sperm.velocity.y * ny;
+              
+              // Check lunge states
+              const p1Lunge = p1.isLunging();
+              const p2Lunge = p2.isLunging();
+              
+              if (p1Lunge && !p2Lunge) {
+                // P1 attacks P2: P1 keeps going (mostly), P2 gets yeeted
+                const ATTACK_FORCE = 800; // Bonus knockback
+                p2.sperm.velocity.x += nx * ATTACK_FORCE;
+                p2.sperm.velocity.y += ny * ATTACK_FORCE;
+                // P1 slight slow down impact
+                p1.sperm.velocity.x *= 0.8;
+                p1.sperm.velocity.y *= 0.8;
+              } else if (!p1Lunge && p2Lunge) {
+                // P2 attacks P1
+                const ATTACK_FORCE = 800;
+                p1.sperm.velocity.x -= nx * ATTACK_FORCE;
+                p1.sperm.velocity.y -= ny * ATTACK_FORCE;
+                p2.sperm.velocity.x *= 0.8;
+                p2.sperm.velocity.y *= 0.8;
+              } else {
+                // Standard bounce (both lunging or neither)
+                const dv = v1n - v2n;
+                if (dv > 0) { // Only bounce if moving towards each other
+                    // restitution 0.8 = bouncy
+                    const restitution = 0.8;
+                    const impulse = (-(1 + restitution) * dv) / 2;
+                    p1.sperm.velocity.x += impulse * nx;
+                    p1.sperm.velocity.y += impulse * ny;
+                    p2.sperm.velocity.x -= impulse * nx;
+                    p2.sperm.velocity.y -= impulse * ny;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 }

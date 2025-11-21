@@ -28,7 +28,7 @@ export class HudManager {
     this.topBar.id = 'unified-top-bar';
     Object.assign(this.topBar.style, {
       position: 'absolute',
-      top: '12px',
+      top: 'calc(10px + env(safe-area-inset-top, 0px))',
       left: '50%',
       transform: 'translateX(-50%)',
       display: 'flex',
@@ -55,7 +55,7 @@ export class HudManager {
     });
 
     this.zoneTimerEl = document.createElement('div');
-    this.zoneTimerEl.textContent = '⏱ 1:30';
+    this.zoneTimerEl.textContent = 'TIME 1:30';
     Object.assign(this.zoneTimerEl.style, {
       color: '#22d3ee',
       whiteSpace: 'nowrap'
@@ -78,7 +78,7 @@ export class HudManager {
 
     const boostIcon = document.createElement('div');
     boostIcon.id = 'boost-icon';
-    boostIcon.textContent = '⚡';
+    boostIcon.textContent = 'BOOST';
     Object.assign(boostIcon.style, {
       fontSize: isMobile ? '14px' : '16px',
       color: '#22d3ee'
@@ -123,7 +123,7 @@ export class HudManager {
     });
 
     this.aliveCountEl = document.createElement('div');
-    this.aliveCountEl.textContent = '👥 8';
+    this.aliveCountEl.textContent = '8 ALIVE';
     Object.assign(this.aliveCountEl.style, {
       color: '#10b981',
       whiteSpace: 'nowrap'
@@ -163,7 +163,7 @@ export class HudManager {
       : `${secs}s`;
 
     if (clampedSeconds === 0) {
-      this.zoneTimerEl.innerHTML = '⚠ ZONE COLLAPSE';
+      this.zoneTimerEl.innerHTML = 'ZONE COLLAPSE';
       this.zoneTimerEl.style.color = '#ef4444';
       this.zoneTimerEl.style.textShadow = '0 0 10px rgba(239, 68, 68, 0.9)';
       this.zoneTimerEl.style.animation = '';
@@ -171,7 +171,7 @@ export class HudManager {
     }
 
     if (clampedSeconds < 30) {
-      this.zoneTimerEl.innerHTML = `⚠ SHRINKING: <span>${timeLabel}</span>`;
+      this.zoneTimerEl.innerHTML = `SHRINKING: <span>${timeLabel}</span>`;
       this.zoneTimerEl.style.color = '#ef4444';
       this.zoneTimerEl.style.textShadow = '0 0 10px rgba(239, 68, 68, 0.9)';
       this.zoneTimerEl.style.animation = 'blink 1s ease-in-out infinite';
@@ -222,7 +222,7 @@ export class HudManager {
   updateAliveCount(count: number) {
     if (!this.aliveCountEl) return;
 
-    this.aliveCountEl.textContent = `👥 ${count}`;
+    this.aliveCountEl.textContent = `${count} ALIVE`;
 
     // Color based on count
     if (count <= 2) {
