@@ -3053,7 +3053,11 @@ class SpermRaceGame {
 
   updateTrails(_deltaTime: number) {
     // Add trail points for active cars
-    if (this.player && !this.player.destroyed) {
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const isTournament = !!(this.wsHud && this.wsHud.active);
+    const hidePlayerTrailInMobilePractice = isMobile && !isTournament;
+
+    if (this.player && !this.player.destroyed && !hidePlayerTrailInMobilePractice) {
       this.addTrailPoint(this.player);
     }
     if (this.bot && !this.bot.destroyed) {
@@ -3190,15 +3194,13 @@ class SpermRaceGame {
     }
     if (pts.length < 2) return;
 
-    // Mobile practice: draw a calm, non-wiggling trail for the player to avoid jittery visuals
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const isTournament = !!(this.wsHud && this.wsHud.active);
-    const isMobilePracticePlayerTrail = isMobile && !isTournament && trail.car.type === 'player';
+    // Calm player trail: avoid ghost wiggle on the local player's own trail to prevent jittery visuals
+    const isPlayerTrail = !!(this.player && trail.car === this.player);
 
     const baseWidth = (car.type === 'player') ? 2 : 1.6; // thinner overall
     const alphaStart = 1.0;
 
-    if (isMobilePracticePlayerTrail) {
+    if (isPlayerTrail) {
       const first = pts[0];
       trail.graphics.moveTo(first.x, first.y);
       for (let i = 1; i < pts.length; i++) {
