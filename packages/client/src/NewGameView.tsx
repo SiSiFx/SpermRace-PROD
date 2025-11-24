@@ -332,6 +332,11 @@ class SpermRaceGame {
 
   // JUICE METHODS - Make game feel amazing!
   private screenShake(intensity: number = 1) {
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const isTournament = !!(this.wsHud && this.wsHud.active);
+    // Disable screen shake in mobile practice for a stable feel
+    if (isMobile && !isTournament) return;
+
     // Reduced shake - less disorienting on mobile
     this.camera.shakeX = (Math.random() - 0.5) * 8 * intensity;
     this.camera.shakeY = (Math.random() - 0.5) * 8 * intensity;
@@ -1638,6 +1643,18 @@ class SpermRaceGame {
     } catch {}
     this.player = this.createCar(s.x, s.y, headHex, 'player');
     if (this.player) {
+      // Slightly faster feel in mobile practice (no ws HUD)
+      try {
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        const isTournament = !!(this.wsHud && this.wsHud.active);
+        if (isMobile && !isTournament) {
+          this.player.baseSpeed *= 1.2;
+          this.player.speed = this.player.baseSpeed;
+          this.player.targetSpeed = this.player.baseSpeed;
+          this.player.boostSpeed *= 1.2;
+        }
+      } catch {}
+
       (this.player as any).tailColor = tailHex ?? headHex;
       this.player.angle = s.angle;
       this.player.targetAngle = s.angle;
