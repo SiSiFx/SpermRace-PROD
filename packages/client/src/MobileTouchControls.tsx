@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, memo } from 'react';
+import { Lightning } from 'phosphor-react';
 import './mobile-controls.css';
 
 interface TouchPosition {
@@ -15,6 +16,7 @@ interface MobileTouchControlsProps {
 
 export const MobileTouchControls = memo(function MobileTouchControls({ onTouch, onBoost, canBoost, boostCooldownPct }: MobileTouchControlsProps) {
   const [joystickActive, setJoystickActive] = useState(false);
+  const [joystickPosition, setJoystickPosition] = useState({ x: 0, y: 0 });
 
   const joystickStart = useRef<TouchPosition>({ x: 0, y: 0 });
   const joystickCurrent = useRef<TouchPosition>({ x: 0, y: 0 });
@@ -71,6 +73,7 @@ export const MobileTouchControls = memo(function MobileTouchControls({ onTouch, 
       const centerX = joystickTouch.clientX;
       const centerY = joystickTouch.clientY;
 
+      setJoystickPosition({ x: centerX, y: centerY });
       joystickStart.current = { x: centerX, y: centerY };
       joystickCurrent.current = { x: joystickTouch.clientX, y: joystickTouch.clientY };
       setJoystickActive(true);
@@ -191,7 +194,17 @@ export const MobileTouchControls = memo(function MobileTouchControls({ onTouch, 
       />
 
       {joystickActive && (
-        <div className="mobile-joystick active">
+        <div
+          className="mobile-joystick active"
+          style={{
+            position: 'fixed',
+            left: `${joystickPosition.x}px`,
+            top: `${joystickPosition.y}px`,
+            transform: 'translate(-50%, -50%)',
+            pointerEvents: 'none',
+            zIndex: 15,
+          }}
+        >
           <div className="joystick-base">
             <div className="joystick-ring" />
           </div>
@@ -208,8 +221,9 @@ export const MobileTouchControls = memo(function MobileTouchControls({ onTouch, 
         className={`mobile-boost-button ${canBoost ? 'ready' : 'cooldown'}`}
         disabled={!canBoost}
       >
-        <div className="boost-icon">BOOST</div>
-        <div className="boost-label">BOOST</div>
+        <div className="boost-icon">
+          <Lightning size={24} weight="fill" />
+        </div>
         <svg className="boost-cooldown-ring" viewBox="0 0 100 100">
           <circle cx="50" cy="50" r="45" className="cooldown-bg" />
           <circle
