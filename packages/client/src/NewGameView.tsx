@@ -3190,53 +3190,67 @@ class SpermRaceGame {
     }
     if (pts.length < 2) return;
 
-    // GHOST TAIL: Procedurally wiggle the trail visually (hitbox remains at server positions)
+    // Mobile practice: draw a calm, non-wiggling trail for the player to avoid jittery visuals
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const isTournament = !!(this.wsHud && this.wsHud.active);
+    const isMobilePracticePlayerTrail = isMobile && !isTournament && trail.car.type === 'player';
+
     const baseWidth = (car.type === 'player') ? 2 : 1.6; // thinner overall
     const alphaStart = 1.0;
 
-    // Build ghost spine starting at head position, then backward through trail
-    const headX = car.x;
-    const headY = car.y;
-    const ghost: Array<{ x: number; y: number }> = [];
-    ghost.push({ x: headX, y: headY });
+    if (isMobilePracticePlayerTrail) {
+      const first = pts[0];
+      trail.graphics.moveTo(first.x, first.y);
+      for (let i = 1; i < pts.length; i++) {
+        const p = pts[i];
+        trail.graphics.lineTo(p.x, p.y);
+      }
+      trail.graphics.stroke({ width: baseWidth, color: trailColor, alpha: alphaStart, cap: 'round', join: 'round' });
+    } else {
+      // GHOST TAIL: Procedurally wiggle the trail visually (hitbox remains at server positions)
+      const headX = car.x;
+      const headY = car.y;
+      const ghost: Array<{ x: number; y: number }> = [];
+      ghost.push({ x: headX, y: headY });
 
-    const time = now * 0.004; // global time factor
-    const amplitudeBase = isBot ? 4 : 6;
-    const speedMag = Math.hypot(car.vx, car.vy);
-    const speedFactor = 1.0 + Math.min(1.5, speedMag / 260); // faster wiggle when moving
+      const time = now * 0.004; // global time factor
+      const amplitudeBase = isBot ? 4 : 6;
+      const speedMag = Math.hypot(car.vx, car.vy);
+      const speedFactor = 1.0 + Math.min(1.5, speedMag / 260); // faster wiggle when moving
 
-    for (let idx = pts.length - 1; idx >= 0; idx--) {
-      const p = pts[idx];
-      const prev = idx === pts.length - 1 ? { x: headX, y: headY } : pts[idx + 1];
-      const dirX = p.x - prev.x;
-      const dirY = p.y - prev.y;
-      const len = Math.hypot(dirX, dirY) || 1;
-      const nx = -dirY / len;
-      const ny = dirX / len;
-      const t = (pts.length - 1 - idx) / Math.max(1, pts.length - 1); // 0 at head → 1 at tail
-      const envelope = Math.pow(t, 1.6); // more motion toward tail
-      const phase = time * speedFactor + t * 4.0;
-      const offset = Math.sin(phase) * amplitudeBase * envelope;
-      ghost.push({ x: p.x + nx * offset, y: p.y + ny * offset });
+      for (let idx = pts.length - 1; idx >= 0; idx--) {
+        const p = pts[idx];
+        const prev = idx === pts.length - 1 ? { x: headX, y: headY } : pts[idx + 1];
+        const dirX = p.x - prev.x;
+        const dirY = p.y - prev.y;
+        const len = Math.hypot(dirX, dirY) || 1;
+        const nx = -dirY / len;
+        const ny = dirX / len;
+        const t = (pts.length - 1 - idx) / Math.max(1, pts.length - 1); // 0 at head → 1 at tail
+        const envelope = Math.pow(t, 1.6); // more motion toward tail
+        const phase = time * speedFactor + t * 4.0;
+        const offset = Math.sin(phase) * amplitudeBase * envelope;
+        ghost.push({ x: p.x + nx * offset, y: p.y + ny * offset });
+      }
+
+      if (ghost.length < 2) return;
+
+      // Draw smooth quadratic Bezier through ghost points
+      const g0 = ghost[0];
+      const g1 = ghost[1];
+      const m0x = (g0.x + g1.x) * 0.5;
+      const m0y = (g0.y + g1.y) * 0.5;
+      trail.graphics.moveTo(m0x, m0y);
+      for (let i = 1; i < ghost.length - 1; i++) {
+        const c = ghost[i];
+        const n = ghost[i + 1];
+        const mx = (c.x + n.x) * 0.5;
+        const my = (c.y + n.y) * 0.5;
+        trail.graphics.quadraticCurveTo(c.x, c.y, mx, my);
+      }
+
+      trail.graphics.stroke({ width: baseWidth, color: trailColor, alpha: alphaStart, cap: 'round', join: 'round' });
     }
-
-    if (ghost.length < 2) return;
-
-    // Draw smooth quadratic Bezier through ghost points
-    const g0 = ghost[0];
-    const g1 = ghost[1];
-    const m0x = (g0.x + g1.x) * 0.5;
-    const m0y = (g0.y + g1.y) * 0.5;
-    trail.graphics.moveTo(m0x, m0y);
-    for (let i = 1; i < ghost.length - 1; i++) {
-      const c = ghost[i];
-      const n = ghost[i + 1];
-      const mx = (c.x + n.x) * 0.5;
-      const my = (c.y + n.y) * 0.5;
-      trail.graphics.quadraticCurveTo(c.x, c.y, mx, my);
-    }
-
-    trail.graphics.stroke({ width: baseWidth, color: trailColor, alpha: alphaStart, cap: 'round', join: 'round' });
 
     // Proximity glow (subtle, thinner) using segment checks
     if (this.player && trail.car !== this.player && pts.length >= 2) {
