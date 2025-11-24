@@ -2882,12 +2882,24 @@ class SpermRaceGame {
     try {
       const sizeMul = this.getSizeMultiplierForCar(car);
       if (this.smallTailEnabled && car.tailGraphics) {
-        car.tailWaveT = (car.tailWaveT || 0) + deltaTime * (car.isBoosting ? 18 : 10); // Faster wave animation
-        const segs = Math.max(8, car.tailSegments || 16);
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        const isTournament = !!(this.wsHud && this.wsHud.active);
+        const isMobilePracticePlayer = isMobile && !isTournament && car.type === 'player';
+
+        const waveSpeed = isMobilePracticePlayer
+          ? (car.isBoosting ? 6 : 3)
+          : (car.isBoosting ? 18 : 10); // Default faster wave animation
+        car.tailWaveT = (car.tailWaveT || 0) + deltaTime * waveSpeed;
+
+        const segsBase = car.tailSegments || 16;
+        const segs = isMobilePracticePlayer ? Math.max(6, segsBase) : Math.max(8, segsBase);
         const len = (car.tailLength || 48) * sizeMul;
         const speedMag = Math.hypot(car.vx, car.vy);
         const speedScale = 0.5 + Math.min(1, speedMag / 350);
-        const ampBase = (car.tailAmplitude || 6) * (car.isBoosting ? 1.5 : 1.0) * sizeMul; // More dramatic boost wave
+        let ampBase = (car.tailAmplitude || 6) * (car.isBoosting ? 1.5 : 1.0) * sizeMul; // More dramatic boost wave
+        if (isMobilePracticePlayer) {
+          ampBase *= 0.4; // Much calmer tail motion in mobile practice
+        }
         const amp = ampBase;
         const baseWidth = 3 * (0.75 + 0.25 * speedScale) * sizeMul;
         const step = len / segs;
@@ -2906,7 +2918,8 @@ class SpermRaceGame {
           const t = i / segs;
           // Zero motion at head, increases toward mid/back
           const envelope = Math.pow(t, 2.2);
-          const wave = Math.sin((t * 11) + (car.tailWaveT || 0)) * envelope * amp;
+          const freq = isMobilePracticePlayer ? 6 : 11;
+          const wave = Math.sin((t * freq) + (car.tailWaveT || 0)) * envelope * amp;
           const sx = ax - dirX * (i * step) + latX * wave;
           const sy = ay - dirY * (i * step) + latY * wave;
           const w = baseWidth * Math.pow(1 - t, 3.2); // stronger taper → thinner back and base
@@ -3599,10 +3612,22 @@ class SpermRaceGame {
       this.worldContainer.addChild(particle.graphics);
       this.particles.push(particle);
     }
-    
-    // Add screen shake on explosion (reduced)
-    this.camera.shakeX = 6;
-    this.camera.shakeY = 6;
+
+    // Add screen shake on explosion (reduced) - but skip in mobile practice for stability
+    try {
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const isTournament = !!(this.wsHud && this.wsHud.active);
+      if (isMobile && !isTournament) {
+        this.camera.shakeX = 0;
+        this.camera.shakeY = 0;
+      } else {
+        this.camera.shakeX = 6;
+        this.camera.shakeY = 6;
+      }
+    } catch {
+      this.camera.shakeX = 6;
+      this.camera.shakeY = 6;
+    }
   }
 
   updateParticles(deltaTime: number) {
