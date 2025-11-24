@@ -272,7 +272,7 @@ function Landing({ solPrice, onPractice, onTournament }: { solPrice: number | nu
             <span className="text-accent">RACE</span>
             <span className="text-gradient">.IO</span>
           </h1>
-          <p className="mobile-brand-subtitle">Battle Royale 💥</p>
+          <p className="mobile-brand-subtitle">Battle Royale</p>
           
           {stats.totalGames > 0 && (
             <div className="mobile-stats-row">

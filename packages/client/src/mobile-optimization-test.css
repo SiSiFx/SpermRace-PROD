@@ -99,7 +99,7 @@
   }
   
   .breakpoint-indicator::after {
-    content: ' 📱';
+    content: ' MOBILE';
   }
 }
 
@@ -109,7 +109,7 @@
   }
   
   .breakpoint-indicator::after {
-    content: ' 🖥️';
+    content: ' DESKTOP';
   }
 }
 
