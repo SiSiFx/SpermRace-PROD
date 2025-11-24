@@ -1420,7 +1420,7 @@ class SpermRaceGame {
     
     Object.assign(controlsHint.style, {
       position: 'absolute',
-      bottom: '20px',
+      bottom: 'calc(32px + env(safe-area-inset-bottom, 0px))',
       left: '50%',
       transform: 'translateX(-50%)',
       color: this.theme.text,

@@ -15,8 +15,7 @@ interface MobileTouchControlsProps {
 
 export const MobileTouchControls = memo(function MobileTouchControls({ onTouch, onBoost, canBoost, boostCooldownPct }: MobileTouchControlsProps) {
   const [joystickActive, setJoystickActive] = useState(false);
-  const [joystickPosition, setJoystickPosition] = useState({ x: 0, y: 0 });
-  
+
   const joystickStart = useRef<TouchPosition>({ x: 0, y: 0 });
   const joystickCurrent = useRef<TouchPosition>({ x: 0, y: 0 });
   const joystickTouchId = useRef<number | null>(null);
@@ -72,7 +71,6 @@ export const MobileTouchControls = memo(function MobileTouchControls({ onTouch, 
       const centerX = joystickTouch.clientX;
       const centerY = joystickTouch.clientY;
 
-      setJoystickPosition({ x: centerX, y: centerY });
       joystickStart.current = { x: centerX, y: centerY };
       joystickCurrent.current = { x: joystickTouch.clientX, y: joystickTouch.clientY };
       setJoystickActive(true);
@@ -193,17 +191,7 @@ export const MobileTouchControls = memo(function MobileTouchControls({ onTouch, 
       />
 
       {joystickActive && (
-        <div
-          className="mobile-joystick active"
-          style={{
-            position: 'fixed',
-            left: `${joystickPosition.x}px`,
-            top: `${joystickPosition.y}px`,
-            transform: 'translate(-50%, -50%)',
-            pointerEvents: 'none',
-            zIndex: 15
-          }}
-        >
+        <div className="mobile-joystick active">
           <div className="joystick-base">
             <div className="joystick-ring" />
           </div>
