@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useWallet } from '../WalletProvider';
 import { useWs } from '../WsProvider';
+import { Lightning, Diamond, CrownSimple, Trophy, Users, Clock } from 'phosphor-react';
 
 // Base URL for backend API.
 // For any spermrace.io host (prod/dev/www), always use same-origin /api so hosting can proxy
@@ -22,12 +23,16 @@ const API_BASE: string = (() => {
   return '/api';
 })();
 
+type TierId = 'micro' | 'nano' | 'mega' | 'championship';
+
 type Tier = {
-  id: 'micro' | 'nano' | 'mega' | 'championship';
+  id: TierId;
   name: string;
   usd: number;
   maxPlayers: number;
   duration: string;
+  description: string;
+  recommended?: boolean;
 };
 
 type PrizePreflight = {
@@ -37,11 +42,72 @@ type PrizePreflight = {
 } | null;
 
 const TIERS: Tier[] = [
-  { id: 'micro', name: 'Micro Race', usd: 1, maxPlayers: 16, duration: '2–3 min' },
-  { id: 'nano', name: 'Nano Race', usd: 5, maxPlayers: 32, duration: '3–4 min' },
-  { id: 'mega', name: 'Mega Race', usd: 25, maxPlayers: 32, duration: '4–6 min' },
-  { id: 'championship', name: 'Championship', usd: 100, maxPlayers: 16, duration: '5–8 min' },
+  { 
+    id: 'micro', 
+    name: 'Micro Race', 
+    usd: 1, 
+    maxPlayers: 16, 
+    duration: '2–3 min',
+    description: 'Quick battles, perfect for beginners'
+  },
+  { 
+    id: 'nano', 
+    name: 'Nano Race', 
+    usd: 5, 
+    maxPlayers: 32, 
+    duration: '3–4 min',
+    description: 'Balanced competition with bigger pools',
+    recommended: true
+  },
+  { 
+    id: 'mega', 
+    name: 'Mega Race', 
+    usd: 25, 
+    maxPlayers: 32, 
+    duration: '4–6 min',
+    description: 'High stakes, intense gameplay'
+  },
+  { 
+    id: 'championship', 
+    name: 'Championship', 
+    usd: 100, 
+    maxPlayers: 16, 
+    duration: '5–8 min',
+    description: 'Elite tournament for champions only'
+  },
 ];
+
+const TIER_THEMES: Record<TierId, {
+  icon: any;
+  gradient: string;
+  accentColor: string;
+  glowColor: string;
+}> = {
+  micro: {
+    icon: Lightning,
+    gradient: 'linear-gradient(135deg, #00F0FF 0%, #0EA5E9 100%)',
+    accentColor: '#00F0FF',
+    glowColor: 'rgba(0, 240, 255, 0.4)',
+  },
+  nano: {
+    icon: Diamond,
+    gradient: 'linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%)',
+    accentColor: '#8B5CF6',
+    glowColor: 'rgba(139, 92, 246, 0.4)',
+  },
+  mega: {
+    icon: CrownSimple,
+    gradient: 'linear-gradient(135deg, #F43F5E 0%, #FB923C 100%)',
+    accentColor: '#FB923C',
+    glowColor: 'rgba(251, 146, 60, 0.4)',
+  },
+  championship: {
+    icon: Trophy,
+    gradient: 'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)',
+    accentColor: '#FFD700',
+    glowColor: 'rgba(255, 215, 0, 0.4)',
+  },
+};
 
 type ExposedJoinApi = {
   joinTier: (usd: number) => void;
@@ -124,16 +190,19 @@ function Modes({ exposeJoin }: ModesProps = {}) {
     <div
       className="mode-grid"
       style={{
-        maxWidth: 960,
+        maxWidth: 1080,
         margin: '32px auto 24px',
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-        gap: 20,
+        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+        gap: 24,
+        padding: '0 16px',
       }}
     >
       {TIERS.map((tier) => {
         const estPrizeUsd = (tier.usd * tier.maxPlayers * 0.85).toFixed(2);
         const disabled = busy || globalDisabled;
+        const theme = TIER_THEMES[tier.id];
+        const TierIcon = theme.icon;
 
         return (
           <button
@@ -143,125 +212,335 @@ function Modes({ exposeJoin }: ModesProps = {}) {
             className="mode-card"
             style={{
               position: 'relative',
-              background: 'rgba(3,3,5,0.85)',
-              borderRadius: 18,
-              border: '1px solid var(--border-dim)',
-              padding: '18px 18px',
+              background: 'rgba(3,3,5,0.9)',
+              borderRadius: 20,
+              border: `2px solid ${disabled ? 'var(--border-dim)' : 'transparent'}`,
+              padding: 0,
               cursor: disabled ? 'not-allowed' : 'pointer',
               textAlign: 'left',
-              boxShadow: disabled ? 'none' : 'var(--shadow-premium)',
-              transition:
-                'border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease',
+              boxShadow: disabled ? 'none' : '0 20px 60px rgba(0,0,0,0.8)',
+              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
               opacity: disabled ? 0.6 : 1,
               overflow: 'hidden',
             }}
             onClick={() => handleJoin(tier.usd)}
             onMouseEnter={(e) => {
               if (disabled) return;
-              e.currentTarget.style.borderColor = 'rgba(0,240,255,0.8)';
-              e.currentTarget.style.boxShadow =
-                '0 0 24px rgba(0,240,255,0.35), 0 16px 40px rgba(0,0,0,0.9)';
-              e.currentTarget.style.backgroundColor = 'rgba(14,14,18,0.98)';
-              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.borderColor = theme.accentColor;
+              e.currentTarget.style.boxShadow = `0 0 40px ${theme.glowColor}, 0 24px 70px rgba(0,0,0,0.9)`;
+              e.currentTarget.style.transform = 'translateY(-4px) scale(1.02)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = 'var(--border-dim)';
+              e.currentTarget.style.borderColor = 'transparent';
               e.currentTarget.style.boxShadow = disabled
                 ? 'none'
-                : 'var(--shadow-premium)';
-              e.currentTarget.style.backgroundColor = 'rgba(3,3,5,0.85)';
-              e.currentTarget.style.transform = 'translateY(0)';
+                : '0 20px 60px rgba(0,0,0,0.8)';
+              e.currentTarget.style.transform = 'translateY(0) scale(1)';
             }}
           >
+            {/* Accent gradient bar at top */}
             <div
               style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: 10,
+                height: 4,
+                background: theme.gradient,
+                boxShadow: `0 0 20px ${theme.glowColor}`,
               }}
-            >
-              <div>
+            />
+
+            {/* Recommended badge */}
+            {tier.recommended && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 16,
+                  right: 16,
+                  background: theme.gradient,
+                  color: '#000',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: 1.2,
+                  padding: '4px 12px',
+                  borderRadius: 20,
+                  zIndex: 2,
+                  boxShadow: `0 4px 12px ${theme.glowColor}`,
+                }}
+              >
+                Popular
+              </div>
+            )}
+
+            <div style={{ padding: '24px 24px 20px' }}>
+              {/* Icon + Tier Name */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  marginBottom: 16,
+                }}
+              >
                 <div
                   style={{
-                    fontSize: 12,
-                    letterSpacing: 4,
+                    width: 56,
+                    height: 56,
+                    borderRadius: 16,
+                    background: `linear-gradient(135deg, ${theme.accentColor}20, ${theme.accentColor}10)`,
+                    border: `2px solid ${theme.accentColor}40`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <TierIcon size={32} weight="fill" color={theme.accentColor} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div
+                    style={{
+                      fontSize: 20,
+                      fontWeight: 800,
+                      color: 'var(--text-primary)',
+                      marginBottom: 4,
+                      letterSpacing: 0.5,
+                    }}
+                  >
+                    {tier.name}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: 'var(--text-secondary)',
+                      opacity: 0.9,
+                    }}
+                  >
+                    {tier.description}
+                  </div>
+                </div>
+              </div>
+
+              {/* Prize Pool - Main focal point */}
+              <div
+                style={{
+                  background: `linear-gradient(135deg, ${theme.accentColor}15, ${theme.accentColor}08)`,
+                  border: `1px solid ${theme.accentColor}30`,
+                  borderRadius: 14,
+                  padding: '16px 20px',
+                  marginBottom: 16,
+                  textAlign: 'center',
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 11,
                     textTransform: 'uppercase',
+                    letterSpacing: 2,
                     color: 'var(--text-muted)',
                     marginBottom: 6,
-                    fontFamily:
-                      'Orbitron, system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
+                    fontWeight: 600,
                   }}
                 >
-                  {tier.name}
+                  Prize Pool
                 </div>
                 <div
                   style={{
-                    fontSize: 18,
-                    fontWeight: 700,
-                    color: 'var(--text-primary)',
-                    letterSpacing: 0.5,
+                    fontSize: 36,
+                    fontWeight: 900,
+                    background: theme.gradient,
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text',
+                    fontFamily:
+                      '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
+                    letterSpacing: -1,
                   }}
                 >
-                  {tier.usd.toFixed(2)} USD entry • {tier.maxPlayers} players
-                </div>
-              </div>
-            </div>
-
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginTop: 12,
-                fontFamily:
-                  '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
-                fontSize: 11,
-                color: 'var(--text-secondary)',
-              }}
-            >
-              <div>
-                <div style={{ opacity: 0.7 }}>Est. Prize Pool</div>
-                <div style={{ color: 'var(--accent)', marginTop: 2 }}>
                   ${estPrizeUsd}
                 </div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ opacity: 0.7 }}>Round Length</div>
-                <div style={{ color: 'var(--text-primary)', marginTop: 2 }}>
-                  {tier.duration}
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: 'var(--text-secondary)',
+                    marginTop: 4,
+                    opacity: 0.8,
+                  }}
+                >
+                  85% distributed to winners
                 </div>
               </div>
+
+              {/* Stats row */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr 1fr',
+                  gap: 10,
+                  marginBottom: 16,
+                }}
+              >
+                <div
+                  style={{
+                    background: 'rgba(255,255,255,0.04)',
+                    borderRadius: 10,
+                    padding: '10px 8px',
+                    textAlign: 'center',
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 9,
+                      textTransform: 'uppercase',
+                      color: 'var(--text-muted)',
+                      marginBottom: 4,
+                      letterSpacing: 0.5,
+                    }}
+                  >
+                    Entry
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 700,
+                      color: 'var(--text-primary)',
+                    }}
+                  >
+                    ${tier.usd}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    background: 'rgba(255,255,255,0.04)',
+                    borderRadius: 10,
+                    padding: '10px 8px',
+                    textAlign: 'center',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 4,
+                      marginBottom: 4,
+                    }}
+                  >
+                    <Users size={10} weight="fill" color="var(--text-muted)" />
+                    <div
+                      style={{
+                        fontSize: 9,
+                        textTransform: 'uppercase',
+                        color: 'var(--text-muted)',
+                        letterSpacing: 0.5,
+                      }}
+                    >
+                      Players
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 700,
+                      color: 'var(--text-primary)',
+                    }}
+                  >
+                    {tier.maxPlayers}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    background: 'rgba(255,255,255,0.04)',
+                    borderRadius: 10,
+                    padding: '10px 8px',
+                    textAlign: 'center',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 4,
+                      marginBottom: 4,
+                    }}
+                  >
+                    <Clock size={10} weight="fill" color="var(--text-muted)" />
+                    <div
+                      style={{
+                        fontSize: 9,
+                        textTransform: 'uppercase',
+                        color: 'var(--text-muted)',
+                        letterSpacing: 0.5,
+                      }}
+                    >
+                      Time
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 700,
+                      color: 'var(--text-primary)',
+                    }}
+                  >
+                    {tier.duration}
+                  </div>
+                </div>
+              </div>
+
+              {/* CTA / Status */}
+              {preflightError ? (
+                <div
+                  style={{
+                    padding: '14px 20px',
+                    background: 'rgba(239, 68, 68, 0.15)',
+                    border: '1px solid rgba(239, 68, 68, 0.4)',
+                    borderRadius: 12,
+                    fontSize: 12,
+                    color: '#ef4444',
+                    textAlign: 'center',
+                    fontWeight: 500,
+                  }}
+                >
+                  Service temporarily unavailable
+                </div>
+              ) : busy && !preflightError ? (
+                <div
+                  style={{
+                    padding: '14px 20px',
+                    background: `linear-gradient(135deg, ${theme.accentColor}25, ${theme.accentColor}15)`,
+                    border: `1px solid ${theme.accentColor}40`,
+                    borderRadius: 12,
+                    fontSize: 12,
+                    color: theme.accentColor,
+                    textAlign: 'center',
+                    fontWeight: 500,
+                  }}
+                >
+                  {wsState.entryFee?.pending
+                    ? 'Verifying on Solana…'
+                    : wsState.phase === 'authenticating'
+                    ? 'Sign with wallet…'
+                    : 'Connecting…'}
+                </div>
+              ) : (
+                <div
+                  style={{
+                    padding: '14px 20px',
+                    background: theme.gradient,
+                    borderRadius: 12,
+                    fontSize: 14,
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: 1,
+                    textAlign: 'center',
+                    color: tier.id === 'championship' || tier.id === 'micro' ? '#000' : '#fff',
+                    boxShadow: `0 8px 20px ${theme.glowColor}`,
+                  }}
+                >
+                  Join Race
+                </div>
+              )}
             </div>
-
-            {preflightError && (
-              <div
-                style={{
-                  marginTop: 10,
-                  fontSize: 11,
-                  color: 'var(--danger)',
-                  opacity: 0.9,
-                }}
-              >
-                Tournament service temporarily unavailable.
-              </div>
-            )}
-
-            {busy && !preflightError && (
-              <div
-                style={{
-                  marginTop: 10,
-                  fontSize: 11,
-                  color: 'var(--text-secondary)',
-                }}
-              >
-                {wsState.entryFee?.pending
-                  ? 'Verifying entry fee on Solana…'
-                  : wsState.phase === 'authenticating'
-                  ? 'Waiting for wallet signature…'
-                  : 'Connecting…'}
-              </div>
-            )}
           </button>
         );
       })}
