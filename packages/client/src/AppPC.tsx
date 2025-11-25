@@ -727,31 +727,31 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify: _onNoti
         width: '100%',
       }}>
         {/* Premium Header Section */}
-        <div style={{ textAlign: 'center', marginBottom: 56 }}>
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <div
             style={{
               display: 'inline-block',
-              padding: '8px 20px',
-              marginBottom: 20,
+              padding: '6px 16px',
+              marginBottom: 12,
               background: 'linear-gradient(135deg, rgba(34,211,238,0.15), rgba(99,102,241,0.15))',
               border: '1px solid rgba(34,211,238,0.3)',
               borderRadius: 999,
-              fontSize: 12,
+              fontSize: 10,
               fontWeight: 700,
               textTransform: 'uppercase',
-              letterSpacing: '0.15em',
+              letterSpacing: '0.12em',
               color: '#22d3ee',
             }}
           >
-            <Trophy size={14} weight="fill" style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: 6 }} />
-            Tournament Selection
+            <Trophy size={12} weight="fill" style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: 4 }} />
+            Tournaments
           </div>
           
           <h1 style={{
-            fontSize: 56,
+            fontSize: 36,
             fontWeight: 900,
             color: '#fff',
-            marginBottom: 16,
+            marginBottom: 8,
             letterSpacing: '-0.02em',
             lineHeight: 1.1,
           }}>
@@ -759,50 +759,27 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify: _onNoti
           </h1>
           
           <p style={{
-            fontSize: 18,
-            color: 'rgba(148,163,184,0.95)',
-            maxWidth: 600,
-            margin: '0 auto 8px',
-            lineHeight: 1.6,
-          }}>
-            Enter high-stakes battle royale tournaments. Compete for real crypto prizes.
-          </p>
-          
-          <div style={{
             fontSize: 14,
-            color: 'rgba(148,163,184,0.75)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 16,
-            marginTop: 12,
+            color: 'rgba(148,163,184,0.9)',
+            maxWidth: 500,
+            margin: '0 auto',
+            lineHeight: 1.5,
           }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <CheckCircle size={16} weight="fill" color="#10b981" />
-              Instant SOL payouts
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <CheckCircle size={16} weight="fill" color="#10b981" />
-              85% to winners
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <CheckCircle size={16} weight="fill" color="#10b981" />
-              Fair matchmaking
-            </span>
-          </div>
+            Battle royale tournaments with real crypto prizes
+          </p>
         </div>
 
         {/* Tournament Tier Selection */}
         <Modes />
 
         {/* Back Button */}
-        <div style={{ textAlign: 'center', marginTop: 40 }}>
+        <div style={{ textAlign: 'center', marginTop: 20 }}>
           <button
             className="btn-secondary"
-            style={{ padding: '14px 32px', fontSize: 15, minWidth: 200 }}
+            style={{ padding: '12px 28px', fontSize: 14, minWidth: 180 }}
             onClick={onClose}
           >
-            ← Back to Menu
+            ← Back
           </button>
         </div>
       </div>

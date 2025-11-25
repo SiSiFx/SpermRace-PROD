@@ -190,28 +190,19 @@ function Modes({ exposeJoin }: ModesProps = {}) {
     <>
       <style>{`
         .mode-grid {
-          max-width: 900px;
-          margin: 32px auto 24px;
+          max-width: 680px;
+          margin: 16px auto;
           display: grid;
           grid-template-columns: repeat(2, 1fr);
-          gap: 20px;
-          padding: 0 16px;
+          gap: 12px;
+          padding: 0 12px;
         }
         
         @media (max-width: 640px) {
           .mode-grid {
-            gap: 16px;
-            padding: 0 12px;
-          }
-          
-          .mode-card {
-            min-height: 340px;
-          }
-        }
-        
-        @media (max-width: 480px) {
-          .mode-grid {
-            gap: 12px;
+            gap: 10px;
+            padding: 0 10px;
+            max-width: 100%;
           }
         }
       `}</style>
@@ -276,87 +267,87 @@ function Modes({ exposeJoin }: ModesProps = {}) {
               <div
                 style={{
                   position: 'absolute',
-                  top: 12,
-                  right: 12,
+                  top: 8,
+                  right: 8,
                   background: theme.gradient,
                   color: '#000',
-                  fontSize: 9,
+                  fontSize: 8,
                   fontWeight: 800,
                   textTransform: 'uppercase',
-                  letterSpacing: 1.5,
-                  padding: '4px 10px',
+                  letterSpacing: 1,
+                  padding: '3px 8px',
                   borderRadius: 999,
                   zIndex: 2,
-                  boxShadow: `0 4px 16px ${theme.glowColor}`,
+                  boxShadow: `0 2px 12px ${theme.glowColor}`,
                 }}
               >
                 Hot
               </div>
             )}
 
-            <div style={{ padding: '28px 20px 24px', display: 'flex', flexDirection: 'column', gap: 16, flex: 1, position: 'relative', zIndex: 1 }}>
-              {/* Icon - Large and centered */}
-              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
+            <div style={{ padding: '16px 14px 12px', display: 'flex', flexDirection: 'column', gap: 8, flex: 1, position: 'relative', zIndex: 1 }}>
+              {/* Icon - Compact */}
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4 }}>
                 <div
                   style={{
-                    width: 72,
-                    height: 72,
+                    width: 48,
+                    height: 48,
                     borderRadius: '50%',
                     background: `radial-gradient(circle at 30% 30%, ${theme.accentColor}25, ${theme.accentColor}08)`,
                     border: `2px solid ${theme.accentColor}40`,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    boxShadow: `0 8px 32px ${theme.glowColor}`,
+                    boxShadow: `0 4px 20px ${theme.glowColor}`,
                   }}
                 >
-                  <TierIcon size={40} weight="fill" color={theme.accentColor} />
+                  <TierIcon size={28} weight="fill" color={theme.accentColor} />
                 </div>
               </div>
 
-              {/* Tier Name - Centered */}
+              {/* Tier Name - Compact */}
               <div>
                 <div
                   style={{
-                    fontSize: 18,
+                    fontSize: 15,
                     fontWeight: 900,
                     color: 'var(--text-primary)',
-                    marginBottom: 4,
-                    letterSpacing: 0.3,
+                    marginBottom: 2,
+                    letterSpacing: 0.2,
                   }}
                 >
                   {tier.name}
                 </div>
                 <div
                   style={{
-                    fontSize: 10,
+                    fontSize: 9,
                     color: 'var(--text-secondary)',
-                    opacity: 0.85,
+                    opacity: 0.8,
                     textTransform: 'uppercase',
-                    letterSpacing: 0.8,
+                    letterSpacing: 0.5,
                   }}
                 >
                   {tier.description}
                 </div>
               </div>
 
-              {/* Prize Pool - Main focal point */}
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', paddingTop: 8, paddingBottom: 8 }}>
+              {/* Prize Pool - Compact */}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', paddingTop: 4, paddingBottom: 4 }}>
                 <div
                   style={{
-                    fontSize: 9,
+                    fontSize: 8,
                     textTransform: 'uppercase',
-                    letterSpacing: 1.5,
+                    letterSpacing: 1,
                     color: 'var(--text-muted)',
-                    marginBottom: 6,
+                    marginBottom: 4,
                     fontWeight: 700,
                   }}
                 >
-                  Win up to
+                  Win
                 </div>
                 <div
                   style={{
-                    fontSize: 42,
+                    fontSize: 32,
                     fontWeight: 900,
                     background: theme.gradient,
                     WebkitBackgroundClip: 'text',
@@ -364,7 +355,7 @@ function Modes({ exposeJoin }: ModesProps = {}) {
                     backgroundClip: 'text',
                     fontFamily:
                       '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
-                    letterSpacing: -2,
+                    letterSpacing: -1.5,
                     lineHeight: 1,
                   }}
                 >
@@ -372,38 +363,38 @@ function Modes({ exposeJoin }: ModesProps = {}) {
                 </div>
                 <div
                   style={{
-                    fontSize: 9,
+                    fontSize: 8,
                     color: 'var(--text-secondary)',
-                    marginTop: 6,
-                    opacity: 0.75,
+                    marginTop: 4,
+                    opacity: 0.7,
                     textTransform: 'uppercase',
-                    letterSpacing: 0.5,
+                    letterSpacing: 0.3,
                   }}
                 >
-                  85% Pool
+                  85%
                 </div>
               </div>
 
-              {/* Stats row - Compact at bottom */}
+              {/* Stats row - Ultra compact */}
               <div
                 style={{
                   display: 'flex',
                   justifyContent: 'space-around',
                   alignItems: 'center',
-                  padding: '12px 8px',
+                  padding: '8px 6px',
                   background: 'rgba(255,255,255,0.03)',
-                  borderRadius: 12,
-                  gap: 8,
+                  borderRadius: 10,
+                  gap: 6,
                 }}
               >
                 <div style={{ textAlign: 'center', flex: 1 }}>
                   <div
                     style={{
-                      fontSize: 8,
+                      fontSize: 7,
                       textTransform: 'uppercase',
                       color: 'var(--text-muted)',
-                      marginBottom: 4,
-                      letterSpacing: 0.8,
+                      marginBottom: 3,
+                      letterSpacing: 0.5,
                       fontWeight: 600,
                     }}
                   >
@@ -411,7 +402,7 @@ function Modes({ exposeJoin }: ModesProps = {}) {
                   </div>
                   <div
                     style={{
-                      fontSize: 15,
+                      fontSize: 13,
                       fontWeight: 800,
                       color: 'var(--text-primary)',
                     }}
@@ -419,16 +410,16 @@ function Modes({ exposeJoin }: ModesProps = {}) {
                     ${tier.usd}
                   </div>
                 </div>
-                <div style={{ width: 1, height: 30, background: 'rgba(255,255,255,0.1)' }} />
+                <div style={{ width: 1, height: 24, background: 'rgba(255,255,255,0.1)' }} />
                 <div style={{ textAlign: 'center', flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, marginBottom: 4 }}>
-                    <Users size={8} weight="fill" color="var(--text-muted)" />
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, marginBottom: 3 }}>
+                    <Users size={7} weight="fill" color="var(--text-muted)" />
                     <div
                       style={{
-                        fontSize: 8,
+                        fontSize: 7,
                         textTransform: 'uppercase',
                         color: 'var(--text-muted)',
-                        letterSpacing: 0.8,
+                        letterSpacing: 0.5,
                         fontWeight: 600,
                       }}
                     >
@@ -437,7 +428,7 @@ function Modes({ exposeJoin }: ModesProps = {}) {
                   </div>
                   <div
                     style={{
-                      fontSize: 15,
+                      fontSize: 13,
                       fontWeight: 800,
                       color: 'var(--text-primary)',
                     }}
@@ -445,16 +436,16 @@ function Modes({ exposeJoin }: ModesProps = {}) {
                     {tier.maxPlayers}
                   </div>
                 </div>
-                <div style={{ width: 1, height: 30, background: 'rgba(255,255,255,0.1)' }} />
+                <div style={{ width: 1, height: 24, background: 'rgba(255,255,255,0.1)' }} />
                 <div style={{ textAlign: 'center', flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, marginBottom: 4 }}>
-                    <Clock size={8} weight="fill" color="var(--text-muted)" />
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, marginBottom: 3 }}>
+                    <Clock size={7} weight="fill" color="var(--text-muted)" />
                     <div
                       style={{
-                        fontSize: 8,
+                        fontSize: 7,
                         textTransform: 'uppercase',
                         color: 'var(--text-muted)',
-                        letterSpacing: 0.8,
+                        letterSpacing: 0.5,
                         fontWeight: 600,
                       }}
                     >
@@ -463,7 +454,7 @@ function Modes({ exposeJoin }: ModesProps = {}) {
                   </div>
                   <div
                     style={{
-                      fontSize: 13,
+                      fontSize: 11,
                       fontWeight: 800,
                       color: 'var(--text-primary)',
                     }}
@@ -477,16 +468,16 @@ function Modes({ exposeJoin }: ModesProps = {}) {
               {(preflightError || (busy && !preflightError)) && (
                 <div
                   style={{
-                    padding: '8px 12px',
+                    padding: '6px 10px',
                     background: preflightError ? 'rgba(239, 68, 68, 0.2)' : `linear-gradient(135deg, ${theme.accentColor}30, ${theme.accentColor}20)`,
                     border: preflightError ? '1px solid rgba(239, 68, 68, 0.5)' : `1px solid ${theme.accentColor}50`,
-                    borderRadius: 10,
-                    fontSize: 10,
+                    borderRadius: 8,
+                    fontSize: 9,
                     color: preflightError ? '#ef4444' : theme.accentColor,
                     textAlign: 'center',
                     fontWeight: 600,
                     textTransform: 'uppercase',
-                    letterSpacing: 0.8,
+                    letterSpacing: 0.5,
                   }}
                 >
                   {preflightError
@@ -494,7 +485,7 @@ function Modes({ exposeJoin }: ModesProps = {}) {
                     : wsState.entryFee?.pending
                     ? 'Verifying…'
                     : wsState.phase === 'authenticating'
-                    ? 'Sign wallet'
+                    ? 'Sign'
                     : 'Connecting…'}
                 </div>
               )}

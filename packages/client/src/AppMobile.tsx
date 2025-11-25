@@ -700,81 +700,57 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify: _onNoti
     }}>
       <div style={{ padding: '20px 16px', maxWidth: 600, margin: '0 auto', width: '100%' }}>
         {/* Premium Mobile Header */}
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+        <div style={{ textAlign: 'center', marginBottom: 16 }}>
           <div
             style={{
               display: 'inline-block',
-              padding: '6px 16px',
-              marginBottom: 16,
+              padding: '5px 12px',
+              marginBottom: 10,
               background: 'linear-gradient(135deg, rgba(34,211,238,0.15), rgba(99,102,241,0.15))',
               border: '1px solid rgba(34,211,238,0.3)',
               borderRadius: 999,
-              fontSize: 10,
+              fontSize: 9,
               fontWeight: 700,
               textTransform: 'uppercase',
-              letterSpacing: '0.15em',
+              letterSpacing: '0.12em',
               color: '#22d3ee',
             }}
           >
-            <Trophy size={12} weight="fill" style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: 4 }} />
-            Tournament
+            <Trophy size={10} weight="fill" style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: 3 }} />
+            Tournaments
           </div>
           
           <h1 style={{
-            fontSize: 32,
+            fontSize: 24,
             fontWeight: 900,
             color: '#fff',
-            marginBottom: 12,
-            letterSpacing: '-0.02em',
+            marginBottom: 6,
+            letterSpacing: '-0.01em',
             lineHeight: 1.1,
           }}>
             Choose Your Arena
           </h1>
           
           <p style={{
-            fontSize: 14,
-            color: 'rgba(148,163,184,0.95)',
-            lineHeight: 1.5,
-            marginBottom: 12,
+            fontSize: 12,
+            color: 'rgba(148,163,184,0.9)',
+            lineHeight: 1.4,
           }}>
-            Battle royale tournaments with real crypto prizes
+            Battle royale with crypto prizes
           </p>
-          
-          <div style={{
-            fontSize: 11,
-            color: 'rgba(148,163,184,0.75)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 12,
-            flexWrap: 'wrap',
-          }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <CheckCircle size={12} weight="fill" color="#10b981" />
-              Instant SOL
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <CheckCircle size={12} weight="fill" color="#10b981" />
-              85% to winners
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <CheckCircle size={12} weight="fill" color="#10b981" />
-              Fair play
-            </span>
-          </div>
         </div>
 
         {/* Tournament Tier Selection */}
         <Modes />
 
         {/* Back Button */}
-        <div style={{ textAlign: 'center', marginTop: 32 }}>
+        <div style={{ textAlign: 'center', marginTop: 16 }}>
           <button
             className="mobile-btn-secondary"
-            style={{ width: '100%', maxWidth: 300, padding: '14px 24px', fontSize: 14 }}
+            style={{ width: '100%', maxWidth: 260, padding: '12px 20px', fontSize: 13 }}
             onClick={onClose}
           >
-            ← Back to Menu
+            ← Back
           </button>
         </div>
       </div>
