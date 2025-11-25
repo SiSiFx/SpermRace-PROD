@@ -172,7 +172,7 @@ export class GameEffects {
 
     const title = document.createElement('div');
     title.className = 'vfx-title';
-    title.textContent = '⚠ ZONE UNSTABLE';
+    title.textContent = 'ZONE UNSTABLE';
     title.style.color = accentColor;
 
     const subtitle = document.createElement('div');

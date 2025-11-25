@@ -332,6 +332,11 @@ class SpermRaceGame {
 
   // JUICE METHODS - Make game feel amazing!
   private screenShake(intensity: number = 1) {
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const isTournament = !!(this.wsHud && this.wsHud.active);
+    // Disable screen shake in mobile practice for a stable feel
+    if (isMobile && !isTournament) return;
+
     // Reduced shake - less disorienting on mobile
     this.camera.shakeX = (Math.random() - 0.5) * 8 * intensity;
     this.camera.shakeY = (Math.random() - 0.5) * 8 * intensity;
@@ -380,7 +385,7 @@ class SpermRaceGame {
   }
 
   private showNearMiss(x: number, y: number, distance: number) {
-    const texts = distance < 15 ? '😱 INSANE DODGE!' : distance < 25 ? '🎯 CLOSE CALL' : '+DODGED';
+    const texts = distance < 15 ? 'INSANE DODGE' : distance < 25 ? 'CLOSE CALL' : 'DODGED';
     this.nearMisses.push({ text: texts, time: Date.now(), x, y });
     this.hapticFeedback('light');
   }
@@ -1415,12 +1420,12 @@ class SpermRaceGame {
     
     // Show appropriate controls text
     controlsHint.innerHTML = isMobileControls 
-      ? 'Drag left side to move • Tap ⚡ to boost'
+      ? 'Drag left side to move • Tap BOOST to dash'
       : 'WASD: Move • SPACE: Boost';
     
     Object.assign(controlsHint.style, {
       position: 'absolute',
-      bottom: '20px',
+      bottom: 'calc(32px + env(safe-area-inset-bottom, 0px))',
       left: '50%',
       transform: 'translateX(-50%)',
       color: this.theme.text,
@@ -1493,10 +1498,10 @@ class SpermRaceGame {
 
   createEmoteButtons() {
     const emotes = [
-      { emoji: '👍', label: 'GG' },
-      { emoji: '😂', label: 'LOL' },
-      { emoji: '😱', label: 'OMG' },
-      { emoji: '🔥', label: 'Fire' }
+      { label: 'GG' },
+      { label: 'LOL' },
+      { label: 'WOW' },
+      { label: 'FOCUS' }
     ];
 
     const emoteContainer = document.createElement('div');
@@ -1513,7 +1518,7 @@ class SpermRaceGame {
 
     emotes.forEach((emote) => {
       const btn = document.createElement('button');
-      btn.textContent = emote.emoji;
+      btn.textContent = emote.label;
       btn.title = emote.label;
       Object.assign(btn.style, {
         width: '46px',
@@ -1543,7 +1548,7 @@ class SpermRaceGame {
 
       // Click handler
       btn.onclick = () => {
-        this.showEmote(emote.emoji);
+        this.showEmote(emote.label);
         // Haptic feedback
         try { navigator.vibrate?.(30); } catch {}
         // Visual feedback
@@ -1557,12 +1562,12 @@ class SpermRaceGame {
     this.uiContainer.appendChild(emoteContainer);
   }
 
-  showEmote(emoji: string) {
+  showEmote(text: string) {
     if (!this.player || this.player.destroyed) return;
 
     // Create emote display above player
     const emoteEl = document.createElement('div');
-    emoteEl.textContent = emoji;
+    emoteEl.textContent = text;
     Object.assign(emoteEl.style, {
       position: 'absolute',
       fontSize: '48px',
@@ -1638,6 +1643,18 @@ class SpermRaceGame {
     } catch {}
     this.player = this.createCar(s.x, s.y, headHex, 'player');
     if (this.player) {
+      // Slightly faster feel in mobile practice (no ws HUD)
+      try {
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        const isTournament = !!(this.wsHud && this.wsHud.active);
+        if (isMobile && !isTournament) {
+          this.player.baseSpeed *= 1.2;
+          this.player.speed = this.player.baseSpeed;
+          this.player.targetSpeed = this.player.baseSpeed;
+          this.player.boostSpeed *= 1.2;
+        }
+      } catch {}
+
       (this.player as any).tailColor = tailHex ?? headHex;
       this.player.angle = s.angle;
       this.player.targetAngle = s.angle;
@@ -2254,7 +2271,7 @@ class SpermRaceGame {
                   0 0 15px rgba(251, 191, 36, 0.4),
                   0 2px 8px rgba(0, 0, 0, 0.6);
                 transition: opacity 0.3s ease;
-              ">⚠ Zone closes in 10 seconds</div>
+              ">Zone closes in 10 seconds</div>
             `;
           }
         } else {
@@ -2608,7 +2625,7 @@ class SpermRaceGame {
       ">
         <span style="width:6px;height:6px;border-radius:50%;background:#ef4444;flex-shrink:0;"></span>
         <span style="color:#ff6b6b;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;">${k.killer}</span>
-        <span style="opacity:0.7;flex-shrink:0;">💀</span>
+        <span style="opacity:0.7;flex-shrink:0;font-size:11px;margin:0 4px;letter-spacing:1px;">KO</span>
         <span style="color:#fbbf24;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;">${k.victim}</span>
       </div>`;
     }).join('');
@@ -2698,10 +2715,10 @@ class SpermRaceGame {
       }
     }
 
-    // Quick emote: press 'E' to pop a fun, crypto-flavored emote above your head
+    // Quick emote: press 'E' to pop a short SR emote above your head
     if (this.keys['KeyE']) {
       this.keys['KeyE'] = false; // single-shot
-      try { this.spawnEmote(this.player, Math.random() < 0.5 ? '🚀' : '💎'); } catch {}
+      try { this.spawnEmote(this.player, Math.random() < 0.5 ? 'SR' : 'SR+'); } catch {}
     }
   }
 
@@ -2865,12 +2882,24 @@ class SpermRaceGame {
     try {
       const sizeMul = this.getSizeMultiplierForCar(car);
       if (this.smallTailEnabled && car.tailGraphics) {
-        car.tailWaveT = (car.tailWaveT || 0) + deltaTime * (car.isBoosting ? 18 : 10); // Faster wave animation
-        const segs = Math.max(8, car.tailSegments || 16);
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        const isTournament = !!(this.wsHud && this.wsHud.active);
+        const isMobilePracticePlayer = isMobile && !isTournament && car.type === 'player';
+
+        const waveSpeed = isMobilePracticePlayer
+          ? (car.isBoosting ? 6 : 3)
+          : (car.isBoosting ? 18 : 10); // Default faster wave animation
+        car.tailWaveT = (car.tailWaveT || 0) + deltaTime * waveSpeed;
+
+        const segsBase = car.tailSegments || 16;
+        const segs = isMobilePracticePlayer ? Math.max(6, segsBase) : Math.max(8, segsBase);
         const len = (car.tailLength || 48) * sizeMul;
         const speedMag = Math.hypot(car.vx, car.vy);
         const speedScale = 0.5 + Math.min(1, speedMag / 350);
-        const ampBase = (car.tailAmplitude || 6) * (car.isBoosting ? 1.5 : 1.0) * sizeMul; // More dramatic boost wave
+        let ampBase = (car.tailAmplitude || 6) * (car.isBoosting ? 1.5 : 1.0) * sizeMul; // More dramatic boost wave
+        if (isMobilePracticePlayer) {
+          ampBase *= 0.4; // Much calmer tail motion in mobile practice
+        }
         const amp = ampBase;
         const baseWidth = 3 * (0.75 + 0.25 * speedScale) * sizeMul;
         const step = len / segs;
@@ -2889,7 +2918,8 @@ class SpermRaceGame {
           const t = i / segs;
           // Zero motion at head, increases toward mid/back
           const envelope = Math.pow(t, 2.2);
-          const wave = Math.sin((t * 11) + (car.tailWaveT || 0)) * envelope * amp;
+          const freq = isMobilePracticePlayer ? 6 : 11;
+          const wave = Math.sin((t * freq) + (car.tailWaveT || 0)) * envelope * amp;
           const sx = ax - dirX * (i * step) + latX * wave;
           const sy = ay - dirY * (i * step) + latY * wave;
           const w = baseWidth * Math.pow(1 - t, 3.2); // stronger taper → thinner back and base
@@ -3023,7 +3053,11 @@ class SpermRaceGame {
 
   updateTrails(_deltaTime: number) {
     // Add trail points for active cars
-    if (this.player && !this.player.destroyed) {
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const isTournament = !!(this.wsHud && this.wsHud.active);
+    const hidePlayerTrailInMobilePractice = isMobile && !isTournament;
+
+    if (this.player && !this.player.destroyed && !hidePlayerTrailInMobilePractice) {
       this.addTrailPoint(this.player);
     }
     if (this.bot && !this.bot.destroyed) {
@@ -3160,53 +3194,65 @@ class SpermRaceGame {
     }
     if (pts.length < 2) return;
 
-    // GHOST TAIL: Procedurally wiggle the trail visually (hitbox remains at server positions)
+    // Calm player trail: avoid ghost wiggle on the local player's own trail to prevent jittery visuals
+    const isPlayerTrail = !!(this.player && trail.car === this.player);
+
     const baseWidth = (car.type === 'player') ? 2 : 1.6; // thinner overall
     const alphaStart = 1.0;
 
-    // Build ghost spine starting at head position, then backward through trail
-    const headX = car.x;
-    const headY = car.y;
-    const ghost: Array<{ x: number; y: number }> = [];
-    ghost.push({ x: headX, y: headY });
+    if (isPlayerTrail) {
+      const first = pts[0];
+      trail.graphics.moveTo(first.x, first.y);
+      for (let i = 1; i < pts.length; i++) {
+        const p = pts[i];
+        trail.graphics.lineTo(p.x, p.y);
+      }
+      trail.graphics.stroke({ width: baseWidth, color: trailColor, alpha: alphaStart, cap: 'round', join: 'round' });
+    } else {
+      // GHOST TAIL: Procedurally wiggle the trail visually (hitbox remains at server positions)
+      const headX = car.x;
+      const headY = car.y;
+      const ghost: Array<{ x: number; y: number }> = [];
+      ghost.push({ x: headX, y: headY });
 
-    const time = now * 0.004; // global time factor
-    const amplitudeBase = isBot ? 4 : 6;
-    const speedMag = Math.hypot(car.vx, car.vy);
-    const speedFactor = 1.0 + Math.min(1.5, speedMag / 260); // faster wiggle when moving
+      const time = now * 0.004; // global time factor
+      const amplitudeBase = isBot ? 4 : 6;
+      const speedMag = Math.hypot(car.vx, car.vy);
+      const speedFactor = 1.0 + Math.min(1.5, speedMag / 260); // faster wiggle when moving
 
-    for (let idx = pts.length - 1; idx >= 0; idx--) {
-      const p = pts[idx];
-      const prev = idx === pts.length - 1 ? { x: headX, y: headY } : pts[idx + 1];
-      const dirX = p.x - prev.x;
-      const dirY = p.y - prev.y;
-      const len = Math.hypot(dirX, dirY) || 1;
-      const nx = -dirY / len;
-      const ny = dirX / len;
-      const t = (pts.length - 1 - idx) / Math.max(1, pts.length - 1); // 0 at head → 1 at tail
-      const envelope = Math.pow(t, 1.6); // more motion toward tail
-      const phase = time * speedFactor + t * 4.0;
-      const offset = Math.sin(phase) * amplitudeBase * envelope;
-      ghost.push({ x: p.x + nx * offset, y: p.y + ny * offset });
+      for (let idx = pts.length - 1; idx >= 0; idx--) {
+        const p = pts[idx];
+        const prev = idx === pts.length - 1 ? { x: headX, y: headY } : pts[idx + 1];
+        const dirX = p.x - prev.x;
+        const dirY = p.y - prev.y;
+        const len = Math.hypot(dirX, dirY) || 1;
+        const nx = -dirY / len;
+        const ny = dirX / len;
+        const t = (pts.length - 1 - idx) / Math.max(1, pts.length - 1); // 0 at head → 1 at tail
+        const envelope = Math.pow(t, 1.6); // more motion toward tail
+        const phase = time * speedFactor + t * 4.0;
+        const offset = Math.sin(phase) * amplitudeBase * envelope;
+        ghost.push({ x: p.x + nx * offset, y: p.y + ny * offset });
+      }
+
+      if (ghost.length < 2) return;
+
+      // Draw smooth quadratic Bezier through ghost points
+      const g0 = ghost[0];
+      const g1 = ghost[1];
+      const m0x = (g0.x + g1.x) * 0.5;
+      const m0y = (g0.y + g1.y) * 0.5;
+      trail.graphics.moveTo(m0x, m0y);
+      for (let i = 1; i < ghost.length - 1; i++) {
+        const c = ghost[i];
+        const n = ghost[i + 1];
+        const mx = (c.x + n.x) * 0.5;
+        const my = (c.y + n.y) * 0.5;
+        trail.graphics.quadraticCurveTo(c.x, c.y, mx, my);
+      }
+
+      trail.graphics.stroke({ width: baseWidth, color: trailColor, alpha: alphaStart, cap: 'round', join: 'round' });
     }
-
-    if (ghost.length < 2) return;
-
-    // Draw smooth quadratic Bezier through ghost points
-    const g0 = ghost[0];
-    const g1 = ghost[1];
-    const m0x = (g0.x + g1.x) * 0.5;
-    const m0y = (g0.y + g1.y) * 0.5;
-    trail.graphics.moveTo(m0x, m0y);
-    for (let i = 1; i < ghost.length - 1; i++) {
-      const c = ghost[i];
-      const n = ghost[i + 1];
-      const mx = (c.x + n.x) * 0.5;
-      const my = (c.y + n.y) * 0.5;
-      trail.graphics.quadraticCurveTo(c.x, c.y, mx, my);
-    }
-
-    trail.graphics.stroke({ width: baseWidth, color: trailColor, alpha: alphaStart, cap: 'round', join: 'round' });
 
     // Proximity glow (subtle, thinner) using segment checks
     if (this.player && trail.car !== this.player && pts.length >= 2) {
@@ -3412,17 +3458,17 @@ class SpermRaceGame {
 
   showKillStreakNotification(streak: number, x: number, y: number) {
     const streakTexts: Record<number, string> = {
-      2: '🔥 DOUBLE KILL',
-      3: '⚡ TRIPLE KILL',
-      4: '💥 MEGA KILL',
-      5: '🌟 ULTRA KILL',
-      6: '👑 MONSTER KILL',
-      7: '💀 KILLING SPREE',
-      8: '🔥 UNSTOPPABLE',
-      10: '⭐ LEGENDARY'
+      2: 'DOUBLE KILL',
+      3: 'TRIPLE KILL',
+      4: 'MEGA KILL',
+      5: 'ULTRA KILL',
+      6: 'MONSTER KILL',
+      7: 'KILLING SPREE',
+      8: 'UNSTOPPABLE',
+      10: 'LEGENDARY'
     };
 
-    const text = streakTexts[streak] || `🔥 ${streak}x STREAK`;
+    const text = streakTexts[streak] || `${streak}x STREAK`;
     this.killStreakNotifications.push({ text, time: Date.now(), x, y });
 
     // Keep only last 5 notifications
@@ -3582,10 +3628,22 @@ class SpermRaceGame {
       this.worldContainer.addChild(particle.graphics);
       this.particles.push(particle);
     }
-    
-    // Add screen shake on explosion (reduced)
-    this.camera.shakeX = 6;
-    this.camera.shakeY = 6;
+
+    // Add screen shake on explosion (reduced) - but skip in mobile practice for stability
+    try {
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const isTournament = !!(this.wsHud && this.wsHud.active);
+      if (isMobile && !isTournament) {
+        this.camera.shakeX = 0;
+        this.camera.shakeY = 0;
+      } else {
+        this.camera.shakeX = 6;
+        this.camera.shakeY = 6;
+      }
+    } catch {
+      this.camera.shakeX = 6;
+      this.camera.shakeY = 6;
+    }
   }
 
   updateParticles(deltaTime: number) {
@@ -3758,7 +3816,7 @@ class SpermRaceGame {
       letter-spacing: -0.02em;
       text-shadow: 0 4px 20px rgba(255,255,255,0.2);
     `;
-    title.textContent = isVictory ? '👑 VICTORY' : '💀 ELIMINATED';
+    title.textContent = isVictory ? 'VICTORY' : 'ELIMINATED';
 
     // Rank display
     const rankDisplay = document.createElement('div');
@@ -3770,7 +3828,7 @@ class SpermRaceGame {
     `;
     // Use computed totalPlayersCount above
     rankDisplay.textContent = isVictory
-      ? `🏆 Champion`
+      ? 'Champion'
       : `Rank #${rank} / ${totalPlayersCount}`;
 
     // Stats container
@@ -3790,17 +3848,17 @@ class SpermRaceGame {
 
     const eliminated = Math.max(0, (totalPlayersCount - this.alivePlayers - (this.player?.destroyed ? 0 : 1)));
     stats.innerHTML = `
-      <div style="color:#ffffff; font-size: 16px; font-weight:700; margin-bottom: 12px;">⚡ Battle Stats</div>
+      <div style="color:#ffffff; font-size: 16px; font-weight:700; margin-bottom: 12px;">BATTLE STATS</div>
       <div style="display: flex; justify-content: space-between; margin: 8px 0;">
-        <span style="color:rgba(255,255,255,0.8); font-size: 14px;">⏱️ Survived</span>
+        <span style="color:rgba(255,255,255,0.8); font-size: 14px;">Survival Time</span>
         <span style="color:#ffffff; font-size: 14px; font-weight:600;">${minutes}:${seconds.toString().padStart(2, '0')}</span>
       </div>
       <div style="display: flex; justify-content: space-between; margin: 8px 0;">
-        <span style="color:rgba(255,255,255,0.8); font-size: 14px;">💀 Knockouts</span>
+        <span style="color:rgba(255,255,255,0.8); font-size: 14px;">Knockouts</span>
         <span style="color:#ffffff; font-size: 14px; font-weight:600;">${eliminated}</span>
       </div>
       <div style="display: flex; justify-content: space-between; margin: 8px 0;">
-        <span style="color:rgba(255,255,255,0.8); font-size: 14px;">📊 Placement</span>
+        <span style="color:rgba(255,255,255,0.8); font-size: 14px;">Placement</span>
         <span style="color:#ffffff; font-size: 14px; font-weight:600;">#${rank}/${totalPlayersCount}</span>
       </div>
     `;
@@ -4624,11 +4682,11 @@ class SpermRaceGame {
       const isMobile = window.innerWidth <= 768;
       if (isMobile) {
         // Simple mobile warning
-        warning.innerHTML = `<div>⚠️ OUTSIDE ZONE!</div>`;
+        warning.innerHTML = `<div>OUTSIDE SAFE ZONE</div>`;
       } else {
         warning.innerHTML = `
-          <div>⚠️ OUTSIDE ZONE!</div>
-          <div style="font-size:20px;margin-top:8px">Return to safe area!</div>
+          <div>OUTSIDE SAFE ZONE</div>
+          <div style="font-size:20px;margin-top:8px">Return to safe area</div>
         `;
       }
       warning.style.display = 'block';
@@ -4881,7 +4939,7 @@ class SpermRaceGame {
           <div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600">
             <span style="color:#10b981">R${this.currentRound}</span>
             <span style="color:#666">|</span>
-            <span style="color:#fbbf24">⏱${String(secs%60).padStart(2,'0')}s</span>
+            <span style="color:#fbbf24">${String(secs%60).padStart(2,'0')}s</span>
             <span style="color:#666">|</span>
             <span style="color:#3b82f6">${alivePlayers} left</span>
           </div>
@@ -4892,7 +4950,7 @@ class SpermRaceGame {
           <div style="text-align:center">
             <div style="font-size:14px;opacity:0.7;margin-bottom:4px">BEST OF ${this.totalRounds} • First to ${winsNeeded}</div>
             <div style="font-size:18px;color:#10b981;margin:4px 0">Round ${this.currentRound}/3 • ${alivePlayers} Alive</div>
-            <div style="font-size:14px;opacity:0.9;color:#fbbf24">⏱️ ${Math.floor(secs/60)}:${String(secs%60).padStart(2,'0')}</div>
+            <div style="font-size:14px;opacity:0.9;color:#fbbf24">TIME ${Math.floor(secs/60)}:${String(secs%60).padStart(2,'0')}</div>
           </div>
         `;
       }
@@ -4970,7 +5028,7 @@ class SpermRaceGame {
     }
     
     if (resultUI) {
-      const message = won ? (isMobile ? 'WON! 🎉' : 'ROUND WON! 🎉') : (isMobile ? 'LOST' : 'ROUND LOST');
+      const message = won ? (isMobile ? 'ROUND WON' : 'ROUND WON') : (isMobile ? 'ROUND LOST' : 'ROUND LOST');
       const subtitle = won 
         ? `${this.roundWins}/${Math.ceil(this.totalRounds/2)} wins` 
         : `${this.roundLosses} losses`;
@@ -5012,7 +5070,7 @@ class SpermRaceGame {
     
     if (matchUI) {
       matchUI.innerHTML = `
-        <div>${won ? '🏆 VICTORY!' : '💀 DEFEAT'}</div>
+        <div>${won ? 'VICTORY' : 'DEFEAT'}</div>
         <div style="font-size:${isMobile ? '18px' : '24px'};margin-top:${isMobile ? '12px' : '16px'};opacity:0.8">
           ${this.roundWins} - ${this.roundLosses}
         </div>

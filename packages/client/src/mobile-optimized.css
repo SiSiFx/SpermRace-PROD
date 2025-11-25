@@ -215,7 +215,6 @@ html, body {
   background: radial-gradient(circle at 30% 30%, rgba(34, 211, 238, 0.4), rgba(34, 211, 238, 0.2));
   border-color: rgba(34, 211, 238, 0.8);
   box-shadow: 0 6px 24px rgba(34, 211, 238, 0.5), inset 0 2px 8px rgba(255, 255, 255, 0.2);
-  animation: pulse-boost 2s ease-in-out infinite;
 }
 
 .mobile-boost-button.ready:active::before {
@@ -239,7 +238,7 @@ html, body {
 }
 
 .mobile-boost-button.ready .boost-icon {
-  animation: zap 0.8s ease-in-out infinite;
+  /* Keep static to avoid distracting motion on mobile */
 }
 
 .boost-label {
@@ -253,7 +252,7 @@ html, body {
 }
 
 .mobile-boost-button::after {
-  content: '⚡';
+  content: ' ';
   position: absolute;
   top: 8px;
   right: 8px;

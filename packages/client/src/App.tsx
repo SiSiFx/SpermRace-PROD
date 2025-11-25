@@ -1,8 +1,16 @@
 import { useEffect, useState } from 'react';
-// Base URL for backend API; prefer env, else infer by hostname, else same-origin /api
+// Base URL for backend API.
+// For any spermrace.io host (prod/dev/www), always use same-origin /api so hosting can proxy
+// and we avoid CORS issues when VITE_API_BASE points at api.spermrace.io.
 const API_BASE: string = (() => {
+  try {
+    const host = (window?.location?.hostname || '').toLowerCase();
+    if (host.endsWith('spermrace.io')) return '/api';
+  } catch {}
+
   const env = (import.meta as any).env?.VITE_API_BASE as string | undefined;
   if (env && typeof env === 'string' && env.trim()) return env.trim();
+
   try {
     const host = (window?.location?.hostname || '').toLowerCase();
     if (host.includes('dev.spermrace.io')) return 'https://dev.spermrace.io/api';

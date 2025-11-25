@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, memo } from 'react';
+import { Lightning } from 'phosphor-react';
 import './mobile-controls.css';
 
 interface TouchPosition {
@@ -16,7 +17,7 @@ interface MobileTouchControlsProps {
 export const MobileTouchControls = memo(function MobileTouchControls({ onTouch, onBoost, canBoost, boostCooldownPct }: MobileTouchControlsProps) {
   const [joystickActive, setJoystickActive] = useState(false);
   const [joystickPosition, setJoystickPosition] = useState({ x: 0, y: 0 });
-  
+
   const joystickStart = useRef<TouchPosition>({ x: 0, y: 0 });
   const joystickCurrent = useRef<TouchPosition>({ x: 0, y: 0 });
   const joystickTouchId = useRef<number | null>(null);
@@ -201,7 +202,7 @@ export const MobileTouchControls = memo(function MobileTouchControls({ onTouch, 
             top: `${joystickPosition.y}px`,
             transform: 'translate(-50%, -50%)',
             pointerEvents: 'none',
-            zIndex: 15
+            zIndex: 15,
           }}
         >
           <div className="joystick-base">
@@ -220,8 +221,9 @@ export const MobileTouchControls = memo(function MobileTouchControls({ onTouch, 
         className={`mobile-boost-button ${canBoost ? 'ready' : 'cooldown'}`}
         disabled={!canBoost}
       >
-        <div className="boost-icon">BOOST</div>
-        <div className="boost-label">BOOST</div>
+        <div className="boost-icon">
+          <Lightning size={24} weight="fill" />
+        </div>
         <svg className="boost-cooldown-ring" viewBox="0 0 100 100">
           <circle cx="50" cy="50" r="45" className="cooldown-bg" />
           <circle

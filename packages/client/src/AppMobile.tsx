@@ -3,12 +3,12 @@ import { OrientationWarning } from './OrientationWarning';
 import { MobileTouchControls } from './MobileTouchControls';
 import MobileTutorial from './MobileTutorial';
 import PracticeFullTutorial from './PracticeFullTutorial';
-// Base URL for backend API; prefer same-origin /api for dev/preview, absolute for production domain
+// Base URL for backend API. For any spermrace.io host (prod/dev/www), always use same-origin /api
+// so Vercel can proxy and we avoid CORS with separate api.* origins.
 const API_BASE: string = (() => {
-  // For any non-production host (localhost, Vercel preview, etc.) always hit same-origin /api
   try {
     const host = (window?.location?.hostname || '').toLowerCase();
-    if (!host.includes('spermrace.io')) return '/api';
+    if (host.endsWith('spermrace.io')) return '/api';
   } catch {}
 
   const env = (import.meta as any).env?.VITE_API_BASE as string | undefined;

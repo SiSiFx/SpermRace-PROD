@@ -150,7 +150,6 @@
   box-shadow:
     0 6px 24px rgba(34, 211, 238, 0.5),
     inset 0 2px 8px rgba(255, 255, 255, 0.2);
-  animation: pulse-boost 2s ease-in-out infinite;
 }
 
 .mobile-boost-button.pressed::before,
@@ -177,7 +176,7 @@
 }
 
 .mobile-boost-button.ready .boost-icon {
-  animation: zap 0.8s ease-in-out infinite;
+  /* Keep static to avoid distracting motion on mobile */
 }
 
 .boost-label {
