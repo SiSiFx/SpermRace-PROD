@@ -187,17 +187,35 @@ function Modes({ exposeJoin }: ModesProps = {}) {
   };
 
   return (
-    <div
-      className="mode-grid"
-      style={{
-        maxWidth: 1080,
-        margin: '32px auto 24px',
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-        gap: 24,
-        padding: '0 16px',
-      }}
-    >
+    <>
+      <style>{`
+        .mode-grid {
+          max-width: 900px;
+          margin: 32px auto 24px;
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 20px;
+          padding: 0 16px;
+        }
+        
+        @media (max-width: 640px) {
+          .mode-grid {
+            gap: 16px;
+            padding: 0 12px;
+          }
+          
+          .mode-card {
+            min-height: 340px;
+          }
+        }
+        
+        @media (max-width: 480px) {
+          .mode-grid {
+            gap: 12px;
+          }
+        }
+      `}</style>
+      <div className="mode-grid">
       {TIERS.map((tier) => {
         const estPrizeUsd = (tier.usd * tier.maxPlayers * 0.85).toFixed(2);
         const disabled = busy || globalDisabled;
@@ -212,16 +230,20 @@ function Modes({ exposeJoin }: ModesProps = {}) {
             className="mode-card"
             style={{
               position: 'relative',
-              background: 'rgba(3,3,5,0.9)',
-              borderRadius: 20,
+              background: 'rgba(3,3,5,0.92)',
+              borderRadius: 24,
               border: `2px solid ${disabled ? 'var(--border-dim)' : 'transparent'}`,
               padding: 0,
               cursor: disabled ? 'not-allowed' : 'pointer',
-              textAlign: 'left',
-              boxShadow: disabled ? 'none' : '0 20px 60px rgba(0,0,0,0.8)',
-              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              textAlign: 'center',
+              boxShadow: disabled ? 'none' : '0 24px 80px rgba(0,0,0,0.9)',
+              transition: 'all 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
               opacity: disabled ? 0.6 : 1,
               overflow: 'hidden',
+              aspectRatio: '1 / 1',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
             }}
             onClick={() => handleJoin(tier.usd)}
             onMouseEnter={(e) => {
@@ -238,12 +260,14 @@ function Modes({ exposeJoin }: ModesProps = {}) {
               e.currentTarget.style.transform = 'translateY(0) scale(1)';
             }}
           >
-            {/* Accent gradient bar at top */}
+            {/* Background gradient overlay */}
             <div
               style={{
-                height: 4,
+                position: 'absolute',
+                inset: 0,
                 background: theme.gradient,
-                boxShadow: `0 0 20px ${theme.glowColor}`,
+                opacity: 0.08,
+                pointerEvents: 'none',
               }}
             />
 
@@ -252,99 +276,87 @@ function Modes({ exposeJoin }: ModesProps = {}) {
               <div
                 style={{
                   position: 'absolute',
-                  top: 16,
-                  right: 16,
+                  top: 12,
+                  right: 12,
                   background: theme.gradient,
                   color: '#000',
-                  fontSize: 10,
-                  fontWeight: 700,
+                  fontSize: 9,
+                  fontWeight: 800,
                   textTransform: 'uppercase',
-                  letterSpacing: 1.2,
-                  padding: '4px 12px',
-                  borderRadius: 20,
+                  letterSpacing: 1.5,
+                  padding: '4px 10px',
+                  borderRadius: 999,
                   zIndex: 2,
-                  boxShadow: `0 4px 12px ${theme.glowColor}`,
+                  boxShadow: `0 4px 16px ${theme.glowColor}`,
                 }}
               >
-                Popular
+                Hot
               </div>
             )}
 
-            <div style={{ padding: '24px 24px 20px' }}>
-              {/* Icon + Tier Name */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  marginBottom: 16,
-                }}
-              >
+            <div style={{ padding: '28px 20px 24px', display: 'flex', flexDirection: 'column', gap: 16, flex: 1, position: 'relative', zIndex: 1 }}>
+              {/* Icon - Large and centered */}
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
                 <div
                   style={{
-                    width: 56,
-                    height: 56,
-                    borderRadius: 16,
-                    background: `linear-gradient(135deg, ${theme.accentColor}20, ${theme.accentColor}10)`,
+                    width: 72,
+                    height: 72,
+                    borderRadius: '50%',
+                    background: `radial-gradient(circle at 30% 30%, ${theme.accentColor}25, ${theme.accentColor}08)`,
                     border: `2px solid ${theme.accentColor}40`,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    flexShrink: 0,
+                    boxShadow: `0 8px 32px ${theme.glowColor}`,
                   }}
                 >
-                  <TierIcon size={32} weight="fill" color={theme.accentColor} />
+                  <TierIcon size={40} weight="fill" color={theme.accentColor} />
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div
-                    style={{
-                      fontSize: 20,
-                      fontWeight: 800,
-                      color: 'var(--text-primary)',
-                      marginBottom: 4,
-                      letterSpacing: 0.5,
-                    }}
-                  >
-                    {tier.name}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: 'var(--text-secondary)',
-                      opacity: 0.9,
-                    }}
-                  >
-                    {tier.description}
-                  </div>
+              </div>
+
+              {/* Tier Name - Centered */}
+              <div>
+                <div
+                  style={{
+                    fontSize: 18,
+                    fontWeight: 900,
+                    color: 'var(--text-primary)',
+                    marginBottom: 4,
+                    letterSpacing: 0.3,
+                  }}
+                >
+                  {tier.name}
+                </div>
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: 'var(--text-secondary)',
+                    opacity: 0.85,
+                    textTransform: 'uppercase',
+                    letterSpacing: 0.8,
+                  }}
+                >
+                  {tier.description}
                 </div>
               </div>
 
               {/* Prize Pool - Main focal point */}
-              <div
-                style={{
-                  background: `linear-gradient(135deg, ${theme.accentColor}15, ${theme.accentColor}08)`,
-                  border: `1px solid ${theme.accentColor}30`,
-                  borderRadius: 14,
-                  padding: '16px 20px',
-                  marginBottom: 16,
-                  textAlign: 'center',
-                }}
-              >
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', paddingTop: 8, paddingBottom: 8 }}>
                 <div
                   style={{
-                    fontSize: 11,
+                    fontSize: 9,
                     textTransform: 'uppercase',
-                    letterSpacing: 2,
+                    letterSpacing: 1.5,
                     color: 'var(--text-muted)',
                     marginBottom: 6,
-                    fontWeight: 600,
+                    fontWeight: 700,
                   }}
                 >
-                  Prize Pool
+                  Win up to
                 </div>
                 <div
                   style={{
-                    fontSize: 36,
+                    fontSize: 42,
                     fontWeight: 900,
                     background: theme.gradient,
                     WebkitBackgroundClip: 'text',
@@ -352,124 +364,98 @@ function Modes({ exposeJoin }: ModesProps = {}) {
                     backgroundClip: 'text',
                     fontFamily:
                       '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
-                    letterSpacing: -1,
+                    letterSpacing: -2,
+                    lineHeight: 1,
                   }}
                 >
                   ${estPrizeUsd}
                 </div>
                 <div
                   style={{
-                    fontSize: 11,
+                    fontSize: 9,
                     color: 'var(--text-secondary)',
-                    marginTop: 4,
-                    opacity: 0.8,
+                    marginTop: 6,
+                    opacity: 0.75,
+                    textTransform: 'uppercase',
+                    letterSpacing: 0.5,
                   }}
                 >
-                  85% distributed to winners
+                  85% Pool
                 </div>
               </div>
 
-              {/* Stats row */}
+              {/* Stats row - Compact at bottom */}
               <div
                 style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr 1fr',
-                  gap: 10,
-                  marginBottom: 16,
+                  display: 'flex',
+                  justifyContent: 'space-around',
+                  alignItems: 'center',
+                  padding: '12px 8px',
+                  background: 'rgba(255,255,255,0.03)',
+                  borderRadius: 12,
+                  gap: 8,
                 }}
               >
-                <div
-                  style={{
-                    background: 'rgba(255,255,255,0.04)',
-                    borderRadius: 10,
-                    padding: '10px 8px',
-                    textAlign: 'center',
-                  }}
-                >
+                <div style={{ textAlign: 'center', flex: 1 }}>
                   <div
                     style={{
-                      fontSize: 9,
+                      fontSize: 8,
                       textTransform: 'uppercase',
                       color: 'var(--text-muted)',
                       marginBottom: 4,
-                      letterSpacing: 0.5,
+                      letterSpacing: 0.8,
+                      fontWeight: 600,
                     }}
                   >
                     Entry
                   </div>
                   <div
                     style={{
-                      fontSize: 14,
-                      fontWeight: 700,
+                      fontSize: 15,
+                      fontWeight: 800,
                       color: 'var(--text-primary)',
                     }}
                   >
                     ${tier.usd}
                   </div>
                 </div>
-                <div
-                  style={{
-                    background: 'rgba(255,255,255,0.04)',
-                    borderRadius: 10,
-                    padding: '10px 8px',
-                    textAlign: 'center',
-                  }}
-                >
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 4,
-                      marginBottom: 4,
-                    }}
-                  >
-                    <Users size={10} weight="fill" color="var(--text-muted)" />
+                <div style={{ width: 1, height: 30, background: 'rgba(255,255,255,0.1)' }} />
+                <div style={{ textAlign: 'center', flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, marginBottom: 4 }}>
+                    <Users size={8} weight="fill" color="var(--text-muted)" />
                     <div
                       style={{
-                        fontSize: 9,
+                        fontSize: 8,
                         textTransform: 'uppercase',
                         color: 'var(--text-muted)',
-                        letterSpacing: 0.5,
+                        letterSpacing: 0.8,
+                        fontWeight: 600,
                       }}
                     >
-                      Players
+                      Max
                     </div>
                   </div>
                   <div
                     style={{
-                      fontSize: 14,
-                      fontWeight: 700,
+                      fontSize: 15,
+                      fontWeight: 800,
                       color: 'var(--text-primary)',
                     }}
                   >
                     {tier.maxPlayers}
                   </div>
                 </div>
-                <div
-                  style={{
-                    background: 'rgba(255,255,255,0.04)',
-                    borderRadius: 10,
-                    padding: '10px 8px',
-                    textAlign: 'center',
-                  }}
-                >
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 4,
-                      marginBottom: 4,
-                    }}
-                  >
-                    <Clock size={10} weight="fill" color="var(--text-muted)" />
+                <div style={{ width: 1, height: 30, background: 'rgba(255,255,255,0.1)' }} />
+                <div style={{ textAlign: 'center', flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, marginBottom: 4 }}>
+                    <Clock size={8} weight="fill" color="var(--text-muted)" />
                     <div
                       style={{
-                        fontSize: 9,
+                        fontSize: 8,
                         textTransform: 'uppercase',
                         color: 'var(--text-muted)',
-                        letterSpacing: 0.5,
+                        letterSpacing: 0.8,
+                        fontWeight: 600,
                       }}
                     >
                       Time
@@ -477,8 +463,8 @@ function Modes({ exposeJoin }: ModesProps = {}) {
                   </div>
                   <div
                     style={{
-                      fontSize: 14,
-                      fontWeight: 700,
+                      fontSize: 13,
+                      fontWeight: 800,
                       color: 'var(--text-primary)',
                     }}
                   >
@@ -487,64 +473,37 @@ function Modes({ exposeJoin }: ModesProps = {}) {
                 </div>
               </div>
 
-              {/* CTA / Status */}
-              {preflightError ? (
+              {/* Status overlay - only show if busy or error */}
+              {(preflightError || (busy && !preflightError)) && (
                 <div
                   style={{
-                    padding: '14px 20px',
-                    background: 'rgba(239, 68, 68, 0.15)',
-                    border: '1px solid rgba(239, 68, 68, 0.4)',
-                    borderRadius: 12,
-                    fontSize: 12,
-                    color: '#ef4444',
+                    padding: '8px 12px',
+                    background: preflightError ? 'rgba(239, 68, 68, 0.2)' : `linear-gradient(135deg, ${theme.accentColor}30, ${theme.accentColor}20)`,
+                    border: preflightError ? '1px solid rgba(239, 68, 68, 0.5)' : `1px solid ${theme.accentColor}50`,
+                    borderRadius: 10,
+                    fontSize: 10,
+                    color: preflightError ? '#ef4444' : theme.accentColor,
                     textAlign: 'center',
-                    fontWeight: 500,
-                  }}
-                >
-                  Service temporarily unavailable
-                </div>
-              ) : busy && !preflightError ? (
-                <div
-                  style={{
-                    padding: '14px 20px',
-                    background: `linear-gradient(135deg, ${theme.accentColor}25, ${theme.accentColor}15)`,
-                    border: `1px solid ${theme.accentColor}40`,
-                    borderRadius: 12,
-                    fontSize: 12,
-                    color: theme.accentColor,
-                    textAlign: 'center',
-                    fontWeight: 500,
-                  }}
-                >
-                  {wsState.entryFee?.pending
-                    ? 'Verifying on Solana…'
-                    : wsState.phase === 'authenticating'
-                    ? 'Sign with wallet…'
-                    : 'Connecting…'}
-                </div>
-              ) : (
-                <div
-                  style={{
-                    padding: '14px 20px',
-                    background: theme.gradient,
-                    borderRadius: 12,
-                    fontSize: 14,
-                    fontWeight: 700,
+                    fontWeight: 600,
                     textTransform: 'uppercase',
-                    letterSpacing: 1,
-                    textAlign: 'center',
-                    color: tier.id === 'championship' || tier.id === 'micro' ? '#000' : '#fff',
-                    boxShadow: `0 8px 20px ${theme.glowColor}`,
+                    letterSpacing: 0.8,
                   }}
                 >
-                  Join Race
+                  {preflightError
+                    ? 'Unavailable'
+                    : wsState.entryFee?.pending
+                    ? 'Verifying…'
+                    : wsState.phase === 'authenticating'
+                    ? 'Sign wallet'
+                    : 'Connecting…'}
                 </div>
               )}
             </div>
           </button>
         );
       })}
-    </div>
+      </div>
+    </>
   );
 }
 
