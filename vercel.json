@@ -5,11 +5,11 @@
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "https://spermrace.io/api/$1"
+      "dest": "https://api.spermrace.io/api/$1"
     },
     {
       "src": "/ws",
-      "dest": "https://spermrace.io/ws"
+      "dest": "https://api.spermrace.io/ws"
     }
   ]
 }
