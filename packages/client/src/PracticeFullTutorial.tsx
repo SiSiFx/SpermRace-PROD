@@ -102,35 +102,38 @@ export function PracticeFullTutorial({ visible, onDone }: PracticeFullTutorialPr
       <div
         style={{
           position: 'absolute',
-          top: '16px',
-          right: '16px',
+          top: '20px',
+          right: '20px',
           color: 'rgba(148,163,184,0.9)',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'flex-end',
+          zIndex: 2300,
         }}
       >
-        <div style={{ fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', opacity: 0.85 }}>Practice tutorial</div>
+        <div style={{ fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', opacity: 0.8, marginBottom: 6 }}>Tutorial</div>
         <div
           style={{
-            marginTop: 6,
-            padding: '6px 10px',
+            padding: '8px 14px',
             borderRadius: 999,
-            background: 'rgba(15,23,42,0.96)',
-            boxShadow: '0 0 0 1px rgba(148,163,184,0.6), 0 8px 20px rgba(15,23,42,0.85)',
+            background: 'linear-gradient(135deg, rgba(34,211,238,0.15), rgba(99,102,241,0.15))',
+            border: '1px solid rgba(34,211,238,0.4)',
+            backdropFilter: 'blur(12px)',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
             display: 'flex',
             alignItems: 'center',
-            gap: 8,
+            gap: 10,
           }}
         >
-          <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 }}>Race starts in</span>
+          <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, color: 'rgba(255,255,255,0.9)' }}>Starting</span>
           <span
             style={{
-              fontSize: 18,
-              fontWeight: 800,
-              color: '#e5e7eb',
-              minWidth: 32,
-              textAlign: 'right',
+              fontSize: 20,
+              fontWeight: 900,
+              color: '#22d3ee',
+              minWidth: 34,
+              textAlign: 'center',
+              fontFamily: '"JetBrains Mono", monospace',
             }}
           >
             {secondsLeft}s

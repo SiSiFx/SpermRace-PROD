@@ -90,13 +90,13 @@ export function Leaderboard({ onClose, apiBase = '/api', myWallet, isMobile = fa
   const myRank = myWallet ? data.findIndex(e => e.wallet_address === myWallet) + 1 : 0;
 
   return (
-    <div className={`leaderboard-overlay ${isMobile ? 'mobile' : ''}`}>
-      <div className={`leaderboard-modal ${isMobile ? 'mobile' : ''}`}>
+    <div className={`leaderboard-overlay ${isMobile ? 'mobile' : ''}`} onClick={onClose}>
+      <div className={`leaderboard-modal ${isMobile ? 'mobile' : ''}`} onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="leaderboard-header">
-          <h2>
-            <Trophy size={20} weight="fill" style={{ marginRight: 8 }} />
-            Leaderboard
+          <h2 style={{ display: 'flex', alignItems: 'center', margin: 0 }}>
+            <Trophy size={24} weight="fill" style={{ marginRight: 8, color: '#22d3ee' }} />
+            <span>Leaderboard</span>
           </h2>
           <button className="close-btn" onClick={onClose}>✕</button>
         </div>
@@ -131,16 +131,18 @@ export function Leaderboard({ onClose, apiBase = '/api', myWallet, isMobile = fa
           <button
             className={`tab ${activeTab === 'wins' ? 'active' : ''}`}
             onClick={() => setActiveTab('wins')}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           >
             <Medal size={16} weight="fill" style={{ marginRight: 6 }} />
-            Most Wins
+            <span>Most Wins</span>
           </button>
           <button
             className={`tab ${activeTab === 'earnings' ? 'active' : ''}`}
             onClick={() => setActiveTab('earnings')}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           >
             <Coins size={16} weight="fill" style={{ marginRight: 6 }} />
-            Top Earners
+            <span>Top Earners</span>
           </button>
         </div>
 
