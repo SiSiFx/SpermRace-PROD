@@ -13,10 +13,11 @@ if (typeof globalThis !== 'undefined' && !(globalThis as any).Buffer) {
 // Lightweight client error ingestion to backend analytics (no third-party)
 // Only enable if API endpoint is configured
 const ANALYTICS_API_BASE: string | null = (() => {
-  // For non-production hosts (localhost, Vercel preview, etc.) go through same-origin /api
+  // For any spermrace.io host (prod/dev/www), always go through same-origin /api
+  // so Vercel/hosting can proxy and we avoid CORS with api.* origins.
   try {
     const host = (window?.location?.hostname || '').toLowerCase();
-    if (!host.includes('spermrace.io')) return '/api';
+    if (host.endsWith('spermrace.io')) return '/api';
   } catch {}
 
   const env = (import.meta as any).env?.VITE_API_BASE as string | undefined;

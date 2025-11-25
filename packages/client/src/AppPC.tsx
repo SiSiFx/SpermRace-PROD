@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-// Base URL for backend API; prefer same-origin /api for dev/preview, absolute for production domain
+// Base URL for backend API.
+// For any spermrace.io host (prod/dev/www), always hit same-origin /api so Vercel can proxy
+// and we avoid CORS issues with api.spermrace.io.
 const API_BASE: string = (() => {
-  // For any non-production host (localhost, Vercel preview, etc.) always hit same-origin /api
   try {
     const host = (window?.location?.hostname || '').toLowerCase();
-    if (!host.includes('spermrace.io')) return '/api';
+    if (host.endsWith('spermrace.io')) return '/api';
   } catch {}
 
   const env = (import.meta as any).env?.VITE_API_BASE as string | undefined;
@@ -406,6 +407,9 @@ function HeaderWallet({
             {onLeaderboard && (
               <button type="button" className="pc-nav-link" onClick={onLeaderboard}>Leaderboard</button>
             )}
+            {onShowHowTo && (
+              <button type="button" className="pc-nav-link" onClick={onShowHowTo}>How to Play</button>
+            )}
           </nav>
         )}
       </div>
@@ -598,7 +602,13 @@ function Landing({
 }
 
 function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBack: () => void }) {
-  const [step, setStep] = useState<'lobby' | 'game'>('lobby');
+  const [step, setStep] = useState<'lobby' | 'game'>(() => {
+    try {
+      return localStorage.getItem('sr_practice_full_tuto_seen') ? 'game' : 'lobby';
+    } catch {
+      return 'lobby';
+    }
+  });
   const [meId] = useState<string>('PLAYER_' + Math.random().toString(36).slice(2, 8));
   const [players, setPlayers] = useState<string[]>([]);
   const [countdown, setCountdown] = useState<number>(5);
@@ -678,6 +688,8 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
             try {
               localStorage.setItem('sr_practice_full_tuto_seen', '1');
             } catch {}
+            // After the first tutorial, jump straight into the game and skip lobby on PC
+            setStep('game');
           }}
         />
       </div>
@@ -1368,7 +1380,7 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void }
       {!isProd && (
         <div className="pc-debug-panel">
           <button onClick={() => setDebugOn(v => !v)} className="btn-secondary pc-debug-btn">
-            🐛 Debug {debugOn ? 'ON' : 'OFF'}
+            Debug {debugOn ? 'ON' : 'OFF'}
           </button>
           {debugOn && (
               <div className="pc-debug-info">

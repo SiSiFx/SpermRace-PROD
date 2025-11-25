@@ -1,8 +1,16 @@
 import React, { createContext, useContext, useMemo, useRef, useState } from 'react';
-// API base for HTTP calls from the client. Prefer env; else infer from hostname; else same-origin /api
+// API base for HTTP calls from the client.
+// For any spermrace.io host (prod/dev/www), always use same-origin /api so we avoid CORS and
+// let the frontend host proxy to the API.
 const API_BASE: string = (() => {
+  try {
+    const host = (window?.location?.hostname || '').toLowerCase();
+    if (host.endsWith('spermrace.io')) return '/api';
+  } catch {}
+
   const env = (import.meta as any).env?.VITE_API_BASE as string | undefined;
   if (env && typeof env === 'string' && env.trim()) return env.trim();
+
   try {
     const host = (window?.location?.hostname || '').toLowerCase();
     if (host.includes('dev.spermrace.io')) return 'https://dev.spermrace.io/api';
