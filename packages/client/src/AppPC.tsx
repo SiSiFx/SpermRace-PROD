@@ -417,20 +417,91 @@ function HeaderWallet({
       <div className="pc-header-right">
         {showStatusPill && <span className="pc-status-pill">{status}</span>}
         {short ? (
-          <>
-            <span className="pc-wallet-id">{short}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '8px 16px',
+                background: 'linear-gradient(135deg, rgba(34,211,238,0.12), rgba(99,102,241,0.12))',
+                border: '1px solid rgba(34,211,238,0.3)',
+                borderRadius: 999,
+                backdropFilter: 'blur(10px)',
+              }}
+            >
+              <div
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #22d3ee, #14b8a6)',
+                  boxShadow: '0 0 8px rgba(34,211,238,0.6)',
+                }}
+              />
+              <span
+                style={{
+                  fontFamily: '"JetBrains Mono", monospace',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: '#22d3ee',
+                  letterSpacing: 0.3,
+                }}
+              >
+                {short}
+              </span>
+            </div>
             <button
               type="button"
-              className="btn-secondary pc-wallet-btn"
+              style={{
+                padding: '8px 18px',
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: 999,
+                color: 'rgba(255,255,255,0.7)',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+                e.currentTarget.style.color = 'rgba(255,255,255,0.95)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+                e.currentTarget.style.color = 'rgba(255,255,255,0.7)';
+              }}
               onClick={() => disconnect?.()}
             >
               Disconnect
             </button>
-          </>
+          </div>
         ) : (
           <button
             type="button"
-            className="btn-primary pc-wallet-btn"
+            style={{
+              padding: '10px 24px',
+              background: 'linear-gradient(135deg, #22d3ee, #14b8a6)',
+              border: 'none',
+              borderRadius: 999,
+              color: '#000',
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              boxShadow: '0 4px 16px rgba(34,211,238,0.3)',
+              letterSpacing: 0.3,
+              textTransform: 'uppercase',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 8px 24px rgba(34,211,238,0.5)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 4px 16px rgba(34,211,238,0.3)';
+            }}
             onClick={() => connect?.()}
           >
             Connect Wallet
@@ -718,13 +789,15 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify: _onNoti
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
-      justifyContent: 'flex-start',
+      justifyContent: 'center',
+      minHeight: '100vh',
       padding: '100px 40px 60px',
       overflowY: 'auto',
     }}>
       <div style={{
-        maxWidth: 1200,
+        maxWidth: 800,
         width: '100%',
+        margin: '0 auto',
       }}>
         {/* Premium Header Section */}
         <div style={{ textAlign: 'center', marginBottom: 24 }}>

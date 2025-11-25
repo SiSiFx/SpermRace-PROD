@@ -692,13 +692,15 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify: _onNoti
       inset: 0,
       display: 'flex',
       flexDirection: 'column',
+      justifyContent: 'center',
+      alignItems: 'center',
       overflowY: 'auto',
       paddingTop: 'calc(60px + env(safe-area-inset-top, 0px))',
       paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 0px))',
       paddingLeft: 'env(safe-area-inset-left, 0px)',
       paddingRight: 'env(safe-area-inset-right, 0px)',
     }}>
-      <div style={{ padding: '20px 16px', maxWidth: 600, margin: '0 auto', width: '100%' }}>
+      <div style={{ padding: '20px 16px', maxWidth: 480, margin: '0 auto', width: '100%' }}>
         {/* Premium Mobile Header */}
         <div style={{ textAlign: 'center', marginBottom: 16 }}>
           <div
