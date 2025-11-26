@@ -3066,7 +3066,6 @@ class SpermRaceGame {
       car.angle = -car.angle;
       bounced = true;
     }
-
     if (bounced) {
       car.targetAngle = car.angle;
       car.speed *= 0.9;
@@ -3177,9 +3176,12 @@ class SpermRaceGame {
       if (!trail) {
         // Create rope with initial points
         const points = [new PIXI.Point(car.x, car.y), new PIXI.Point(car.x, car.y)];
+        // Fallback if texture missing
+        if (!this.trailTexture) this.createTrailTexture();
+
         const rope = new PIXI.MeshRope({ texture: this.trailTexture, points });
-        // Set blend mode for glowing effect
-        rope.blendMode = 'add';
+        // Set blend mode for glowing effect - DEBUG: using normal for visibility check
+        rope.blendMode = 'normal'; // Was 'add'
 
         trail = {
           carId: car.type,
@@ -3200,92 +3202,6 @@ class SpermRaceGame {
       });
 
       car.lastTrailTime = now;
-
-      // Limit trail length
-      if (trail.points.length > 60) {
-        trail.points.shift();
-      }
-    }
-  }
-
-  renderTrail(trail: Trail) {
-    if (!trail.rope || trail.points.length < 2) {
-      trail.rope.visible = false;
-      return;
-    }
-    trail.rope.visible = true;
-
-    const now = Date.now();
-    const car = trail.car;
-
-    // Trail colors
-    const trailColor = car.type === 'player' ? this.theme.accent : this.theme.enemy;
-    trail.rope.tint = trailColor;
-    trail.rope.alpha = 0.8;
-
-    // Collect recent points and optionally decimate for far bots
-    const isBot = trail.car.type !== 'player';
-    const camX = - (this.camera.x - (this.app!.screen.width / 2)) / this.camera.zoom;
-    const camY = - (this.camera.y - (this.app!.screen.height / 2)) / this.camera.zoom;
-    const dxCam = trail.car.x - camX;
-    const dyCam = trail.car.y - camY;
-    const far = (dxCam * dxCam + dyCam * dyCam) > (1600 * 1600);
-    const step = (isBot && far) ? 2 : 1;
-
-    const ropePoints: PIXI.Point[] = [];
-
-    // GHOST TAIL: Procedurally wiggle the trail visually (hitbox remains at server positions)
-    const headX = car.x;
-    const headY = car.y;
-
-    // Add head point
-    ropePoints.push(new PIXI.Point(headX, headY));
-
-    const time = now * 0.004; // global time factor
-    const amplitudeBase = isBot ? 4 : 6;
-    const speedMag = Math.hypot(car.vx, car.vy);
-    const speedFactor = 1.0 + Math.min(1.5, speedMag / 260); // faster wiggle when moving
-
-    // Process points for rope
-    for (let i = trail.points.length - 1; i >= 0; i -= step) {
-      const p = trail.points[i];
-      const age = (now - p.time) / 1000;
-      if (age > 3.0) continue;
-
-      // Apply wiggle
-      const t = (trail.points.length - 1 - i) / Math.max(1, trail.points.length - 1); // 0 at head → 1 at tail
-      const envelope = Math.pow(t, 1.6); // more motion toward tail
-      const phase = time * speedFactor + t * 4.0;
-      const offset = Math.sin(phase) * amplitudeBase * envelope;
-
-      // Calculate normal for offset (simplified)
-      // For a robust normal, we'd need next/prev points, but for simple wiggle:
-      // Just offset perpendicular to general direction or just X/Y based on noise
-      // Let's use the previous point to determine direction
-      let nx = 0, ny = 0;
-      if (i < trail.points.length - 1) {
-        const prev = trail.points[i + 1];
-        const dx = p.x - prev.x;
-        const dy = p.y - prev.y;
-        const len = Math.hypot(dx, dy) || 1;
-        nx = -dy / len;
-        ny = dx / len;
-      }
-
-      ropePoints.push(new PIXI.Point(p.x + nx * offset, p.y + ny * offset));
-    }
-
-    if (ropePoints.length < 2) return;
-
-    // Update rope points
-    // MeshRope requires at least 2 points
-    trail.rope.points = ropePoints;
-  }
-
-  checkTrailCollisions() {
-    const cars = [this.player, this.bot, ...this.extraBots].filter((car): car is Car => car !== null && !car.destroyed);
-
-    for (const car of cars) {
       let closestMiss = Infinity; // Track closest near-miss for this frame
       let missX = 0, missY = 0;
 
@@ -3336,6 +3252,81 @@ class SpermRaceGame {
         this.showNearMiss(missX, missY, closestMiss);
       }
     }
+  }
+
+  renderTrail(trail: Trail) {
+    if (!trail.rope || trail.points.length < 2) {
+      if (trail.rope) trail.rope.visible = false;
+      return;
+    }
+    trail.rope.visible = true;
+
+    // DEBUG: Ensure rope is in container
+    if (this.trailContainer && trail.rope.parent !== this.trailContainer) {
+      this.trailContainer.addChild(trail.rope);
+    }
+
+    const now = Date.now();
+    const car = trail.car;
+
+    // Trail colors - DEBUG: removed tint, using normal blend
+    // const trailColor = car.type === 'player' ? this.theme.accent : this.theme.enemy;
+    // trail.rope.tint = trailColor;
+    trail.rope.alpha = 1.0; // Full alpha
+
+    // Collect recent points and optionally decimate for far bots
+    const isBot = trail.car.type !== 'player';
+    const camX = - (this.camera.x - (this.app!.screen.width / 2)) / this.camera.zoom;
+    const camY = - (this.camera.y - (this.app!.screen.height / 2)) / this.camera.zoom;
+    const dxCam = trail.car.x - camX;
+    const dyCam = trail.car.y - camY;
+    const far = (dxCam * dxCam + dyCam * dyCam) > (1600 * 1600);
+    const step = (isBot && far) ? 2 : 1;
+
+    const ropePoints: PIXI.Point[] = [];
+
+    // GHOST TAIL: Procedurally wiggle the trail visually (hitbox remains at server positions)
+    const headX = car.x;
+    const headY = car.y;
+
+    // Add head point
+    ropePoints.push(new PIXI.Point(headX, headY));
+
+    const time = now * 0.004; // global time factor
+    const amplitudeBase = isBot ? 4 : 6;
+    const speedMag = Math.hypot(car.vx, car.vy);
+    const speedFactor = 1.0 + Math.min(1.5, speedMag / 260); // faster wiggle when moving
+
+    // Process points for rope
+    for (let i = trail.points.length - 1; i >= 0; i -= step) {
+      const p = trail.points[i];
+      const age = (now - p.time) / 1000;
+      if (age > 3.0) continue;
+
+      // Apply wiggle
+      const t = (trail.points.length - 1 - i) / Math.max(1, trail.points.length - 1); // 0 at head → 1 at tail
+      const envelope = Math.pow(t, 1.6); // more motion toward tail
+      const phase = time * speedFactor + t * 4.0;
+      const offset = Math.sin(phase) * amplitudeBase * envelope;
+
+      // Calculate normal for offset (simplified)
+      let nx = 0, ny = 0;
+      if (i < trail.points.length - 1) {
+        const prev = trail.points[i + 1];
+        const dx = p.x - prev.x;
+        const dy = p.y - prev.y;
+        const len = Math.hypot(dx, dy) || 1;
+        nx = -dy / len;
+        ny = dx / len;
+      }
+
+      ropePoints.push(new PIXI.Point(p.x + nx * offset, p.y + ny * offset));
+    }
+
+    if (ropePoints.length < 2) return;
+
+    // Update rope points
+    trail.rope.points = ropePoints;
   }
 
   private resolveCarBumps(deltaTime: number) {
@@ -3449,7 +3440,6 @@ class SpermRaceGame {
       this.screenShake(0.3);
     }
   }
-
   // Effective kill count for size scaling (practice uses local kills; tournament uses server HUD for the local player)
   private getEffectiveKillsForCar(car: Car): number {
     let kills = car.kills || 0;
