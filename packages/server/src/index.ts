@@ -15,6 +15,12 @@ import { DatabaseService } from './DatabaseService.js';
 import { ClientToServerMessage, ServerToClientMessage, GameStateUpdateMessage, LobbyStateMessage, Lobby, AuthenticatedMessage } from 'shared';
 import { clientToServerMessageSchema } from 'shared/dist/schemas.js';
 import { v4 as uuidv4 } from 'uuid';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // =================================================================================================
 // Constants
@@ -77,7 +83,12 @@ const gameWorld = new GameWorld(smartContractService);
 const lobbyManager = new LobbyManager(smartContractService);
 
 // Database for leaderboards and player stats
-const DB_PATH = process.env.DB_PATH || './packages/server/data/spermrace.db';
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, '../../../data/spermrace.db');
+const dbDir = path.dirname(DB_PATH);
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+  log.info(`[DB] Created database directory: ${dbDir}`);
+}
 const db = new DatabaseService(DB_PATH);
 log.info(`[DB] Using database: ${DB_PATH}`);
 const pendingSockets = new Set<WebSocket>();

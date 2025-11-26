@@ -5,11 +5,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "pnpm --filter shared build && tsc-watch --onSuccess \"node dist/index.js\"",
+    "dev": "pnpm --filter shared build && tsc-watch --onSuccess \"node dist/server/src/index.js\"",
     "dev:devnet": "cross-env SOLANA_RPC_ENDPOINT=https://api.devnet.solana.com ENABLE_DEV_BOTS=true DEV_BOTS_TARGET=8 SKIP_ENTRY_FEE=true pnpm dev",
     "dev:devnet:paid": "cross-env SOLANA_RPC_ENDPOINT=https://api.devnet.solana.com ENABLE_DEV_BOTS=true DEV_BOTS_TARGET=8 pnpm dev",
-    "start:devnet": "cross-env SOLANA_RPC_ENDPOINT=https://api.devnet.solana.com node dist/index.js",
-    "start": "node dist/index.js",
+    "start:devnet": "cross-env SOLANA_RPC_ENDPOINT=https://api.devnet.solana.com node dist/server/src/index.js",
+    "start": "node dist/server/src/index.js",
     "build": "pnpm --filter shared build && tsc",
     "test": "echo \"No tests yet\" && exit 0"
   },

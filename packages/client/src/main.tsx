@@ -18,7 +18,7 @@ const ANALYTICS_API_BASE: string | null = (() => {
   try {
     const host = (window?.location?.hostname || '').toLowerCase();
     if (host.endsWith('spermrace.io')) return '/api';
-  } catch {}
+  } catch { }
 
   const env = (import.meta as any).env?.VITE_API_BASE as string | undefined;
   if (env && typeof env === 'string' && env.trim()) return env.trim();
@@ -27,20 +27,21 @@ const ANALYTICS_API_BASE: string | null = (() => {
     const host = (window?.location?.hostname || '').toLowerCase();
     if (host.includes('dev.spermrace.io')) return 'https://dev.spermrace.io/api';
     if (host.includes('spermrace.io')) return 'https://spermrace.io/api';
-  } catch {}
+  } catch { }
   return '/api';
 })();
 
 if ((import.meta as any).env?.PROD === true && ANALYTICS_API_BASE) {
   try {
     const send = (type: string, payload: any) => {
+      // Fire and forget, suppress all errors to prevent loops
       try {
         fetch(`${ANALYTICS_API_BASE}/analytics`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ type, payload })
-        });
-      } catch {}
+        }).catch(() => { }); // Catch network errors
+      } catch { }
     };
     window.addEventListener('error', (e) => {
       const msg = e?.message || 'unknown';
@@ -52,7 +53,7 @@ if ((import.meta as any).env?.PROD === true && ANALYTICS_API_BASE) {
       const reason = e?.reason?.message || String(e?.reason || 'unknown');
       send('client_unhandled_rejection', { reason });
     });
-  } catch {}
+  } catch { }
 } else if ((import.meta as any).env?.PROD === true && !ANALYTICS_API_BASE) {
   console.log('[Analytics] Disabled - VITE_API_BASE not configured');
 }
@@ -69,7 +70,7 @@ const loadApp = async () => {
   if (!rootEl) return;
 
   const root = createRoot(rootEl);
-  
+
   if (isMobile) {
     // Load mobile-specific styles and component
     await import('./mobile-game-fixes.css');

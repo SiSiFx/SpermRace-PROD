@@ -4,125 +4,10 @@ import * as PIXI from 'pixi.js';
 import { useWs } from './WsProvider';
 import { HudManager } from './HudManager';
 
-interface Car {
-  x: number;
-  y: number;
-  angle: number;
-  targetAngle: number;
-  speed: number;
-  baseSpeed: number;
-  boostSpeed: number;
-  targetSpeed: number;
-  speedTransitionRate: number;
-  driftFactor: number;
-  maxDriftFactor: number;
-  vx: number;
-  vy: number;
-  color: number;
-  type: string;
-  id: string;
-  name: string;
-  kills: number;
-  destroyed: boolean;
-  respawnTimer: number;
-  isBoosting: boolean;
-  boostTimer: number;
-  boostCooldown: number;
-  boostEnergy: number;
-  maxBoostEnergy: number;
-  boostRegenRate: number;
-  boostConsumptionRate: number;
-  minBoostEnergy: number;
-  trailPoints: any[];
-  trailGraphics: PIXI.Graphics | null;
-  lastTrailTime: number;
-  turnTimer: number;
-  boostAITimer: number;
-  currentTrailId: string | null;
-  lastTrailBoostStatus: boolean | undefined;
-  sprite: PIXI.Container;
-  // Sperm visuals
-  headGraphics?: PIXI.Graphics;
-  tailGraphics?: PIXI.Graphics | null;
-  tailWaveT?: number;
-  tailLength?: number;
-  tailSegments?: number;
-  tailAmplitude?: number;
-  nameplate?: HTMLDivElement;
-  outZoneTime?: number;
-  elimAtMs?: number;
-  turnResponsiveness?: number;
-  lateralDragScalar?: number;
-  tailColor?: number;
-  accelerationScalar?: number;
-  handlingAssist?: number;
-  impactMitigation?: number;
-  hotspotBuffExpiresAt?: number;
-  spotlightUntil?: number;
-  contactCooldown?: number;
-}
 
-interface Trail {
-  carId: string;
-  car: Car;
-  points: Array<{ x: number; y: number; time: number; isBoosting: boolean }>;
-  rope: PIXI.MeshRope;
-}
 
-interface Particle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  life: number;
-  color: number;
-  graphics: PIXI.Graphics;
-}
-
-interface Pickup {
-  x: number;
-  y: number;
-  radius: number;
-  type: 'energy' | 'overdrive';
-  amount: number; // boost energy restored
-  graphics: PIXI.Container;
-  shape: PIXI.Graphics;
-  aura: PIXI.Graphics;
-  pulseT: number;
-  rotationSpeed: number;
-  color: number;
-  expiresAt?: number;
-  source?: 'ambient' | 'hotspot';
-}
-
-interface RadarPing {
-  x: number;
-  y: number;
-  timestamp: number;
-  playerId: string;
-  kind?: 'sweep' | 'echo' | 'bounty';
-  ttlMs?: number;
-}
-
-interface BoostPad {
-  x: number; y: number; radius: number;
-  cooldownMs: number; lastTriggeredAt: number;
-  graphics: PIXI.Graphics;
-}
-
-interface Hotspot {
-  id: string;
-  x: number;
-  y: number;
-  radius: number;
-  state: 'telegraph' | 'active';
-  spawnAtMs: number;
-  activateAtMs: number;
-  expiresAtMs: number;
-  graphics: PIXI.Graphics;
-  label?: HTMLDivElement;
-  hasSpawnedLoot: boolean;
-}
+import { TrailSystem } from './systems/TrailSystem';
+import { Car, Particle, Pickup, RadarPing, BoostPad, Hotspot } from './types';
 
 class SpermRaceGame {
   public app: PIXI.Application | null = null;
@@ -135,7 +20,9 @@ class SpermRaceGame {
   public player: Car | null = null;
   public bot: Car | null = null;
   public extraBots: Car[] = [];
-  public trails: Trail[] = [];
+
+  public trailSystem!: TrailSystem; // New system
+
   public particles: Particle[] = [];
   public particlePool: PIXI.Graphics[] = [];
   public maxPoolSize = 200;
@@ -260,9 +147,7 @@ class SpermRaceGame {
   private lastFrameTime: number = 0;
   private frameInterval: number = 1000 / 60; // 16.67ms per frame
 
-  // Particle object pooling (prevent memory leaks)
-  private particlePool: PIXI.Graphics[] = [];
-  private maxPoolSize: number = 100;
+
 
   // Radar update throttling (mobile optimization)
   private lastRadarUpdate: number = 0;
@@ -670,7 +555,6 @@ class SpermRaceGame {
     } catch { }
     this.updateCamera();
   }
-
   setupWorld() {
     if (!this.app) return;
 
@@ -678,6 +562,24 @@ class SpermRaceGame {
     this.worldContainer = new PIXI.Container();
     this.worldContainer.sortableChildren = true;
     this.app.stage.addChild(this.worldContainer);
+
+    // Initialize TrailSystem
+    const trailContainer = new PIXI.Container();
+    trailContainer.visible = true;
+    trailContainer.alpha = 1.0;
+    this.worldContainer.addChild(trailContainer);
+    this.trailSystem = new TrailSystem(trailContainer, this.app);
+
+    // Setup callbacks
+    this.trailSystem.onCollision = (victim, owner) => {
+      this.createExplosion(victim.x, victim.y, victim.color);
+      this.recordKill(owner, victim);
+      this.destroyCar(victim);
+    };
+
+    this.trailSystem.onNearMiss = (x, y, dist) => {
+      this.showNearMiss(x, y, dist);
+    };
 
     // Create and add arena border graphics (drawn once and updated on resize/zoom if needed)
     this.borderGraphics = new PIXI.Graphics();
@@ -733,6 +635,9 @@ class SpermRaceGame {
       this.borderOverlay = new PIXI.Graphics();
       (this.app as any)?.stage?.addChild?.(this.borderOverlay);
     } catch { }
+
+    // Add grid pattern for better navigation
+    this.createGrid();
 
     // Visibility handling: pause ticker when tab hidden to save CPU and avoid desync stutters
     const onVis = () => {
@@ -2838,735 +2743,9 @@ class SpermRaceGame {
         pad.lastTriggeredAt = now;
         // Top up a bit of energy and force a short boost burst
         car.boostEnergy = Math.min(car.maxBoostEnergy, car.boostEnergy + 20);
-        car.isBoosting = true;
-        car.targetSpeed = car.boostSpeed * 1.05;
-        // brief visual pulse
-        try { pad.graphics.alpha = 0.5; setTimeout(() => { try { pad.graphics.alpha = 1.0; } catch { } }, 180); } catch { }
-        // auto-stop after 0.7s to avoid sustained advantage
-        setTimeout(() => {
-          try {
-            if (!this.player || car.destroyed) return;
-            if (car.isBoosting) {
-              car.isBoosting = false;
-              car.targetSpeed = car.baseSpeed;
-            }
-          } catch { }
-        }, 700);
-        // echo ring
-        this.emitBoostEcho(pad.x, pad.y);
-      }
-    }
-
-    // Smooth speed transitions
-    const speedDiff = car.targetSpeed - car.speed;
-    const accel = car.accelerationScalar ?? car.speedTransitionRate;
-    const speedChange = speedDiff * accel * deltaTime;
-    car.speed += speedChange;
-
-    // Smooth angle interpolation for drift effect
-    const angleDiff = normalizeAngle((car as any).targetAngle - car.angle);
-    const baseTurn = (car as any).turnResponsiveness ?? 7.0;
-    const handlingAssist = car.handlingAssist ?? 0;
-    const speedRatio = Math.min(1, Math.abs(car.speed) / Math.max(1, car.boostSpeed));
-    const assistMultiplier = 1 + handlingAssist * (1 - speedRatio);
-    const boostPenalty = car.isBoosting ? 0.92 : 1;
-    const turnRate = baseTurn * assistMultiplier * boostPenalty;
-    car.angle += angleDiff * Math.min(1.0, turnRate * deltaTime);
-    car.sprite.rotation = car.angle;
-
-    // Calculate forward direction
-    const forwardX = Math.cos(car.angle);
-    const forwardY = Math.sin(car.angle);
-
-    // Add drift effect - car slides sideways while turning
-    const driftAngle = car.angle + (Math.PI / 2);
-    const driftX = Math.cos(driftAngle);
-    const driftY = Math.sin(driftAngle);
-
-    // Combine forward movement with drift
-    let effectiveSpeed = car.speed;
-    const driftIntensity = car.driftFactor * effectiveSpeed * 0.4 * Math.abs(angleDiff);
-    const lateralDrag = ((car as any).lateralDragScalar ?? 1.0) * 0.008;
-    car.vx = forwardX * effectiveSpeed + driftX * driftIntensity;
-    car.vy = forwardY * effectiveSpeed + driftY * driftIntensity;
-
-    // Apply velocity update with slight lateral drag for sharper control at speed
-    car.vx += Math.cos(car.angle) * effectiveSpeed * deltaTime;
-    car.vy += Math.sin(car.angle) * effectiveSpeed * deltaTime;
-    // lateral drag opposing perpendicular component
-    const perpX = -Math.sin(car.angle);
-    const perpY = Math.cos(car.angle);
-    const lateralVel = car.vx * perpX + car.vy * perpY;
-    car.vx -= lateralVel * perpX * lateralDrag;
-    car.vy -= lateralVel * perpY * lateralDrag;
-
-    // Update position
-    car.x += car.vx * deltaTime;
-    car.y += car.vy * deltaTime;
-
-    // Update sprite
-    car.sprite.x = car.x;
-    car.sprite.y = car.y;
-    car.sprite.rotation = car.angle;
-
-    // Animate sperm tail (tapered ribbon) and head (static oval) with kill-based growth
-    try {
-      const sizeMul = this.getSizeMultiplierForCar(car);
-      if (this.smallTailEnabled && car.tailGraphics) {
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        const isTournament = !!(this.wsHud && this.wsHud.active);
-        const isMobilePracticePlayer = isMobile && !isTournament && car.type === 'player';
-
-        const waveSpeed = isMobilePracticePlayer
-          ? (car.isBoosting ? 6 : 3)
-          : (car.isBoosting ? 18 : 10); // Default faster wave animation
-        car.tailWaveT = (car.tailWaveT || 0) + deltaTime * waveSpeed;
-
-        const segsBase = car.tailSegments || 16;
-        const segs = isMobilePracticePlayer ? Math.max(6, segsBase) : Math.max(8, segsBase);
-        const len = (car.tailLength || 48) * sizeMul;
-        const speedMag = Math.hypot(car.vx, car.vy);
-        const speedScale = 0.5 + Math.min(1, speedMag / 350);
-        let ampBase = (car.tailAmplitude || 6) * (car.isBoosting ? 1.5 : 1.0) * sizeMul; // More dramatic boost wave
-        if (isMobilePracticePlayer) {
-          ampBase *= 0.4; // Much calmer tail motion in mobile practice
-        }
-        const amp = ampBase;
-        const baseWidth = 3 * (0.75 + 0.25 * speedScale) * sizeMul;
-        const step = len / segs;
-        const g = car.tailGraphics;
-        g.clear();
-        // Tail anchor slightly behind head center
-        const headR = 8 * sizeMul;
-        const dirX = Math.cos(car.angle);
-        const dirY = Math.sin(car.angle);
-        const latX = Math.cos(car.angle + Math.PI / 2);
-        const latY = Math.sin(car.angle + Math.PI / 2);
-        const ax = -dirX * headR * 0.8;
-        const ay = -dirY * headR * 0.8;
-        const spine: Array<{ x: number; y: number; w: number }> = [];
-        for (let i = 0; i <= segs; i++) {
-          const t = i / segs;
-          // Zero motion at head, increases toward mid/back
-          const envelope = Math.pow(t, 2.2);
-          const freq = isMobilePracticePlayer ? 6 : 11;
-          const wave = Math.sin((t * freq) + (car.tailWaveT || 0)) * envelope * amp;
-          const sx = ax - dirX * (i * step) + latX * wave;
-          const sy = ay - dirY * (i * step) + latY * wave;
-          const w = baseWidth * Math.pow(1 - t, 3.2); // stronger taper → thinner back and base
-          spine.push({ x: sx, y: sy, w });
-        }
-        const poly: number[] = [];
-        // left side
-        for (let i = 0; i < spine.length; i++) {
-          const s = spine[i];
-          poly.push(s.x - latX * s.w, s.y - latY * s.w);
-        }
-        // right side (reverse)
-        for (let i = spine.length - 1; i >= 0; i--) {
-          const s = spine[i];
-          poly.push(s.x + latX * s.w, s.y + latY * s.w);
-        }
-        g.poly(poly).fill({ color: car.color, alpha: car.isBoosting ? 0.95 : 0.8 }); // Brighter when boosting
-      }
-      if (car.headGraphics) {
-        // Dynamic head with boost pulsation + growth per kill
-        const baseRx = car.isBoosting ? 10 : 9; // Larger when boosting
-        const baseRy = car.isBoosting ? 7 : 6;
-        const rx = baseRx * sizeMul;
-        const ry = baseRy * sizeMul;
-        car.headGraphics.clear();
-        car.headGraphics.ellipse(0, 0, rx, ry).fill({ color: car.color, alpha: 1.0 }).stroke({ width: car.isBoosting ? 3 : 2, color: car.color, alpha: car.isBoosting ? 0.7 : 0.3 });
-
-        // Add boost glow effect
-        if (car.isBoosting) {
-          car.headGraphics.ellipse(0, 0, rx + 3, ry + 2).fill({ color: car.color, alpha: 0.2 });
-        }
-        if (buffActive) {
-          car.headGraphics.ellipse(0, 0, rx + 5, ry + 4).stroke({ width: 2, color: 0xfacc15, alpha: 0.9 });
-        }
-      }
-    } catch { }
-
-    // Update glow intensity when boosting (apply to head only)
-    if (car.isBoosting && car.headGraphics) {
-      (car.headGraphics as any).alpha = 0.9;
-    } else if (car.headGraphics) {
-      (car.headGraphics as any).alpha = 1.0;
-    }
-
-    if (car === this.player) {
-      if (buffActive) {
-        this.updateOverdriveBanner(true, (car.hotspotBuffExpiresAt || now) - now);
-      } else {
-        this.updateOverdriveBanner(false, 0);
-      }
-      if ((buffActive || (car.spotlightUntil && car.spotlightUntil > now)) && now - this.lastSpotlightPingAt > 320) {
-        this.lastSpotlightPingAt = now;
-        this.radarPings.push({ x: car.x, y: car.y, timestamp: now, playerId: 'overdrive', kind: 'bounty', ttlMs: 900 });
-      }
-    }
-  }
-
-  updateBot(car: Car, deltaTime: number) {
-    if (car.destroyed) return;
-
-    // Random direction changes
-    car.turnTimer -= deltaTime;
-    if (car.turnTimer <= 0) {
-      car.targetAngle += (Math.random() - 0.5) * Math.PI * 0.5;
-      car.turnTimer = 1.0 + Math.random() * 2.0;
-    }
-
-    // Random boost
-    car.boostAITimer -= deltaTime;
-    if (car.boostAITimer <= 0) {
-      if (!car.isBoosting && car.boostEnergy >= car.minBoostEnergy && Math.random() < 0.3) {
-        car.isBoosting = true;
-        car.targetSpeed = car.boostSpeed;
-        car.boostAITimer = 2.0 + Math.random() * 3.0;
-      } else if (car.isBoosting && (car.boostEnergy < 10 || Math.random() < 0.4)) {
-        car.isBoosting = false;
-        car.targetSpeed = car.baseSpeed;
-        car.boostAITimer = 1.0 + Math.random() * 2.0;
-      } else {
-        car.boostAITimer = 0.5;
-      }
-    }
-
-    this.updateCar(car, deltaTime);
-  }
-
-  checkArenaCollision(car: Car) {
-    const halfWidth = this.arena.width / 2;
-    const halfHeight = this.arena.height / 2;
-    const carSize = 20;
-
-    let bounced = false;
-
-    if (car.x <= -halfWidth + carSize) {
-      car.x = -halfWidth + carSize;
-      car.vx = -car.vx * 0.7;
-      car.angle = Math.PI - car.angle;
-      bounced = true;
-    }
-
-    if (car.x >= halfWidth - carSize) {
-      car.x = halfWidth - carSize;
-      car.vx = -car.vx * 0.7;
-      car.angle = Math.PI - car.angle;
-      bounced = true;
-    }
-
-    if (car.y <= -halfHeight + carSize) {
-      car.y = -halfHeight + carSize;
-      car.vy = -car.vy * 0.7;
-      car.angle = -car.angle;
-      bounced = true;
-    }
-
-    if (car.y >= halfHeight - carSize) {
-      car.y = halfHeight - carSize;
-      car.vy = -car.vy * 0.7;
-      car.angle = -car.angle;
-      bounced = true;
-    }
-    if (bounced) {
-      car.targetAngle = car.angle;
-      car.speed *= 0.9;
-
-      if (car.type === 'bot') {
-        car.targetAngle += (Math.random() - 0.5) * Math.PI * 0.5;
-      }
-    }
-  }
-
-  updateTrails(_deltaTime: number) {
-    // Add trail points for active cars
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const isTournament = !!(this.wsHud && this.wsHud.active);
-    const hidePlayerTrailInMobilePractice = isMobile && !isTournament;
-
-    if (this.player && !this.player.destroyed && !hidePlayerTrailInMobilePractice) {
-      this.addTrailPoint(this.player);
-    }
-    if (this.bot && !this.bot.destroyed) {
-      this.addTrailPoint(this.bot);
-    }
-    // Add trail points for extra bots (LOD: only near camera)
-    const camX = - (this.camera.x - (this.app!.screen.width / 2)) / this.camera.zoom;
-    const camY = - (this.camera.y - (this.app!.screen.height / 2)) / this.camera.zoom;
-    const lodRadius = 1200 / this.camera.zoom; // adaptive LOD radius
-    for (const extraBot of this.extraBots) {
-      if (!extraBot.destroyed) {
-        const dx = extraBot.x - camX;
-        const dy = extraBot.y - camY;
-        if (dx * dx + dy * dy < lodRadius * lodRadius) {
-          this.addTrailPoint(extraBot);
-        }
-      }
-    }
-
-    // Update and clean trails
-    for (let i = this.trails.length - 1; i >= 0; i--) {
-      const trail = this.trails[i];
-      const now = Date.now();
-
-      // Remove old points (manual loop to avoid allocation)
-      const maxAge = 3.0;
-      let removeCount = 0;
-      for (let j = 0; j < trail.points.length; j++) {
-        if ((now - trail.points[j].time) / 1000 > maxAge) {
-          removeCount++;
-        } else {
-          break;
-        }
-      }
-      if (removeCount > 0) {
-        trail.points.splice(0, removeCount);
-      }
-
-      // Remove trail if no points left
-      if (trail.points.length === 0) {
-        if (trail.rope && trail.rope.parent && this.trailContainer) {
-          try { this.trailContainer.removeChild(trail.rope); } catch { }
-          try { trail.rope.destroy(); } catch { }
-        }
-        this.trails.splice(i, 1);
-      } else {
-        // Update trail visuals
-        this.renderTrail(trail);
-        // Playful feedback: near-miss toast (once every ~2s max)
-        try {
-          const p = this.player;
-          if (p && !p.destroyed && trail.car !== p && trail.points.length >= 2) {
-            const a = trail.points[trail.points.length - 2];
-            const b = trail.points[trail.points.length - 1];
-            const d = this.pointToLineDistance(p.x, p.y, a.x, a.y, b.x, b.y);
-            if (d < 28) {
-              const nowT = Date.now();
-              if (nowT - this.lastToastAt > 2000) {
-                this.lastToastAt = nowT;
-                const el = document.getElementById('game-toast');
-                if (el) {
-                  el.textContent = d < 16 ? 'Nice dodge!' : 'So close!';
-                  el.style.opacity = '1';
-                  setTimeout(() => { try { el.style.opacity = '0'; } catch { } }, 900);
-                }
-              }
-            }
-          }
-        } catch { }
-      }
-    }
-  }
-
-  addTrailPoint(car: Car) {
-    const now = Date.now();
-    const interval = 30;
-
-    if (now - car.lastTrailTime > interval) {
-      if (!this.trailContainer) {
-        // Safety: lazily initialize trail container if setupWorld hasn't run yet
-        try {
-          this.trailContainer = new PIXI.Container();
-          this.trailContainer.visible = true;
-          this.trailContainer.alpha = 1.0;
-          this.worldContainer?.addChild?.(this.trailContainer as any);
-        } catch { }
-        if (!this.trailContainer) return;
-      }
-      // Get or create trail for this car
-      let trail = this.trails.find(t => t.carId === car.type);
-      if (!trail) {
-        // Create rope with initial points
-        const points = [new PIXI.Point(car.x, car.y), new PIXI.Point(car.x, car.y)];
-        // Fallback if texture missing
-        if (!this.trailTexture) this.createTrailTexture();
-
-        const rope = new PIXI.MeshRope({ texture: this.trailTexture, points });
-        // Set blend mode for glowing effect - DEBUG: using normal for visibility check
-        rope.blendMode = 'normal'; // Was 'add'
-
-        trail = {
-          carId: car.type,
-          car: car,
-          points: [],
-          rope: rope
-        };
-        this.trails.push(trail);
-        try { this.trailContainer.addChild(trail.rope); } catch { }
-      }
-
-      // Add new point
-      trail.points.push({
-        x: car.x,
-        y: car.y,
-        time: now,
-        isBoosting: car.isBoosting
-      });
-
-      car.lastTrailTime = now;
-      let closestMiss = Infinity; // Track closest near-miss for this frame
-      let missX = 0, missY = 0;
-
-      for (const trail of this.trails) {
-        if (trail.points.length < 2) continue;
-
-        const now = Date.now();
-        const isSelfTrail = trail.car === car;
-
-        // REMOVE SELF-COLLISION - Players can't die from their own trail
-        if (isSelfTrail) continue;
-
-        // Check collision with trail points
-        for (let i = 1; i < trail.points.length; i++) {
-          const p1 = trail.points[i - 1];
-          const p2 = trail.points[i];
-          const age = (now - p2.time) / 1000;
-
-          // Skip old points
-          if (age > 3.0) continue;
-
-          const distance = this.pointToLineDistance(car.x, car.y, p1.x, p1.y, p2.x, p2.y);
-          const hitboxSize = p2.isBoosting ? 12 : 6;
-
-          if (distance < hitboxSize) {
-            // EXPLOSION when WE crash (not when we kill others)
-            this.createExplosion(car.x, car.y, car.color);
-
-            // Attribute kill to trail owner
-            this.recordKill(trail.car, car);
-            this.destroyCar(car);
-            break;
-          }
-
-          // NEAR-MISS DETECTION - Reward skillful dodging!
-          if (car === this.player && distance < 40 && distance < closestMiss) {
-            closestMiss = distance;
-            missX = (p1.x + p2.x) / 2;
-            missY = (p1.y + p2.y) / 2;
-          }
-        }
-
-        if (car.destroyed) break;
-      }
-
-      // Show near-miss notification if player had a close call
-      if (car === this.player && closestMiss < 40 && Math.random() < 0.3) { // 30% chance to show (avoid spam)
-        this.showNearMiss(missX, missY, closestMiss);
-      }
-    }
-  }
-
-  renderTrail(trail: Trail) {
-    if (!trail.rope || trail.points.length < 2) {
-      if (trail.rope) trail.rope.visible = false;
-      return;
-    }
-    trail.rope.visible = true;
-
-    // DEBUG: Ensure rope is in container
-    if (this.trailContainer && trail.rope.parent !== this.trailContainer) {
-      this.trailContainer.addChild(trail.rope);
-    }
-
-    const now = Date.now();
-    const car = trail.car;
-
-    // Trail colors - DEBUG: removed tint, using normal blend
-    // const trailColor = car.type === 'player' ? this.theme.accent : this.theme.enemy;
-    // trail.rope.tint = trailColor;
-    trail.rope.alpha = 1.0; // Full alpha
-
-    // Collect recent points and optionally decimate for far bots
-    const isBot = trail.car.type !== 'player';
-    const camX = - (this.camera.x - (this.app!.screen.width / 2)) / this.camera.zoom;
-    const camY = - (this.camera.y - (this.app!.screen.height / 2)) / this.camera.zoom;
-    const dxCam = trail.car.x - camX;
-    const dyCam = trail.car.y - camY;
-    const far = (dxCam * dxCam + dyCam * dyCam) > (1600 * 1600);
-    const step = (isBot && far) ? 2 : 1;
-
-    const ropePoints: PIXI.Point[] = [];
-
-    // GHOST TAIL: Procedurally wiggle the trail visually (hitbox remains at server positions)
-    const headX = car.x;
-    const headY = car.y;
-
-    // Add head point
-    ropePoints.push(new PIXI.Point(headX, headY));
-
-    const time = now * 0.004; // global time factor
-    const amplitudeBase = isBot ? 4 : 6;
-    const speedMag = Math.hypot(car.vx, car.vy);
-    const speedFactor = 1.0 + Math.min(1.5, speedMag / 260); // faster wiggle when moving
-
-    // Process points for rope
-    for (let i = trail.points.length - 1; i >= 0; i -= step) {
-      const p = trail.points[i];
-      const age = (now - p.time) / 1000;
-      if (age > 3.0) continue;
-
-      // Apply wiggle
-      const t = (trail.points.length - 1 - i) / Math.max(1, trail.points.length - 1); // 0 at head → 1 at tail
-      const envelope = Math.pow(t, 1.6); // more motion toward tail
-      const phase = time * speedFactor + t * 4.0;
-      const offset = Math.sin(phase) * amplitudeBase * envelope;
-
-      // Calculate normal for offset (simplified)
-      let nx = 0, ny = 0;
-      if (i < trail.points.length - 1) {
-        const prev = trail.points[i + 1];
-        const dx = p.x - prev.x;
-        const dy = p.y - prev.y;
-        const len = Math.hypot(dx, dy) || 1;
-        nx = -dy / len;
-        ny = dx / len;
-      }
-
-      ropePoints.push(new PIXI.Point(p.x + nx * offset, p.y + ny * offset));
-    }
-
-    if (ropePoints.length < 2) return;
-
-    // Update rope points
-    trail.rope.points = ropePoints;
-  }
-
-  private resolveCarBumps(deltaTime: number) {
-    const cars = [this.player, this.bot, ...this.extraBots].filter((car): car is Car => car !== null && !car.destroyed);
-    if (cars.length < 2) return;
-
-    const collisionRadius = 32;
-    for (const car of cars) {
-      car.contactCooldown = Math.max(0, (car.contactCooldown ?? 0) - deltaTime);
-    }
-
-    for (let i = 0; i < cars.length; i++) {
-      for (let j = i + 1; j < cars.length; j++) {
-        const a = cars[i];
-        const b = cars[j];
-        if ((a.contactCooldown ?? 0) > 0.02 && (b.contactCooldown ?? 0) > 0.02) continue;
-
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const distSq = dx * dx + dy * dy;
-        if (distSq === 0 || distSq > collisionRadius * collisionRadius) continue;
-
-        const dist = Math.sqrt(distSq) || 1;
-        const normalX = dx / dist;
-        const normalY = dy / dist;
-        const relativeVel = (b.vx - a.vx) * normalX + (b.vy - a.vy) * normalY;
-        if (relativeVel >= 0) continue; // moving apart already
-
-        // Lightweight impulse resolution
-        const restitution = 1.1;
-        const impulse = -(1 + restitution) * relativeVel * 0.5;
-        const mitigationA = a.impactMitigation ?? 0.7;
-        const mitigationB = b.impactMitigation ?? 0.7;
-        a.vx -= impulse * normalX * (1 - mitigationA * 0.4);
-        a.vy -= impulse * normalY * (1 - mitigationA * 0.4);
-        b.vx += impulse * normalX * (1 - mitigationB * 0.4);
-        b.vy += impulse * normalY * (1 - mitigationB * 0.4);
-
-        const forwardA = Math.cos(a.angle) * normalX + Math.sin(a.angle) * normalY;
-        const forwardB = -(Math.cos(b.angle) * normalX + Math.sin(b.angle) * normalY);
-        const headOn = Math.abs(forwardA) > 0.6 && Math.abs(forwardB) > 0.6;
-        const flankA = Math.abs(forwardA) > 0.65 && Math.abs(forwardB) < 0.35;
-        const flankB = Math.abs(forwardB) > 0.65 && Math.abs(forwardA) < 0.35;
-
-        if (headOn) {
-          a.speed *= 0.85;
-          b.speed *= 0.85;
-          if (a === this.player || b === this.player) {
-            this.hapticFeedback('medium');
-            this.screenShake(0.4);
-          }
-        } else {
-          if (flankA) {
-            b.speed *= 0.7;
-            b.contactCooldown = Math.max(b.contactCooldown ?? 0, 0.45);
-          }
-          if (flankB) {
-            a.speed *= 0.7;
-            a.contactCooldown = Math.max(a.contactCooldown ?? 0, 0.45);
-          }
-          if ((flankA && a === this.player) || (flankB && b === this.player)) {
-            this.hapticFeedback('light');
-            this.screenShake(0.25);
-          }
-        }
-
-        // Positional correction to avoid overlap
-        const penetration = collisionRadius - dist;
-        if (penetration > 0) {
-          const correction = penetration * 0.5;
-          a.x -= normalX * correction;
-          a.y -= normalY * correction;
-          b.x += normalX * correction;
-          b.y += normalY * correction;
-          if (a.sprite) {
-            a.sprite.x = a.x;
-            a.sprite.y = a.y;
-          }
-          if (b.sprite) {
-            b.sprite.x = b.x;
-            b.sprite.y = b.y;
-          }
-        }
-
-        a.contactCooldown = Math.max(a.contactCooldown ?? 0, 0.25);
-        b.contactCooldown = Math.max(b.contactCooldown ?? 0, 0.25);
-      }
-    }
-  }
-
-  recordKill(killer: Car, victim: Car) {
-    if (!killer || !victim) return;
-    killer.kills = (killer.kills || 0) + 1;
-    this.recentKills.push({ killer: killer.name, victim: victim.name, time: Date.now() });
-
-    // Kill streak tracking for player - simplified without combo
-    if (killer === this.player) {
-      const now = Date.now();
-
-      // Reset streak if more than 5 seconds since last kill
-      if (now - this.lastKillTime > 5000) {
-        this.killStreak = 0;
-      }
-      this.killStreak++;
-      this.lastKillTime = now;
-
-      // Simple haptic feedback
-      this.hapticFeedback('heavy');
-
-      // Mild screen shake
-      this.screenShake(0.3);
-    }
-  }
-  // Effective kill count for size scaling (practice uses local kills; tournament uses server HUD for the local player)
-  private getEffectiveKillsForCar(car: Car): number {
-    let kills = car.kills || 0;
-    if (car === this.player && this.wsHud?.active && this.wsHud.playerId) {
-      const srvKills = this.wsHud.kills?.[this.wsHud.playerId];
-      if (typeof srvKills === 'number' && srvKills > kills) kills = srvKills;
-    }
-    return kills;
-  }
-
-  // Map kills → visual size multiplier (caps at ~+60% size so things stay readable)
-  private getSizeMultiplierForCar(car: Car): number {
-    const kills = this.getEffectiveKillsForCar(car);
-    const clamped = Math.max(0, Math.min(6, kills));
-    return 1 + clamped * 0.12;
-  }
-
-  showKillStreakNotification(streak: number, x: number, y: number) {
-    const streakTexts: Record<number, string> = {
-      2: 'DOUBLE KILL',
-      3: 'TRIPLE KILL',
-      4: 'MEGA KILL',
-      5: 'ULTRA KILL',
-      6: 'MONSTER KILL',
-      7: 'KILLING SPREE',
-      8: 'UNSTOPPABLE',
-      10: 'LEGENDARY'
-    };
-
-    const text = streakTexts[streak] || `${streak}x STREAK`;
-    this.killStreakNotifications.push({ text, time: Date.now(), x, y });
-
-    // Keep only last 5 notifications
-    if (this.killStreakNotifications.length > 5) {
-      this.killStreakNotifications.shift();
-    }
-  }
-
-  pointToLineDistance(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const length = Math.sqrt(dx * dx + dy * dy);
-
-    if (length === 0) {
-      return Math.sqrt((px - x1) * (px - x1) + (py - y1) * (py - y1));
-    }
-
-    const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (length * length)));
-    const projection = {
-      x: x1 + t * dx,
-      y: y1 + t * dy
-    };
-
-    return Math.sqrt((px - projection.x) * (px - projection.x) + (py - projection.y) * (py - projection.y));
-  }
-
-  destroyCar(car: Car) {
-    if (car.destroyed) return;
-
-    car.destroyed = true;
-    car.elimAtMs = Date.now();
-    car.sprite.visible = false;
-
-    let playerDistance = Infinity;
-    let viewportRadius = Math.max(window.innerWidth, window.innerHeight) / 2;
-    const playerAlive = this.player && !this.player.destroyed;
-    if (playerAlive) {
-      const dx = car.x - this.player!.x;
-      const dy = car.y - this.player!.y;
-      playerDistance = Math.sqrt(dx * dx + dy * dy);
-    }
-
-    // AAA Impact Frame: only trigger when the drama is near the player or involves them
-    const playerInvolved = car === this.player || (playerDistance <= viewportRadius * 0.9);
-    if (playerAlive && car !== this.player && playerInvolved) {
-      this.triggerImpactFrame();
-    } else if (car === this.player) {
-      this.triggerImpactFrame();
-    }
-
-    // Haptic feedback on death (mobile)
-    if (car === this.player) {
-      this.hapticFeedback('heavy');
-
-      // RESET KILL STREAK WHEN PLAYER DIES
-      this.killStreak = 0;
-      this.lastKillTime = 0;
-    }
-
-    // Ensure all visual parts are removed/destroyed to avoid lingering head/tail
-    try { if (car.headGraphics) { car.headGraphics.destroy(); car.headGraphics = undefined; } } catch { }
-    try { if (car.tailGraphics) { car.tailGraphics.destroy(); car.tailGraphics = null; } } catch { }
-    try { if ((car.sprite as any)?.parent) { (car.sprite as any).parent.removeChild(car.sprite); } } catch { }
-    try { (car.sprite as any)?.destroy?.({ children: false }); } catch { }
-    try { const np = (car as any).nameplate as HTMLDivElement | undefined; if (np && np.parentElement) np.parentElement.removeChild(np); (car as any).nameplate = undefined; } catch { }
-
-    // Battle Royale: No respawning, permanent elimination
-    car.respawnTimer = -1; // Never respawn
-
-    // Clear and remove car's trail immediately
-    const tIdx = this.trails.findIndex(t => t.car === car);
-    if (tIdx >= 0) {
-      const trail = this.trails[tIdx];
-      trail.points = [];
-      try {
-        if (trail.rope && trail.rope.parent) trail.rope.parent.removeChild(trail.rope);
-        trail.rope.destroy();
-      } catch { }
-      this.trails.splice(tIdx, 1);
-    }
-
-    // Explosion already created at collision point - don't duplicate here
-
-    // Flash only if death is near player (within viewport)
-    if (playerAlive) {
-      if (playerDistance < viewportRadius) {
-        try {
-          let flash = document.getElementById('elim-flash');
-          if (!flash) {
-            flash = document.createElement('div');
-            flash.id = 'elim-flash';
-            flash.style.cssText = `
+        const flash = document.createElement('div');
+        flash.id = 'elim-flash';
+        flash.style.cssText = `
               position: fixed;
               inset: 0;
               background: rgba(255,255,255,0.8);
@@ -3575,15 +2754,14 @@ class SpermRaceGame {
               opacity: 0;
               transition: opacity 220ms ease-out;
             `;
-            document.body.appendChild(flash);
-          }
-          // Trigger flash
-          flash.style.opacity = '0.35';
-          setTimeout(() => { try { flash!.style.opacity = '0'; } catch { } }, 10);
-          setTimeout(() => {
-            try { if (flash && flash.parentElement) flash.parentElement.removeChild(flash); } catch { }
-          }, 280);
-        } catch { }
+        document.body.appendChild(flash);
+
+        // Trigger flash
+        requestAnimationFrame(() => { flash.style.opacity = '0.35'; });
+        setTimeout(() => { try { flash.style.opacity = '0'; } catch { } }, 50);
+        setTimeout(() => {
+          try { if (flash && flash.parentElement) flash.parentElement.removeChild(flash); } catch { }
+        }, 280);
       }
     }
 
@@ -3685,6 +2863,28 @@ class SpermRaceGame {
         b.sprite.visible = (b.x >= left && b.x <= right && b.y >= top && b.y <= bottom);
       }
     }
+  }
+
+  updateTrails(deltaTime: number) {
+    // Delegate to TrailSystem
+    if (this.player && !this.player.destroyed) {
+      this.trailSystem.addPoint(this.player);
+    }
+    if (this.bot && !this.bot.destroyed) {
+      this.trailSystem.addPoint(this.bot);
+    }
+    for (const bot of this.extraBots) {
+      if (!bot.destroyed) {
+        this.trailSystem.addPoint(bot);
+      }
+    }
+
+    this.trailSystem.update();
+  }
+
+  checkTrailCollisions() {
+    const allCars = [this.player, this.bot, ...this.extraBots].filter((c): c is Car => !!c);
+    this.trailSystem.checkCollisions(allCars, this.player);
   }
 
   updateParticles(deltaTime: number) {
