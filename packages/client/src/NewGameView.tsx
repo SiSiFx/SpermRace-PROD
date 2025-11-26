@@ -66,7 +66,7 @@ interface Trail {
   carId: string;
   car: Car;
   points: Array<{ x: number; y: number; time: number; isBoosting: boolean }>;
-  graphics: PIXI.Graphics;
+  rope: PIXI.MeshRope;
 }
 
 interface Particle {
@@ -137,6 +137,8 @@ class SpermRaceGame {
   public extraBots: Car[] = [];
   public trails: Trail[] = [];
   public particles: Particle[] = [];
+  public particlePool: PIXI.Graphics[] = [];
+  public maxPoolSize = 200;
   public pickups: Pickup[] = [];
   public artifactContainer!: PIXI.Container;
   public boostPads: BoostPad[] = [];
@@ -150,9 +152,9 @@ class SpermRaceGame {
     // Portrait mobile: Zoom out more to see the narrow arena better
     const isPortraitMobile = typeof window !== 'undefined' && window.innerHeight > window.innerWidth && window.innerWidth < 768;
     const defaultZoom = isPortraitMobile ? 0.45 : 0.55; // Even wider view
-    return { 
-      x: 0, y: 0, 
-      zoom: defaultZoom, targetZoom: defaultZoom, 
+    return {
+      x: 0, y: 0,
+      zoom: defaultZoom, targetZoom: defaultZoom,
       minZoom: 0.2, maxZoom: 1.5,
       // Screen shake for juicy feedback
       shakeX: 0, shakeY: 0, shakeDecay: 0.85
@@ -167,6 +169,7 @@ class SpermRaceGame {
   public pickupsContainer!: PIXI.Container;
   public boostPadsContainer!: PIXI.Container;
   public solanaTexture!: PIXI.Texture;
+  public trailTexture!: PIXI.Texture;
   public radar!: HTMLCanvasElement;
   public radarCtx!: CanvasRenderingContext2D;
   public gameEffects!: GameEffects; // Instantiated in setupWorld
@@ -248,7 +251,7 @@ class SpermRaceGame {
       const ls = window.localStorage.getItem('SR_DEBUG');
       if (ls === '1' || ls === 'true') return true;
       if (ls === '0' || ls === 'false') return false;
-    } catch {}
+    } catch { }
     return ((import.meta as any).env?.DEV === true);
   })();
   private lastVisCheckAt: number = 0;
@@ -306,15 +309,15 @@ class SpermRaceGame {
     lastSide: 'left' | 'right' | 'top' | 'bottom' | null;
     minWidth: number; minHeight: number; sliceStep: number;
   } = {
-    left: 0, right: 0, top: 0, bottom: 0,
-    nextSliceAt: 0, sliceIntervalMs: 2400, telegraphMs: 1400,
-    pendingSide: null, lastSide: null,
-    minWidth: 1200, minHeight: 1200, sliceStep: 300,
-  };
+      left: 0, right: 0, top: 0, bottom: 0,
+      nextSliceAt: 0, sliceIntervalMs: 2400, telegraphMs: 1400,
+      pendingSide: null, lastSide: null,
+      minWidth: 1200, minHeight: 1200, sliceStep: 300,
+    };
   public firstSliceSide: 'left' | 'right' | 'top' | 'bottom' | null = null;
   private sliceIndex: number = 0;
   private daySeed: number = 0;
-  private slicePattern: Array<'left'|'right'|'top'|'bottom'> = [];
+  private slicePattern: Array<'left' | 'right' | 'top' | 'bottom'> = [];
 
   // Callbacks for navigation
   public onReplay?: () => void;
@@ -325,7 +328,7 @@ class SpermRaceGame {
     this.container = container;
     this.onReplay = onReplay;
     this.onExit = onExit;
-    
+
     // Listen for mobile boost events to trigger haptics
     window.addEventListener('mobile-boost', this.handleMobileBoost.bind(this));
   }
@@ -341,7 +344,7 @@ class SpermRaceGame {
     this.camera.shakeX = (Math.random() - 0.5) * 8 * intensity;
     this.camera.shakeY = (Math.random() - 0.5) * 8 * intensity;
   }
-  
+
   private handleMobileBoost() {
     // Check if boost actually happened
     if (this.player?.isBoosting) {
@@ -349,7 +352,7 @@ class SpermRaceGame {
       this.screenShake(0.2);
     }
   }
-  
+
   // Public accessor for external haptic triggers
   public triggerHaptic(type: 'light' | 'medium' | 'heavy') {
     this.hapticFeedback(type);
@@ -381,7 +384,7 @@ class SpermRaceGame {
           navigator.vibrate?.([20, 10, 20, 10, 20]);
           break;
       }
-    } catch {}
+    } catch { }
   }
 
   private showNearMiss(x: number, y: number, distance: number) {
@@ -399,26 +402,26 @@ class SpermRaceGame {
   private computeDaySeed(): number {
     try {
       const d = new Date();
-      const key = `${d.getUTCFullYear()}-${(d.getUTCMonth()+1).toString().padStart(2,'0')}-${d.getUTCDate().toString().padStart(2,'0')}`;
+      const key = `${d.getUTCFullYear()}-${(d.getUTCMonth() + 1).toString().padStart(2, '0')}-${d.getUTCDate().toString().padStart(2, '0')}`;
       let h = 2166136261; // FNV-1a 32-bit
-      for (let i = 0; i < key.length; i++) { h ^= key.charCodeAt(i); h += (h<<1) + (h<<4) + (h<<7) + (h<<8) + (h<<24); }
-      return (h >>> 0) || Math.floor(Math.random()*1e9);
-    } catch { return Math.floor(Math.random()*1e9); }
+      for (let i = 0; i < key.length; i++) { h ^= key.charCodeAt(i); h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24); }
+      return (h >>> 0) || Math.floor(Math.random() * 1e9);
+    } catch { return Math.floor(Math.random() * 1e9); }
   }
 
-  private buildSlicePattern(seed: number): Array<'left'|'right'|'top'|'bottom'> {
+  private buildSlicePattern(seed: number): Array<'left' | 'right' | 'top' | 'bottom'> {
     // Deterministic, well-distributed pattern avoiding immediate repeats
-    const sides: Array<'left'|'right'|'top'|'bottom'> = ['left','right','top','bottom'];
+    const sides: Array<'left' | 'right' | 'top' | 'bottom'> = ['left', 'right', 'top', 'bottom'];
     // simple LCG
     let st = (seed ^ 0x9e3779b9) >>> 0;
     const rnd = () => { st = (1664525 * st + 1013904223) >>> 0; return st / 0xffffffff; };
-    const out: Array<'left'|'right'|'top'|'bottom'> = [];
-    let last: 'left'|'right'|'top'|'bottom' | null = null;
+    const out: Array<'left' | 'right' | 'top' | 'bottom'> = [];
+    let last: 'left' | 'right' | 'top' | 'bottom' | null = null;
     for (let i = 0; i < 64; i++) {
-      const opts: Array<'left'|'right'|'top'|'bottom'> = last
-        ? (sides.filter(s => s !== last) as Array<'left'|'right'|'top'|'bottom'>)
-        : (sides.slice() as Array<'left'|'right'|'top'|'bottom'>);
-      const pick: 'left'|'right'|'top'|'bottom' = opts[Math.floor(rnd() * opts.length)];
+      const opts: Array<'left' | 'right' | 'top' | 'bottom'> = last
+        ? (sides.filter(s => s !== last) as Array<'left' | 'right' | 'top' | 'bottom'>)
+        : (sides.slice() as Array<'left' | 'right' | 'top' | 'bottom'>);
+      const pick: 'left' | 'right' | 'top' | 'bottom' = opts[Math.floor(rnd() * opts.length)];
       out.push(pick);
       last = pick;
     }
@@ -450,27 +453,27 @@ class SpermRaceGame {
         enemyGlow: 0xff6666,
         text
       } as any;
-    } catch {}
+    } catch { }
   }
 
 
   private dbg(...args: any[]) {
     if (!this.debugEnabled) return;
-    try { console.log('[GAME][DBG]', ...args); } catch {}
+    try { console.log('[GAME][DBG]', ...args); } catch { }
   }
 
   async init() {
     const width = this.container.clientWidth || window.innerWidth;
     const height = this.container.clientHeight || window.innerHeight;
-    
+
     // High-quality rendering settings
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     const rawPixelRatio = window.devicePixelRatio || 1;
     // Cap at 2x on mobile to prevent 3x (9x pixels) on high-end phones - massive performance boost
     const pixelRatio = isMobile ? Math.min(rawPixelRatio, 2) : rawPixelRatio;
-    
+
     console.log('[RENDERER] Resolution:', pixelRatio, 'Device:', isMobile ? 'Mobile' : 'Desktop', 'Raw DPR:', rawPixelRatio);
-    
+
     this.app = new PIXI.Application();
     await this.app.init({
       width,
@@ -484,60 +487,60 @@ class SpermRaceGame {
     this.loadThemeFromCSS();
     this.dbg('init', { width, height });
     // Pause ticker during initialization to avoid rendering half-built scene
-    try { (this.app as any)?.ticker?.stop?.(); } catch {}
+    try { (this.app as any)?.ticker?.stop?.(); } catch { }
     // Ensure stage exists across Pixi versions
     try {
       const st = (this.app as any)?.stage;
       if (!st) { (this.app as any).stage = new PIXI.Container(); }
-    } catch {}
-    
+    } catch { }
+
     // Add canvas to container and make it focusable (guard across Pixi versions)
     const canvas = ((this.app as any)?.canvas
       || (this.app as any)?.renderer?.view
       || (this.app as any)?.view) as HTMLCanvasElement | undefined;
     if (canvas) {
-      try { (canvas as any).tabIndex = 0; } catch {}
-      try { (canvas as any).style.outline = 'none'; } catch {}
-      try { (canvas as any).style.touchAction = 'none'; } catch {} // Prevent browser gestures (pinch, zoom, pull-to-refresh)
-      try { if (!this.container.contains(canvas)) this.container.appendChild(canvas); } catch {}
+      try { (canvas as any).tabIndex = 0; } catch { }
+      try { (canvas as any).style.outline = 'none'; } catch { }
+      try { (canvas as any).style.touchAction = 'none'; } catch { } // Prevent browser gestures (pinch, zoom, pull-to-refresh)
+      try { if (!this.container.contains(canvas)) this.container.appendChild(canvas); } catch { }
     } else {
       // Fallback: create a canvas to avoid null deref; Pixi will still render to its internal view
       const fallback = document.createElement('canvas');
-      try { fallback.width = width; fallback.height = height; fallback.style.outline = 'none'; fallback.style.touchAction = 'none'; } catch {}
-      try { this.container.appendChild(fallback); } catch {}
+      try { fallback.width = width; fallback.height = height; fallback.style.outline = 'none'; fallback.style.touchAction = 'none'; } catch { }
+      try { this.container.appendChild(fallback); } catch { }
     }
-    
+
     // Auto-focus the canvas so keyboard input works immediately
-    try { (canvas as any)?.focus?.(); } catch {}
-    
+    try { (canvas as any)?.focus?.(); } catch { }
+
     // Re-focus canvas when clicked to ensure keyboard input always works
-    const refocusCanvas = () => { try { (canvas as any)?.focus?.(); } catch {} };
+    const refocusCanvas = () => { try { (canvas as any)?.focus?.(); } catch { } };
     try {
       canvas?.addEventListener?.('click', refocusCanvas);
       canvas?.addEventListener?.('mousedown', refocusCanvas);
       this.cleanupFunctions.push(() => {
-        try { canvas?.removeEventListener?.('click', refocusCanvas); } catch {}
-        try { canvas?.removeEventListener?.('mousedown', refocusCanvas); } catch {}
+        try { canvas?.removeEventListener?.('click', refocusCanvas); } catch { }
+        try { canvas?.removeEventListener?.('mousedown', refocusCanvas); } catch { }
       });
-    } catch {}
+    } catch { }
 
     // WebGL context loss recovery (prevents black screen on mobile)
     const handleContextLost = (e: Event) => {
       e.preventDefault();
       console.warn('[GAME] WebGL context lost, pausing game...');
-      try { (this.app as any)?.ticker?.stop?.(); } catch {}
+      try { (this.app as any)?.ticker?.stop?.(); } catch { }
     };
     const handleContextRestored = () => {
       console.log('[GAME] WebGL context restored, resuming game...');
-      try { (this.app as any)?.ticker?.start?.(); } catch {}
+      try { (this.app as any)?.ticker?.start?.(); } catch { }
     };
     try {
       if (canvas) {
         canvas.addEventListener('webglcontextlost', handleContextLost as EventListener);
         canvas.addEventListener('webglcontextrestored', handleContextRestored as EventListener);
         this.cleanupFunctions.push(() => {
-          try { canvas.removeEventListener('webglcontextlost', handleContextLost as EventListener); } catch {}
-          try { canvas.removeEventListener('webglcontextrestored', handleContextRestored as EventListener); } catch {}
+          try { canvas.removeEventListener('webglcontextlost', handleContextLost as EventListener); } catch { }
+          try { canvas.removeEventListener('webglcontextrestored', handleContextRestored as EventListener); } catch { }
         });
       }
     } catch (e) {
@@ -547,19 +550,19 @@ class SpermRaceGame {
     // *** MOBILE ORIENTATION & RESIZE FIX ***
     // Explicitly handle orientation changes with a slight delay to allow browser UI to settle
     const handleMobileResize = () => {
-        const nowTs = Date.now();
-        if (nowTs - __sr_lastResize < 100) return;
-        __sr_lastResize = nowTs;
-        
-        // Force strict match to visual viewport
-        const w = window.visualViewport ? window.visualViewport.width : window.innerWidth;
-        const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-        
-        if (this.app && this.app.renderer) {
-            this.app.renderer.resize(w, h);
-            try { this.drawArenaBorder(); } catch {}
-            this.updateCamera();
-        }
+      const nowTs = Date.now();
+      if (nowTs - __sr_lastResize < 100) return;
+      __sr_lastResize = nowTs;
+
+      // Force strict match to visual viewport
+      const w = window.visualViewport ? window.visualViewport.width : window.innerWidth;
+      const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+
+      if (this.app && this.app.renderer) {
+        this.app.renderer.resize(w, h);
+        try { this.drawArenaBorder(); } catch { }
+        this.updateCamera();
+      }
     };
     window.visualViewport?.addEventListener('resize', handleMobileResize);
     this.cleanupFunctions.push(() => window.visualViewport?.removeEventListener('resize', handleMobileResize));
@@ -584,7 +587,7 @@ class SpermRaceGame {
     Object.assign(this.overviewCanvas.style, { position: 'absolute', top: '0', left: '0', width: '100%', height: '100%', zIndex: '12', pointerEvents: 'none' });
     this.uiContainer.appendChild(this.overviewCanvas);
     this.overviewCtx = this.overviewCanvas.getContext('2d');
-    
+
     // Create danger overlay for zone warnings (vignette, desaturation, pulse effects)
     const dangerOverlay = document.createElement('div');
     dangerOverlay.id = 'game-danger-overlay';
@@ -604,17 +607,17 @@ class SpermRaceGame {
       willChange: 'opacity, border-color'
     });
     this.uiContainer.appendChild(dangerOverlay);
-    
+
     // Setup the game world immediately
     this.setupWorld();
     this.dbg('setupWorld: done, stageChildren=', (this.app as any)?.stage?.children?.length);
-    try { this.updateCamera(); } catch {}
+    try { this.updateCamera(); } catch { }
     // Fallback: guarantee world container exists
     if (!this.worldContainer) {
       try {
         this.worldContainer = new PIXI.Container();
         (this.app as any)?.stage?.addChild?.(this.worldContainer);
-      } catch {}
+      } catch { }
     }
     this.setupControls();
     // Mount HUD layers immediately
@@ -644,11 +647,11 @@ class SpermRaceGame {
     };
     window.addEventListener('resize', resizeHandler);
     this.cleanupFunctions.push(() => window.removeEventListener('resize', resizeHandler));
-    
+
     // Start game loop after one microtask to ensure stage is fully assembled
     Promise.resolve().then(() => {
-      try { (this.app as any)?.ticker?.add?.(() => this.gameLoop()); } catch {}
-      try { (this.app as any)?.ticker?.start?.(); } catch {}
+      try { (this.app as any)?.ticker?.add?.(() => this.gameLoop()); } catch { }
+      try { (this.app as any)?.ticker?.start?.(); } catch { }
     });
   }
 
@@ -657,54 +660,54 @@ class SpermRaceGame {
     const width = this.container.clientWidth || window.innerWidth;
     const height = this.container.clientHeight || window.innerHeight;
     this.app.renderer.resize(width, height);
-    try { this.drawArenaBorder(); } catch {}
+    try { this.drawArenaBorder(); } catch { }
     try {
       // Recreate grid to avoid blurry lines after zoom/resize
       if (this.gridGraphics && this.worldContainer) {
-        try { this.worldContainer.removeChild(this.gridGraphics); } catch {}
+        try { this.worldContainer.removeChild(this.gridGraphics); } catch { }
       }
       this.createGrid();
-    } catch {}
+    } catch { }
     this.updateCamera();
   }
 
   setupWorld() {
     if (!this.app) return;
-    
+
     // Create world container and attach to stage (no visible rectangular frame)
     this.worldContainer = new PIXI.Container();
     this.worldContainer.sortableChildren = true;
     this.app.stage.addChild(this.worldContainer);
-    
+
     // Create and add arena border graphics (drawn once and updated on resize/zoom if needed)
     this.borderGraphics = new PIXI.Graphics();
     (this.borderGraphics as any).zIndex = 1000;
     this.worldContainer.addChild(this.borderGraphics);
-    
+
     // Add grid pattern for better navigation
     this.createGrid();
-    try { (this.gridGraphics as any).zIndex = 1; } catch {}
+    try { (this.gridGraphics as any).zIndex = 1; } catch { }
 
     // Add a decor layer (faint neon nodes)
     this.decorContainer = new PIXI.Container();
     this.worldContainer.addChild(this.decorContainer);
-    try { (this.decorContainer as any).zIndex = 5; } catch {}
+    try { (this.decorContainer as any).zIndex = 5; } catch { }
     // Decor disabled for bio-minimal theme (no neon nodes)
     // this.spawnDecor();
-    
+
     // Create separate container for trails
     this.trailContainer = new PIXI.Container();
     this.trailContainer.visible = true;
     this.trailContainer.alpha = 1.0;
     this.worldContainer.addChild(this.trailContainer);
-    try { (this.trailContainer as any).zIndex = 20; } catch {}
-    
+    try { (this.trailContainer as any).zIndex = 20; } catch { }
+
     // Pickups (energy orbs) – hidden initially
     this.pickupsContainer = new PIXI.Container();
     this.pickupsContainer.visible = false;
     this.worldContainer.addChild(this.pickupsContainer);
     // Defer initial pickup spawn
-    
+
     // Add ambient colored particles for atmosphere
     this.createAmbientParticles();
 
@@ -720,6 +723,7 @@ class SpermRaceGame {
 
     // Load Solana logo sprite
     this.createSolanaTexture();
+    this.createTrailTexture();
 
     // Initial border draw
     this.drawArenaBorder();
@@ -728,7 +732,7 @@ class SpermRaceGame {
     try {
       this.borderOverlay = new PIXI.Graphics();
       (this.app as any)?.stage?.addChild?.(this.borderOverlay);
-    } catch {}
+    } catch { }
 
     // Visibility handling: pause ticker when tab hidden to save CPU and avoid desync stutters
     const onVis = () => {
@@ -738,7 +742,7 @@ class SpermRaceGame {
         if (tk) {
           if (hidden) tk.stop?.(); else tk.start?.();
         }
-      } catch {}
+      } catch { }
     };
     document.addEventListener('visibilitychange', onVis);
     this.cleanupFunctions.push(() => document.removeEventListener('visibilitychange', onVis));
@@ -747,49 +751,49 @@ class SpermRaceGame {
   createGrid() {
     const gridSize = 160;
     this.gridGraphics = new PIXI.Graphics();
-    
+
     // Vertical lines
-    for (let x = -this.arena.width/2; x <= this.arena.width/2; x += gridSize) {
+    for (let x = -this.arena.width / 2; x <= this.arena.width / 2; x += gridSize) {
       this.gridGraphics
-        .moveTo(x, -this.arena.height/2)
-        .lineTo(x, this.arena.height/2);
+        .moveTo(x, -this.arena.height / 2)
+        .lineTo(x, this.arena.height / 2);
     }
-    
+
     // Horizontal lines
-    for (let y = -this.arena.height/2; y <= this.arena.height/2; y += gridSize) {
+    for (let y = -this.arena.height / 2; y <= this.arena.height / 2; y += gridSize) {
       this.gridGraphics
-        .moveTo(-this.arena.width/2, y)
-        .lineTo(this.arena.width/2, y);
+        .moveTo(-this.arena.width / 2, y)
+        .lineTo(this.arena.width / 2, y);
     }
-    
+
     // Matte grid only (remove veins that could look like a border)
     this.gridGraphics.stroke({ width: 1, color: this.theme.grid, alpha: this.theme.gridAlpha });
     this.worldContainer.addChild(this.gridGraphics);
   }
-  
+
   createAmbientParticles() {
     // Add subtle floating colored particles for atmosphere
     const particleCount = 40;
     const colors = [0x22d3ee, 0x6366f1, 0x10b981, 0xfbbf24]; // Cyan, purple, green, yellow
-    
+
     for (let i = 0; i < particleCount; i++) {
       const x = (Math.random() - 0.5) * this.arena.width;
       const y = (Math.random() - 0.5) * this.arena.height;
       const color = colors[Math.floor(Math.random() * colors.length)];
       const size = 2 + Math.random() * 3;
-      
+
       const particle = new PIXI.Graphics();
       particle.circle(0, 0, size).fill({ color, alpha: 0.3 });
       particle.x = x;
       particle.y = y;
-      
+
       // Store animation data
       (particle as any).baseY = y;
       (particle as any).floatSpeed = 0.3 + Math.random() * 0.5;
       (particle as any).floatOffset = Math.random() * Math.PI * 2;
-      
+
       this.worldContainer.addChild(particle);
-      try { (particle as any).zIndex = 3; } catch {}
+      try { (particle as any).zIndex = 3; } catch { }
     }
   }
 
@@ -834,15 +838,15 @@ class SpermRaceGame {
 
   createSolanaTexture() {
     if (!this.app) return;
-    
+
     // Create a high-quality Solana logo texture
     const logoGraphics = new PIXI.Graphics();
-    
+
     // Solana logo colors
     const purple = 0x9945FF;
     const green = 0x14F195;
     const gradient = 0x19FB9B;
-    
+
     // Create Solana logo shape (simplified but recognizable)
     logoGraphics
       .moveTo(0, -3)
@@ -851,7 +855,7 @@ class SpermRaceGame {
       .lineTo(2, -1)
       .closePath()
       .fill(purple);
-    
+
     logoGraphics
       .moveTo(0, 1)
       .lineTo(6, 1)
@@ -859,7 +863,7 @@ class SpermRaceGame {
       .lineTo(2, 3)
       .closePath()
       .fill(green);
-    
+
     logoGraphics
       .moveTo(2, -1)
       .lineTo(8, -1)
@@ -867,9 +871,28 @@ class SpermRaceGame {
       .lineTo(0, 1)
       .closePath()
       .fill(gradient);
-    
+
     // Store the texture for reuse
     this.solanaTexture = this.app.renderer.generateTexture(logoGraphics);
+  }
+
+  createTrailTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 32;
+    canvas.height = 32;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      // Gradient from transparent -> white -> transparent (vertical, for rope width)
+      const g = ctx.createLinearGradient(0, 0, 0, 32);
+      g.addColorStop(0, 'rgba(255,255,255,0)');
+      g.addColorStop(0.2, 'rgba(255,255,255,0.6)');
+      g.addColorStop(0.5, 'rgba(255,255,255,1)');
+      g.addColorStop(0.8, 'rgba(255,255,255,0.6)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, 32, 32);
+    }
+    this.trailTexture = PIXI.Texture.from(canvas);
   }
 
   // Simple LCG for deterministic artifact placement
@@ -909,7 +932,7 @@ class SpermRaceGame {
       this.pickupsContainer = new PIXI.Container();
       this.pickupsContainer.visible = true;
       this.worldContainer?.addChild?.(this.pickupsContainer as any);
-    } catch {}
+    } catch { }
     return !!this.pickupsContainer;
   }
 
@@ -963,7 +986,7 @@ class SpermRaceGame {
     container.addChild(g);
     container.x = x;
     container.y = y;
-    try { this.pickupsContainer.addChild(container); } catch {}
+    try { this.pickupsContainer.addChild(container); } catch { }
 
     const pickup: Pickup = {
       x,
@@ -1017,7 +1040,7 @@ class SpermRaceGame {
         transition: 'opacity 220ms ease-out',
         pointerEvents: 'none',
         zIndex: '40'
-  } as Partial<CSSStyleDeclaration>);
+      } as Partial<CSSStyleDeclaration>);
       this.uiContainer.appendChild(el);
       this.hotspotToastEl = el;
     }
@@ -1030,7 +1053,7 @@ class SpermRaceGame {
     this.hotspotToastEl.style.opacity = '1';
     if (this.hotspotToastTimeout) window.clearTimeout(this.hotspotToastTimeout);
     this.hotspotToastTimeout = window.setTimeout(() => {
-      try { if (this.hotspotToastEl) this.hotspotToastEl.style.opacity = '0'; } catch {}
+      try { if (this.hotspotToastEl) this.hotspotToastEl.style.opacity = '0'; } catch { }
     }, 1800);
   }
 
@@ -1113,10 +1136,10 @@ class SpermRaceGame {
   }
 
   private teardownHotspot(hotspot: Hotspot) {
-    try { this.worldContainer?.removeChild(hotspot.graphics); } catch {}
-    try { hotspot.graphics.destroy(); } catch {}
+    try { this.worldContainer?.removeChild(hotspot.graphics); } catch { }
+    try { hotspot.graphics.destroy(); } catch { }
     if (hotspot.label) {
-      try { hotspot.label.remove(); } catch {}
+      try { hotspot.label.remove(); } catch { }
       hotspot.label = undefined;
     }
   }
@@ -1167,7 +1190,7 @@ class SpermRaceGame {
         transition: 'opacity 180ms ease-out',
         pointerEvents: 'none',
         zIndex: '42'
-  } as Partial<CSSStyleDeclaration>);
+      } as Partial<CSSStyleDeclaration>);
       this.uiContainer.appendChild(el);
       this.overdriveBannerEl = el;
     }
@@ -1208,7 +1231,7 @@ class SpermRaceGame {
 
   setupControls() {
     if (!this.app) return;
-    
+
     // Keyboard controls
     const onKeyDown = (e: KeyboardEvent) => {
       this.keys[e.code] = true;
@@ -1216,24 +1239,24 @@ class SpermRaceGame {
     const onKeyUp = (e: KeyboardEvent) => {
       this.keys[e.code] = false;
     };
-    
+
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
     this.cleanupFunctions.push(() => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     });
-    
+
     // Mouse controls
     const onMouseMove = (e: MouseEvent) => {
       const rect = this.app!.canvas.getBoundingClientRect();
       this.mouse.x = e.clientX - rect.left;
       this.mouse.y = e.clientY - rect.top;
     };
-    
+
     window.addEventListener('mousemove', onMouseMove);
     this.cleanupFunctions.push(() => window.removeEventListener('mousemove', onMouseMove));
-    
+
     // Touch controls - Enhanced for mobile
     const onTouchStart = (e: TouchEvent) => {
       e.preventDefault();
@@ -1252,7 +1275,7 @@ class SpermRaceGame {
         } else {
           this.startBoost();
           // Haptic feedback on boost
-          try { navigator.vibrate?.(50); } catch {}
+          try { navigator.vibrate?.(50); } catch { }
         }
       }
       // Double tap detection for boost (fallback)
@@ -1262,12 +1285,12 @@ class SpermRaceGame {
         } else {
           this.startBoost();
           // Haptic feedback
-          try { navigator.vibrate?.(50); } catch {}
+          try { navigator.vibrate?.(50); } catch { }
         }
       }
       this.touch.lastTap = now;
     };
-    
+
     const onTouchMove = (e: TouchEvent) => {
       e.preventDefault();
       if (this.touch.active && e.touches.length > 0) {
@@ -1277,12 +1300,12 @@ class SpermRaceGame {
         this.touch.y = touch.clientY - rect.top;
       }
     };
-    
+
     const onTouchEnd = (e: TouchEvent) => {
       e.preventDefault();
       this.touch.active = false;
     };
-    
+
     this.app.canvas.addEventListener('touchstart', onTouchStart, { passive: false });
     this.app.canvas.addEventListener('touchmove', onTouchMove, { passive: false });
     this.app.canvas.addEventListener('touchend', onTouchEnd, { passive: false });
@@ -1291,7 +1314,7 @@ class SpermRaceGame {
       this.app!.canvas.removeEventListener('touchmove', onTouchMove);
       this.app!.canvas.removeEventListener('touchend', onTouchEnd);
     });
-    
+
     // Zoom controls
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
@@ -1299,25 +1322,25 @@ class SpermRaceGame {
       const zoomDelta = -e.deltaY * zoomSpeed;
       this.camera.targetZoom = Math.max(this.camera.minZoom, Math.min(this.camera.maxZoom, this.camera.targetZoom + zoomDelta));
     };
-    
+
     window.addEventListener('wheel', onWheel);
     this.cleanupFunctions.push(() => window.removeEventListener('wheel', onWheel));
-    
+
     // Mobile virtual controls integration
     const onMobileJoystick = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (!detail) return;
-      
+
       // Convert joystick offset to screen position for aiming
       const rect = this.app!.canvas.getBoundingClientRect();
       const centerX = rect.width / 2;
       const centerY = rect.height / 2;
-      
+
       // Improved sensitivity and smoothing
       const scale = 4; // Increased sensitivity
       const targetX = centerX + (detail.x * scale);
       const targetY = centerY + (detail.y * scale);
-      
+
       // Smooth input for better feel
       if (this.touch.active) {
         this.touch.x = this.touch.x * 0.4 + targetX * 0.6;
@@ -1328,14 +1351,14 @@ class SpermRaceGame {
       }
       this.touch.active = true;
     };
-    
+
     const onMobileBoost = () => {
       // Don't allow boost during preStart countdown
       if (this.preStart) {
         console.log('[BOOST] Blocked during countdown');
         return;
       }
-      
+
       if (this.player?.isBoosting) {
         this.stopBoost();
       } else {
@@ -1343,7 +1366,7 @@ class SpermRaceGame {
         this.startBoost();
       }
     };
-    
+
     window.addEventListener('mobile-joystick', onMobileJoystick as EventListener);
     window.addEventListener('mobile-boost', onMobileBoost);
     this.cleanupFunctions.push(() => {
@@ -1357,7 +1380,7 @@ class SpermRaceGame {
     return;
     // Check if mobile - if yes, use proximity radar instead
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    
+
     if (isMobile) {
       // Create proximity radar overlay (full screen, edge indicators)
       this.radar = document.createElement('canvas');
@@ -1377,7 +1400,7 @@ class SpermRaceGame {
       this.radarCtx = this.radar.getContext('2d')!;
       return;
     }
-    
+
     // Desktop: Create sonar radar
     this.radar = document.createElement('canvas');
     this.radar.id = 'game-radar';
@@ -1406,7 +1429,7 @@ class SpermRaceGame {
   createUI() {
     // Ensure HUD animations are available
     injectHudAnimationStylesOnce();
-    
+
     // Initialize clean HUD manager
     this.hudManager = new HudManager(this.uiContainer);
     this.hudManager.createHUD();
@@ -1414,15 +1437,15 @@ class SpermRaceGame {
     // Create controls hint
     const controlsHint = document.createElement('div');
     controlsHint.id = 'game-controls-hint';
-    
+
     // Detect mobile device
     const isMobileControls = window.innerWidth <= 768 && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
-    
+
     // Show appropriate controls text
-    controlsHint.innerHTML = isMobileControls 
+    controlsHint.innerHTML = isMobileControls
       ? 'Drag left side to move • Tap BOOST to dash'
       : 'WASD: Move • SPACE: Boost';
-    
+
     Object.assign(controlsHint.style, {
       position: 'absolute',
       bottom: 'calc(32px + env(safe-area-inset-bottom, 0px))',
@@ -1441,7 +1464,7 @@ class SpermRaceGame {
       whiteSpace: 'nowrap'
     });
     this.uiContainer.appendChild(controlsHint);
-    
+
     // Fade out controls hint after 5 seconds
     setTimeout(() => {
       if (controlsHint) {
@@ -1550,7 +1573,7 @@ class SpermRaceGame {
       btn.onclick = () => {
         this.showEmote(emote.label);
         // Haptic feedback
-        try { navigator.vibrate?.(30); } catch {}
+        try { navigator.vibrate?.(30); } catch { }
         // Visual feedback
         btn.style.transform = 'scale(0.9)';
         setTimeout(() => { btn.style.transform = 'scale(1)'; }, 100);
@@ -1637,10 +1660,10 @@ class SpermRaceGame {
       const head = localStorage.getItem('sr_profile_head');
       const tail = localStorage.getItem('sr_profile_tail');
       const nm = localStorage.getItem('sr_profile_name');
-      if (head && /^#?[0-9a-fA-F]{6}$/.test(head)) headHex = parseInt(head.replace('#',''), 16);
-      if (tail && /^#?[0-9a-fA-F]{6}$/.test(tail)) tailHex = parseInt(tail.replace('#',''), 16);
+      if (head && /^#?[0-9a-fA-F]{6}$/.test(head)) headHex = parseInt(head.replace('#', ''), 16);
+      if (tail && /^#?[0-9a-fA-F]{6}$/.test(tail)) tailHex = parseInt(tail.replace('#', ''), 16);
       if (nm && nm.trim()) nameText = nm.trim();
-    } catch {}
+    } catch { }
     this.player = this.createCar(s.x, s.y, headHex, 'player');
     if (this.player) {
       // Slightly faster feel in mobile practice (no ws HUD)
@@ -1653,7 +1676,7 @@ class SpermRaceGame {
           this.player.targetSpeed = this.player.baseSpeed;
           this.player.boostSpeed *= 1.2;
         }
-      } catch {}
+      } catch { }
 
       (this.player as any).tailColor = tailHex ?? headHex;
       this.player.angle = s.angle;
@@ -1687,12 +1710,12 @@ class SpermRaceGame {
       this.worldContainer.x = Math.round(this.camera.x + this.camera.shakeX);
       this.worldContainer.y = Math.round(this.camera.y + this.camera.shakeY);
       this.worldContainer.scale.set(this.camera.zoom);
-      try { this.drawBorderOverlay(); } catch {}
-    } catch {}
-    
+      try { this.drawBorderOverlay(); } catch { }
+    } catch { }
+
     // Trigger spawn haptic
     this.hapticFeedback('medium');
-    
+
     this.dbg('after createPlayer: stageChildren=', (this.app as any)?.stage?.children?.length, 'worldChildren=', this.worldContainer?.children?.length);
   }
 
@@ -1774,22 +1797,22 @@ class SpermRaceGame {
     // Left side
     for (let i = 0; i < perSide && q.length < count; i++) {
       const y = top + (i + 0.5) * stepY;
-      q.push({ x: left, y: Math.min(bottom, Math.max(top, y)), angle: 0 + (Math.random()-0.5)*0.4 });
+      q.push({ x: left, y: Math.min(bottom, Math.max(top, y)), angle: 0 + (Math.random() - 0.5) * 0.4 });
     }
     // Right side
     for (let i = 0; i < perSide && q.length < count; i++) {
       const y = top + (i + 0.5) * stepY;
-      q.push({ x: right, y: Math.min(bottom, Math.max(top, y)), angle: Math.PI + (Math.random()-0.5)*0.4 });
+      q.push({ x: right, y: Math.min(bottom, Math.max(top, y)), angle: Math.PI + (Math.random() - 0.5) * 0.4 });
     }
     // Top side
     for (let i = 0; i < perSide && q.length < count; i++) {
       const x = left + (i + 0.5) * stepX;
-      q.push({ x: Math.min(right, Math.max(left, x)), y: top, angle: Math.PI/2 + (Math.random()-0.5)*0.4 });
+      q.push({ x: Math.min(right, Math.max(left, x)), y: top, angle: Math.PI / 2 + (Math.random() - 0.5) * 0.4 });
     }
     // Bottom side
     for (let i = 0; i < perSide && q.length < count; i++) {
       const x = left + (i + 0.5) * stepX;
-      q.push({ x: Math.min(right, Math.max(left, x)), y: bottom, angle: -Math.PI/2 + (Math.random()-0.5)*0.4 });
+      q.push({ x: Math.min(right, Math.max(left, x)), y: bottom, angle: -Math.PI / 2 + (Math.random() - 0.5) * 0.4 });
     }
     // Shuffle
     for (let i = q.length - 1; i > 0; i--) {
@@ -1871,12 +1894,12 @@ class SpermRaceGame {
     const headSize = type === 'player' ? 8 : 10; // Enemies 25% bigger
     const strokeWidth = type === 'player' ? 2 : 3; // Thicker stroke for enemies
     car.headGraphics!.circle(0, 0, headSize).fill(color).stroke({ width: strokeWidth, color, alpha: 0.5 });
-    
+
     // Add glow effect for better visibility
     if (type !== 'player') {
       car.headGraphics!.circle(0, 0, headSize + 4).fill({ color, alpha: 0.15 });
     }
-    
+
     // Tail (wavy polyline), initially empty; updated each frame
     if (car.tailGraphics) {
       car.tailGraphics!.clear();
@@ -1885,12 +1908,12 @@ class SpermRaceGame {
     }
     (car.headGraphics as any).zIndex = 2;
     car.sprite.addChild(car.headGraphics!);
-    
+
     car.sprite.x = x;
     car.sprite.y = y;
     car.sprite.rotation = car.angle;
     car.sprite.visible = true;
-    try { (car.sprite as any).zIndex = type === 'player' ? 50 : 50; } catch {}
+    try { (car.sprite as any).zIndex = type === 'player' ? 50 : 50; } catch { }
 
     // Create nameplate DOM element
     if (this.uiContainer) {
@@ -1922,26 +1945,26 @@ class SpermRaceGame {
     if (this.player && this.player.boostEnergy >= (this.player.minBoostEnergy + 5) && !this.player.isBoosting) {
       this.player.isBoosting = true;
       this.player.targetSpeed = this.player.boostSpeed;
-      
+
       // Enhanced boost feedback for mobile
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      
+
       // Haptic feedback - makes boost feel punchy
       this.hapticFeedback('medium');
-      
+
       // Subtle camera zoom for speed sensation (FOV effect)
       this.camera.targetZoom = Math.min(this.camera.zoom * 1.05, this.camera.maxZoom);
-      
+
       // Light screen shake on boost start
       this.screenShake(0.5);
-      
+
       // Skip heavy particle effect on mobile - causes visual glitches
       if (!isMobile) {
         this.createBoostEffect(this.player.x, this.player.y);
       }
     }
   }
-  
+
   // Get particle from pool or create new one
   private getParticle(): PIXI.Graphics {
     const particle = this.particlePool.pop() || new PIXI.Graphics();
@@ -1949,61 +1972,61 @@ class SpermRaceGame {
     particle.alpha = 1;
     return particle;
   }
-  
+
   // Return particle to pool for reuse
   private returnParticle(particle: PIXI.Graphics) {
     particle.clear();
     particle.visible = false;
     particle.alpha = 0;
-    
+
     // Only pool if under max size (prevent unbounded growth)
     if (this.particlePool.length < this.maxPoolSize) {
       this.particlePool.push(particle);
     } else {
-      try { particle.destroy(); } catch {}
+      try { particle.destroy(); } catch { }
     }
   }
-  
+
   createBoostEffect(x: number, y: number) {
     // Create a visual burst effect at boost location using pooled particles
     if (!this.worldContainer) return;
-    
+
     // More particles for dramatic boost effect
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     const particleCount = isMobile ? 12 : 18; // Increased from 8/12
-    
+
     for (let i = 0; i < particleCount; i++) {
       const angle = (Math.PI * 2 * i) / particleCount;
       const speed = 300 + Math.random() * 150; // Faster particles
       const lifetime = 0.8; // Longer visible time
-      
+
       const particle = this.getParticle();
       particle.beginFill(0x00ffff);
       particle.drawCircle(0, 0, 4); // Bigger particles
       particle.endFill();
       particle.x = x;
       particle.y = y;
-      
+
       this.worldContainer.addChild(particle);
-      
+
       const startTime = Date.now();
       const vx = Math.cos(angle) * speed;
       const vy = Math.sin(angle) * speed;
-      
+
       const animate = () => {
         const elapsed = (Date.now() - startTime) / 1000;
         if (elapsed >= lifetime) {
           try {
             this.worldContainer?.removeChild(particle);
             this.returnParticle(particle); // Return to pool instead of destroying
-          } catch {}
+          } catch { }
           return;
         }
-        
+
         particle.x += vx * 0.016;
         particle.y += vy * 0.016;
         particle.alpha = 1 - (elapsed / lifetime);
-        
+
         requestAnimationFrame(animate);
       };
       animate();
@@ -2019,10 +2042,10 @@ class SpermRaceGame {
 
   updateCamera() {
     if (!this.player || !this.app) return;
-    
+
     // Detect mobile once for all camera adjustments
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    
+
     // During countdown, keep targetZoom as set in gameLoop and center as needed
     const inCountdown = !!this.preStart;
     if (!inCountdown) {
@@ -2034,10 +2057,10 @@ class SpermRaceGame {
       const nearbyRadius = 600;
       let nearbyCount = 0;
       if (this.bot && !this.bot.destroyed) {
-        const dx = this.bot.x - camX; const dy = this.bot.y - camY; if (dx*dx + dy*dy < nearbyRadius*nearbyRadius) nearbyCount++;
+        const dx = this.bot.x - camX; const dy = this.bot.y - camY; if (dx * dx + dy * dy < nearbyRadius * nearbyRadius) nearbyCount++;
       }
       for (const b of this.extraBots) {
-        if (!b.destroyed) { const dx = b.x - camX; const dy = b.y - camY; if (dx*dx + dy*dy < nearbyRadius*nearbyRadius) nearbyCount++; }
+        if (!b.destroyed) { const dx = b.x - camX; const dy = b.y - camY; if (dx * dx + dy * dy < nearbyRadius * nearbyRadius) nearbyCount++; }
       }
       const crowdFactor = Math.min(1, nearbyCount / 8);
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -2048,7 +2071,7 @@ class SpermRaceGame {
       const target = baseZoom - out;
       this.camera.targetZoom = Math.max(this.camera.minZoom, Math.min(this.camera.maxZoom, target));
     }
-    
+
     // Smooth target zoom - slower for mobile to prevent shake
     const zoomSpeed = isMobile ? 0.08 : (this.player?.isBoosting ? 0.04 : 0.10); // Slower zoom = smoother
     if (this.preStart && (Math.max(0, this.preStart.durationMs - (Date.now() - this.preStart.startAt)) > 2000)) {
@@ -2056,7 +2079,7 @@ class SpermRaceGame {
     } else {
       this.camera.zoom += (this.camera.targetZoom - this.camera.zoom) * zoomSpeed;
     }
-    
+
     // Center camera on player (no lead), or on full arena during early countdown
     let desiredCenterX = this.player.x;
     let desiredCenterY = this.player.y;
@@ -2096,21 +2119,21 @@ class SpermRaceGame {
     const followSmooth = this.preStart ? 1.0 : baseSmoothness;
     this.camera.x += (targetCamX - this.camera.x) * followSmooth;
     this.camera.y += (targetCamY - this.camera.y) * followSmooth;
-    
+
     // Apply and decay screen shake
     this.camera.shakeX *= this.camera.shakeDecay;
     this.camera.shakeY *= this.camera.shakeDecay;
     if (Math.abs(this.camera.shakeX) < 0.1) this.camera.shakeX = 0;
     if (Math.abs(this.camera.shakeY) < 0.1) this.camera.shakeY = 0;
-    
+
     // Ensure player sprite stays visible after camera changes
-    try { if (this.player?.sprite) this.player.sprite.visible = true; } catch {}
-    
+    try { if (this.player?.sprite) this.player.sprite.visible = true; } catch { }
+
     // Pixel-snapped placement with shake applied to avoid subpixel shimmer on thin lines
     this.worldContainer.x = Math.round(this.camera.x + this.camera.shakeX);
     this.worldContainer.y = Math.round(this.camera.y + this.camera.shakeY);
     // Redraw crisp screen-space border overlay after camera updates
-    try { this.drawBorderOverlay(); } catch {}
+    try { this.drawBorderOverlay(); } catch { }
     this.worldContainer.scale.set(this.camera.zoom);
     // Periodic visibility check (throttled)
     const now = Date.now();
@@ -2122,36 +2145,36 @@ class SpermRaceGame {
       const onStage = !!(this.worldContainer && (this.worldContainer as any).parent === (this.app as any).stage);
       this.dbg('visCheck', { vis, inWorld, onStage, px: p?.x, py: p?.y, cam: { x: this.camera.x, y: this.camera.y, z: this.camera.zoom } });
       if (p && (!inWorld || !onStage)) {
-        try { this.worldContainer.addChild(p.sprite); } catch {}
+        try { this.worldContainer.addChild(p.sprite); } catch { }
       }
       if (p && !p.sprite.visible) {
-        try { p.sprite.visible = true; } catch {}
+        try { p.sprite.visible = true; } catch { }
       }
     }
   }
 
   gameLoop() {
     if (!this.app) return;
-    
+
     // FPS limiter for mobile (prevent overheating & battery drain)
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     if (isMobile) {
       const now = performance.now();
       const elapsed = now - this.lastFrameTime;
-      
+
       if (elapsed < this.frameInterval) return; // Skip frame to cap at 60 FPS
-      
+
       this.lastFrameTime = now - (elapsed % this.frameInterval); // Carry over remainder
     }
-    
+
     const deltaTime = this.app.ticker.deltaMS / 1000;
     const isTournament = !!(this.wsHud && this.wsHud.active);
-    
+
     // Handle pre-start countdown (freeze inputs/boost/trails until GO)
     if (this.preStart) {
       const remain = Math.max(0, this.preStart.durationMs - (Date.now() - this.preStart.startAt));
       const sec = Math.ceil(remain / 1000);
-      
+
       // COUNTDOWN CAMERA: Show full arena overview, then zoom to player
       if (remain > 2500) {
         // First 2.5 seconds: Calculate zoom to fit entire arena
@@ -2165,20 +2188,20 @@ class SpermRaceGame {
         const endZoom = 0.6;
         this.camera.targetZoom = startZoom + (endZoom - startZoom) * t;
       }
-      
+
       // Show countdown HUD with AAA-grade animations
       let cd = document.getElementById('prestart-countdown');
       if (!cd && this.uiContainer) {
         cd = document.createElement('div');
         cd.id = 'prestart-countdown';
-        Object.assign(cd.style, { 
-          position: 'absolute', 
-          left: '50%', 
-          top: '40%', 
-          transform: 'translate(-50%, -50%)', 
-          color: this.theme.text, 
-          fontSize: '48px', 
-          fontWeight: '700', 
+        Object.assign(cd.style, {
+          position: 'absolute',
+          left: '50%',
+          top: '40%',
+          transform: 'translate(-50%, -50%)',
+          color: this.theme.text,
+          fontSize: '48px',
+          fontWeight: '700',
           zIndex: '20',
           textAlign: 'center',
           textShadow: '0 0 20px rgba(16, 185, 129, 0.5), 0 0 40px rgba(16, 185, 129, 0.3)',
@@ -2188,27 +2211,27 @@ class SpermRaceGame {
       }
       if (cd) {
         const isMobile = window.innerWidth <= 768;
-        
+
         // Calculate animation progress
         const phaseInMs = this.preStart.durationMs - remain;
         const frac = (phaseInMs % 1000) / 1000;
-        
+
         // Multi-stage easing for professional feel - NUMBER ONLY
         const bounceIn = frac < 0.4 ? this.easeOutBack(frac / 0.4) : 1;
         const fadeOut = frac > 0.85 ? 1 - ((frac - 0.85) / 0.15) : 1;
         const pulseScale = 1 + Math.sin(frac * Math.PI) * 0.1;
-        
+
         const scale = bounceIn * pulseScale;
         const opacity = fadeOut;
-        
+
         // Text below stays stable (no sync to number animation)
         const textOpacity = Math.min(1, phaseInMs / 500); // Fade in once at start
-        
+
         if (sec > 0) {
           // Dynamic color based on urgency
           const numberColor = sec === 1 ? '#ef4444' : sec === 2 ? '#fbbf24' : '#10b981';
           const glowColor = sec === 1 ? '239, 68, 68' : sec === 2 ? '251, 191, 36' : '16, 185, 129';
-          
+
           if (isMobile) {
             cd.innerHTML = `
               <div style="
@@ -2304,7 +2327,7 @@ class SpermRaceGame {
             ">SURVIVE THE ZONE</div>` : ''}
           `;
         }
-        
+
         // Smooth transform with hardware acceleration
         (cd as HTMLDivElement).style.transform = `translate(-50%, -50%) scale(${scale})`;
         (cd as HTMLDivElement).style.willChange = 'transform, opacity';
@@ -2319,14 +2342,14 @@ class SpermRaceGame {
     }
     // Handle player input only after countdown
     if (!this.preStart) this.handlePlayerInput();
-    
+
     // Update cars only after countdown
     if (!this.preStart) {
       // Timed unlock of pickups to avoid early clutter (artifacts/hotspots disabled)
       const sinceStart = Date.now() - (this.gameStartTime || Date.now());
       if (!this.pickupsUnlocked && sinceStart >= this.unlockPickupsAfterMs) {
         this.pickupsUnlocked = true;
-        try { this.spawnPickups(35); } catch {}
+        try { this.spawnPickups(35); } catch { }
         if (this.pickupsContainer) this.pickupsContainer.visible = true;
         // HUD cue: energy orbs phase begins
         this.showHotspotToast('Energy orbs active • refill boost and chase kills', '#4ade80');
@@ -2343,14 +2366,14 @@ class SpermRaceGame {
             np.style.left = `${sx}px`;
             np.style.top = `${sy}px`;
           }
-        } catch {}
+        } catch { }
       }
-      
+
       if (this.bot && !this.bot.destroyed) {
         this.updateBot(this.bot, deltaTime);
         this.checkArenaCollision(this.bot);
       }
-      
+
       // Update extra bots
       for (const extraBot of this.extraBots) {
         if (!extraBot.destroyed) {
@@ -2358,42 +2381,45 @@ class SpermRaceGame {
           this.checkArenaCollision(extraBot);
         }
       }
-      
+
       // Update trails
       this.updateTrails(deltaTime);
-      
+
       // Check trail collisions
       this.checkTrailCollisions();
       this.resolveCarBumps(deltaTime);
     }
-    
+
     // Update particles
     this.updateParticles(deltaTime);
+
+    // Cull off-screen objects
+    this.cullObjects();
 
     // Animate and collect pickups (collection only after countdown)
     if (!this.preStart && this.pickupsUnlocked && this.pickupsContainer) {
       this.updatePickups(deltaTime);
     }
-    
+
     // Update camera
     this.updateCamera();
-    
+
     // Update round system
     this.updateRoundSystem();
-    
+
     // Update BR zone
     this.updateZoneAndDamage(deltaTime);
-    
+
     // Update sonar radar
     this.radarAngle = (this.radarAngle + deltaTime * 2) % (Math.PI * 2);
     this.updateRadar();
-    
+
     // Update alive count (legacy HUD removed; kept for practice header only)
     this.updateAliveCount();
-    
+
     // Update boost bar
     this.updateBoostBar();
-    
+
     // Update trail status
     this.updateTrailStatus();
     // Update emotes positions
@@ -2407,13 +2433,13 @@ class SpermRaceGame {
         }
         this.emotes = this.emotes.filter(e => Date.now() < e.expiresAt);
       }
-    } catch {}
-    
+    } catch { }
+
     // Update boost screen effects (temporarily disabled to simplify DA)
     if (!this.preStart) this.updateBoostScreenEffects();
 
     // Countdown overlay drawings disabled to reduce CPU
-    
+
     // Update HUD elements: nameplates and alive count
     this.updateNameplates();
     this.updateLeaderboard();
@@ -2422,7 +2448,7 @@ class SpermRaceGame {
 
     // Render debug collision overlays (short TTL)
     this.renderDebugOverlays();
-    
+
     // Handle respawning
     this.handleRespawning(deltaTime);
 
@@ -2432,7 +2458,7 @@ class SpermRaceGame {
       if (aliveCount <= 1 && this.onExit) {
         this.notifiedServerEnd = true;
         // allow a short delay to show end
-        setTimeout(() => { try { this.onExit && this.onExit(); } catch {} }, 500);
+        setTimeout(() => { try { this.onExit && this.onExit(); } catch { } }, 500);
       }
     }
   }
@@ -2446,7 +2472,7 @@ class SpermRaceGame {
         try {
           const nm = localStorage.getItem('sr_profile_name');
           if (nm && nm.trim()) { (car as any).nameplate.textContent = nm.trim(); }
-        } catch {}
+        } catch { }
       }
       // Transform world -> screen
       const sx = car.x * this.camera.zoom + this.app.screen.width / 2 + this.camera.x - (this.app.screen.width / 2);
@@ -2458,10 +2484,10 @@ class SpermRaceGame {
     updateFor(this.bot);
     for (const b of this.extraBots) updateFor(b);
   }
-  
+
   updateLeaderboard() {
     if (!this.leaderboardContainer) return;
-    
+
     // Skip leaderboard updates on mobile
     const isMobileDevice = window.innerWidth <= 768 && window.matchMedia('(orientation: portrait)').matches;
     if (isMobileDevice) return;
@@ -2472,7 +2498,7 @@ class SpermRaceGame {
       (this.wsHud.eliminationOrder || []).forEach((pid, idx) => { if (elimIndex[pid] == null) elimIndex[pid] = idx + 1; });
       const list = Array.from(ids).map(id => ({
         id,
-        name: this.wsHud!.idToName[id] || `${id.slice(0,4)}…${id.slice(-4)}`,
+        name: this.wsHud!.idToName[id] || `${id.slice(0, 4)}…${id.slice(-4)}`,
         kills: this.wsHud!.kills[id] || 0,
         alive: this.wsHud!.aliveSet.has(id),
         elimIdx: elimIndex[id] ?? 0
@@ -2527,7 +2553,7 @@ class SpermRaceGame {
       this.leaderboardContainer.innerHTML = newContent;
     }
   }
-  
+
   savePlayerStats(won: boolean, prize: number = 0, kills: number = 0, rank: number = 0, totalPlayers: number = 0) {
     try {
       const stats = this.getPlayerStats();
@@ -2563,7 +2589,7 @@ class SpermRaceGame {
       if (stored) {
         return JSON.parse(stored);
       }
-    } catch {}
+    } catch { }
 
     return {
       totalGames: 0,
@@ -2583,13 +2609,13 @@ class SpermRaceGame {
     if (!this.killFeedContainer) return;
     const now = Date.now();
     const KILL_LIFETIME = 6000;
-    
+
     // Merge local and server kill feed (server preferred when active)
     let feed: Array<{ killer: string; victim: string; time: number }> = [];
     if (this.wsHud?.active && Array.isArray(this.wsHud.killFeed)) {
       feed = (this.wsHud.killFeed || []).map(ev => ({
-        killer: ev.killerId ? (this.wsHud!.idToName[ev.killerId] || `${ev.killerId.slice(0,4)}…${ev.killerId.slice(-4)}`) : 'ZONE',
-        victim: this.wsHud!.idToName[ev.victimId] || `${ev.victimId.slice(0,4)}…${ev.victimId.slice(-4)}`,
+        killer: ev.killerId ? (this.wsHud!.idToName[ev.killerId] || `${ev.killerId.slice(0, 4)}…${ev.killerId.slice(-4)}`) : 'ZONE',
+        victim: this.wsHud!.idToName[ev.victimId] || `${ev.victimId.slice(0, 4)}…${ev.victimId.slice(-4)}`,
         time: ev.ts || now
       }));
     } else {
@@ -2597,17 +2623,17 @@ class SpermRaceGame {
       this.recentKills = this.recentKills.filter(k => now - k.time < KILL_LIFETIME);
       feed = this.recentKills;
     }
-    
+
     // Only show last 6 kills, most recent at bottom
     const items = feed.slice(-6);
-    
+
     // Build HTML in one go to prevent flickering
     const html = items.map(k => {
       const age = now - k.time;
       const alpha = Math.max(0, 1 - (age / KILL_LIFETIME));
       const slideIn = age < 300; // Slide in animation for first 300ms
       const translateY = slideIn ? `translateY(${(1 - age / 300) * 20}px)` : 'translateY(0)';
-      
+
       return `<div class="killfeed-item" style="
         display: flex;
         gap: 8px;
@@ -2629,7 +2655,7 @@ class SpermRaceGame {
         <span style="color:#fbbf24;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;">${k.victim}</span>
       </div>`;
     }).join('');
-    
+
     // Only update if content changed to prevent glitching
     if (this.killFeedContainer.innerHTML !== html) {
       this.killFeedContainer.innerHTML = html;
@@ -2672,9 +2698,9 @@ class SpermRaceGame {
 
   handlePlayerInput() {
     if (!this.player || this.player.destroyed || !this.app) return;
-    
+
     let targetX: number, targetY: number;
-    
+
     if (this.touch.active) {
       // Touch controls
       targetX = this.touch.x - this.app.screen.width / 2;
@@ -2684,7 +2710,7 @@ class SpermRaceGame {
       targetX = this.mouse.x - this.app.screen.width / 2;
       targetY = this.mouse.y - this.app.screen.height / 2;
     }
-    
+
     // Calculate target angle from player position to input position
     const dx = targetX;
     const dy = targetY;
@@ -2697,7 +2723,7 @@ class SpermRaceGame {
     } else {
       (this.player as any).targetAngle = targetAngle;
     }
-    
+
     // Boost control - hold to boost (DESKTOP ONLY - mobile uses button)
     // Don't interfere with mobile boost controls
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -2718,7 +2744,7 @@ class SpermRaceGame {
     // Quick emote: press 'E' to pop a short SR emote above your head
     if (this.keys['KeyE']) {
       this.keys['KeyE'] = false; // single-shot
-      try { this.spawnEmote(this.player, Math.random() < 0.5 ? 'SR' : 'SR+'); } catch {}
+      try { this.spawnEmote(this.player, Math.random() < 0.5 ? 'SR' : 'SR+'); } catch { }
     }
   }
 
@@ -2742,8 +2768,8 @@ class SpermRaceGame {
     el.style.top = `${sy}px`;
     const expiresAt = Date.now() + 900;
     this.emotes.push({ el, car, expiresAt });
-    setTimeout(() => { try { el.style.opacity = '0'; el.style.transform = 'translate(-50%, -60%)'; } catch {} }, 700);
-    setTimeout(() => { try { el.remove(); } catch {} }, 900);
+    setTimeout(() => { try { el.style.opacity = '0'; el.style.transform = 'translate(-50%, -60%)'; } catch { } }, 700);
+    setTimeout(() => { try { el.remove(); } catch { } }, 900);
   }
 
   updateCar(car: Car, deltaTime: number) {
@@ -2752,7 +2778,7 @@ class SpermRaceGame {
     if (car.hotspotBuffExpiresAt && car.hotspotBuffExpiresAt <= now) car.hotspotBuffExpiresAt = undefined;
     if (car.spotlightUntil && car.spotlightUntil <= now) car.spotlightUntil = undefined;
     const buffActive = !!(car.hotspotBuffExpiresAt && car.hotspotBuffExpiresAt > now);
-    
+
     // Update boost energy system
     const wasBoosting = car.isBoosting;
     if (car.isBoosting) {
@@ -2760,7 +2786,7 @@ class SpermRaceGame {
       car.targetSpeed = car.boostSpeed;
       if (buffActive) car.targetSpeed *= 1.08;
       car.driftFactor = Math.min(car.maxDriftFactor, car.driftFactor + deltaTime * 2.0);
-      
+
       // Stop boosting if energy depleted
       if (car.boostEnergy <= 0) {
         car.boostEnergy = 0;
@@ -2771,11 +2797,11 @@ class SpermRaceGame {
       // Regenerate boost energy when not boosting
       // Progressive regen: faster in early game, slower in final seconds
       let regenMultiplier = 1.0;
-      
+
       if (this.zone && this.zone.startAtMs) {
         const elapsed = Date.now() - this.zone.startAtMs;
         const remainMs = Math.max(0, this.zone.durationMs - elapsed);
-        
+
         // First 10 seconds: 50% faster regen (1.5x)
         if (elapsed < 10000) {
           regenMultiplier = 1.5;
@@ -2785,7 +2811,7 @@ class SpermRaceGame {
           regenMultiplier = 0.7;
         }
       }
-      
+
       car.boostEnergy += car.boostRegenRate * deltaTime * regenMultiplier;
       if (car.boostEnergy > car.maxBoostEnergy) {
         car.boostEnergy = car.maxBoostEnergy;
@@ -2798,9 +2824,9 @@ class SpermRaceGame {
     if (!wasBoosting && car.isBoosting) {
       this.emitBoostEcho(car.x, car.y);
     }
-    
+
     // Boost pads trigger (simple distance check)
-  for (const pad of this.boostPads) {
+    for (const pad of this.boostPads) {
       const dx = car.x - pad.x, dy = car.y - pad.y;
       const within = (dx * dx + dy * dy) <= (pad.radius * pad.radius);
       if (within && (now - pad.lastTriggeredAt) >= pad.cooldownMs) {
@@ -2810,7 +2836,7 @@ class SpermRaceGame {
         car.isBoosting = true;
         car.targetSpeed = car.boostSpeed * 1.05;
         // brief visual pulse
-        try { pad.graphics.alpha = 0.5; setTimeout(() => { try { pad.graphics.alpha = 1.0; } catch {} }, 180); } catch {}
+        try { pad.graphics.alpha = 0.5; setTimeout(() => { try { pad.graphics.alpha = 1.0; } catch { } }, 180); } catch { }
         // auto-stop after 0.7s to avoid sustained advantage
         setTimeout(() => {
           try {
@@ -2819,19 +2845,19 @@ class SpermRaceGame {
               car.isBoosting = false;
               car.targetSpeed = car.baseSpeed;
             }
-          } catch {}
+          } catch { }
         }, 700);
         // echo ring
         this.emitBoostEcho(pad.x, pad.y);
       }
     }
-    
+
     // Smooth speed transitions
     const speedDiff = car.targetSpeed - car.speed;
     const accel = car.accelerationScalar ?? car.speedTransitionRate;
     const speedChange = speedDiff * accel * deltaTime;
     car.speed += speedChange;
-    
+
     // Smooth angle interpolation for drift effect
     const angleDiff = normalizeAngle((car as any).targetAngle - car.angle);
     const baseTurn = (car as any).turnResponsiveness ?? 7.0;
@@ -2842,37 +2868,37 @@ class SpermRaceGame {
     const turnRate = baseTurn * assistMultiplier * boostPenalty;
     car.angle += angleDiff * Math.min(1.0, turnRate * deltaTime);
     car.sprite.rotation = car.angle;
-    
+
     // Calculate forward direction
     const forwardX = Math.cos(car.angle);
     const forwardY = Math.sin(car.angle);
-    
+
     // Add drift effect - car slides sideways while turning
     const driftAngle = car.angle + (Math.PI / 2);
     const driftX = Math.cos(driftAngle);
     const driftY = Math.sin(driftAngle);
-    
+
     // Combine forward movement with drift
     let effectiveSpeed = car.speed;
     const driftIntensity = car.driftFactor * effectiveSpeed * 0.4 * Math.abs(angleDiff);
     const lateralDrag = ((car as any).lateralDragScalar ?? 1.0) * 0.008;
     car.vx = forwardX * effectiveSpeed + driftX * driftIntensity;
     car.vy = forwardY * effectiveSpeed + driftY * driftIntensity;
-    
+
     // Apply velocity update with slight lateral drag for sharper control at speed
     car.vx += Math.cos(car.angle) * effectiveSpeed * deltaTime;
     car.vy += Math.sin(car.angle) * effectiveSpeed * deltaTime;
     // lateral drag opposing perpendicular component
     const perpX = -Math.sin(car.angle);
-    const perpY =  Math.cos(car.angle);
+    const perpY = Math.cos(car.angle);
     const lateralVel = car.vx * perpX + car.vy * perpY;
     car.vx -= lateralVel * perpX * lateralDrag;
     car.vy -= lateralVel * perpY * lateralDrag;
-    
+
     // Update position
     car.x += car.vx * deltaTime;
     car.y += car.vy * deltaTime;
-    
+
     // Update sprite
     car.sprite.x = car.x;
     car.sprite.y = car.y;
@@ -2946,7 +2972,7 @@ class SpermRaceGame {
         const ry = baseRy * sizeMul;
         car.headGraphics.clear();
         car.headGraphics.ellipse(0, 0, rx, ry).fill({ color: car.color, alpha: 1.0 }).stroke({ width: car.isBoosting ? 3 : 2, color: car.color, alpha: car.isBoosting ? 0.7 : 0.3 });
-        
+
         // Add boost glow effect
         if (car.isBoosting) {
           car.headGraphics.ellipse(0, 0, rx + 3, ry + 2).fill({ color: car.color, alpha: 0.2 });
@@ -2955,8 +2981,8 @@ class SpermRaceGame {
           car.headGraphics.ellipse(0, 0, rx + 5, ry + 4).stroke({ width: 2, color: 0xfacc15, alpha: 0.9 });
         }
       }
-    } catch {}
-    
+    } catch { }
+
     // Update glow intensity when boosting (apply to head only)
     if (car.isBoosting && car.headGraphics) {
       (car.headGraphics as any).alpha = 0.9;
@@ -2979,14 +3005,14 @@ class SpermRaceGame {
 
   updateBot(car: Car, deltaTime: number) {
     if (car.destroyed) return;
-    
+
     // Random direction changes
     car.turnTimer -= deltaTime;
     if (car.turnTimer <= 0) {
       car.targetAngle += (Math.random() - 0.5) * Math.PI * 0.5;
       car.turnTimer = 1.0 + Math.random() * 2.0;
     }
-    
+
     // Random boost
     car.boostAITimer -= deltaTime;
     if (car.boostAITimer <= 0) {
@@ -3002,7 +3028,7 @@ class SpermRaceGame {
         car.boostAITimer = 0.5;
       }
     }
-    
+
     this.updateCar(car, deltaTime);
   }
 
@@ -3010,41 +3036,41 @@ class SpermRaceGame {
     const halfWidth = this.arena.width / 2;
     const halfHeight = this.arena.height / 2;
     const carSize = 20;
-    
+
     let bounced = false;
-    
+
     if (car.x <= -halfWidth + carSize) {
       car.x = -halfWidth + carSize;
       car.vx = -car.vx * 0.7;
       car.angle = Math.PI - car.angle;
       bounced = true;
     }
-    
+
     if (car.x >= halfWidth - carSize) {
       car.x = halfWidth - carSize;
       car.vx = -car.vx * 0.7;
       car.angle = Math.PI - car.angle;
       bounced = true;
     }
-    
+
     if (car.y <= -halfHeight + carSize) {
       car.y = -halfHeight + carSize;
       car.vy = -car.vy * 0.7;
       car.angle = -car.angle;
       bounced = true;
     }
-    
+
     if (car.y >= halfHeight - carSize) {
       car.y = halfHeight - carSize;
       car.vy = -car.vy * 0.7;
       car.angle = -car.angle;
       bounced = true;
     }
-    
+
     if (bounced) {
       car.targetAngle = car.angle;
       car.speed *= 0.9;
-      
+
       if (car.type === 'bot') {
         car.targetAngle += (Math.random() - 0.5) * Math.PI * 0.5;
       }
@@ -3071,28 +3097,36 @@ class SpermRaceGame {
       if (!extraBot.destroyed) {
         const dx = extraBot.x - camX;
         const dy = extraBot.y - camY;
-        if (dx*dx + dy*dy < lodRadius*lodRadius) {
+        if (dx * dx + dy * dy < lodRadius * lodRadius) {
           this.addTrailPoint(extraBot);
         }
       }
     }
-    
+
     // Update and clean trails
     for (let i = this.trails.length - 1; i >= 0; i--) {
       const trail = this.trails[i];
       const now = Date.now();
-      
-      // Remove old points
+
+      // Remove old points (manual loop to avoid allocation)
       const maxAge = 3.0;
-      trail.points = trail.points.filter(point => {
-        return (now - point.time) / 1000 <= maxAge;
-      });
-      
+      let removeCount = 0;
+      for (let j = 0; j < trail.points.length; j++) {
+        if ((now - trail.points[j].time) / 1000 > maxAge) {
+          removeCount++;
+        } else {
+          break;
+        }
+      }
+      if (removeCount > 0) {
+        trail.points.splice(0, removeCount);
+      }
+
       // Remove trail if no points left
       if (trail.points.length === 0) {
-        if (trail.graphics && trail.graphics.parent && this.trailContainer) {
-          try { this.trailContainer.removeChild(trail.graphics); } catch {}
-          try { trail.graphics.destroy(); } catch {}
+        if (trail.rope && trail.rope.parent && this.trailContainer) {
+          try { this.trailContainer.removeChild(trail.rope); } catch { }
+          try { trail.rope.destroy(); } catch { }
         }
         this.trails.splice(i, 1);
       } else {
@@ -3113,12 +3147,12 @@ class SpermRaceGame {
                 if (el) {
                   el.textContent = d < 16 ? 'Nice dodge!' : 'So close!';
                   el.style.opacity = '1';
-                  setTimeout(() => { try { el.style.opacity = '0'; } catch {} }, 900);
+                  setTimeout(() => { try { el.style.opacity = '0'; } catch { } }, 900);
                 }
               }
             }
           }
-        } catch {}
+        } catch { }
       }
     }
   }
@@ -3126,7 +3160,7 @@ class SpermRaceGame {
   addTrailPoint(car: Car) {
     const now = Date.now();
     const interval = 30;
-    
+
     if (now - car.lastTrailTime > interval) {
       if (!this.trailContainer) {
         // Safety: lazily initialize trail container if setupWorld hasn't run yet
@@ -3135,22 +3169,28 @@ class SpermRaceGame {
           this.trailContainer.visible = true;
           this.trailContainer.alpha = 1.0;
           this.worldContainer?.addChild?.(this.trailContainer as any);
-        } catch {}
+        } catch { }
         if (!this.trailContainer) return;
       }
       // Get or create trail for this car
       let trail = this.trails.find(t => t.carId === car.type);
       if (!trail) {
+        // Create rope with initial points
+        const points = [new PIXI.Point(car.x, car.y), new PIXI.Point(car.x, car.y)];
+        const rope = new PIXI.MeshRope({ texture: this.trailTexture, points });
+        // Set blend mode for glowing effect
+        rope.blendMode = 'add';
+
         trail = {
           carId: car.type,
           car: car,
           points: [],
-          graphics: new PIXI.Graphics()
+          rope: rope
         };
         this.trails.push(trail);
-        try { this.trailContainer.addChild(trail.graphics); } catch {}
+        try { this.trailContainer.addChild(trail.rope); } catch { }
       }
-      
+
       // Add new point
       trail.points.push({
         x: car.x,
@@ -3158,9 +3198,9 @@ class SpermRaceGame {
         time: now,
         isBoosting: car.isBoosting
       });
-      
+
       car.lastTrailTime = now;
-      
+
       // Limit trail length
       if (trail.points.length > 60) {
         trail.points.shift();
@@ -3169,106 +3209,77 @@ class SpermRaceGame {
   }
 
   renderTrail(trail: Trail) {
-    if (!trail.graphics || trail.points.length < 2) return;
-    
-    trail.graphics.clear();
+    if (!trail.rope || trail.points.length < 2) {
+      trail.rope.visible = false;
+      return;
+    }
+    trail.rope.visible = true;
+
     const now = Date.now();
     const car = trail.car;
-    
+
     // Trail colors
     const trailColor = car.type === 'player' ? this.theme.accent : this.theme.enemy;
-    
+    trail.rope.tint = trailColor;
+    trail.rope.alpha = 0.8;
+
     // Collect recent points and optionally decimate for far bots
     const isBot = trail.car.type !== 'player';
     const camX = - (this.camera.x - (this.app!.screen.width / 2)) / this.camera.zoom;
     const camY = - (this.camera.y - (this.app!.screen.height / 2)) / this.camera.zoom;
     const dxCam = trail.car.x - camX;
     const dyCam = trail.car.y - camY;
-    const far = (dxCam*dxCam + dyCam*dyCam) > (1600*1600);
+    const far = (dxCam * dxCam + dyCam * dyCam) > (1600 * 1600);
     const step = (isBot && far) ? 2 : 1;
-    const pts: Array<{x:number;y:number;time:number;isBoosting:boolean}> = [];
-    for (let i = 0; i < trail.points.length; i += step) {
+
+    const ropePoints: PIXI.Point[] = [];
+
+    // GHOST TAIL: Procedurally wiggle the trail visually (hitbox remains at server positions)
+    const headX = car.x;
+    const headY = car.y;
+
+    // Add head point
+    ropePoints.push(new PIXI.Point(headX, headY));
+
+    const time = now * 0.004; // global time factor
+    const amplitudeBase = isBot ? 4 : 6;
+    const speedMag = Math.hypot(car.vx, car.vy);
+    const speedFactor = 1.0 + Math.min(1.5, speedMag / 260); // faster wiggle when moving
+
+    // Process points for rope
+    for (let i = trail.points.length - 1; i >= 0; i -= step) {
       const p = trail.points[i];
       const age = (now - p.time) / 1000;
-      if (age <= 3.0) pts.push(p);
-    }
-    if (pts.length < 2) return;
+      if (age > 3.0) continue;
 
-    // Calm player trail: avoid ghost wiggle on the local player's own trail to prevent jittery visuals
-    const isPlayerTrail = !!(this.player && trail.car === this.player);
+      // Apply wiggle
+      const t = (trail.points.length - 1 - i) / Math.max(1, trail.points.length - 1); // 0 at head → 1 at tail
+      const envelope = Math.pow(t, 1.6); // more motion toward tail
+      const phase = time * speedFactor + t * 4.0;
+      const offset = Math.sin(phase) * amplitudeBase * envelope;
 
-    const baseWidth = (car.type === 'player') ? 2 : 1.6; // thinner overall
-    const alphaStart = 1.0;
-
-    if (isPlayerTrail) {
-      const first = pts[0];
-      trail.graphics.moveTo(first.x, first.y);
-      for (let i = 1; i < pts.length; i++) {
-        const p = pts[i];
-        trail.graphics.lineTo(p.x, p.y);
-      }
-      trail.graphics.stroke({ width: baseWidth, color: trailColor, alpha: alphaStart, cap: 'round', join: 'round' });
-    } else {
-      // GHOST TAIL: Procedurally wiggle the trail visually (hitbox remains at server positions)
-      const headX = car.x;
-      const headY = car.y;
-      const ghost: Array<{ x: number; y: number }> = [];
-      ghost.push({ x: headX, y: headY });
-
-      const time = now * 0.004; // global time factor
-      const amplitudeBase = isBot ? 4 : 6;
-      const speedMag = Math.hypot(car.vx, car.vy);
-      const speedFactor = 1.0 + Math.min(1.5, speedMag / 260); // faster wiggle when moving
-
-      for (let idx = pts.length - 1; idx >= 0; idx--) {
-        const p = pts[idx];
-        const prev = idx === pts.length - 1 ? { x: headX, y: headY } : pts[idx + 1];
-        const dirX = p.x - prev.x;
-        const dirY = p.y - prev.y;
-        const len = Math.hypot(dirX, dirY) || 1;
-        const nx = -dirY / len;
-        const ny = dirX / len;
-        const t = (pts.length - 1 - idx) / Math.max(1, pts.length - 1); // 0 at head → 1 at tail
-        const envelope = Math.pow(t, 1.6); // more motion toward tail
-        const phase = time * speedFactor + t * 4.0;
-        const offset = Math.sin(phase) * amplitudeBase * envelope;
-        ghost.push({ x: p.x + nx * offset, y: p.y + ny * offset });
+      // Calculate normal for offset (simplified)
+      // For a robust normal, we'd need next/prev points, but for simple wiggle:
+      // Just offset perpendicular to general direction or just X/Y based on noise
+      // Let's use the previous point to determine direction
+      let nx = 0, ny = 0;
+      if (i < trail.points.length - 1) {
+        const prev = trail.points[i + 1];
+        const dx = p.x - prev.x;
+        const dy = p.y - prev.y;
+        const len = Math.hypot(dx, dy) || 1;
+        nx = -dy / len;
+        ny = dx / len;
       }
 
-      if (ghost.length < 2) return;
-
-      // Draw smooth quadratic Bezier through ghost points
-      const g0 = ghost[0];
-      const g1 = ghost[1];
-      const m0x = (g0.x + g1.x) * 0.5;
-      const m0y = (g0.y + g1.y) * 0.5;
-      trail.graphics.moveTo(m0x, m0y);
-      for (let i = 1; i < ghost.length - 1; i++) {
-        const c = ghost[i];
-        const n = ghost[i + 1];
-        const mx = (c.x + n.x) * 0.5;
-        const my = (c.y + n.y) * 0.5;
-        trail.graphics.quadraticCurveTo(c.x, c.y, mx, my);
-      }
-
-      trail.graphics.stroke({ width: baseWidth, color: trailColor, alpha: alphaStart, cap: 'round', join: 'round' });
+      ropePoints.push(new PIXI.Point(p.x + nx * offset, p.y + ny * offset));
     }
 
-    // Proximity glow (subtle, thinner) using segment checks
-    if (this.player && trail.car !== this.player && pts.length >= 2) {
-      for (let i = 1; i < pts.length; i++) {
-        const a = pts[i - 1];
-        const b = pts[i];
-        const dist = this.pointToLineDistance(this.player.x, this.player.y, a.x, a.y, b.x, b.y);
-        if (dist < 60) {
-          const glowAlpha = Math.max(0, 0.25 * (1 - dist / 60));
-      trail.graphics
-            .moveTo(a.x, a.y)
-            .lineTo(b.x, b.y)
-            .stroke({ width: baseWidth + 1, color: this.theme.enemyGlow, alpha: glowAlpha, cap: 'round', join: 'round' });
-        }
-      }
-    }
+    if (ropePoints.length < 2) return;
+
+    // Update rope points
+    // MeshRope requires at least 2 points
+    trail.rope.points = ropePoints;
   }
 
   checkTrailCollisions() {
@@ -3277,13 +3288,13 @@ class SpermRaceGame {
     for (const car of cars) {
       let closestMiss = Infinity; // Track closest near-miss for this frame
       let missX = 0, missY = 0;
-      
+
       for (const trail of this.trails) {
         if (trail.points.length < 2) continue;
 
         const now = Date.now();
         const isSelfTrail = trail.car === car;
-        
+
         // REMOVE SELF-COLLISION - Players can't die from their own trail
         if (isSelfTrail) continue;
 
@@ -3302,13 +3313,13 @@ class SpermRaceGame {
           if (distance < hitboxSize) {
             // EXPLOSION when WE crash (not when we kill others)
             this.createExplosion(car.x, car.y, car.color);
-            
+
             // Attribute kill to trail owner
             this.recordKill(trail.car, car);
             this.destroyCar(car);
             break;
           }
-          
+
           // NEAR-MISS DETECTION - Reward skillful dodging!
           if (car === this.player && distance < 40 && distance < closestMiss) {
             closestMiss = distance;
@@ -3319,7 +3330,7 @@ class SpermRaceGame {
 
         if (car.destroyed) break;
       }
-      
+
       // Show near-miss notification if player had a close call
       if (car === this.player && closestMiss < 40 && Math.random() < 0.3) { // 30% chance to show (avoid spam)
         this.showNearMiss(missX, missY, closestMiss);
@@ -3423,7 +3434,7 @@ class SpermRaceGame {
     // Kill streak tracking for player - simplified without combo
     if (killer === this.player) {
       const now = Date.now();
-      
+
       // Reset streak if more than 5 seconds since last kill
       if (now - this.lastKillTime > 5000) {
         this.killStreak = 0;
@@ -3433,7 +3444,7 @@ class SpermRaceGame {
 
       // Simple haptic feedback
       this.hapticFeedback('heavy');
-      
+
       // Mild screen shake
       this.screenShake(0.3);
     }
@@ -3481,17 +3492,17 @@ class SpermRaceGame {
     const dx = x2 - x1;
     const dy = y2 - y1;
     const length = Math.sqrt(dx * dx + dy * dy);
-    
+
     if (length === 0) {
       return Math.sqrt((px - x1) * (px - x1) + (py - y1) * (py - y1));
     }
-    
+
     const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (length * length)));
     const projection = {
       x: x1 + t * dx,
       y: y1 + t * dy
     };
-    
+
     return Math.sqrt((px - projection.x) * (px - projection.x) + (py - projection.y) * (py - projection.y));
   }
 
@@ -3501,7 +3512,7 @@ class SpermRaceGame {
     car.destroyed = true;
     car.elimAtMs = Date.now();
     car.sprite.visible = false;
-    
+
     let playerDistance = Infinity;
     let viewportRadius = Math.max(window.innerWidth, window.innerHeight) / 2;
     const playerAlive = this.player && !this.player.destroyed;
@@ -3522,34 +3533,34 @@ class SpermRaceGame {
     // Haptic feedback on death (mobile)
     if (car === this.player) {
       this.hapticFeedback('heavy');
-      
+
       // RESET KILL STREAK WHEN PLAYER DIES
       this.killStreak = 0;
       this.lastKillTime = 0;
     }
 
     // Ensure all visual parts are removed/destroyed to avoid lingering head/tail
-    try { if (car.headGraphics) { car.headGraphics.destroy(); car.headGraphics = undefined; } } catch {}
-    try { if (car.tailGraphics) { car.tailGraphics.destroy(); car.tailGraphics = null; } } catch {}
-    try { if ((car.sprite as any)?.parent) { (car.sprite as any).parent.removeChild(car.sprite); } } catch {}
-    try { (car.sprite as any)?.destroy?.({ children: false }); } catch {}
-    try { const np = (car as any).nameplate as HTMLDivElement | undefined; if (np && np.parentElement) np.parentElement.removeChild(np); (car as any).nameplate = undefined; } catch {}
+    try { if (car.headGraphics) { car.headGraphics.destroy(); car.headGraphics = undefined; } } catch { }
+    try { if (car.tailGraphics) { car.tailGraphics.destroy(); car.tailGraphics = null; } } catch { }
+    try { if ((car.sprite as any)?.parent) { (car.sprite as any).parent.removeChild(car.sprite); } } catch { }
+    try { (car.sprite as any)?.destroy?.({ children: false }); } catch { }
+    try { const np = (car as any).nameplate as HTMLDivElement | undefined; if (np && np.parentElement) np.parentElement.removeChild(np); (car as any).nameplate = undefined; } catch { }
 
     // Battle Royale: No respawning, permanent elimination
     car.respawnTimer = -1; // Never respawn
-    
+
     // Clear and remove car's trail immediately
     const tIdx = this.trails.findIndex(t => t.car === car);
     if (tIdx >= 0) {
       const trail = this.trails[tIdx];
       trail.points = [];
       try {
-        if (trail.graphics && trail.graphics.parent) trail.graphics.parent.removeChild(trail.graphics);
-        trail.graphics.destroy();
-      } catch {}
+        if (trail.rope && trail.rope.parent) trail.rope.parent.removeChild(trail.rope);
+        trail.rope.destroy();
+      } catch { }
       this.trails.splice(tIdx, 1);
     }
-    
+
     // Explosion already created at collision point - don't duplicate here
 
     // Flash only if death is near player (within viewport)
@@ -3573,17 +3584,17 @@ class SpermRaceGame {
           }
           // Trigger flash
           flash.style.opacity = '0.35';
-          setTimeout(() => { try { flash!.style.opacity = '0'; } catch {} }, 10);
+          setTimeout(() => { try { flash!.style.opacity = '0'; } catch { } }, 10);
           setTimeout(() => {
-            try { if (flash && flash.parentElement) flash.parentElement.removeChild(flash); } catch {}
+            try { if (flash && flash.parentElement) flash.parentElement.removeChild(flash); } catch { }
           }, 280);
-        } catch {}
+        } catch { }
       }
     }
-    
+
     // Update alive count and handle elimination flow
     this.updateAliveCount();
-    
+
     // If player died, show death screen immediately (practice only; tournament uses App Results)
     if (car === this.player && this.gamePhase === 'active' && !(this.wsHud && this.wsHud.active)) {
       // Calculate player's rank at time of death
@@ -3604,27 +3615,31 @@ class SpermRaceGame {
     for (let i = 0; i < particleCount; i++) {
       const angle = (Math.PI * 2 / particleCount) * i + (Math.random() - 0.5) * 0.3;
       const speed = 150 + Math.random() * 200; // Faster explosion
-      
+
       // Bright explosion colors (mix victim color with bright white/yellow)
       const explosionColors = [0xFFFFFF, 0xFFFF00, 0xFF6600, color];
       const particleColor = explosionColors[Math.floor(Math.random() * explosionColors.length)];
-      
-      const particle: Particle = {
+
+      let particle: Particle;
+      const g = this.getParticle();
+      g.clear();
+
+      particle = {
         x: x,
         y: y,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
-        life: 1.2, // Longer lifetime
+        life: 1.2,
         color: particleColor,
-        graphics: new PIXI.Graphics()
+        graphics: g
       };
-      
+
       // Bigger particles (5-8px radius)
       const size = 5 + Math.random() * 3;
       particle.graphics.circle(0, 0, size).fill(particleColor);
       particle.graphics.x = x;
       particle.graphics.y = y;
-      
+
       this.worldContainer.addChild(particle.graphics);
       this.particles.push(particle);
     }
@@ -3646,21 +3661,55 @@ class SpermRaceGame {
     }
   }
 
+  cullObjects() {
+    if (!this.app || !this.camera) return;
+
+    const margin = 150;
+    const viewX = this.camera.x;
+    const viewY = this.camera.y;
+    const w = this.app.screen.width / this.camera.zoom;
+    const h = this.app.screen.height / this.camera.zoom;
+    const left = viewX - w / 2 - margin;
+    const right = viewX + w / 2 + margin;
+    const top = viewY - h / 2 - margin;
+    const bottom = viewY + h / 2 + margin;
+
+    // Cull particles
+    for (const p of this.particles) {
+      p.graphics.visible = (p.x >= left && p.x <= right && p.y >= top && p.y <= bottom);
+    }
+
+    // Cull pickups
+    for (const p of this.pickups) {
+      p.graphics.visible = (p.x >= left && p.x <= right && p.y >= top && p.y <= bottom);
+    }
+
+    // Cull extra bots sprites
+    for (const b of this.extraBots) {
+      if (!b.destroyed && b.sprite) {
+        b.sprite.visible = (b.x >= left && b.x <= right && b.y >= top && b.y <= bottom);
+      }
+    }
+  }
+
   updateParticles(deltaTime: number) {
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const particle = this.particles[i];
-      
+
       particle.x += particle.vx * deltaTime;
       particle.y += particle.vy * deltaTime;
       particle.life -= deltaTime * 2;
-      
+
       particle.graphics.x = particle.x;
       particle.graphics.y = particle.y;
       particle.graphics.alpha = Math.max(0, particle.life);
-      
+
       if (particle.life <= 0) {
         this.worldContainer.removeChild(particle.graphics);
-        this.particles.splice(i, 1);
+        this.returnParticle(particle.graphics);
+        // Swap remove
+        this.particles[i] = this.particles[this.particles.length - 1];
+        this.particles.pop();
       }
     }
   }
@@ -3673,7 +3722,7 @@ class SpermRaceGame {
     for (let i = this.pickups.length - 1; i >= 0; i--) {
       const p = this.pickups[i];
       if (p.expiresAt && now >= p.expiresAt) {
-        try { this.pickupsContainer.removeChild(p.graphics); } catch {}
+        try { this.pickupsContainer.removeChild(p.graphics); } catch { }
         this.pickups.splice(i, 1);
         continue;
       }
@@ -3708,7 +3757,7 @@ class SpermRaceGame {
           }
 
           this.createExplosion(orb.x, orb.y, orb.type === 'overdrive' ? 0xfacc15 : 0x00ffaa);
-          try { this.pickupsContainer.removeChild(orb.graphics); } catch {}
+          try { this.pickupsContainer.removeChild(orb.graphics); } catch { }
           this.pickups.splice(i, 1);
           this.hapticFeedback(orb.type === 'overdrive' ? 'success' : 'light');
           this.screenShake(orb.type === 'overdrive' ? 0.6 : 0.3);
@@ -3739,12 +3788,12 @@ class SpermRaceGame {
     const allCars = [this.player, this.bot, ...this.extraBots].filter((car): car is Car => car !== null);
     const aliveCars = allCars.filter(car => !car.destroyed);
     const winner = aliveCars[0];
-    
+
     // AAA Victory Moment: Slow-mo + zoom on winner
     if (winner) {
       this.triggerVictorySlowMo(winner);
     }
-    
+
     // Calculate player rank (8 - current alive count + 1 if player is alive)
     let playerRank;
     if (this.player && !this.player.destroyed) {
@@ -3753,10 +3802,10 @@ class SpermRaceGame {
       // Player died - rank is based on when they died
       playerRank = this.alivePlayers + 1;
     }
-    
+
     // Practice-only overlay; tournament shows App-level Results
     if (!(this.wsHud && this.wsHud.active)) {
-    this.showGameOverScreen(winner === this.player, playerRank);
+      this.showGameOverScreen(winner === this.player, playerRank);
     }
   }
 
@@ -3764,7 +3813,7 @@ class SpermRaceGame {
     // Save player stats
     const totalPlayersCount = (this.wsHud && this.wsHud.active)
       ? (Object.keys(this.wsHud.idToName || {}).length || 0)
-      : ([this.player, this.bot, ...this.extraBots].filter(c=>!!c).length);
+      : ([this.player, this.bot, ...this.extraBots].filter(c => !!c).length);
     const kills = this.player?.kills || 0;
     this.savePlayerStats(isVictory, 0, kills, rank, totalPlayersCount);
 
@@ -3894,9 +3943,9 @@ class SpermRaceGame {
     replayBtn.onclick = () => {
       overlay.remove();
       // Always restart locally to ensure a clean replay without relying on parent screen changes
-      try { this.restartGame(); } catch {}
+      try { this.restartGame(); } catch { }
       // Optionally notify parent after a tick if it wants to react (e.g., practice flow)
-      try { setTimeout(() => { this.onReplay && this.onReplay(); }, 0); } catch {}
+      try { setTimeout(() => { this.onReplay && this.onReplay(); }, 0); } catch { }
     };
 
     // Back to Menu button
@@ -3928,12 +3977,12 @@ class SpermRaceGame {
     // Assemble the overlay
     buttonsContainer.appendChild(replayBtn);
     buttonsContainer.appendChild(menuBtn);
-    
+
     content.appendChild(title);
     content.appendChild(rankDisplay);
     content.appendChild(stats);
     content.appendChild(buttonsContainer);
-    
+
     overlay.appendChild(content);
     document.body.appendChild(overlay);
 
@@ -3960,7 +4009,7 @@ class SpermRaceGame {
           p.style.transform = `translateY(${window.innerHeight + 40}px) translateX(${drift}px) rotate(${Math.random() * 360}deg)`;
           p.style.opacity = '0';
         });
-        setTimeout(() => { try { p.remove(); } catch {} }, 900);
+        setTimeout(() => { try { p.remove(); } catch { } }, 900);
       }
     }
   }
@@ -3978,10 +4027,10 @@ class SpermRaceGame {
     if (this.artifactContainer) this.artifactContainer.visible = false;
     if (this.pickupsContainer) this.pickupsContainer.visible = false;
     // Clear pickups/artifacts
-    try { this.pickupsContainer?.removeChildren?.(); } catch {}
+    try { this.pickupsContainer?.removeChildren?.(); } catch { }
     this.pickups = [];
-    try { this.artifactContainer?.removeChildren?.(); } catch {}
-    
+    try { this.artifactContainer?.removeChildren?.(); } catch { }
+
     // Reset all cars
     if (this.player) {
       this.player.destroyed = false;
@@ -4001,7 +4050,7 @@ class SpermRaceGame {
         this.player.sprite.rotation = this.player.angle;
       }
     }
-    
+
     if (this.bot) {
       this.bot.destroyed = false;
       this.bot.sprite.visible = true;
@@ -4019,7 +4068,7 @@ class SpermRaceGame {
         this.bot.sprite.rotation = this.bot.angle;
       }
     }
-    
+
     for (let i = 0; i < this.extraBots.length; i++) {
       const extraBot = this.extraBots[i];
       extraBot.destroyed = false;
@@ -4037,18 +4086,18 @@ class SpermRaceGame {
         extraBot.sprite.rotation = extraBot.angle;
       }
     }
-    
+
     // Clear all trails
     this.trails.forEach(trail => {
       trail.points = [];
     });
-    try { this.trailContainer?.removeChildren?.(); } catch {}
+    try { this.trailContainer?.removeChildren?.(); } catch { }
     this.trails = [];
-    
+
     // Clear particles
     this.particles = [];
-    try { this.borderGraphics && this.drawArenaBorder(); } catch {}
-    
+    try { this.borderGraphics && this.drawArenaBorder(); } catch { }
+
     // Update alive counter
     this.updateAliveCount();
   }
@@ -4061,30 +4110,30 @@ class SpermRaceGame {
     // Radar disabled
     return;
     if (!this.radarCtx || !this.player) return;
-    
+
     // Check if mobile - use proximity radar
     const isMobile = this.radar.id === 'game-proximity-radar';
     if (isMobile) {
       this.updateProximityRadar();
       return;
     }
-    
+
     const ctx = this.radarCtx;
     const W = this.radar.width;
     const H = this.radar.height;
     const centerX = W / 2;
     const centerY = H / 2;
     const radius = Math.min(W, H) / 2 - 5;
-    
+
     // Clear canvas
     ctx.clearRect(0, 0, W, H);
-    
+
     // Draw radar background
     ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
     ctx.beginPath();
     ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
     ctx.fill();
-    
+
     // Draw radar rings
     ctx.strokeStyle = 'rgba(0, 255, 255, 0.2)';
     ctx.lineWidth = 1;
@@ -4093,7 +4142,7 @@ class SpermRaceGame {
       ctx.arc(centerX, centerY, (radius * i) / 3, 0, Math.PI * 2);
       ctx.stroke();
     }
-    
+
     // Fit rectangle diagonal to radar circle for max map size inside sonar
     const rFit = radius - 3;
     const diag = Math.sqrt(this.arena.width * this.arena.width + this.arena.height * this.arena.height);
@@ -4101,35 +4150,35 @@ class SpermRaceGame {
     const arenaW = this.arena.width * scale;
     const arenaH = this.arena.height * scale;
     // Map rect
-    const rectL = centerX - arenaW/2;
-    const rectR = centerX + arenaW/2;
-    const rectT = centerY - arenaH/2;
-    const rectB = centerY + arenaH/2;
+    const rectL = centerX - arenaW / 2;
+    const rectR = centerX + arenaW / 2;
+    const rectT = centerY - arenaH / 2;
+    const rectB = centerY + arenaH / 2;
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
     ctx.lineWidth = 1;
     ctx.strokeRect(rectL, rectT, arenaW, arenaH);
-    
+
     // Function to check if a point is within the sonar sweep beam
     const isInSweepBeam = (x: number, y: number) => {
       const dx = x - centerX;
       const dy = y - centerY;
       let angle = Math.atan2(dy, dx);
-      
+
       // Normalize angles to 0-2π range
       if (angle < 0) angle += Math.PI * 2;
       let sweepAngle = this.radarAngle;
       if (sweepAngle < 0) sweepAngle += Math.PI * 2;
-      
+
       // Calculate angular difference
       let diff = Math.abs(angle - sweepAngle);
       if (diff > Math.PI) diff = Math.PI * 2 - diff;
-      
+
       // Beam width is about 0.6 radians (±0.3)
       return diff <= 0.3;
     };
-    
+
     // Only draw objects if they're in the sweep beam OR if they're the player (always visible)
-    
+
     // Draw player (only if inside map rect)
     if (!this.player.destroyed) {
       const px = centerX + (this.player.x * scale);
@@ -4148,20 +4197,20 @@ class SpermRaceGame {
         ctx.stroke();
       }
     }
-    
+
     // Check for bots being detected by sweep and add pings
     const allBots = [this.bot, ...this.extraBots].filter((bot): bot is Car => bot !== null && !bot.destroyed);
     const now = Date.now();
-    
+
     for (const bot of allBots) {
       const bx = centerX + (bot.x * scale);
       const by = centerY + (bot.y * scale);
-      
+
       // If bot is in sweep beam and inside map rect, add/update ping
       if (isInSweepBeam(bx, by) && bx >= rectL && bx <= rectR && by >= rectT && by <= rectB) {
         // Remove old ping for this bot
         this.radarPings = this.radarPings.filter(ping => ping.playerId !== bot.type);
-        
+
         // Add new ping
         this.radarPings.push({
           x: bot.x,
@@ -4171,12 +4220,12 @@ class SpermRaceGame {
         });
       }
     }
-    
+
     // Remove expired pings (older than ttl or 1s default)
     this.radarPings = this.radarPings.filter(ping => now - ping.timestamp < (ping.ttlMs || 1000));
     // Remove expired echo pings
     this.echoPings = this.echoPings.filter(p => now - p.timestamp < (p.ttlMs || 900));
-    
+
     // Draw all active sweep pings
     for (const ping of this.radarPings) {
       const px = centerX + (ping.x * scale);
@@ -4188,7 +4237,7 @@ class SpermRaceGame {
       ctx.beginPath();
       ctx.arc(px, py, isBounty ? 4 : 3, 0, Math.PI * 2); // Slightly larger dot for bounty
       ctx.fill();
-      
+
       // Add pulsing effect
       if (age < 0.3) { // Pulse for first 300ms
         const pulseRadius = 2 + Math.sin(age * 20) * 2;
@@ -4217,7 +4266,7 @@ class SpermRaceGame {
         ctx.stroke();
       }
     }
-    
+
     // Draw sonar sweep wedge limited to map rectangle
     ctx.save();
     ctx.translate(centerX, centerY);
@@ -4247,21 +4296,21 @@ class SpermRaceGame {
 
   updateBoostBar() {
     if (!this.player || !this.hudManager) return;
-    
+
     const energyPercent = (this.player.boostEnergy / this.player.maxBoostEnergy) * 100;
     const boostingNow = this.player.isBoosting && (this.player.boostEnergy >= (this.player.minBoostEnergy + 5));
     const isLow = this.player.boostEnergy < this.player.minBoostEnergy;
-    
+
     // Update HUD manager
     this.hudManager.updateBoost(energyPercent, boostingNow, isLow);
-    
+
     // Emit echo on boost start
     if (boostingNow && !(this as any).wasBoostingUI) {
       this.emitBoostEcho(this.player.x, this.player.y);
     }
     (this as any).wasBoostingUI = boostingNow;
   }
-  
+
   updateComboDisplay() {
     // Combo display removed - too cluttered
   }
@@ -4269,7 +4318,7 @@ class SpermRaceGame {
   updateTrailStatus() {
     const trailStatus = document.getElementById('game-trail-status');
     if (!trailStatus || !this.player) return;
-    
+
     // Keep trail form consistent - just show status, don't change trail appearance
     if (this.player.isBoosting) {
       trailStatus.textContent = 'BOOSTING: ACTIVE';
@@ -4290,7 +4339,7 @@ class SpermRaceGame {
     // Radar disabled
     return;
     if (!this.radarCtx || !this.player || !this.app) return;
-    
+
     // Throttle radar updates on mobile for better performance
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     if (isMobile) {
@@ -4300,7 +4349,7 @@ class SpermRaceGame {
       }
       this.lastRadarUpdate = now;
     }
-    
+
     const ctx = this.radarCtx;
     const W = this.radar.width;
     const H = this.radar.height;
@@ -4320,13 +4369,13 @@ class SpermRaceGame {
       if (dist > detectionRange) return;
       const onScreen = car.x >= viewLeft && car.x <= viewRight && car.y >= viewTop && car.y <= viewBottom;
       if (onScreen) return;
-    const angle = Math.atan2(dy, dx);
-    const edgeMargin = 40;
-    let indicatorX: number;
-    let indicatorY: number;
-    const aspectRatio = W / H;
-    const cornerAngle = Math.atan(1 / aspectRatio);
-    const absAngle = Math.abs(angle);
+      const angle = Math.atan2(dy, dx);
+      const edgeMargin = 40;
+      let indicatorX: number;
+      let indicatorY: number;
+      const aspectRatio = W / H;
+      const cornerAngle = Math.atan(1 / aspectRatio);
+      const absAngle = Math.abs(angle);
       if (absAngle < cornerAngle) {
         indicatorX = W - edgeMargin;
         indicatorY = H / 2 + Math.tan(angle) * (W / 2 - edgeMargin);
@@ -4366,7 +4415,7 @@ class SpermRaceGame {
 
   updateBoostScreenEffects() {
     if (!this.player) return;
-    
+
     // Get or create boost overlay
     let boostOverlay = document.getElementById('boost-screen-overlay');
     if (!boostOverlay) {
@@ -4386,7 +4435,7 @@ class SpermRaceGame {
       `;
       this.uiContainer.appendChild(boostOverlay);
     }
-    
+
     const visualBoosting = this.player.isBoosting && (this.player.boostEnergy >= (this.player.minBoostEnergy + 5));
     if (visualBoosting) {
       // Boost active - soft vignette + radial blur imitation (no shake)
@@ -4415,8 +4464,8 @@ class SpermRaceGame {
     this.zone.centerY = 0;
     this.zone.startRadius = Math.min(this.arena.width, this.arena.height) * 0.48;
     this.zone.startAtMs = Date.now();
-  // Sharper pacing: ~42s core rounds with aggressive finale
-  this.zone.durationMs = 42000;
+    // Sharper pacing: ~42s core rounds with aggressive finale
+    this.zone.durationMs = 42000;
     this.zoneGraphics = new PIXI.Graphics();
     this.worldContainer.addChild(this.zoneGraphics);
     this.finalSurgeBannerShown = false;
@@ -4431,8 +4480,8 @@ class SpermRaceGame {
     this.slicePattern = this.buildSlicePattern(this.daySeed);
     this.sliceIndex = 0;
     // Avoid slicing toward first spawns: pick opposite of dominant spawn side (left/right) for first slice
-    const dominantEdge: 'left'|'right'|'top'|'bottom' = 'left';
-    const opposite: Record<'left'|'right'|'top'|'bottom','left'|'right'|'top'|'bottom'> = { left: 'right', right: 'left', top: 'bottom', bottom: 'top' };
+    const dominantEdge: 'left' | 'right' | 'top' | 'bottom' = 'left';
+    const opposite: Record<'left' | 'right' | 'top' | 'bottom', 'left' | 'right' | 'top' | 'bottom'> = { left: 'right', right: 'left', top: 'bottom', bottom: 'top' };
     this.firstSliceSide = opposite[dominantEdge];
     this.rectZone.pendingSide = this.firstSliceSide;
     this.rectZone.lastSide = null;
@@ -4454,7 +4503,7 @@ class SpermRaceGame {
     // Rectangular slicer: periodically push one side inward
     if (!this.rectZone.pendingSide && now >= this.rectZone.nextSliceAt - this.rectZone.telegraphMs) {
       // Use seeded daily pattern, avoid immediate repeats
-      let side: 'left'|'right'|'top'|'bottom';
+      let side: 'left' | 'right' | 'top' | 'bottom';
       if (this.firstSliceSide) {
         side = this.firstSliceSide;
         this.firstSliceSide = null;
@@ -4526,7 +4575,7 @@ class SpermRaceGame {
     this.zoneGraphics
       .rect(this.rectZone.right, safeTop, Math.max(0, worldRight - this.rectZone.right), safeHeight)
       .fill({ color: 0x450a0a, alpha: outerAlpha });
-      
+
     // 3) Telegraph arrow on pending side
     if (this.rectZone.pendingSide) {
       const remain = Math.max(0, this.rectZone.nextSliceAt - now);
@@ -4534,22 +4583,22 @@ class SpermRaceGame {
       const alpha = 0.25 + 0.5 * (1 - remain / this.rectZone.telegraphMs);
       const g = this.zoneGraphics;
       const size = 80;
-      g.moveTo(0,0); // reset path start
+      g.moveTo(0, 0); // reset path start
       if (this.rectZone.pendingSide === 'left') {
         const x = this.rectZone.left; const cy = (this.rectZone.top + this.rectZone.bottom) / 2;
-        g.poly([x-10, cy, x-10-size, cy-size, x-10-size, cy+size]).fill({ color: this.theme.accent, alpha: 0.08 + 0.15*pulse }).stroke({ width: 2, color: this.theme.accent, alpha });
+        g.poly([x - 10, cy, x - 10 - size, cy - size, x - 10 - size, cy + size]).fill({ color: this.theme.accent, alpha: 0.08 + 0.15 * pulse }).stroke({ width: 2, color: this.theme.accent, alpha });
       }
       if (this.rectZone.pendingSide === 'right') {
         const x = this.rectZone.right; const cy = (this.rectZone.top + this.rectZone.bottom) / 2;
-        g.poly([x+10, cy, x+10+size, cy-size, x+10+size, cy+size]).fill({ color: this.theme.accent, alpha: 0.08 + 0.15*pulse }).stroke({ width: 2, color: this.theme.accent, alpha });
+        g.poly([x + 10, cy, x + 10 + size, cy - size, x + 10 + size, cy + size]).fill({ color: this.theme.accent, alpha: 0.08 + 0.15 * pulse }).stroke({ width: 2, color: this.theme.accent, alpha });
       }
       if (this.rectZone.pendingSide === 'top') {
         const y = this.rectZone.top; const cx = (this.rectZone.left + this.rectZone.right) / 2;
-        g.poly([cx, y-10, cx-size, y-10-size, cx+size, y-10-size]).fill({ color: this.theme.accent, alpha: 0.08 + 0.15*pulse }).stroke({ width: 2, color: this.theme.accent, alpha });
+        g.poly([cx, y - 10, cx - size, y - 10 - size, cx + size, y - 10 - size]).fill({ color: this.theme.accent, alpha: 0.08 + 0.15 * pulse }).stroke({ width: 2, color: this.theme.accent, alpha });
       }
       if (this.rectZone.pendingSide === 'bottom') {
         const y = this.rectZone.bottom; const cx = (this.rectZone.left + this.rectZone.right) / 2;
-        g.poly([cx, y+10, cx-size, y+10+size, cx+size, y+10+size]).fill({ color: this.theme.accent, alpha: 0.08 + 0.15*pulse }).stroke({ width: 2, color: this.theme.accent, alpha });
+        g.poly([cx, y + 10, cx - size, y + 10 + size, cx + size, y + 10 + size]).fill({ color: this.theme.accent, alpha: 0.08 + 0.15 * pulse }).stroke({ width: 2, color: this.theme.accent, alpha });
       }
     }
 
@@ -4559,7 +4608,7 @@ class SpermRaceGame {
       this.showFinalSurgeBanner();
       this.finalSurgeBannerShown = true;
     }
-    
+
     // Update zone timer in HUD
     if (this.hudManager) {
       const secs = Math.ceil(remainMs / 1000);
@@ -4575,13 +4624,13 @@ class SpermRaceGame {
         if (car === this.player) {
           this.showZoneWarning();
         }
-        
+
         // Compute shortest push vector toward rectangle
         const clampedX = Math.max(this.rectZone.left, Math.min(this.rectZone.right, car.x));
         const clampedY = Math.max(this.rectZone.top, Math.min(this.rectZone.bottom, car.y));
         const dx = car.x - clampedX;
         const dy = car.y - clampedY;
-        const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
         const dirX = dx / dist;
         const dirY = dy / dist;
         const pushStrength = 14 + tension * 36;
@@ -4602,7 +4651,7 @@ class SpermRaceGame {
     applyZone(this.player);
     applyZone(this.bot);
     for (const b of this.extraBots) applyZone(b);
-    
+
     // Update danger overlay based on zone proximity and time
     this.updateDangerOverlay(remainMs);
   }
@@ -4632,7 +4681,7 @@ class SpermRaceGame {
         pointerEvents: 'none',
         zIndex: '50',
         textAlign: 'center'
-  } as Partial<CSSStyleDeclaration>);
+      } as Partial<CSSStyleDeclaration>);
       banner.textContent = 'FINAL SURGE • ZONE CRUSHING';
       this.uiContainer.appendChild(banner);
     }
@@ -4640,16 +4689,16 @@ class SpermRaceGame {
     banner.style.opacity = '1';
     if (this.finalSurgeTimeout) window.clearTimeout(this.finalSurgeTimeout);
     this.finalSurgeTimeout = window.setTimeout(() => {
-      try { banner!.style.opacity = '0'; } catch {}
+      try { banner!.style.opacity = '0'; } catch { }
     }, 2200);
   }
-  
+
   showZoneWarning() {
     let warning = document.getElementById('zone-warning');
     if (!warning && this.uiContainer) {
       warning = document.createElement('div');
       warning.id = 'zone-warning';
-      
+
       const isMobile = window.innerWidth <= 768;
       Object.assign(warning.style, {
         position: 'absolute',
@@ -4666,7 +4715,7 @@ class SpermRaceGame {
         animation: 'pulse 1s ease-in-out infinite'
       });
       this.uiContainer.appendChild(warning);
-      
+
       // Add CSS animation
       const style = document.createElement('style');
       style.textContent = `
@@ -4677,7 +4726,7 @@ class SpermRaceGame {
       `;
       document.head.appendChild(style);
     }
-    
+
     if (warning) {
       const isMobile = window.innerWidth <= 768;
       if (isMobile) {
@@ -4692,26 +4741,26 @@ class SpermRaceGame {
       warning.style.display = 'block';
     }
   }
-  
+
   hideZoneWarning() {
     const warning = document.getElementById('zone-warning');
     if (warning) {
       warning.style.display = 'none';
     }
   }
-  
+
   updateDangerOverlay(remainMs: number) {
     const overlay = document.getElementById('game-danger-overlay');
     if (!overlay || !this.player || this.player.destroyed) return;
-    
+
     // Calculate danger level from multiple sources
     let dangerLevel = 0;
-    
+
     // 1. Time pressure - final 5 seconds
     if (remainMs <= 5000) {
       dangerLevel = Math.max(dangerLevel, 1 - (remainMs / 5000)); // 0 to 1 as time runs out
     }
-    
+
     // 2. Zone proximity - when near zone edges
     if (this.player) {
       const distToLeft = Math.abs(this.player.x - this.rectZone.left);
@@ -4720,22 +4769,22 @@ class SpermRaceGame {
       const distToBottom = Math.abs(this.player.y - this.rectZone.bottom);
       const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
       const dangerThreshold = 200; // Distance at which warning starts
-      
+
       if (minDist < dangerThreshold) {
         const proximityDanger = 1 - (minDist / dangerThreshold);
         dangerLevel = Math.max(dangerLevel, proximityDanger * 0.6); // Max 0.6 from proximity
       }
     }
-    
+
     // 3. Outside zone - max danger
     if (this.player.outZoneTime && this.player.outZoneTime > 0) {
       dangerLevel = Math.max(dangerLevel, 0.8);
     }
-    
+
     // Apply smooth transitions
     const targetOpacity = dangerLevel * 0.8; // Max 80% opacity
     overlay.style.opacity = targetOpacity.toFixed(2);
-    
+
     // Pulsing border effect when in high danger
     if (dangerLevel > 0.3) {
       const pulseIntensity = Math.sin(Date.now() * 0.005) * 0.5 + 0.5; // 0 to 1
@@ -4747,30 +4796,30 @@ class SpermRaceGame {
       overlay.style.filter = 'none';
     }
   }
-  
+
   triggerImpactFrame() {
     // Very brief time slow (not freeze) - 25ms at 50% speed
     const slowDuration = 25;
     const originalTimeScale = (this.app as any)?.ticker?.speed ?? 1;
-    
+
     // Slow time (50% speed instead of full freeze)
     if ((this.app as any)?.ticker) {
       (this.app as any).ticker.speed = 0.5;
     }
-    
+
     // Subtle camera shake (1.5x intensity)
     this.screenShake(1.5);
-    
+
     // Haptic feedback (short sharp burst)
-    try { navigator.vibrate?.(10); } catch {}
-    
+    try { navigator.vibrate?.(10); } catch { }
+
     // Resume after brief slow
     setTimeout(() => {
       if ((this.app as any)?.ticker) {
         (this.app as any).ticker.speed = originalTimeScale;
       }
     }, slowDuration);
-    
+
     // Add impact flash overlay
     try {
       let impactFlash = document.getElementById('impact-flash');
@@ -4790,41 +4839,41 @@ class SpermRaceGame {
       }
       // Trigger flash
       impactFlash.style.opacity = '1';
-      setTimeout(() => { try { impactFlash!.style.opacity = '0'; } catch {} }, 50);
-    } catch {}
+      setTimeout(() => { try { impactFlash!.style.opacity = '0'; } catch { } }, 50);
+    } catch { }
   }
-  
+
   triggerVictorySlowMo(winner: Car) {
     // Slow motion effect for 1.5 seconds
     const slowDuration = 1500;
     const slowMotionSpeed = 0.3; // 30% speed
-    
+
     // Slow down time
     if ((this.app as any)?.ticker) {
       (this.app as any).ticker.speed = slowMotionSpeed;
     }
-    
+
     // Zoom camera to winner
     if (this.camera) {
       const startZoom = this.camera.zoom;
       const targetZoom = Math.min(0.8, startZoom * 1.3); // Zoom in 30%
       const zoomDuration = 800;
       const startTime = Date.now();
-      
+
       const animateZoom = () => {
         const elapsed = Date.now() - startTime;
         const progress = Math.min(1, elapsed / zoomDuration);
         const eased = 1 - Math.pow(1 - progress, 3); // ease-out-cubic
-        
+
         this.camera.targetZoom = startZoom + (targetZoom - startZoom) * eased;
-        
+
         if (progress < 1) {
           requestAnimationFrame(animateZoom);
         }
       };
       animateZoom();
     }
-    
+
     // Add epic victory overlay
     try {
       let victoryOverlay = document.getElementById('victory-overlay');
@@ -4848,7 +4897,7 @@ class SpermRaceGame {
       }
       // Fade in
       victoryOverlay.style.opacity = '1';
-      
+
       // Add "VICTORY" text if player won
       if (winner === this.player) {
         const victoryText = document.createElement('div');
@@ -4872,13 +4921,13 @@ class SpermRaceGame {
         `;
         victoryText.textContent = 'VICTORY';
         document.body.appendChild(victoryText);
-        
+
         // Animate in
         setTimeout(() => {
           victoryText.style.opacity = '1';
           victoryText.style.transform = 'translate(-50%, -50%) scale(1)';
         }, 100);
-        
+
         // Remove after slow-mo ends
         setTimeout(() => {
           victoryText.style.opacity = '0';
@@ -4886,8 +4935,8 @@ class SpermRaceGame {
           setTimeout(() => victoryText.remove(), 500);
         }, slowDuration - 300);
       }
-    } catch {}
-    
+    } catch { }
+
     // Resume normal speed after slow-mo
     setTimeout(() => {
       if ((this.app as any)?.ticker) {
@@ -4895,7 +4944,7 @@ class SpermRaceGame {
       }
     }, slowDuration);
   }
-  
+
   updateRoundSystem() {
     // Round indicator disabled - using unified top HUD bar instead
     return;
@@ -4904,7 +4953,7 @@ class SpermRaceGame {
     if (!roundUI && this.uiContainer) {
       roundUI = document.createElement('div');
       roundUI.id = 'round-indicator';
-      
+
       const isMobile = window.innerWidth <= 768;
       Object.assign(roundUI.style, {
         position: 'absolute',
@@ -4923,23 +4972,23 @@ class SpermRaceGame {
       });
       this.uiContainer.appendChild(roundUI);
     }
-    
+
     if (roundUI) {
       const winsNeeded = Math.ceil(this.totalRounds / 2);
       const roundTimeRemain = this.zone.startAtMs ? Math.max(0, this.zone.durationMs - (Date.now() - this.zone.startAtMs)) : 0;
       const secs = Math.ceil(roundTimeRemain / 1000);
       const isMobile = window.innerWidth <= 768;
-      
+
       // Count alive players
       const alivePlayers = [this.player, this.bot, ...this.extraBots].filter(c => c && !c.destroyed).length;
-      
+
       if (isMobile) {
         // Cleaner mobile view - essential info only
         roundUI.innerHTML = `
           <div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600">
             <span style="color:#10b981">R${this.currentRound}</span>
             <span style="color:#666">|</span>
-            <span style="color:#fbbf24">${String(secs%60).padStart(2,'0')}s</span>
+            <span style="color:#fbbf24">${String(secs % 60).padStart(2, '0')}s</span>
             <span style="color:#666">|</span>
             <span style="color:#3b82f6">${alivePlayers} left</span>
           </div>
@@ -4950,17 +4999,17 @@ class SpermRaceGame {
           <div style="text-align:center">
             <div style="font-size:14px;opacity:0.7;margin-bottom:4px">BEST OF ${this.totalRounds} • First to ${winsNeeded}</div>
             <div style="font-size:18px;color:#10b981;margin:4px 0">Round ${this.currentRound}/3 • ${alivePlayers} Alive</div>
-            <div style="font-size:14px;opacity:0.9;color:#fbbf24">TIME ${Math.floor(secs/60)}:${String(secs%60).padStart(2,'0')}</div>
+            <div style="font-size:14px;opacity:0.9;color:#fbbf24">TIME ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}</div>
           </div>
         `;
       }
     }
-    
+
     // Check round end conditions
     if (!this.roundInProgress) return;
-    
+
     const aliveCars = [this.player, this.bot, ...this.extraBots].filter(c => c && !c.destroyed);
-    
+
     // Round ends when only one car remains (last survivor wins)
     if (aliveCars.length === 1 && this.roundInProgress) {
       const playerWon = !!(this.player && !this.player.destroyed);
@@ -4970,23 +5019,23 @@ class SpermRaceGame {
       this.endRound(false);
     }
   }
-  
+
   endRound(playerWon: boolean) {
     this.roundInProgress = false;
     this.roundEndTime = Date.now();
-    
+
     // Hide zone warning
     this.hideZoneWarning();
-    
+
     if (playerWon) {
       this.roundWins++;
     } else {
       this.roundLosses++;
     }
-    
+
     // Show round result
     this.showRoundResult(playerWon);
-    
+
     // Check if match is over
     const winsNeeded = Math.ceil(this.totalRounds / 2);
     if (this.roundWins >= winsNeeded) {
@@ -4998,11 +5047,11 @@ class SpermRaceGame {
       setTimeout(() => this.startNextRound(), 3000);
     }
   }
-  
+
   showRoundResult(won: boolean) {
     let resultUI = document.getElementById('round-result');
     const isMobile = window.innerWidth <= 768;
-    
+
     if (!resultUI && this.uiContainer) {
       resultUI = document.createElement('div');
       resultUI.id = 'round-result';
@@ -5026,13 +5075,13 @@ class SpermRaceGame {
       });
       this.uiContainer.appendChild(resultUI);
     }
-    
+
     if (resultUI) {
       const message = won ? (isMobile ? 'ROUND WON' : 'ROUND WON') : (isMobile ? 'ROUND LOST' : 'ROUND LOST');
-      const subtitle = won 
-        ? `${this.roundWins}/${Math.ceil(this.totalRounds/2)} wins` 
+      const subtitle = won
+        ? `${this.roundWins}/${Math.ceil(this.totalRounds / 2)} wins`
         : `${this.roundLosses} losses`;
-      
+
       resultUI.innerHTML = `
         <div>${message}</div>
         <div style="font-size:${isMobile ? '16px' : '20px'};margin-top:${isMobile ? '8px' : '12px'};opacity:0.8">${subtitle}</div>
@@ -5041,11 +5090,11 @@ class SpermRaceGame {
       setTimeout(() => { resultUI!.style.opacity = '0'; }, 2000);
     }
   }
-  
+
   showMatchResult(won: boolean) {
     let matchUI = document.getElementById('match-result');
     const isMobile = window.innerWidth <= 768;
-    
+
     if (!matchUI && this.uiContainer) {
       matchUI = document.createElement('div');
       matchUI.id = 'match-result';
@@ -5067,7 +5116,7 @@ class SpermRaceGame {
       });
       this.uiContainer.appendChild(matchUI);
     }
-    
+
     if (matchUI) {
       matchUI.innerHTML = `
         <div>${won ? 'VICTORY' : 'DEFEAT'}</div>
@@ -5077,11 +5126,11 @@ class SpermRaceGame {
       `;
     }
   }
-  
+
   startNextRound() {
     this.currentRound++;
     this.roundInProgress = true;
-    
+
     // Reset all cars
     const resetCar = (car: Car | null) => {
       if (!car) return;
@@ -5094,7 +5143,7 @@ class SpermRaceGame {
       car.isBoosting = false;
       car.boostEnergy = car.maxBoostEnergy;
       car.outZoneTime = 0;
-      
+
       // Respawn at random position
       const angle = Math.random() * Math.PI * 2;
       const dist = Math.random() * 500 + 200;
@@ -5103,14 +5152,14 @@ class SpermRaceGame {
       car.angle = Math.random() * Math.PI * 2;
       car.targetAngle = car.angle;
     };
-    
+
     resetCar(this.player);
     resetCar(this.bot);
     this.extraBots.forEach(b => resetCar(b));
-    
+
     // Reset zone for new round (faster closing for urgency)
-  this.zone.startAtMs = Date.now() + 3000; // Start zone after countdown
-  this.zone.durationMs = 26000; // Later rounds stay fast but allow finale
+    this.zone.startAtMs = Date.now() + 3000; // Start zone after countdown
+    this.zone.durationMs = 26000; // Later rounds stay fast but allow finale
     this.rectZone.left = -this.arena.width / 2;
     this.rectZone.right = this.arena.width / 2;
     this.rectZone.top = -this.arena.height / 2;
@@ -5119,13 +5168,13 @@ class SpermRaceGame {
     this.rectZone.pendingSide = null;
     this.sliceIndex = 0;
     this.finalSurgeBannerShown = false;
-    
+
     // Clear trails
     this.trails = [];
     if (this.trailContainer) {
       this.trailContainer.removeChildren();
     }
-    
+
     // Clear particles
     this.particles.forEach(p => {
       if (p.graphics && p.graphics.parent) {
@@ -5133,7 +5182,7 @@ class SpermRaceGame {
       }
     });
     this.particles = [];
-    
+
     // Start countdown
     this.preStart = { startAt: Date.now(), durationMs: 3000 };
   }
@@ -5165,7 +5214,7 @@ class SpermRaceGame {
         }
       });
       this.cleanupFunctions = [];
-      
+
       // Clean up UI container (this removes all game UI elements at once)
       try {
         if (this.uiContainer) {
@@ -5185,21 +5234,21 @@ class SpermRaceGame {
           console.warn(`Error removing body element ${id}:`, error);
         }
       });
-      
+
       // Reset body transform
       try {
         document.body.style.transform = 'translate(0px, 0px)';
       } catch (error) {
         console.warn('Error resetting body transform:', error);
       }
-      
+
       // Radar is now cleaned up as part of uiContainer removal
-      
+
       // Clean up PIXI app
       try {
         if (this.app) {
           // Stop ticker first to prevent any ongoing updates (guard for undefined ticker in Pixi v8)
-          try { (this.app as any)?.ticker?.stop?.(); } catch {}
+          try { (this.app as any)?.ticker?.stop?.(); } catch { }
 
           // Detach canvas from DOM to fully release WebGL context
           try {
@@ -5214,11 +5263,11 @@ class SpermRaceGame {
           }
 
           // Destroy containers if present
-          try { this.worldContainer?.destroy?.({ children: true }); } catch {}
-          try { this.trailContainer?.destroy?.({ children: true }); } catch {}
+          try { this.worldContainer?.destroy?.({ children: true }); } catch { }
+          try { this.trailContainer?.destroy?.({ children: true }); } catch { }
 
           // Finally destroy the app (guard signature across Pixi versions)
-          try { (this.app as any)?.destroy?.(true, { children: true, texture: true }); } catch {}
+          try { (this.app as any)?.destroy?.(true, { children: true, texture: true }); } catch { }
           this.app = null;
         }
       } catch (error) {
@@ -5250,16 +5299,16 @@ function injectHudAnimationStylesOnce() {
 .hud-pulse { animation: srPulse 180ms ease-out; }
 `;
     document.head.appendChild(style);
-  } catch {}
+  } catch { }
 }
 
 // Bot color palette for variety
 const BOT_COLORS: number[] = [0xff6b6b, 0x4ecdc4, 0x45b7d1, 0x96ceb4, 0xfeca57, 0xff9ff3, 0x54a0ff, 0x5f27cd, 0x00d2d3, 0xff9f43];
 
-export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onExit }: { 
-  meIdOverride?: string; 
-  onReplay?: () => void; 
-  onExit?: () => void 
+export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onExit }: {
+  meIdOverride?: string;
+  onReplay?: () => void;
+  onExit?: () => void
 }) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<SpermRaceGame | null>(null);
@@ -5295,7 +5344,7 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
         const aliveSet = new Set<string>(players.filter(p => p.isAlive).map(p => p.id));
         const idToName: Record<string, string> = {};
         for (const p of players) {
-          const short = `${p.id.slice(0,4)}…${p.id.slice(-4)}`;
+          const short = `${p.id.slice(0, 4)}…${p.id.slice(-4)}`;
           idToName[p.id] = short;
         }
         game.wsHud = {
@@ -5328,4 +5377,4 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
     />
   );
 }
-        
+
