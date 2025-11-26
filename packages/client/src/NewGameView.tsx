@@ -2344,6 +2344,7 @@ class SpermRaceGame {
     if (!this.preStart) this.handlePlayerInput();
 
     // Update cars only after countdown
+    if (Math.random() < 0.01) console.log('gameLoop preStart:', this.preStart);
     if (!this.preStart) {
       // Timed unlock of pickups to avoid early clutter (artifacts/hotspots disabled)
       const sinceStart = Date.now() - (this.gameStartTime || Date.now());
@@ -2698,6 +2699,7 @@ class SpermRaceGame {
 
   handlePlayerInput() {
     if (!this.player || this.player.destroyed || !this.app) return;
+    if (Math.random() < 0.01) console.log('handlePlayerInput', { active: this.touch.active, keys: Object.keys(this.keys) });
 
     let targetX: number, targetY: number;
 
@@ -2774,6 +2776,9 @@ class SpermRaceGame {
 
   updateCar(car: Car, deltaTime: number) {
     if (car.destroyed) return;
+    if (car === this.player && Math.random() < 0.01) {
+      console.log('updateCar', { x: car.x, y: car.y, speed: car.speed, vx: car.vx, vy: car.vy, dt: deltaTime, targetSpeed: car.targetSpeed });
+    }
     const now = Date.now();
     if (car.hotspotBuffExpiresAt && car.hotspotBuffExpiresAt <= now) car.hotspotBuffExpiresAt = undefined;
     if (car.spotlightUntil && car.spotlightUntil <= now) car.spotlightUntil = undefined;
