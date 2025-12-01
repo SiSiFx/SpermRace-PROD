@@ -4,6 +4,10 @@ console.log('[BUILD] SpermRace wallet refactor bundle loaded');
 import { Buffer } from 'buffer';
 import { isMobileDevice } from './deviceDetection';
 import '/style.css';
+import { initSentry } from './utils/sentry';
+
+// Initialize Sentry error tracking FIRST (before any errors can occur)
+initSentry();
 
 // Ensure Buffer is available for Solana/web3 dependencies running in the browser.
 if (typeof globalThis !== 'undefined' && !(globalThis as any).Buffer) {

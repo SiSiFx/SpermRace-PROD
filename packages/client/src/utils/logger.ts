@@ -3,6 +3,8 @@
  * Automatically gates console logs based on environment
  */
 
+import { captureError } from './sentry';
+
 const isDev = import.meta.env.DEV || import.meta.env.MODE === 'development';
 const isDebug = () => {
   try {
@@ -28,7 +30,18 @@ export const logger = {
   error: (...args: any[]) => {
     // Always log errors, even in production
     console.error(...args);
-    // TODO: Send to error tracking service (Sentry)
+    
+    // Send to Sentry in production
+    try {
+      const error = args[0];
+      if (error instanceof Error) {
+        captureError(error);
+      } else if (typeof error === 'string') {
+        captureError(error);
+      }
+    } catch {
+      // Silently fail if Sentry isn't initialized
+    }
   },
   
   debug: (...args: any[]) => {
