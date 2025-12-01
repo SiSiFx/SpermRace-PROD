@@ -476,11 +476,13 @@ class SpermRaceGame {
     
     // High-quality rendering settings
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const isAndroid = /Android/i.test(navigator.userAgent);
     const rawPixelRatio = window.devicePixelRatio || 1;
-    // Cap at 2x on mobile to prevent 3x (9x pixels) on high-end phones - massive performance boost
-    const pixelRatio = isMobile ? Math.min(rawPixelRatio, 2) : rawPixelRatio;
+    // Android gets lower pixel ratio for better performance (many Android devices struggle with high DPR)
+    // iOS can handle 2x, Android gets 1.5x max
+    const pixelRatio = isAndroid ? Math.min(rawPixelRatio, 1.5) : isMobile ? Math.min(rawPixelRatio, 2) : rawPixelRatio;
     
-    console.log('[RENDERER] Resolution:', pixelRatio, 'Device:', isMobile ? 'Mobile' : 'Desktop', 'Raw DPR:', rawPixelRatio);
+    console.log('[RENDERER] Resolution:', pixelRatio, 'Device:', isAndroid ? 'Android' : isMobile ? 'Mobile' : 'Desktop', 'Raw DPR:', rawPixelRatio);
     
     this.app = new PIXI.Application();
     await this.app.init({
