@@ -242,7 +242,7 @@ function AppInner() {
         <Practice onFinish={() => setScreen('results')} onBack={() => setScreen('landing')} />
       )}
       {screen === 'modes' && (
-        <TournamentModesScreen onSelect={() => setScreen('wallet')} onClose={() => setScreen('landing')} onNotify={showToast} solPrice={solPrice} />
+        <TournamentModesScreen onSelect={() => setScreen('wallet')} onClose={() => setScreen('landing')} onNotify={showToast} />
       )}
       {screen === 'wallet' && (
         <Wallet onConnected={() => setScreen('lobby')} onClose={() => setScreen('modes')} />
@@ -700,7 +700,7 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
   return null;
 }
 
-function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify, solPrice }: { onSelect: () => void; onClose: () => void; onNotify: (msg: string, duration?: number) => void; solPrice: number | null }) {
+function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onSelect: () => void; onClose: () => void; onNotify: (msg: string, duration?: number) => void }) {
   const { publicKey, connect } = useWallet();
   const { connectAndJoin, state: wsState } = useWs();
   const [isJoining, setIsJoining] = useState<boolean>(false);
@@ -949,25 +949,6 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify, solPric
           Tournaments temporarily unavailable
         </div>
       )}
-
-      {/* SOL Price - Fixed square */}
-      <div style={{ 
-        position: 'fixed',
-        bottom: 'calc(16px + env(safe-area-inset-bottom, 0px))',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        zIndex: 100,
-        background: 'rgba(0,0,0,0.8)',
-        padding: '8px 20px',
-        borderRadius: 4,
-        border: '1px solid rgba(0,245,255,0.5)',
-        boxShadow: '0 0 15px rgba(0,245,255,0.3)',
-      }}>
-        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>SOL </span>
-        <span style={{ fontSize: 16, fontWeight: 700, color: '#00f5ff' }}>
-          ${solPrice?.toFixed(2) ?? '--'}
-        </span>
-      </div>
     </div>
   );
 }
