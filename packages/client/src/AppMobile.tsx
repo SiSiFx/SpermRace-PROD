@@ -2,6 +2,7 @@ import { useEffect, useState, lazy, Suspense } from 'react';
 import { OrientationWarning } from './OrientationWarning';
 import { MobileTouchControls } from './MobileTouchControls';
 import { LoadingSpinner } from './components/LoadingSpinner';
+import { AnimatedCounter } from './components/AnimatedCounter';
 
 // Lazy load heavy components
 const MobileTutorial = lazy(() => import('./MobileTutorial'));
@@ -463,15 +464,21 @@ function Landing({
               >
                 <div className="mobile-stat">
                   <div className="label">Games</div>
-                  <div className="value">{totalGames}</div>
+                  <div className="value">
+                    <AnimatedCounter value={totalGames} duration={1000} />
+                  </div>
                 </div>
                 <div className="mobile-stat">
                   <div className="label">Win%</div>
-                  <div className="value">{winRate}%</div>
+                  <div className="value">
+                    <AnimatedCounter value={parseFloat(winRate)} duration={1200} decimals={1} suffix="%" />
+                  </div>
                 </div>
                 <div className="mobile-stat">
                   <div className="label">Kills</div>
-                  <div className="value">{totalKills}</div>
+                  <div className="value">
+                    <AnimatedCounter value={totalKills} duration={1400} />
+                  </div>
                 </div>
               </div>
             </div>

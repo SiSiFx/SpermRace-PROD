@@ -1,5 +1,6 @@
 import { useEffect, useState, lazy, Suspense } from 'react';
 import { LoadingSpinner } from './components/LoadingSpinner';
+import { AnimatedCounter } from './components/AnimatedCounter';
 
 // Base URL for backend API.
 // For any spermrace.io host (prod/dev/www), always hit same-origin /api so Vercel can proxy
@@ -695,15 +696,21 @@ function Landing({
               <div className="pc-stats-grid">
                 <div className="pc-stat-card">
                   <div className="stat-label">Games</div>
-                  <div className="stat-value">{totalGames}</div>
+                  <div className="stat-value">
+                    <AnimatedCounter value={totalGames} duration={1000} />
+                  </div>
                 </div>
                 <div className="pc-stat-card highlight">
                   <div className="stat-label">Win%</div>
-                  <div className="stat-value">{winRate}%</div>
+                  <div className="stat-value">
+                    <AnimatedCounter value={parseFloat(winRate)} duration={1200} decimals={1} suffix="%" />
+                  </div>
                 </div>
                 <div className="pc-stat-card">
                   <div className="stat-label">Kills</div>
-                  <div className="stat-value">{totalKills}</div>
+                  <div className="stat-value">
+                    <AnimatedCounter value={totalKills} duration={1400} />
+                  </div>
                 </div>
               </div>
             </section>
