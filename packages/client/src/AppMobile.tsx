@@ -1,8 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import { OrientationWarning } from './OrientationWarning';
 import { MobileTouchControls } from './MobileTouchControls';
-import MobileTutorial from './MobileTutorial';
-import PracticeFullTutorial from './PracticeFullTutorial';
+import { LoadingSpinner } from './components/LoadingSpinner';
+
+// Lazy load heavy components
+const MobileTutorial = lazy(() => import('./MobileTutorial'));
+const PracticeFullTutorial = lazy(() => import('./PracticeFullTutorial'));
 // Base URL for backend API. For any spermrace.io host (prod/dev/www), always use same-origin /api
 // so Vercel can proxy and we avoid CORS with separate api.* origins.
 const API_BASE: string = (() => {
@@ -35,9 +38,11 @@ import { WalletProvider, useWallet } from './WalletProvider';
 import { getWalletDeepLink, isMobileDevice } from './walletUtils';
 import { useWallet as useAdapterWallet } from '@solana/wallet-adapter-react';
 import { WsProvider, useWs } from './WsProvider';
-import NewGameView from './NewGameView';
-import { Leaderboard } from './Leaderboard';
-import HowToPlayOverlay from './HowToPlayOverlay';
+
+// Lazy load heavy components
+const NewGameView = lazy(() => import('./NewGameView'));
+const Leaderboard = lazy(() => import('./Leaderboard').then(module => ({ default: module.Leaderboard })));
+const HowToPlayOverlay = lazy(() => import('./HowToPlayOverlay'));
 import {
   CrownSimple,
   Lightning,
@@ -239,7 +244,9 @@ function AppInner() {
         />
       )}
       {screen === 'practice' && (
-        <Practice onFinish={() => setScreen('results')} onBack={() => setScreen('landing')} />
+        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.95)' }}><LoadingSpinner message="Loading Practice..." size="large" /></div>}>
+          <Practice onFinish={() => setScreen('results')} onBack={() => setScreen('landing')} />
+        </Suspense>
       )}
       {screen === 'modes' && (
         <TournamentModesScreen onSelect={() => setScreen('wallet')} onClose={() => setScreen('landing')} onNotify={showToast} />
@@ -255,7 +262,9 @@ function AppInner() {
         />
       )}
       {screen === 'game' && (
-        <Game onEnd={() => setScreen('results')} onRestart={() => setScreen('game')} />
+        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.95)' }}><LoadingSpinner message="Loading Game..." size="large" /></div>}>
+          <Game onEnd={() => setScreen('results')} onRestart={() => setScreen('game')} />
+        </Suspense>
       )}
       {screen === 'results' && (
         <Results onPlayAgain={() => setScreen('practice')} onChangeTier={() => setScreen('modes')} />
@@ -268,25 +277,29 @@ function AppInner() {
       )}
 
       {showHowTo && (
-        <HowToPlayOverlay
-          mode="mobile"
-          onClose={() => {
-            setShowHowTo(false);
-            try {
+        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.9)', zIndex: 10000 }}><LoadingSpinner message="Loading..." size="large" /></div>}>
+          <HowToPlayOverlay
+            mode="mobile"
+            onClose={() => {
+              setShowHowTo(false);
+              try {
               localStorage.setItem('sr_howto_seen_v2', '1');
             } catch {}
           }}
-        />
+          />
+        </Suspense>
       )}
 
       {/* Leaderboard Modal */}
       {showLeaderboard && (
-        <Leaderboard
-          onClose={() => setShowLeaderboard(false)}
-          apiBase={API_BASE}
-          myWallet={publicKey || null}
-          isMobile={true}
-        />
+        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.9)', zIndex: 10000 }}><LoadingSpinner message="Loading Leaderboard..." size="large" /></div>}>
+          <Leaderboard
+            onClose={() => setShowLeaderboard(false)}
+            apiBase={API_BASE}
+            myWallet={publicKey || null}
+            isMobile={true}
+          />
+        </Suspense>
       )}
     </div>
   );

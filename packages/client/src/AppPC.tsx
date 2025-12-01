@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
+import { LoadingSpinner } from './components/LoadingSpinner';
+
 // Base URL for backend API.
 // For any spermrace.io host (prod/dev/www), always hit same-origin /api so Vercel can proxy
 // and we avoid CORS issues with api.spermrace.io.
@@ -30,11 +32,13 @@ const SOLANA_CLUSTER: 'devnet' | 'mainnet' = (() => {
 })();
 import { WalletProvider, useWallet } from './WalletProvider';
 import { WsProvider, useWs } from './WsProvider';
-import NewGameView from './NewGameView';
-import HowToPlayOverlay from './HowToPlayOverlay';
-import PracticeFullTutorial from './PracticeFullTutorial';
-import { Leaderboard } from './Leaderboard';
 import { CrownSimple, Lightning, Diamond, Atom } from 'phosphor-react';
+
+// Lazy load heavy components for code splitting
+const NewGameView = lazy(() => import('./NewGameView'));
+const HowToPlayOverlay = lazy(() => import('./HowToPlayOverlay'));
+const PracticeFullTutorial = lazy(() => import('./PracticeFullTutorial'));
+const Leaderboard = lazy(() => import('./Leaderboard').then(module => ({ default: module.Leaderboard })));
 
 type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
 
@@ -314,7 +318,9 @@ function AppInner() {
         />
       )}
       {screen === 'practice' && (
-        <Practice onFinish={() => setScreen('results')} onBack={() => setScreen('landing')} />
+        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.95)' }}><LoadingSpinner message="Loading Practice..." size="large" /></div>}>
+          <Practice onFinish={() => setScreen('results')} onBack={() => setScreen('landing')} />
+        </Suspense>
       )}
       {screen === 'modes' && (
         <TournamentModesScreen onSelect={() => setScreen('wallet')} onClose={() => setScreen('landing')} onNotify={showToast} solPrice={solPrice} />
@@ -326,7 +332,9 @@ function AppInner() {
         <Lobby onStart={() => setScreen('game')} onBack={() => setScreen('modes')} />
       )}
       {screen === 'game' && (
-        <Game onEnd={() => setScreen('results')} onRestart={() => setScreen('game')} />
+        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.95)' }}><LoadingSpinner message="Loading Game..." size="large" /></div>}>
+          <Game onEnd={() => setScreen('results')} onRestart={() => setScreen('game')} />
+        </Suspense>
       )}
       {screen === 'results' && (
         <Results onPlayAgain={() => setScreen('practice')} onChangeTier={() => setScreen('modes')} />
