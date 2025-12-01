@@ -153,23 +153,33 @@
   width: 100%;
   min-height: var(--mobile-btn-height);
   padding: 16px 24px;
-  background: linear-gradient(135deg, #22d3ee, #14b8a6);
-  border: none;
-  border-radius: 14px;
+  background: linear-gradient(135deg, #00f5ff 0%, #00d4aa 50%, #00ff88 100%);
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-radius: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 800;
   color: #000;
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 0 10px 30px rgba(34, 211, 238, 0.3);
+  box-shadow: 
+    0 0 20px rgba(0, 245, 255, 0.5),
+    0 0 40px rgba(0, 245, 255, 0.3),
+    0 10px 30px rgba(0, 0, 0, 0.3);
+  animation: cta-glow 2s ease-in-out infinite;
+}
+
+@keyframes cta-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(0, 245, 255, 0.5), 0 0 40px rgba(0, 245, 255, 0.3), 0 10px 30px rgba(0, 0, 0, 0.3); }
+  50% { box-shadow: 0 0 30px rgba(0, 245, 255, 0.7), 0 0 60px rgba(0, 245, 255, 0.4), 0 10px 30px rgba(0, 0, 0, 0.3); }
 }
 
 .mobile-cta-primary:active {
   transform: scale(0.97);
+  box-shadow: 0 0 40px rgba(0, 245, 255, 0.8), 0 0 80px rgba(0, 245, 255, 0.5);
 }
 
 .mobile-cta-primary .icon {
@@ -180,8 +190,8 @@
   width: 100%;
   min-height: 48px;
   padding: 14px 24px;
-  background: rgba(17, 22, 28, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(0, 245, 255, 0.1);
+  border: 1px solid rgba(0, 245, 255, 0.4);
   border-radius: 12px;
   display: flex;
   align-items: center;
@@ -189,14 +199,16 @@
   gap: 10px;
   font-size: 16px;
   font-weight: 600;
-  color: #c7d2de;
+  color: #00f5ff;
   cursor: pointer;
   transition: all 0.2s ease;
+  box-shadow: 0 0 10px rgba(0, 245, 255, 0.15);
 }
 
 .mobile-btn-secondary:active {
   transform: scale(0.97);
-  background: rgba(17, 22, 28, 0.95);
+  background: rgba(0, 245, 255, 0.2);
+  box-shadow: 0 0 20px rgba(0, 245, 255, 0.3);
 }
 
 .mobile-sol-price {
