@@ -523,15 +523,17 @@ function Landing({
         <main>
           <section
             style={{
-              marginTop: 18,
+              width: '100%',
+              maxWidth: '400px',
+              marginTop: '32px',
               display: 'flex',
               flexDirection: 'column',
-              gap: 10,
+              gap: '16px',
             }}
           >
+            {/* Primary CTA - Tournament */}
             <button
               type="button"
-              className="mobile-cta-primary"
               onClick={() => {
                 if (onShowLoading && onTournament) {
                   onShowLoading(onTournament);
@@ -539,11 +541,76 @@ function Landing({
                   onTournament?.();
                 }
               }}
+              style={{
+                width: '100%',
+                padding: '18px 24px',
+                background: 'linear-gradient(135deg, #00f5ff 0%, #00d4ff 100%)',
+                border: 'none',
+                borderRadius: '16px',
+                color: '#000',
+                fontSize: '18px',
+                fontWeight: '800',
+                letterSpacing: '0.02em',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '12px',
+                boxShadow: '0 8px 24px rgba(0, 245, 255, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1) inset',
+                transition: 'all 0.2s ease',
+                position: 'relative',
+                overflow: 'hidden',
+              }}
+              onTouchStart={(e) => {
+                e.currentTarget.style.transform = 'scale(0.98)';
+              }}
+              onTouchEnd={(e) => {
+                e.currentTarget.style.transform = 'scale(1)';
+              }}
             >
-              <span className="icon">
-                <Trophy size={18} weight="fill" />
-              </span>
+              <Trophy size={22} weight="fill" />
               <span>Enter Tournament</span>
+            </button>
+
+            {/* Secondary CTA - Practice */}
+            <button
+              type="button"
+              onClick={() => {
+                if (onShowLoading) {
+                  onShowLoading(onPractice);
+                } else {
+                  onPractice();
+                }
+              }}
+              style={{
+                width: '100%',
+                padding: '16px 24px',
+                background: 'rgba(0, 245, 255, 0.08)',
+                border: '2px solid rgba(0, 245, 255, 0.3)',
+                borderRadius: '16px',
+                color: '#00f5ff',
+                fontSize: '16px',
+                fontWeight: '700',
+                letterSpacing: '0.02em',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '10px',
+                boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)',
+                transition: 'all 0.2s ease',
+              }}
+              onTouchStart={(e) => {
+                e.currentTarget.style.transform = 'scale(0.98)';
+                e.currentTarget.style.background = 'rgba(0, 245, 255, 0.12)';
+              }}
+              onTouchEnd={(e) => {
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.background = 'rgba(0, 245, 255, 0.08)';
+              }}
+            >
+              <GameController size={20} weight="fill" />
+              <span>Practice Mode (Free)</span>
             </button>
 
             {/* Sentry Test Button (Remove after testing) */}
@@ -559,7 +626,6 @@ function Landing({
                   fontSize: '12px',
                   fontWeight: '600',
                   cursor: 'pointer',
-                  marginTop: '12px',
                 }}
                 onClick={() => {
                   throw new Error('🧪 Sentry Test Error - This is your first error!');
@@ -568,23 +634,6 @@ function Landing({
                 🧪 Test Sentry Error
               </button>
             )}
-
-            <button
-              type="button"
-              className="mobile-btn-secondary"
-              onClick={() => {
-                if (onShowLoading) {
-                  onShowLoading(onPractice);
-                } else {
-                  onPractice();
-                }
-              }}
-            >
-              <span className="icon">
-                <GameController size={18} weight="fill" />
-              </span>
-              <span>Practice Mode (Free)</span>
-            </button>
           </section>
 
           <div
