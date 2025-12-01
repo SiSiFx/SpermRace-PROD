@@ -398,22 +398,24 @@ function Landing({
           maxWidth: 960,
           margin: '0 auto',
           minHeight: '100vh',
-          padding: '16px 16px calc(40px + env(safe-area-inset-bottom, 0px))',
+          minHeight: '100dvh',
+          padding: '0 20px',
+          paddingBottom: 'max(40px, env(safe-area-inset-bottom))',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
-          gap: 16,
-          paddingBottom: 'calc(40px + env(safe-area-inset-bottom, 0px))',
+          alignItems: 'center',
+          gap: 20,
         }}
       >
-        <header style={{ textAlign: 'center', marginTop: '-32px' }}>
-          <div style={{ marginBottom: 12 }}>
+        <header style={{ textAlign: 'center', width: '100%' }}>
+          <div style={{ marginBottom: 16 }}>
             <Atom 
-              size={52} 
+              size={56} 
               weight="duotone" 
               color="#00f5ff"
               style={{ 
-                filter: 'drop-shadow(0 0 12px rgba(0, 245, 255, 0.6))',
+                filter: 'drop-shadow(0 0 16px rgba(0, 245, 255, 0.7))',
               }} 
             />
           </div>
