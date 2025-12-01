@@ -340,12 +340,7 @@ class SpermRaceGame {
 
   // JUICE METHODS - Make game feel amazing!
   private screenShake(intensity: number = 1) {
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const isTournament = !!(this.wsHud && this.wsHud.active);
-    // Disable screen shake in mobile practice for a stable feel
-    if (isMobile && !isTournament) return;
-
-    // Reduced shake - less disorienting on mobile
+    // Consistent screen shake on all platforms
     this.camera.shakeX = (Math.random() - 0.5) * 8 * intensity;
     this.camera.shakeY = (Math.random() - 0.5) * 8 * intensity;
   }
@@ -1702,17 +1697,7 @@ class SpermRaceGame {
     } catch {}
     this.player = this.createCar(s.x, s.y, headHex, 'player');
     if (this.player) {
-      // Slightly faster feel in mobile practice (no ws HUD)
-      try {
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        const isTournament = !!(this.wsHud && this.wsHud.active);
-        if (isMobile && !isTournament) {
-          this.player.baseSpeed *= 1.2;
-          this.player.speed = this.player.baseSpeed;
-          this.player.targetSpeed = this.player.baseSpeed;
-          this.player.boostSpeed *= 1.2;
-        }
-      } catch {}
+      // Mobile adjustments removed - same gameplay on all platforms
 
       (this.player as any).tailColor = tailHex ?? headHex;
       this.player.angle = s.angle;
@@ -3004,24 +2989,14 @@ class SpermRaceGame {
     try {
       const sizeMul = this.getSizeMultiplierForCar(car);
       if (car.tailGraphics) {
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        const isTournament = !!(this.wsHud && this.wsHud.active);
-        const isMobilePracticePlayer = isMobile && !isTournament && car.type === 'player';
-
-        const waveSpeed = isMobilePracticePlayer
-          ? (car.isBoosting ? 6 : 3)
-          : (car.isBoosting ? 18 : 10); // Default faster wave animation
+        const waveSpeed = car.isBoosting ? 18 : 10; // Consistent wave animation
         car.tailWaveT = (car.tailWaveT || 0) + deltaTime * waveSpeed;
 
-        const segsBase = car.tailSegments || 16;
-        const segs = isMobilePracticePlayer ? Math.max(6, segsBase) : Math.max(8, segsBase);
+        const segs = Math.max(8, car.tailSegments || 16);
         const len = (car.tailLength || 48) * sizeMul;
         const speedMag = Math.hypot(car.vx, car.vy);
         const speedScale = 0.5 + Math.min(1, speedMag / 350);
-        let ampBase = (car.tailAmplitude || 6) * (car.isBoosting ? 1.5 : 1.0) * sizeMul; // More dramatic boost wave
-        if (isMobilePracticePlayer) {
-          ampBase *= 0.4; // Much calmer tail motion in mobile practice
-        }
+        const ampBase = (car.tailAmplitude || 6) * (car.isBoosting ? 1.5 : 1.0) * sizeMul;
         const amp = ampBase;
         const baseWidth = 3 * (0.75 + 0.25 * speedScale) * sizeMul;
         const step = len / segs;
@@ -3175,11 +3150,7 @@ class SpermRaceGame {
 
   updateTrails(_deltaTime: number) {
     // Add trail points for active cars
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const isTournament = !!(this.wsHud && this.wsHud.active);
-    const hidePlayerTrailInMobilePractice = isMobile && !isTournament;
-
-    if (this.player && !this.player.destroyed && !hidePlayerTrailInMobilePractice) {
+    if (this.player && !this.player.destroyed) {
       this.addTrailPoint(this.player);
     }
     if (this.bot && !this.bot.destroyed) {
@@ -3768,17 +3739,10 @@ class SpermRaceGame {
       this.particles.push(particle);
     }
 
-    // Add screen shake on explosion (reduced) - but skip in mobile practice for stability
+    // Add screen shake on explosion
     try {
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      const isTournament = !!(this.wsHud && this.wsHud.active);
-      if (isMobile && !isTournament) {
-        this.camera.shakeX = 0;
-        this.camera.shakeY = 0;
-      } else {
-        this.camera.shakeX = 6;
-        this.camera.shakeY = 6;
-      }
+      this.camera.shakeX = 6;
+      this.camera.shakeY = 6;
     } catch {
       this.camera.shakeX = 6;
       this.camera.shakeY = 6;
