@@ -4609,16 +4609,39 @@ class SpermRaceGame {
     const cy = this.zone.centerY;
     const safeRadius = this.zone.currentRadius;
     
-    // 1) Safe zone circle with border
+    // Check player proximity for border color
+    let borderColor = this.theme.accent; // Default cyan
+    let borderAlpha = 0.9;
+    
+    if (this.player && !this.player.destroyed) {
+      const dx = this.player.x - cx;
+      const dy = this.player.y - cy;
+      const distFromCenter = Math.sqrt(dx * dx + dy * dy);
+      const distToEdge = safeRadius - distFromCenter;
+      
+      // Change border color based on proximity
+      if (distToEdge < 100) {
+        borderColor = 0xef4444; // Red - very close
+        borderAlpha = 1.0;
+      } else if (distToEdge < 250) {
+        borderColor = 0xf97316; // Orange - warning
+        borderAlpha = 0.95;
+      } else if (distToEdge < 400) {
+        borderColor = 0xfbbf24; // Yellow - caution
+        borderAlpha = 0.92;
+      }
+    }
+    
+    // 1) Safe zone circle with dynamic border
     this.zoneGraphics
       .circle(cx, cy, safeRadius)
       .fill({ color: 0x020617, alpha: 0.4 })
-      .stroke({ width: 6, color: this.theme.accent, alpha: 0.9 });
+      .stroke({ width: 8, color: borderColor, alpha: borderAlpha });
     
     // Inner ring for clarity
     this.zoneGraphics
-      .circle(cx, cy, Math.max(0, safeRadius - 6))
-      .stroke({ width: 2, color: 0xffffff, alpha: 0.6 });
+      .circle(cx, cy, Math.max(0, safeRadius - 8))
+      .stroke({ width: 2, color: 0xffffff, alpha: 0.7 });
     
     // 2) Outer danger zone (red fog circles)
     const dangerPulse = 0.3 + 0.2 * Math.sin(now * 0.003);
@@ -4661,16 +4684,16 @@ class SpermRaceGame {
           this.showZoneWarning();
         }
         
-        // Push vector toward circle center
+        // Push vector toward circle center (stronger push)
         const dist = distFromCenter || 1;
         const dirX = -dx / dist; // Toward center
         const dirY = -dy / dist;
-        const pushStrength = 14 + tension * 36;
+        const pushStrength = 20 + tension * 50; // Increased from 14 + 36
         car.vx += dirX * pushStrength * deltaTime;
         car.vy += dirY * pushStrength * deltaTime;
         car.outZoneTime = (car.outZoneTime || 0) + deltaTime;
-        // If prolonged outside, eliminate
-        const grace = Math.max(2.4, 6 - tension * 3.5);
+        // If prolonged outside, eliminate (longer grace period)
+        const grace = Math.max(4, 8 - tension * 4); // Increased from 2.4-6s to 4-8s
         if (car.outZoneTime > grace) this.destroyCar(car);
       } else {
         car.outZoneTime = 0;
@@ -4799,7 +4822,7 @@ class SpermRaceGame {
       const dy = this.player.y - this.zone.centerY;
       const distFromCenter = Math.sqrt(dx * dx + dy * dy);
       const distToEdge = this.zone.currentRadius - distFromCenter;
-      const dangerThreshold = 200; // Distance at which warning starts
+      const dangerThreshold = 300; // Increased from 200 for earlier warning
       
       if (distToEdge < dangerThreshold) {
         const proximityDanger = 1 - (distToEdge / dangerThreshold);
