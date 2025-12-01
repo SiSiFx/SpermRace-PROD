@@ -61,7 +61,7 @@ import {
 } from 'phosphor-react';
 import './leaderboard.css';
 
-type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
+type AppScreen = 'landing' | 'practice' | 'tournament' | 'wallet' | 'lobby' | 'game' | 'results';
 
 export default function AppMobile() {
   return (
@@ -266,11 +266,11 @@ function AppInner() {
           <Practice onFinish={() => setScreen('results')} onBack={() => setScreen('landing')} />
         </Suspense>
       )}
-      {screen === 'modes' && (
+      {screen === 'tournament' && (
         <TournamentModesScreen onSelect={() => setScreen('wallet')} onClose={() => setScreen('landing')} onNotify={showToast} />
       )}
       {screen === 'wallet' && (
-        <Wallet onConnected={() => setScreen('lobby')} onClose={() => setScreen('modes')} />
+        <Wallet onConnected={() => setScreen('lobby')} onClose={() => setScreen('tournament')} />
       )}
       {screen === 'lobby' && (
         <Lobby 
@@ -521,8 +521,11 @@ function Landing({
               type="button"
               className="mobile-cta-primary"
               onClick={() => {
-                transitionToScreen('tournament');
-                onTournament?.();
+                setShowSpermLoading(true);
+                setTimeout(() => {
+                  setShowSpermLoading(false);
+                  onTournament?.();
+                }, 800);
               }}
             >
               <span className="icon">
@@ -535,8 +538,11 @@ function Landing({
               type="button"
               className="mobile-btn-secondary"
               onClick={() => {
-                transitionToScreen('practice');
-                onPractice();
+                setShowSpermLoading(true);
+                setTimeout(() => {
+                  setShowSpermLoading(false);
+                  onPractice();
+                }, 800);
               }}
             >
               <span className="icon">
