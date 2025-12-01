@@ -20,15 +20,15 @@ export function SpermLoadingAnimation({ onComplete }: SpermLoadingAnimationProps
   if (!isVisible) return null;
 
   // Generate multiple sperm at different heights
-  const spermCount = 5;
+  const spermCount = 3; // Reduced from 5
   const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
-  const baseScale = isMobile ? 0.4 : 0.8; // Much smaller on mobile
+  const baseScale = isMobile ? 0.3 : 0.6; // Even smaller
   
   const sperms = Array.from({ length: spermCount }, (_, i) => ({
     id: i,
-    top: 15 + i * 18, // Staggered vertically
-    delay: i * 0.1, // Staggered timing
-    scale: baseScale + Math.random() * 0.2, // Varied sizes (smaller range on mobile)
+    top: 20 + i * 25, // More spread out
+    delay: i * 0.15, // Slower stagger
+    scale: baseScale + Math.random() * 0.15, // Smaller variation
   }));
 
   return (
@@ -48,9 +48,9 @@ export function SpermLoadingAnimation({ onComplete }: SpermLoadingAnimationProps
             position: 'absolute',
             top: `${sperm.top}%`,
             left: '-60px',
-            animation: `spermSwim 0.8s cubic-bezier(0.4, 0, 0.2, 1) ${sperm.delay}s forwards`,
+            animation: `spermSwim 1.2s cubic-bezier(0.4, 0, 0.2, 1) ${sperm.delay}s forwards`,
             transform: `scale(${sperm.scale})`,
-            filter: 'drop-shadow(0 0 8px rgba(0, 245, 255, 0.6))',
+            filter: 'drop-shadow(0 0 6px rgba(0, 245, 255, 0.5))',
           }}
         >
           {/* Sperm head */}
@@ -94,17 +94,17 @@ export function SpermLoadingAnimation({ onComplete }: SpermLoadingAnimationProps
       <style>{`
         @keyframes spermSwim {
           0% {
-            transform: translateX(0) scale(${spermCount}) rotate(-5deg);
+            transform: translateX(0) rotate(-5deg);
             opacity: 0;
           }
           20% {
-            opacity: 1;
+            opacity: 0.8;
           }
           80% {
-            opacity: 1;
+            opacity: 0.8;
           }
           100% {
-            transform: translateX(calc(100vw + 100px)) scale(${spermCount}) rotate(5deg);
+            transform: translateX(calc(100vw + 100px)) rotate(5deg);
             opacity: 0;
           }
         }

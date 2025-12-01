@@ -43,7 +43,9 @@
   max-height: 100vh;
   height: 100vh;
   border-radius: 0;
+  padding: 0 12px;
   padding-bottom: env(safe-area-inset-bottom, 0px);
+  box-sizing: border-box;
 }
 
 @keyframes slideUp {
