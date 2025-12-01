@@ -43,6 +43,42 @@ const TIERS: Tier[] = [
   { id: 'championship', name: 'Championship', usd: 100, maxPlayers: 16, duration: '5–8 min' },
 ];
 
+// Tier-specific styling
+const getTierTheme = (tierId: string) => {
+  switch (tierId) {
+    case 'micro':
+      return {
+        accent: '#10b981', // Emerald - beginner friendly
+        glow: 'rgba(16, 185, 129, 0.35)',
+        border: 'rgba(16, 185, 129, 0.8)',
+      };
+    case 'nano':
+      return {
+        accent: '#00F0FF', // Electric Cyan - recommended 
+        glow: 'rgba(0, 240, 255, 0.35)',
+        border: 'rgba(0, 240, 255, 0.8)',
+      };
+    case 'mega':
+      return {
+        accent: '#a855f7', // Purple - mid-stakes
+        glow: 'rgba(168, 85, 247, 0.35)',
+        border: 'rgba(168, 85, 247, 0.8)',
+      };
+    case 'championship':
+      return {
+        accent: '#f59e0b', // Amber - high roller
+        glow: 'rgba(245, 158, 11, 0.35)',
+        border: 'rgba(245, 158, 11, 0.8)',
+      };
+    default:
+      return {
+        accent: '#00F0FF',
+        glow: 'rgba(0, 240, 255, 0.35)',
+        border: 'rgba(0, 240, 255, 0.8)',
+      };
+  }
+};
+
 type ExposedJoinApi = {
   joinTier: (usd: number) => void;
   busy: boolean;
@@ -134,6 +170,7 @@ function Modes({ exposeJoin }: ModesProps = {}) {
       {TIERS.map((tier) => {
         const estPrizeUsd = (tier.usd * tier.maxPlayers * 0.85).toFixed(2);
         const disabled = busy || globalDisabled;
+        const theme = getTierTheme(tier.id);
 
         return (
           <button
@@ -158,9 +195,9 @@ function Modes({ exposeJoin }: ModesProps = {}) {
             onClick={() => handleJoin(tier.usd)}
             onMouseEnter={(e) => {
               if (disabled) return;
-              e.currentTarget.style.borderColor = 'rgba(0,240,255,0.8)';
+              e.currentTarget.style.borderColor = theme.border;
               e.currentTarget.style.boxShadow =
-                '0 0 24px rgba(0,240,255,0.35), 0 16px 40px rgba(0,0,0,0.9)';
+                `0 0 24px ${theme.glow}, 0 16px 40px rgba(0,0,0,0.9)`;
               e.currentTarget.style.backgroundColor = 'rgba(14,14,18,0.98)';
               e.currentTarget.style.transform = 'translateY(-2px)';
             }}
@@ -177,23 +214,47 @@ function Modes({ exposeJoin }: ModesProps = {}) {
               style={{
                 display: 'flex',
                 justifyContent: 'space-between',
-                alignItems: 'center',
+                alignItems: 'flex-start',
                 marginBottom: 10,
               }}
             >
-              <div>
+              <div style={{ flex: 1 }}>
                 <div
                   style={{
-                    fontSize: 12,
-                    letterSpacing: 4,
-                    textTransform: 'uppercase',
-                    color: 'var(--text-muted)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
                     marginBottom: 6,
-                    fontFamily:
-                      'Orbitron, system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
                   }}
                 >
-                  {tier.name}
+                  <div
+                    style={{
+                      fontSize: 12,
+                      letterSpacing: 4,
+                      textTransform: 'uppercase',
+                      color: 'var(--text-muted)',
+                      fontFamily:
+                        'Orbitron, system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
+                    }}
+                  >
+                    {tier.name}
+                  </div>
+                  {tier.id === 'nano' && (
+                    <div
+                      style={{
+                        padding: '2px 8px',
+                        backgroundColor: theme.accent,
+                        color: '#000',
+                        fontSize: 9,
+                        fontWeight: 800,
+                        borderRadius: 4,
+                        letterSpacing: 1,
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      Hot
+                    </div>
+                  )}
                 </div>
                 <div
                   style={{
@@ -233,6 +294,19 @@ function Modes({ exposeJoin }: ModesProps = {}) {
                 </div>
               </div>
             </div>
+
+            {/* Tier-specific accent bar */}
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 2,
+                background: `linear-gradient(90deg, ${theme.accent}, transparent)`,
+                borderRadius: '18px 18px 0 0',
+              }}
+            />
 
             {preflightError && (
               <div

@@ -60,6 +60,8 @@ interface Car {
   hotspotBuffExpiresAt?: number;
   spotlightUntil?: number;
   contactCooldown?: number;
+  spawnTime?: number; // For growth over time
+  killBoostUntil?: number; // Speed boost from kills
 }
 
 interface Trail {
@@ -388,6 +390,14 @@ class SpermRaceGame {
     const texts = distance < 15 ? 'INSANE DODGE' : distance < 25 ? 'CLOSE CALL' : 'DODGED';
     this.nearMisses.push({ text: texts, time: Date.now(), x, y });
     this.hapticFeedback('light');
+    
+    // CLOSE CALL BOOST: Subtle speed bump as reward for skillful dodging
+    if (this.player && !this.player.destroyed) {
+      const boostAmount = distance < 15 ? 1.05 : 1.03; // Much subtler boost
+      this.player.speed = Math.min(this.player.baseSpeed * 1.2, this.player.speed * boostAmount);
+      // Brief energy refill for close calls
+      this.player.boostEnergy = Math.min(this.player.maxBoostEnergy, this.player.boostEnergy + 3);
+    }
   }
 
   private easeOutBack(t: number): number {
@@ -1841,6 +1851,8 @@ class SpermRaceGame {
       boostRegenRate: 24,
       boostConsumptionRate: 55,
       minBoostEnergy: 20,
+      spawnTime: Date.now(), // For growth over time
+      killBoostUntil: 0, // Speed boost from kills
       trailPoints: [],
       trailGraphics: null,
       lastTrailTime: 0,
@@ -1929,11 +1941,8 @@ class SpermRaceGame {
       // Haptic feedback - makes boost feel punchy
       this.hapticFeedback('medium');
       
-      // Subtle camera zoom for speed sensation (FOV effect)
-      this.camera.targetZoom = Math.min(this.camera.zoom * 1.05, this.camera.maxZoom);
-      
-      // Light screen shake on boost start
-      this.screenShake(0.5);
+      // Light screen shake on boost start (zoom handled in updateCamera)
+      this.screenShake(0.3);
       
       // Skip heavy particle effect on mobile - causes visual glitches
       if (!isMobile) {
@@ -2026,9 +2035,7 @@ class SpermRaceGame {
     // During countdown, keep targetZoom as set in gameLoop and center as needed
     const inCountdown = !!this.preStart;
     if (!inCountdown) {
-      // Compute target zoom dynamically by speed + local density
-      const speedMag = Math.sqrt(this.player.vx * this.player.vx + this.player.vy * this.player.vy);
-      const speedFactor = Math.min(1, speedMag / 700);
+      // Compute target zoom by local density (removed speed factor for smoother camera)
       const camX = this.player.x;
       const camY = this.player.y;
       const nearbyRadius = 600;
@@ -2042,15 +2049,21 @@ class SpermRaceGame {
       const crowdFactor = Math.min(1, nearbyCount / 8);
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       const baseZoom = isMobile ? 0.55 : 0.75; // Wider for better tactical view
-      // REMOVED boost zoom wobble - keep constant zoom
-      // Reduce dynamic zoom changes for smoother camera
-      const out = isMobile ? 0.08 * speedFactor + 0.10 * crowdFactor : 0.24 * speedFactor + 0.30 * crowdFactor;
-      const target = baseZoom - out;
-      this.camera.targetZoom = Math.max(this.camera.minZoom, Math.min(this.camera.maxZoom, target));
+      
+      // BOOST ZOOM: Zoom IN when boosting for speed sensation
+      if (this.player.isBoosting) {
+        const boostZoom = isMobile ? 0.65 : 0.85; // Tighter view = feels faster
+        this.camera.targetZoom = boostZoom;
+      } else {
+        // Normal zoom with slight crowd-based pullback
+        const out = isMobile ? 0.05 * crowdFactor : 0.15 * crowdFactor;
+        const target = baseZoom - out;
+        this.camera.targetZoom = Math.max(this.camera.minZoom, Math.min(this.camera.maxZoom, target));
+      }
     }
     
-    // Smooth target zoom - slower for mobile to prevent shake
-    const zoomSpeed = isMobile ? 0.08 : (this.player?.isBoosting ? 0.04 : 0.10); // Slower zoom = smoother
+    // Smooth target zoom - very slow to prevent jiggle when spamming boost
+    const zoomSpeed = isMobile ? 0.03 : 0.025; // Much slower = no jiggle
     if (this.preStart && (Math.max(0, this.preStart.durationMs - (Date.now() - this.preStart.startAt)) > 2000)) {
       this.camera.zoom = this.camera.targetZoom;
     } else {
@@ -2790,8 +2803,13 @@ class SpermRaceGame {
       if (car.boostEnergy > car.maxBoostEnergy) {
         car.boostEnergy = car.maxBoostEnergy;
       }
-      car.targetSpeed = car.baseSpeed;
-      if (buffActive) car.targetSpeed *= 1.05;
+      // Kill boost takes priority over normal speed
+      if (car.killBoostUntil && now < car.killBoostUntil) {
+        car.targetSpeed = car.boostSpeed * 0.8;
+      } else {
+        car.targetSpeed = car.baseSpeed;
+        if (buffActive) car.targetSpeed *= 1.05;
+      }
       car.driftFactor = Math.max(0, car.driftFactor - deltaTime * 1.5);
     }
     // Emit boost echo on start
@@ -3320,8 +3338,8 @@ class SpermRaceGame {
         if (car.destroyed) break;
       }
       
-      // Show near-miss notification if player had a close call
-      if (car === this.player && closestMiss < 40 && Math.random() < 0.3) { // 30% chance to show (avoid spam)
+      // Show near-miss notification if player had a close call (reduced frequency)
+      if (car === this.player && closestMiss < 25 && Math.random() < 0.08) { // 8% chance, tighter radius
         this.showNearMiss(missX, missY, closestMiss);
       }
     }
@@ -3420,10 +3438,13 @@ class SpermRaceGame {
     killer.kills = (killer.kills || 0) + 1;
     this.recentKills.push({ killer: killer.name, victim: victim.name, time: Date.now() });
 
+    // KILL BOOST: Reward killer with 1.5s speed burst
+    const now = Date.now();
+    killer.killBoostUntil = now + 1500;
+    killer.targetSpeed = killer.boostSpeed * 0.8;
+
     // Kill streak tracking for player - simplified without combo
     if (killer === this.player) {
-      const now = Date.now();
-      
       // Reset streak if more than 5 seconds since last kill
       if (now - this.lastKillTime > 5000) {
         this.killStreak = 0;
@@ -3449,11 +3470,25 @@ class SpermRaceGame {
     return kills;
   }
 
-  // Map kills → visual size multiplier (caps at ~+60% size so things stay readable)
+  // Map kills + survival + boost → visual size multiplier
   private getSizeMultiplierForCar(car: Car): number {
+    // START SMALL: Base size 0.8
+    let size = 0.8;
+    
+    // GROW ON KILLS: +8% per kill (max +48% at 6 kills)
     const kills = this.getEffectiveKillsForCar(car);
-    const clamped = Math.max(0, Math.min(6, kills));
-    return 1 + clamped * 0.12;
+    size += Math.max(0, Math.min(6, kills)) * 0.08;
+    
+    // GROW OVER TIME: +20% max over 45 seconds
+    const survivalSec = car.spawnTime ? (Date.now() - car.spawnTime) / 1000 : 0;
+    size += Math.min(0.20, survivalSec / 45 * 0.20);
+    
+    // GROW WHEN BOOSTING: +15% pulse when boosting
+    if (car.isBoosting) {
+      size += 0.15;
+    }
+    
+    return size;
   }
 
   showKillStreakNotification(streak: number, x: number, y: number) {

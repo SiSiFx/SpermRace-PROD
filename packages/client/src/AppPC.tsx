@@ -34,7 +34,7 @@ import NewGameView from './NewGameView';
 import HowToPlayOverlay from './HowToPlayOverlay';
 import PracticeFullTutorial from './PracticeFullTutorial';
 import { Leaderboard } from './Leaderboard';
-import { CrownSimple, Lightning, Diamond } from 'phosphor-react';
+import { CrownSimple, Lightning, Diamond, Atom } from 'phosphor-react';
 
 type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
 
@@ -162,6 +162,7 @@ function AppInner() {
       <HeaderWallet
         screen={screen}
         status={statusText}
+        solPrice={solPrice}
         onPractice={onPractice}
         onTournament={onTournament}
         onLeaderboard={openLeaderboard}
@@ -316,7 +317,7 @@ function AppInner() {
         <Practice onFinish={() => setScreen('results')} onBack={() => setScreen('landing')} />
       )}
       {screen === 'modes' && (
-        <TournamentModesScreen onSelect={() => setScreen('wallet')} onClose={() => setScreen('landing')} onNotify={showToast} />
+        <TournamentModesScreen onSelect={() => setScreen('wallet')} onClose={() => setScreen('landing')} onNotify={showToast} solPrice={solPrice} />
       )}
       {screen === 'wallet' && (
         <Wallet onConnected={() => setScreen('lobby')} onClose={() => setScreen('modes')} />
@@ -369,6 +370,7 @@ function AppInner() {
 function HeaderWallet({
   screen,
   status,
+  solPrice,
   onPractice,
   onTournament,
   onLeaderboard,
@@ -376,6 +378,7 @@ function HeaderWallet({
 }: {
   screen: string;
   status: string;
+  solPrice: number | null;
   onPractice: () => void;
   onTournament: () => void;
   onLeaderboard?: () => void;
@@ -387,52 +390,140 @@ function HeaderWallet({
   const showStatusPill = status && status !== 'Not Connected' && status !== 'Connected';
 
   return (
-    <header className="pc-header">
-      <div className="pc-header-left">
-        <button
-          type="button"
-          className="pc-logo"
-          onClick={() => {
-            if (screen !== 'landing') {
-              try { window.location.href = '/'; } catch {}
-            }
-          }}
-        >
-          <span className="pc-logo-main">SPERM</span>
-          <span className="pc-logo-sub">RACE</span>
-        </button>
-        {isLanding && (
-          <nav className="pc-nav">
-            <button type="button" className="pc-nav-link" onClick={onTournament}>Tournaments</button>
-            {onLeaderboard && (
-              <button type="button" className="pc-nav-link" onClick={onLeaderboard}>Leaderboard</button>
-            )}
-            {onShowHowTo && (
-              <button type="button" className="pc-nav-link" onClick={onShowHowTo}>How to Play</button>
-            )}
-          </nav>
-        )}
+    <header style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 50,
+      zIndex: 60,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '0 20px',
+      background: 'rgba(0,0,0,0.85)',
+      borderBottom: '1px solid rgba(0,245,255,0.2)',
+    }}>
+      {/* Left: Logo */}
+      <button
+        type="button"
+        onClick={() => { if (screen !== 'landing') window.location.href = '/'; }}
+        style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: 6,
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+        }}
+      >
+        <span style={{ fontSize: 16, fontWeight: 800, color: '#fff', letterSpacing: '0.1em' }}>SPERM</span>
+        <span style={{ fontSize: 16, fontWeight: 800, color: '#00f5ff', letterSpacing: '0.1em' }}>RACE</span>
+      </button>
+
+      {/* Center: SOL Price */}
+      <div style={{
+        position: 'absolute',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: '6px 16px',
+        background: 'rgba(0,245,255,0.1)',
+        border: '1px solid rgba(0,245,255,0.3)',
+        borderRadius: 4,
+      }}>
+        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>SOL</span>
+        <span style={{ fontSize: 16, fontWeight: 700, color: '#00f5ff' }}>
+          ${solPrice?.toFixed(2) ?? '--'}
+        </span>
       </div>
-      <div className="pc-header-right">
-        {showStatusPill && <span className="pc-status-pill">{status}</span>}
-        {short ? (
+
+      {/* Right: Nav + Wallet */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        {isLanding && (
           <>
-            <span className="pc-wallet-id">{short}</span>
-            <button
-              type="button"
-              className="btn-secondary pc-wallet-btn"
-              onClick={() => disconnect?.()}
+            <button 
+              onClick={onTournament}
+              style={{
+                padding: '6px 12px',
+                background: 'none',
+                border: '1px solid rgba(255,255,255,0.2)',
+                borderRadius: 4,
+                color: 'rgba(255,255,255,0.8)',
+                fontSize: 11,
+                fontWeight: 600,
+                letterSpacing: '0.1em',
+                cursor: 'pointer',
+              }}
             >
-              Disconnect
+              PLAY
             </button>
+            {onLeaderboard && (
+              <button 
+                onClick={onLeaderboard}
+                style={{
+                  padding: '6px 12px',
+                  background: 'none',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: 4,
+                  color: 'rgba(255,255,255,0.8)',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  letterSpacing: '0.1em',
+                  cursor: 'pointer',
+                }}
+              >
+                RANKS
+              </button>
+            )}
           </>
+        )}
+        {showStatusPill && (
+          <span style={{
+            padding: '4px 10px',
+            background: 'rgba(0,245,255,0.15)',
+            borderRadius: 4,
+            fontSize: 11,
+            color: '#00f5ff',
+          }}>{status}</span>
+        )}
+        {short ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 12, color: '#00f5ff', fontFamily: 'monospace' }}>{short}</span>
+            <button
+              onClick={() => disconnect?.()}
+              style={{
+                padding: '6px 12px',
+                background: 'rgba(255,100,100,0.2)',
+                border: '1px solid rgba(255,100,100,0.4)',
+                borderRadius: 4,
+                color: '#ff6b6b',
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              EXIT
+            </button>
+          </div>
         ) : (
           <button
-            type="button"
-            className="btn-primary pc-wallet-btn"
             onClick={() => connect?.()}
+            style={{
+              padding: '6px 14px',
+              background: 'linear-gradient(135deg, #00f5ff, #00ff88)',
+              border: 'none',
+              borderRadius: 4,
+              color: '#000',
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: '0.1em',
+              cursor: 'pointer',
+            }}
           >
-            Connect Wallet
+            CONNECT
           </button>
         )}
       </div>
@@ -488,35 +579,49 @@ function Landing({
         }}
       >
         <header style={{ textAlign: 'center' }}>
+          <div style={{ marginBottom: 20 }}>
+            <Atom 
+              size={72} 
+              weight="duotone" 
+              color="#00f5ff"
+              style={{ 
+                filter: 'drop-shadow(0 0 16px rgba(0, 245, 255, 0.7))',
+              }} 
+            />
+          </div>
           <div
             style={{
               fontFamily: 'Orbitron, system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
-              letterSpacing: '0.22em',
-              fontSize: 12,
+              letterSpacing: '0.35em',
+              fontSize: 13,
               textTransform: 'uppercase',
-              color: 'rgba(148,163,184,0.9)',
-              marginBottom: 16,
+              color: '#00f5ff',
+              marginBottom: 24,
+              textShadow: '0 0 15px rgba(0, 245, 255, 0.6)',
             }}
           >
-            BIO-ARENA PROTOCOL
+            BATTLE ROYALE STARTS AT BIRTH
           </div>
           <h1
             style={{
               display: 'flex',
               justifyContent: 'center',
               alignItems: 'baseline',
-              gap: 16,
-              fontSize: 72,
+              gap: 24,
+              fontSize: 96,
               lineHeight: 1,
-              marginBottom: 20,
+              marginBottom: 28,
+              textShadow: '0 0 40px rgba(0, 245, 255, 0.4), 0 0 80px rgba(0, 245, 255, 0.2)',
             }}
           >
             <span style={{ color: '#fff', fontWeight: 800 }}>SPERM</span>
             <span
               style={{
                 fontWeight: 800,
-                color: 'transparent',
-                WebkitTextStroke: '1px rgba(148,163,184,0.9)',
+                background: 'linear-gradient(135deg, #00f5ff, #00ff88)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                filter: 'drop-shadow(0 0 12px rgba(0, 245, 255, 0.7))',
               }}
             >
               RACE
@@ -524,13 +629,13 @@ function Landing({
           </h1>
           <p
             style={{
-              fontSize: 14,
+              fontSize: 15,
               letterSpacing: '0.18em',
               textTransform: 'uppercase',
-              color: 'rgba(148,163,184,0.9)',
+              color: 'rgba(255,255,255,0.7)',
             }}
           >
-            ON-CHAIN FERTILIZATION BATTLE ROYALE
+            SURVIVE. ELIMINATE. WIN CRYPTO.
           </p>
         </header>
 
@@ -597,6 +702,7 @@ function Landing({
           )}
         </main>
       </div>
+
     </div>
   );
 }
@@ -711,12 +817,13 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
   return null;
 }
 
-function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onSelect: () => void; onClose: () => void; onNotify: (msg: string, duration?: number) => void }) {
+function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify, solPrice }: { onSelect: () => void; onClose: () => void; onNotify: (msg: string, duration?: number) => void; solPrice: number | null }) {
   const { publicKey, connect } = useWallet();
   const { connectAndJoin, state: wsState } = useWs();
   const [isJoining, setIsJoining] = useState<boolean>(false);
   const [preflight, setPreflight] = useState<{ address: string | null; sol: number | null; configured: boolean } | null>(null);
   const [preflightError, setPreflightError] = useState<boolean>(false);
+  const [selectedIndex, setSelectedIndex] = useState(0);
   
   useEffect(() => {
     (async () => {
@@ -725,452 +832,255 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
         if (!r.ok) throw new Error(`preflight ${r.status}`);
         const j = await r.json();
         setPreflight(j);
-        const misconfigured = !j?.configured || !j?.address || j?.sol == null;
-        setPreflightError(!!misconfigured);
+        setPreflightError(!j?.configured || !j?.address || j?.sol == null);
       } catch {
         setPreflightError(true);
       }
     })();
   }, []);
 
-  const tiers = [
-    { name: 'Micro Race', usd: 1, max: 16, dur: '2–3 min' },
-    { name: 'Nano Race', usd: 5, max: 32, dur: '3–4 min' },
-    { name: 'Mega Race', usd: 25, max: 32, dur: '4–6 min' },
-    { name: 'Championship', usd: 100, max: 16, dur: '5–8 min' },
-  ];
-
-  const tierIcons = [Lightning, Lightning, Diamond, CrownSimple] as const;
-
-  const [selectedIndex, setSelectedIndex] = useState(0);
-
   useEffect(() => {
     if (wsState.phase === 'lobby' || wsState.phase === 'game') setIsJoining(false);
   }, [wsState.phase]);
 
-  const buttonGradients = [
-    'linear-gradient(135deg, #22d3ee, #14b8a6)',
-    'linear-gradient(135deg, #6366f1, #8b5cf6)',
-    'linear-gradient(135deg, #f43f5e, #fb923c)',
-    'linear-gradient(135deg, #fb923c, #fbbf24)'
+  const tiers = [
+    { name: 'MICRO', usd: 1, max: 16, prize: 10 },
+    { name: 'NANO', usd: 5, max: 32, prize: 50 },
+    { name: 'MEGA', usd: 25, max: 32, prize: 250 },
+    { name: 'ELITE', usd: 100, max: 16, prize: 1000 },
   ];
 
-  const badgeLabels = ['Warmup', 'Blitz', 'Apex', 'Grand Final'];
-  const selectedTier = tiers[selectedIndex];
-  const selectedPrize = (selectedTier.usd * selectedTier.max * 0.85).toFixed(2);
-  const disabledSelected = isJoining
-    || wsState.phase === 'connecting'
-    || wsState.phase === 'authenticating'
-    || preflightError
-    || (!!preflight && (!preflight.configured || !preflight.address || preflight.sol == null));
+  const selected = tiers[selectedIndex];
+  const isDisabled = isJoining || wsState.phase === 'connecting' || wsState.phase === 'authenticating' || preflightError;
 
-  const handleJoinSelected = async () => {
-    if (disabledSelected) return;
+  const handleJoin = async () => {
+    if (isDisabled) return;
     setIsJoining(true);
-    const ok = publicKey ? true : await connect();
-    if (!ok) {
+    if (!publicKey && !(await connect())) {
       setIsJoining(false);
-      onNotify('Wallet not detected. Please install or unlock your wallet.');
+      onNotify('Connect wallet to enter tournament');
       return;
     }
-    await connectAndJoin({ entryFeeTier: selectedTier.usd as any, mode: 'tournament' });
+    await connectAndJoin({ entryFeeTier: selected.usd as any, mode: 'tournament' });
   };
 
   return (
-    <div className="screen active" id="mode-screen" style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '100px 40px 40px',
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      background: 'linear-gradient(180deg, #030712 0%, #0a1628 100%)',
+      overflowY: 'auto',
+      padding: '30px 40px',
     }}>
-      <div style={{
-        maxWidth: 1400,
-        width: '100%',
-      }}>
-        <div style={{ textAlign: 'center', marginBottom: 48 }}>
-          <h2 style={{
-            fontSize: 48,
-            fontWeight: 800,
-            color: '#fff',
+      <div style={{ maxWidth: 900, width: '100%', margin: '0 auto' }}>
+        {/* Header */}
+        <div style={{ textAlign: 'center', marginBottom: 28 }}>
+          <div style={{ 
+            fontSize: 14, 
+            letterSpacing: '0.3em', 
+            color: '#00f5ff',
             marginBottom: 12,
-            letterSpacing: '0.02em'
-          }}>Select Your Entry Tier</h2>
-          <p style={{
-            fontSize: 16,
-            color: 'rgba(148,163,184,0.9)',
-            marginBottom: 8
-          }}>Tournament races • Winner takes 85% of prize pool</p>
-          {preflightError && (
-            <div style={{ color: '#ff8080', fontSize: 14, marginTop: 16 }}>
-              Tournaments temporarily unavailable
-            </div>
-          )}
+            textShadow: '0 0 10px rgba(0,245,255,0.5)'
+          }}>
+            SELECT YOUR ARENA
+          </div>
+          <h1 style={{ 
+            fontSize: 40, 
+            fontWeight: 800, 
+            color: '#fff',
+            margin: 0 
+          }}>
+            TOURNAMENT
+          </h1>
         </div>
 
-        {/* Bio-Arena Map layout: left = arenas, right = detail drawer */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0, 420px) minmax(0, 1fr)',
-            gap: 32,
-            alignItems: 'stretch',
-            marginBottom: 40,
-          }}
-        >
-          {/* Left: stylized map with arena nodes */}
-          <div
-            style={{
-              position: 'relative',
-              padding: 24,
-              borderRadius: 24,
-              background: 'radial-gradient(circle at 0 0, rgba(56,189,248,0.16), transparent 55%), rgba(15,23,42,0.96)',
-              border: '1px solid rgba(148,163,184,0.5)',
-              boxShadow: '0 18px 50px rgba(0,0,0,0.7)',
-              overflow: 'hidden',
-            }}
-          >
-            {/* Vertical path line */}
-            <div
-              style={{
-                position: 'absolute',
-                left: 40,
-                top: 28,
-                bottom: 28,
-                width: 3,
-                background: 'linear-gradient(to bottom, rgba(34,211,238,0.9), rgba(129,140,248,0.7))',
-                opacity: 0.8,
-              }}
-            />
-            <div
-              style={{
-                position: 'absolute',
-                left: 34,
-                top: 34,
-                bottom: 34,
-                width: 14,
-                borderRadius: 999,
-                background: 'radial-gradient(circle, rgba(15,23,42,0.8), transparent 70%)',
-              }}
-            />
-
-            <div style={{ position: 'relative', zIndex: 1, marginBottom: 16 }}>
-              <div
-                style={{
-                  fontSize: 11,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.18em',
-                  color: 'rgba(148,163,184,0.9)',
-                  marginBottom: 6,
-                }}
-              >
-                Bio-Arena Map
-              </div>
-              <div style={{ fontSize: 18, fontWeight: 600, color: '#e5e7eb', lineHeight: 1.4 }}>
-                Choose your arena
-                <br />
-                along the fertilization route
-              </div>
-            </div>
-
-            <div
-              style={{
-                position: 'relative',
-                zIndex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 14,
-                marginTop: 6,
-              }}
-            >
-              {tiers.map((t, i) => {
-                const active = i === selectedIndex;
-                const difficulty = i + 1; // 1–4
-                const Icon = tierIcons[i];
-                return (
-                  <button
-                    key={t.name}
-                    type="button"
-                    onClick={() => setSelectedIndex(i)}
-                    style={{
-                      position: 'relative',
-                      marginLeft: 32,
-                      padding: '10px 14px',
-                      borderRadius: 14,
-                      border: active ? '1px solid rgba(34,211,238,0.9)' : '1px solid rgba(51,65,85,0.9)',
-                      background: active ? 'rgba(15,23,42,0.95)' : 'rgba(15,23,42,0.85)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 12,
-                      cursor: 'pointer',
-                      boxShadow: active ? '0 0 24px rgba(34,211,238,0.45)' : '0 8px 22px rgba(0,0,0,0.7)',
-                      transform: active ? 'translateX(2px)' : 'translateX(0)',
-                      transition: 'all 0.18s ease-out',
-                      opacity: preflightError ? 0.7 : 1,
-                    }}
-                  >
-                    {/* Node dot */}
-                    <div
-                      style={{
-                        position: 'absolute',
-                        left: -19,
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        width: 14,
-                        height: 14,
-                        borderRadius: '999px',
-                        background: active
-                          ? 'radial-gradient(circle, #22d3ee, #0ea5e9)'
-                          : 'radial-gradient(circle, #4b5563, #020617)',
-                        boxShadow: active ? '0 0 18px rgba(34,211,238,0.9)' : '0 0 6px rgba(15,23,42,1)',
-                        border: '2px solid rgba(15,23,42,0.95)',
-                      }}
-                    />
-
-                    <div
-                      style={{
-                        width: 26,
-                        height: 26,
-                        borderRadius: '999px',
-                        border: '1px solid rgba(148,163,184,0.7)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        background: 'radial-gradient(circle at 30% 20%, #22d3ee, #0f172a)',
-                      }}
-                    >
-                      <Icon size={14} weight="fill" color="#e5e7eb" />
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: '#e5e7eb' }}>{t.name}</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
-                        {/* Difficulty dots */}
-                        <div style={{ display: 'flex', gap: 3 }}>
-                          {Array.from({ length: 4 }).map((_, idx) => (
-                            <span
-                              key={idx}
-                              style={{
-                                width: 6,
-                                height: 6,
-                                borderRadius: '999px',
-                                background:
-                                  idx < difficulty
-                                    ? 'linear-gradient(135deg, #fb923c, #f97316)'
-                                    : 'rgba(55,65,81,0.9)',
-                              }}
-                            />
-                          ))}
-                        </div>
-                        <span style={{ fontSize: 11, color: 'rgba(148,163,184,0.9)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>
-                          {badgeLabels[i]}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.9)', marginTop: 4 }}>
-                        ${t.usd} • {t.max}p • {t.dur}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Right: arena detail panel (drawer style) */}
-          <div
-            style={{
-              width: '100%',
-              background: 'rgba(14,14,18,0.96)',
-              borderRadius: 24,
-              border: '1px solid rgba(255,255,255,0.12)',
-              position: 'relative',
-              overflow: 'hidden',
-              padding: 26,
-              boxShadow: '0 22px 70px rgba(0,0,0,0.7)',
-              backdropFilter: 'blur(24px)',
-            }}
-          >
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                background: `${buttonGradients[selectedIndex]}`,
-                opacity: 0.12,
-                mixBlendMode: 'screen',
-                pointerEvents: 'none',
-              }}
-            />
-
-            <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div>
-                <div
-                  style={{
-                    fontSize: 11,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.16em',
-                    color: 'rgba(148,163,184,0.9)',
-                    marginBottom: 6,
-                  }}
-                >
-                  Arena Details
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  {(() => {
-                    const DetailIcon = tierIcons[selectedIndex];
-                    return (
-                      <div
-                        style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: '999px',
-                          border: '1px solid rgba(148,163,184,0.7)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          background: 'radial-gradient(circle at 30% 20%, #22d3ee, #0f172a)',
-                        }}
-                      >
-                        <DetailIcon size={18} weight="fill" color="#e5e7eb" />
-                      </div>
-                    );
-                  })()}
-                  <div>
-                    <div style={{ fontSize: 22, fontWeight: 800, color: '#fff' }}>{selectedTier.name}</div>
-                    <div style={{ fontSize: 12, color: 'rgba(148,163,184,0.95)' }}>
-                      Tier {selectedIndex + 1} • {badgeLabels[selectedIndex]}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: 'rgba(148,163,184,0.85)',
-                    marginBottom: 4,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.14em',
-                  }}
-                >
-                  Win up to
-                </div>
-                <div
-                  style={{
-                    fontSize: 44,
-                    fontWeight: 900,
-                    background: buttonGradients[selectedIndex],
-                    backgroundClip: 'text',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    lineHeight: 1,
-                    textShadow: '0 4px 18px rgba(0,0,0,0.8)',
-                    marginBottom: 4,
-                  }}
-                >
-                  ${selectedPrize}
-                </div>
-                <div style={{ fontSize: 13, color: 'rgba(148,163,184,0.9)' }}>
-                  Winner takes ~85% of the prize pool
-                </div>
-              </div>
-
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(3, minmax(0,1fr))',
-                  gap: 10,
-                  marginTop: 4,
-                }}
-              >
-                <div
-                  style={{
-                    padding: 12,
-                    borderRadius: 10,
-                    background: 'rgba(15,23,42,0.9)',
-                    border: '1px solid rgba(148,163,184,0.4)',
-                    textAlign: 'center',
-                  }}
-                >
-                  <div style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>${selectedTier.usd}</div>
-                  <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.85)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Buy-in</div>
-                </div>
-                <div
-                  style={{
-                    padding: 12,
-                    borderRadius: 10,
-                    background: 'rgba(15,23,42,0.9)',
-                    border: '1px solid rgba(148,163,184,0.4)',
-                    textAlign: 'center',
-                  }}
-                >
-                  <div style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>{selectedTier.max}</div>
-                  <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.85)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Players max</div>
-                </div>
-                <div
-                  style={{
-                    padding: 12,
-                    borderRadius: 10,
-                    background: 'rgba(15,23,42,0.9)',
-                    border: '1px solid rgba(148,163,184,0.4)',
-                    textAlign: 'center',
-                  }}
-                >
-                  <div style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>{selectedTier.dur}</div>
-                  <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.85)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Duration</div>
-                </div>
-              </div>
-
+        {/* Tier Cards Grid */}
+        <div style={{ 
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: 14,
+          marginBottom: 24
+        }}>
+          {tiers.map((tier, i) => {
+            const isActive = i === selectedIndex;
+            return (
               <button
-                type="button"
-                onClick={handleJoinSelected}
-                disabled={disabledSelected}
+                key={tier.name}
+                onClick={() => setSelectedIndex(i)}
                 style={{
-                  marginTop: 16,
-                  width: '100%',
-                  padding: '14px 28px',
-                  borderRadius: 999,
-                  border: 'none',
-                  background: buttonGradients[selectedIndex],
-                  color: selectedIndex === 1 ? '#fff' : '#000',
-                  fontSize: 15,
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.1em',
-                  cursor: disabledSelected ? 'not-allowed' : 'pointer',
-                  boxShadow: disabledSelected ? 'none' : '0 10px 30px rgba(0,0,0,0.6)',
-                  opacity: disabledSelected ? 0.7 : 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '20px 14px',
+                  borderRadius: 20,
+                  border: isActive ? '2px solid #00f5ff' : '1px solid rgba(255,255,255,0.1)',
+                  background: isActive 
+                    ? 'linear-gradient(135deg, rgba(0,245,255,0.15) 0%, rgba(0,200,255,0.05) 100%)'
+                    : 'rgba(255,255,255,0.03)',
+                  cursor: 'pointer',
                   transition: 'all 0.2s ease',
+                  boxShadow: isActive ? '0 0 40px rgba(0,245,255,0.3)' : 'none',
+                  opacity: preflightError ? 0.5 : 1,
                 }}
               >
-                {preflightError
-                  ? 'Service Unavailable'
-                  : (preflight && (!preflight.configured || !preflight.address || preflight.sol == null))
-                  ? 'Temporarily Unavailable'
-                  : (isJoining || wsState.phase === 'connecting' || wsState.phase === 'authenticating')
-                  ? 'Joining…'
-                  : publicKey
-                  ? 'Enter Race'
-                  : 'Connect & Enter'}
-              </button>
-
-              {(preflightError || (preflight && (!preflight.configured || !preflight.address || preflight.sol == null))) && (
-                <div style={{ textAlign: 'left', marginTop: 8, fontSize: 11, color: '#f97373' }}>
-                  Service unavailable • please try again later
+                {/* Entry Fee Badge */}
+                <div style={{
+                  padding: '6px 16px',
+                  borderRadius: 20,
+                  background: isActive 
+                    ? 'linear-gradient(135deg, #00f5ff, #00ff88)'
+                    : 'rgba(255,255,255,0.1)',
+                  fontSize: 18,
+                  fontWeight: 800,
+                  color: isActive ? '#000' : '#fff',
+                  marginBottom: 10,
+                }}>
+                  ${tier.usd}
                 </div>
-              )}
-            </div>
+                
+                {/* Tier Name */}
+                <div style={{ 
+                  fontSize: 16, 
+                  fontWeight: 600, 
+                  color: isActive ? '#00f5ff' : 'rgba(255,255,255,0.7)',
+                  marginBottom: 12,
+                  letterSpacing: '0.1em'
+                }}>
+                  {tier.name}
+                </div>
+
+                {/* Prize - Big & Engaging */}
+                <div style={{ 
+                  fontSize: 36, 
+                  fontWeight: 900, 
+                  color: isActive ? '#00ff88' : 'rgba(255,255,255,0.6)',
+                  textShadow: isActive ? '0 0 25px rgba(0,255,136,0.6)' : 'none',
+                  lineHeight: 1,
+                }}>
+                  ${tier.prize}
+                </div>
+                <div style={{ 
+                  fontSize: 10, 
+                  color: 'rgba(255,255,255,0.4)', 
+                  letterSpacing: '0.15em',
+                  marginTop: 6
+                }}>
+                  WIN 10X
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Selected Info Panel - More Engaging */}
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(0,245,255,0.1) 0%, rgba(0,255,136,0.08) 100%)',
+          borderRadius: 20,
+          padding: '20px 28px',
+          marginBottom: 20,
+          border: '1px solid rgba(0,245,255,0.25)',
+          textAlign: 'center',
+        }}>
+          <div style={{ 
+            fontSize: 14, 
+            color: 'rgba(255,255,255,0.5)', 
+            letterSpacing: '0.25em',
+            marginBottom: 10
+          }}>
+            PAY ${selected.usd} TO WIN
+          </div>
+          <div style={{ 
+            fontSize: 48, 
+            fontWeight: 900, 
+            color: '#00ff88',
+            textShadow: '0 0 40px rgba(0,255,136,0.5)',
+            lineHeight: 1,
+          }}>
+            ${selected.prize}
+          </div>
+          <div style={{ 
+            fontSize: 16, 
+            color: '#00f5ff', 
+            marginTop: 12,
+            fontWeight: 600
+          }}>
+            10X YOUR ENTRY
           </div>
         </div>
 
-        {/* Back Button */}
-        <div style={{ textAlign: 'center' }}>
+        {/* Action Buttons */}
+        <div style={{ display: 'flex', gap: 16 }}>
           <button
-            className="btn-secondary"
-            style={{ padding: '12px 32px', fontSize: 15 }}
             onClick={onClose}
+            style={{
+              flex: '0 0 140px',
+              padding: '18px 24px',
+              borderRadius: 14,
+              border: '1px solid rgba(255,255,255,0.15)',
+              background: 'transparent',
+              color: 'rgba(255,255,255,0.6)',
+              fontSize: 16,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
           >
-            ← Back to Menu
+            BACK
+          </button>
+          <button
+            onClick={handleJoin}
+            disabled={isDisabled}
+            style={{
+              flex: 1,
+              padding: '18px',
+              borderRadius: 14,
+              border: 'none',
+              background: isDisabled 
+                ? 'rgba(255,255,255,0.1)' 
+                : 'linear-gradient(135deg, #00f5ff 0%, #00ff88 100%)',
+              color: isDisabled ? 'rgba(255,255,255,0.4)' : '#000',
+              fontSize: 18,
+              fontWeight: 800,
+              letterSpacing: '0.1em',
+              cursor: isDisabled ? 'not-allowed' : 'pointer',
+              boxShadow: isDisabled ? 'none' : '0 0 40px rgba(0,245,255,0.4)',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            {isJoining ? 'JOINING...' : preflightError ? 'UNAVAILABLE' : 'ENTER RACE'}
           </button>
         </div>
+
+        {preflightError && (
+          <div style={{ 
+            textAlign: 'center', 
+            marginTop: 16, 
+            fontSize: 13, 
+            color: 'rgba(255,100,100,0.8)' 
+          }}>
+            Tournaments temporarily unavailable
+          </div>
+        )}
+
+      </div>
+
+      {/* SOL Price - Fixed square */}
+      <div style={{ 
+        position: 'fixed',
+        bottom: 20,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 9999,
+        background: 'rgba(0,0,0,0.8)',
+        padding: '12px 28px',
+        borderRadius: 4,
+        border: '2px solid #00f5ff',
+        boxShadow: '0 0 20px rgba(0,245,255,0.5)',
+      }}>
+        <span style={{ fontSize: 16, color: '#fff' }}>SOL </span>
+        <span style={{ fontSize: 22, fontWeight: 800, color: '#00f5ff' }}>
+          ${solPrice?.toFixed(2) ?? '--'}
+        </span>
       </div>
     </div>
   );
