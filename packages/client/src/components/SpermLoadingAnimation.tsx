@@ -21,11 +21,14 @@ export function SpermLoadingAnimation({ onComplete }: SpermLoadingAnimationProps
 
   // Generate multiple sperm at different heights
   const spermCount = 5;
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+  const baseScale = isMobile ? 0.4 : 0.8; // Much smaller on mobile
+  
   const sperms = Array.from({ length: spermCount }, (_, i) => ({
     id: i,
     top: 15 + i * 18, // Staggered vertically
     delay: i * 0.1, // Staggered timing
-    scale: 0.8 + Math.random() * 0.4, // Varied sizes
+    scale: baseScale + Math.random() * 0.2, // Varied sizes (smaller range on mobile)
   }));
 
   return (
@@ -53,8 +56,8 @@ export function SpermLoadingAnimation({ onComplete }: SpermLoadingAnimationProps
           {/* Sperm head */}
           <div
             style={{
-              width: '24px',
-              height: '32px',
+              width: isMobile ? '16px' : '24px',
+              height: isMobile ? '22px' : '32px',
               background: 'radial-gradient(circle at 40% 40%, #00f5ff, #00b4cc)',
               borderRadius: '50% 50% 50% 50% / 60% 60% 40% 40%',
               position: 'relative',
@@ -64,19 +67,19 @@ export function SpermLoadingAnimation({ onComplete }: SpermLoadingAnimationProps
           
           {/* Sperm tail */}
           <svg
-            width="80"
-            height="8"
-            viewBox="0 0 80 8"
+            width={isMobile ? 50 : 80}
+            height={isMobile ? 6 : 8}
+            viewBox={isMobile ? "0 0 50 6" : "0 0 80 8"}
             style={{
               position: 'absolute',
-              left: '-80px',
-              top: '12px',
+              left: isMobile ? '-50px' : '-80px',
+              top: isMobile ? '8px' : '12px',
             }}
           >
             <path
-              d="M 0 4 Q 20 0, 40 4 T 80 4"
+              d={isMobile ? "M 0 3 Q 12 0, 25 3 T 50 3" : "M 0 4 Q 20 0, 40 4 T 80 4"}
               stroke="#00b4cc"
-              strokeWidth="3"
+              strokeWidth={isMobile ? "2" : "3"}
               fill="none"
               strokeLinecap="round"
               opacity="0.8"
