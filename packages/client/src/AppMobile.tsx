@@ -3,6 +3,7 @@ import { OrientationWarning } from './OrientationWarning';
 import { MobileTouchControls } from './MobileTouchControls';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { AnimatedCounter } from './components/AnimatedCounter';
+import { SpermLoadingAnimation } from './components/SpermLoadingAnimation';
 
 // Lazy load heavy components
 const MobileTutorial = lazy(() => import('./MobileTutorial'));
@@ -77,9 +78,25 @@ function AppInner() {
   const [solPrice, setSolPrice] = useState<number | null>(null);
   const { state: wsState, signAuthentication, leave } = useWs() as any;
   const [toast, setToast] = useState<string | null>(null);
+  const [showSpermLoading, setShowSpermLoading] = useState(false);
+  const [pendingScreen, setPendingScreen] = useState<AppScreen | null>(null);
   const showToast = (msg: string, duration = 2000) => {
     setToast(msg);
     window.setTimeout(() => setToast(null), duration);
+  };
+
+  // Screen transition with loading animation
+  const transitionToScreen = (newScreen: AppScreen) => {
+    setPendingScreen(newScreen);
+    setShowSpermLoading(true);
+  };
+
+  const handleLoadingComplete = () => {
+    if (pendingScreen) {
+      setScreen(pendingScreen);
+      setPendingScreen(null);
+    }
+    setShowSpermLoading(false);
   };
   const wallet = useWallet();
   const { publicKey } = wallet;
@@ -292,6 +309,11 @@ function AppInner() {
       )}
 
       {/* Leaderboard Modal */}
+      {/* Sperm Loading Animation */}
+      {showSpermLoading && (
+        <SpermLoadingAnimation onComplete={handleLoadingComplete} />
+      )}
+
       {showLeaderboard && (
         <Suspense fallback={<div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.9)', zIndex: 10000 }}><LoadingSpinner message="Loading Leaderboard..." size="large" /></div>}>
           <Leaderboard
@@ -498,7 +520,10 @@ function Landing({
             <button
               type="button"
               className="mobile-cta-primary"
-              onClick={() => onTournament?.()}
+              onClick={() => {
+                transitionToScreen('tournament');
+                onTournament?.();
+              }}
             >
               <span className="icon">
                 <Trophy size={18} weight="fill" />
@@ -509,7 +534,10 @@ function Landing({
             <button
               type="button"
               className="mobile-btn-secondary"
-              onClick={onPractice}
+              onClick={() => {
+                transitionToScreen('practice');
+                onPractice();
+              }}
             >
               <span className="icon">
                 <GameController size={18} weight="fill" />
