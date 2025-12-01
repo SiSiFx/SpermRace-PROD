@@ -260,6 +260,13 @@ function AppInner() {
           onTournament={onTournament}
           onWallet={onWallet}
           onLeaderboard={() => setShowLeaderboard(true)}
+          onShowLoading={(callback) => {
+            setShowSpermLoading(true);
+            setTimeout(() => {
+              setShowSpermLoading(false);
+              callback();
+            }, 800);
+          }}
         />
       )}
       {screen === 'practice' && (
@@ -358,6 +365,7 @@ interface LandingProps {
   onTournament?: () => void;
   onWallet: () => void;
   onLeaderboard?: () => void;
+  onShowLoading?: (callback: () => void) => void;
 }
 
 function Landing({
@@ -366,6 +374,7 @@ function Landing({
   onTournament,
   onWallet,
   onLeaderboard,
+  onShowLoading,
 }: LandingProps) {
 
   const getPlayerStats = () => {
@@ -522,11 +531,11 @@ function Landing({
               type="button"
               className="mobile-cta-primary"
               onClick={() => {
-                setShowSpermLoading(true);
-                setTimeout(() => {
-                  setShowSpermLoading(false);
+                if (onShowLoading && onTournament) {
+                  onShowLoading(onTournament);
+                } else {
                   onTournament?.();
-                }, 800);
+                }
               }}
             >
               <span className="icon">
@@ -562,11 +571,11 @@ function Landing({
               type="button"
               className="mobile-btn-secondary"
               onClick={() => {
-                setShowSpermLoading(true);
-                setTimeout(() => {
-                  setShowSpermLoading(false);
+                if (onShowLoading) {
+                  onShowLoading(onPractice);
+                } else {
                   onPractice();
-                }, 800);
+                }
               }}
             >
               <span className="icon">

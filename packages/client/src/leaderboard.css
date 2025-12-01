@@ -43,6 +43,7 @@
   max-height: 100vh;
   height: 100vh;
   border-radius: 0;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 @keyframes slideUp {
@@ -313,17 +314,45 @@
     border-radius: 0;
   }
 
+  .leaderboard-header {
+    padding: 16px 16px 12px 16px;
+  }
+
   .leaderboard-header h2 {
-    font-size: 20px;
+    font-size: 18px;
   }
 
   .leaderboard-tabs {
-    padding: 12px 16px;
+    padding: 8px 12px;
+    gap: 8px;
   }
 
   .leaderboard-tabs .tab {
-    min-width: 100px;
+    min-width: 90px;
     padding: 8px 12px;
+    font-size: 12px;
+    
+  }
+
+  .leaderboard-content {
+    padding: 12px;
+  }
+
+  .leaderboard-entry {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  .leaderboard-entry .rank {
+    min-width: 36px;
+    font-size: 14px;
+  }
+
+  .leaderboard-entry .wallet {
+    font-size: 12px;
+  }
+
+  .leaderboard-entry .metric {
     font-size: 13px;
   }
 
