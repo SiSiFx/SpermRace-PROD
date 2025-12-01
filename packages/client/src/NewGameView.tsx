@@ -1478,18 +1478,35 @@ class SpermRaceGame {
     });
     this.uiContainer.appendChild(this.leaderboardContainer);
 
-    // Create kill feed container (top-left)
+    // Create kill feed container (top-right for better visibility)
     this.killFeedContainer = document.createElement('div');
     Object.assign(this.killFeedContainer.style, {
       position: 'absolute',
-      top: '20px',
-      left: '20px',
-      width: '320px',
+      top: '80px',
+      right: '24px',
+      width: '340px',
       display: 'flex',
       flexDirection: 'column',
-      gap: '6px',
+      gap: '8px',
       zIndex: '10'
     });
+    
+    // Add CSS animation for slide-in effect
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes killFeedSlide {
+        0% {
+          opacity: 0;
+          transform: translateX(20px);
+        }
+        100% {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+    `;
+    document.head.appendChild(style);
+    
     this.uiContainer.appendChild(this.killFeedContainer);
 
     // Settings UI toggle removed
@@ -2598,52 +2615,104 @@ class SpermRaceGame {
     const KILL_LIFETIME = 6000;
     
     // Merge local and server kill feed (server preferred when active)
-    let feed: Array<{ killer: string; victim: string; time: number }> = [];
+    let feed: Array<{ killer: string; victim: string; time: number; isMe?: boolean }> = [];
+    const myId = this.wsHud?.playerId || null;
+    
     if (this.wsHud?.active && Array.isArray(this.wsHud.killFeed)) {
-      feed = (this.wsHud.killFeed || []).map(ev => ({
-        killer: ev.killerId ? (this.wsHud!.idToName[ev.killerId] || `${ev.killerId.slice(0,4)}…${ev.killerId.slice(-4)}`) : 'ZONE',
-        victim: this.wsHud!.idToName[ev.victimId] || `${ev.victimId.slice(0,4)}…${ev.victimId.slice(-4)}`,
-        time: ev.ts || now
-      }));
+      feed = (this.wsHud.killFeed || []).map(ev => {
+        const killerName = ev.killerId ? (this.wsHud!.idToName[ev.killerId] || `${ev.killerId.slice(0,4)}…${ev.killerId.slice(-4)}`) : 'ZONE';
+        const victimName = this.wsHud!.idToName[ev.victimId] || `${ev.victimId.slice(0,4)}…${ev.victimId.slice(-4)}`;
+        return {
+          killer: killerName,
+          victim: victimName,
+          time: ev.ts || now,
+          isMe: ev.killerId === myId || ev.victimId === myId
+        };
+      });
     } else {
-      // Local practice - clean expired kills
+      // Local practice
       this.recentKills = this.recentKills.filter(k => now - k.time < KILL_LIFETIME);
-      feed = this.recentKills;
+      feed = this.recentKills.map(k => ({ ...k, isMe: false }));
     }
     
-    // Only show last 6 kills, most recent at bottom
+    // Only show last 6 kills
     const items = feed.slice(-6);
     
-    // Build HTML in one go to prevent flickering
-    const html = items.map(k => {
+    // Premium kill feed with game-like styling
+    const html = items.map((k, idx) => {
       const age = now - k.time;
       const alpha = Math.max(0, 1 - (age / KILL_LIFETIME));
-      const slideIn = age < 300; // Slide in animation for first 300ms
-      const translateY = slideIn ? `translateY(${(1 - age / 300) * 20}px)` : 'translateY(0)';
       
-      return `<div class="killfeed-item" style="
-        display: flex;
-        gap: 8px;
-        align-items: center;
-        background: rgba(0,0,0,0.7);
-        border: 1px solid rgba(255,100,0,0.3);
-        border-radius: 8px;
-        padding: 8px 12px;
-        margin-bottom: 4px;
-        color: ${this.theme.text};
-        opacity: ${alpha};
-        transform: ${translateY};
-        transition: transform 0.3s ease-out, opacity 0.3s;
+      // Detect kill streak
+      let isStreak = false;
+      if (idx > 0 && items[idx-1].killer === k.killer && k.killer !== 'ZONE') {
+        isStreak = true;
+      }
+      
+      // Premium colors
+      const bgColor = k.isMe ? `rgba(34,211,238,${0.2 * alpha})` : `rgba(0,0,0,${0.85 * alpha})`;
+      const borderColor = k.isMe ? `rgba(34,211,238,${0.6 * alpha})` : `rgba(255,100,0,${0.4 * alpha})`;
+      const glowColor = k.isMe ? `rgba(34,211,238,${0.5 * alpha})` : `rgba(0,0,0,${0.4 * alpha})`;
+      
+      return `<div style="
+        display:flex;
+        gap:10px;
+        align-items:center;
+        justify-content:space-between;
+        background:${bgColor};
+        border:1px solid ${borderColor};
+        border-radius:10px;
+        padding:10px 14px;
+        margin-bottom:6px;
+        color:#ffffff;
+        opacity:${alpha};
+        animation: killFeedSlide 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 4px 12px ${glowColor};
+        backdrop-filter: blur(8px);
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
         will-change: transform, opacity;
       ">
-        <span style="width:6px;height:6px;border-radius:50%;background:#ef4444;flex-shrink:0;"></span>
-        <span style="color:#ff6b6b;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;">${k.killer}</span>
-        <span style="opacity:0.7;flex-shrink:0;font-size:11px;margin:0 4px;letter-spacing:1px;">KO</span>
-        <span style="color:#fbbf24;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;">${k.victim}</span>
+        <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
+          <span style="
+            color:#00f5ff;
+            font-weight:800;
+            white-space:nowrap;
+            overflow:hidden;
+            text-overflow:ellipsis;
+            max-width:110px;
+            font-size:13px;
+            text-shadow: 0 0 8px rgba(0,245,255,0.5);
+          ">${k.killer}</span>
+          <span style="
+            color:#ef4444;
+            font-size:14px;
+            filter: drop-shadow(0 0 4px rgba(239,68,68,0.6));
+          ">⚔️</span>
+          <span style="
+            color:#fbbf24;
+            font-weight:600;
+            white-space:nowrap;
+            overflow:hidden;
+            text-overflow:ellipsis;
+            max-width:110px;
+            font-size:13px;
+          ">${k.victim}</span>
+        </div>
+        ${isStreak ? `<div style="
+          padding:3px 10px;
+          background:linear-gradient(135deg, #ef4444, #dc2626);
+          border-radius:6px;
+          font-size:10px;
+          font-weight:900;
+          color:#ffffff;
+          text-transform:uppercase;
+          letter-spacing:0.8px;
+          box-shadow: 0 0 12px rgba(239,68,68,0.7);
+        ">STREAK</div>` : ''}
       </div>`;
     }).join('');
     
-    // Only update if content changed to prevent glitching
+    // Only update if content changed
     if (this.killFeedContainer.innerHTML !== html) {
       this.killFeedContainer.innerHTML = html;
     }
