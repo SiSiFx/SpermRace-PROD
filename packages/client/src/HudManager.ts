@@ -87,12 +87,13 @@ export class HudManager {
 
     const boostBarContainer = document.createElement('div');
     Object.assign(boostBarContainer.style, {
-      width: isMobile ? '60px' : '100px',
-      height: '6px',
+      width: isMobile ? '80px' : '120px',
+      height: '8px',
       background: 'rgba(34, 211, 238, 0.15)',
-      borderRadius: '3px',
+      borderRadius: '4px',
       overflow: 'hidden',
-      position: 'relative'
+      position: 'relative',
+      border: '1px solid rgba(34, 211, 238, 0.3)'
     });
 
     this.boostBarFillEl = document.createElement('div');
@@ -102,10 +103,31 @@ export class HudManager {
       width: '100%',
       background: 'linear-gradient(90deg, #22d3ee 0%, #06b6d4 100%)',
       borderRadius: '3px',
-      transition: 'width 0.1s ease-out, background 0.2s ease',
-      boxShadow: '0 0 8px rgba(34, 211, 238, 0.6)'
+      transition: 'width 0.1s ease-out, background 0.2s ease, box-shadow 0.2s ease',
+      boxShadow: '0 0 10px rgba(34, 211, 238, 0.7)',
+      position: 'relative'
     });
+    
+    // Add percentage text overlay
+    const boostPercentEl = document.createElement('div');
+    boostPercentEl.id = 'boost-percent-text';
+    Object.assign(boostPercentEl.style, {
+      position: 'absolute',
+      top: '50%',
+      right: '4px',
+      transform: 'translateY(-50%)',
+      fontSize: '10px',
+      fontWeight: '800',
+      color: '#ffffff',
+      textShadow: '0 1px 2px rgba(0, 0, 0, 0.8)',
+      pointerEvents: 'none',
+      zIndex: '2',
+      lineHeight: '1'
+    });
+    boostPercentEl.textContent = '100%';
+    
     boostBarContainer.appendChild(this.boostBarFillEl);
+    boostBarContainer.appendChild(boostPercentEl);
     boostSection.appendChild(boostBarContainer);
 
     this.topBar.appendChild(boostSection);
@@ -190,25 +212,36 @@ export class HudManager {
     if (!this.boostBarFillEl) return;
 
     const boostIcon = document.getElementById('boost-icon');
+    const boostPercentText = document.getElementById('boost-percent-text');
+    
+    const clampedPct = Math.max(0, Math.min(100, percentage));
     
     // Update width
-    this.boostBarFillEl.style.width = `${Math.max(0, Math.min(100, percentage))}%`;
+    this.boostBarFillEl.style.width = `${clampedPct}%`;
+    
+    // Update percentage text
+    if (boostPercentText) {
+      boostPercentText.textContent = `${Math.round(clampedPct)}%`;
+    }
 
     // Update colors based on state
     if (isBoosting) {
       this.boostBarFillEl.style.background = 'linear-gradient(90deg, #00ff88 0%, #22d3ee 100%)';
+      this.boostBarFillEl.style.boxShadow = '0 0 16px rgba(0, 255, 136, 0.9), 0 0 4px rgba(0, 255, 136, 0.5)';
       if (boostIcon) {
         boostIcon.style.color = '#00ff88';
         boostIcon.style.textShadow = '0 0 10px rgba(0, 255, 136, 0.8)';
       }
     } else if (isLow) {
       this.boostBarFillEl.style.background = 'linear-gradient(90deg, #ef4444 0%, #dc2626 100%)';
+      this.boostBarFillEl.style.boxShadow = '0 0 10px rgba(239, 68, 68, 0.7)';
       if (boostIcon) {
         boostIcon.style.color = '#ef4444';
         boostIcon.style.textShadow = '0 0 8px rgba(239, 68, 68, 0.6)';
       }
     } else {
       this.boostBarFillEl.style.background = 'linear-gradient(90deg, #22d3ee 0%, #06b6d4 100%)';
+      this.boostBarFillEl.style.boxShadow = '0 0 10px rgba(34, 211, 238, 0.7)';
       if (boostIcon) {
         boostIcon.style.color = '#22d3ee';
         boostIcon.style.textShadow = '0 0 8px rgba(34, 211, 238, 0.6)';

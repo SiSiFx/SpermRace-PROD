@@ -35,12 +35,27 @@ export const MobileTouchControls = memo(function MobileTouchControls({ onTouch, 
     let dy = touchY - centerY;
     const distance = Math.sqrt(dx * dx + dy * dy);
     
+    const isAtMax = distance >= maxRadius;
+    
     if (distance > maxRadius) {
       dx = (dx / distance) * maxRadius;
       dy = (dy / distance) * maxRadius;
     }
     
     stickElement.current.style.transform = `translate(${dx}px, ${dy}px)`;
+    
+    // Update range indicator size and max distance class
+    const joystickEl = stickElement.current.closest('.mobile-joystick');
+    if (joystickEl) {
+      const rangeSize = Math.min(distance * 2, maxRadius * 2);
+      (joystickEl as HTMLElement).style.setProperty('--range-size', `${rangeSize}px`);
+      
+      if (isAtMax) {
+        joystickEl.classList.add('at-max');
+      } else {
+        joystickEl.classList.remove('at-max');
+      }
+    }
   };
 
   useEffect(() => {

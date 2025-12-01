@@ -1,8 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import { OrientationWarning } from './OrientationWarning';
 import { MobileTouchControls } from './MobileTouchControls';
-import MobileTutorial from './MobileTutorial';
-import PracticeFullTutorial from './PracticeFullTutorial';
+import { LoadingSpinner } from './components/LoadingSpinner';
+import { AnimatedCounter } from './components/AnimatedCounter';
+
+// Lazy load heavy components
+const MobileTutorial = lazy(() => import('./MobileTutorial'));
+const PracticeFullTutorial = lazy(() => import('./PracticeFullTutorial'));
 // Base URL for backend API. For any spermrace.io host (prod/dev/www), always use same-origin /api
 // so Vercel can proxy and we avoid CORS with separate api.* origins.
 const API_BASE: string = (() => {
@@ -35,9 +39,11 @@ import { WalletProvider, useWallet } from './WalletProvider';
 import { getWalletDeepLink, isMobileDevice } from './walletUtils';
 import { useWallet as useAdapterWallet } from '@solana/wallet-adapter-react';
 import { WsProvider, useWs } from './WsProvider';
-import NewGameView from './NewGameView';
-import { Leaderboard } from './Leaderboard';
-import HowToPlayOverlay from './HowToPlayOverlay';
+
+// Lazy load heavy components
+const NewGameView = lazy(() => import('./NewGameView'));
+const Leaderboard = lazy(() => import('./Leaderboard').then(module => ({ default: module.Leaderboard })));
+const HowToPlayOverlay = lazy(() => import('./HowToPlayOverlay'));
 import {
   CrownSimple,
   Lightning,
@@ -239,7 +245,9 @@ function AppInner() {
         />
       )}
       {screen === 'practice' && (
-        <Practice onFinish={() => setScreen('results')} onBack={() => setScreen('landing')} />
+        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.95)' }}><LoadingSpinner message="Loading Practice..." size="large" /></div>}>
+          <Practice onFinish={() => setScreen('results')} onBack={() => setScreen('landing')} />
+        </Suspense>
       )}
       {screen === 'modes' && (
         <TournamentModesScreen onSelect={() => setScreen('wallet')} onClose={() => setScreen('landing')} onNotify={showToast} />
@@ -255,7 +263,9 @@ function AppInner() {
         />
       )}
       {screen === 'game' && (
-        <Game onEnd={() => setScreen('results')} onRestart={() => setScreen('game')} />
+        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.95)' }}><LoadingSpinner message="Loading Game..." size="large" /></div>}>
+          <Game onEnd={() => setScreen('results')} onRestart={() => setScreen('game')} />
+        </Suspense>
       )}
       {screen === 'results' && (
         <Results onPlayAgain={() => setScreen('practice')} onChangeTier={() => setScreen('modes')} />
@@ -268,25 +278,29 @@ function AppInner() {
       )}
 
       {showHowTo && (
-        <HowToPlayOverlay
-          mode="mobile"
-          onClose={() => {
-            setShowHowTo(false);
-            try {
+        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.9)', zIndex: 10000 }}><LoadingSpinner message="Loading..." size="large" /></div>}>
+          <HowToPlayOverlay
+            mode="mobile"
+            onClose={() => {
+              setShowHowTo(false);
+              try {
               localStorage.setItem('sr_howto_seen_v2', '1');
             } catch {}
           }}
-        />
+          />
+        </Suspense>
       )}
 
       {/* Leaderboard Modal */}
       {showLeaderboard && (
-        <Leaderboard
-          onClose={() => setShowLeaderboard(false)}
-          apiBase={API_BASE}
-          myWallet={publicKey || null}
-          isMobile={true}
-        />
+        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.9)', zIndex: 10000 }}><LoadingSpinner message="Loading Leaderboard..." size="large" /></div>}>
+          <Leaderboard
+            onClose={() => setShowLeaderboard(false)}
+            apiBase={API_BASE}
+            myWallet={publicKey || null}
+            isMobile={true}
+          />
+        </Suspense>
       )}
     </div>
   );
@@ -352,17 +366,18 @@ function Landing({
           maxWidth: 960,
           margin: '0 auto',
           minHeight: '100vh',
-          padding: '32px 16px 24px',
+          padding: '16px 16px calc(40px + env(safe-area-inset-bottom, 0px))',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
-          gap: 24,
+          gap: 16,
+          paddingBottom: 'calc(40px + env(safe-area-inset-bottom, 0px))',
         }}
       >
-        <header style={{ textAlign: 'center' }}>
-          <div style={{ marginBottom: 16 }}>
+        <header style={{ textAlign: 'center', marginTop: '-32px' }}>
+          <div style={{ marginBottom: 12 }}>
             <Atom 
-              size={56} 
+              size={52} 
               weight="duotone" 
               color="#00f5ff"
               style={{ 
@@ -374,10 +389,10 @@ function Landing({
             style={{
               fontFamily: 'Orbitron, system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
               letterSpacing: '0.3em',
-              fontSize: 10,
+              fontSize: 9,
               textTransform: 'uppercase',
               color: '#00f5ff',
-              marginBottom: 16,
+              marginBottom: 12,
               textShadow: '0 0 10px rgba(0, 245, 255, 0.5)',
             }}
           >
@@ -389,7 +404,7 @@ function Landing({
               justifyContent: 'center',
               alignItems: 'baseline',
               gap: 10,
-              fontSize: 44,
+              fontSize: 42,
               lineHeight: 1,
               textShadow: '0 0 30px rgba(0, 245, 255, 0.4), 0 0 60px rgba(0, 245, 255, 0.2)',
             }}
@@ -409,8 +424,8 @@ function Landing({
           </h1>
           <p
             style={{
-              marginTop: 14,
-              fontSize: 11,
+              marginTop: 10,
+              fontSize: 10,
               letterSpacing: '0.12em',
               textTransform: 'uppercase',
               color: 'rgba(255,255,255,0.7)',
@@ -420,8 +435,8 @@ function Landing({
           </p>
           <div
             style={{
-              marginTop: 8,
-              fontSize: 11,
+              marginTop: 6,
+              fontSize: 10,
               color: 'rgba(148,163,184,0.78)',
               fontFamily: 'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, monospace',
             }}
@@ -432,7 +447,7 @@ function Landing({
           {totalGames > 0 && (
             <div
               style={{
-                marginTop: 16,
+                marginTop: 10,
                 display: 'flex',
                 justifyContent: 'center',
               }}
@@ -450,15 +465,21 @@ function Landing({
               >
                 <div className="mobile-stat">
                   <div className="label">Games</div>
-                  <div className="value">{totalGames}</div>
+                  <div className="value">
+                    <AnimatedCounter value={totalGames} duration={1000} />
+                  </div>
                 </div>
                 <div className="mobile-stat">
                   <div className="label">Win%</div>
-                  <div className="value">{winRate}%</div>
+                  <div className="value">
+                    <AnimatedCounter value={parseFloat(winRate)} duration={1200} decimals={1} suffix="%" />
+                  </div>
                 </div>
                 <div className="mobile-stat">
                   <div className="label">Kills</div>
-                  <div className="value">{totalKills}</div>
+                  <div className="value">
+                    <AnimatedCounter value={totalKills} duration={1400} />
+                  </div>
                 </div>
               </div>
             </div>
@@ -1192,11 +1213,36 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
   const solscan = tx ? `https://solscan.io/tx/${tx}${SOLANA_CLUSTER === 'devnet' ? '?cluster=devnet' : ''}` : null;
   const selfId = wsState.playerId || publicKey || '';
   const isWinner = !!winner && winner === selfId;
+  const [animatedPrize, setAnimatedPrize] = useState(0);
   
-  let rankText: string | null = null;
+  // Animated prize counter
+  useEffect(() => {
+    if (typeof prize === 'number' && prize > 0) {
+      const duration = 1500; // 1.5s animation
+      const steps = 60;
+      const increment = prize / steps;
+      let current = 0;
+      const timer = setInterval(() => {
+        current += increment;
+        if (current >= prize) {
+          setAnimatedPrize(prize);
+          clearInterval(timer);
+        } else {
+          setAnimatedPrize(current);
+        }
+      }, duration / steps);
+      return () => clearInterval(timer);
+    }
+  }, [prize]);
+  
+  // Calculate rank and top 3
+  let myRank = 0;
+  let totalPlayers = 0;
+  let topThree: Array<{ id: string; rank: number; kills: number }> = [];
   try {
     const initial = wsState.initialPlayers || [];
     const order = wsState.eliminationOrder || [];
+    totalPlayers = initial.length;
     if (initial.length) {
       const uniqueOrder: string[] = [];
       for (const pid of order) { if (pid && !uniqueOrder.includes(pid)) uniqueOrder.push(pid); }
@@ -1207,56 +1253,299 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
         const pid = uniqueOrder[i];
         if (pid && !rankMap[pid]) { rankMap[pid] = r; r++; }
       }
-      const myRank = rankMap[selfId];
-      if (myRank) rankText = `#${myRank}`;
+      myRank = rankMap[selfId] || 0;
+      
+      // Build top 3
+      const ranked = Object.entries(rankMap)
+        .sort((a, b) => a[1] - b[1])
+        .slice(0, 3);
+      topThree = ranked.map(([id, rank]) => ({
+        id,
+        rank,
+        kills: wsState.kills?.[id] || 0,
+      }));
     }
   } catch {}
   
+  const myKills = wsState.kills?.[selfId] || 0;
+  
   return (
-    <div className="screen active mobile-results-screen">
-      <div className="mobile-results-container">
-        <div className="mobile-result-header">
-          <h1 className={`mobile-result-title ${isWinner ? 'win' : 'lose'}`}>
-            {isWinner ? (
-              <>
-                <Trophy size={22} weight="fill" style={{ marginRight: 6 }} />
-                Victory!
-              </>
-            ) : (
-              <>
-                <Skull size={22} weight="fill" style={{ marginRight: 6 }} />
-                Eliminated
-              </>
-            )}
+    <div className="screen active mobile-results-screen" style={{
+      background: 'linear-gradient(180deg, #030712 0%, #0a1628 100%)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '20px 16px',
+      overflowY: 'auto',
+    }}>
+      <div style={{
+        maxWidth: 480,
+        width: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 20,
+      }}>
+        {/* Victory/Defeat Banner */}
+        <div style={{
+          textAlign: 'center',
+          padding: '24px 16px',
+          borderRadius: 16,
+          background: isWinner 
+            ? 'linear-gradient(135deg, rgba(16,185,129,0.2), rgba(34,211,238,0.2))'
+            : 'linear-gradient(135deg, rgba(239,68,68,0.15), rgba(168,85,247,0.15))',
+          border: `2px solid ${isWinner ? 'rgba(16,185,129,0.5)' : 'rgba(239,68,68,0.4)'}`,
+          boxShadow: `0 8px 32px ${isWinner ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.2)'}`,
+        }}>
+          {isWinner ? (
+            <Trophy size={48} weight="fill" color="#10b981" style={{ marginBottom: 12 }} />
+          ) : (
+            <Skull size={48} weight="fill" color="#ef4444" style={{ marginBottom: 12 }} />
+          )}
+          <h1 style={{
+            fontSize: 32,
+            fontWeight: 900,
+            color: '#fff',
+            margin: 0,
+            marginBottom: 8,
+            textShadow: `0 0 20px ${isWinner ? 'rgba(16,185,129,0.6)' : 'rgba(239,68,68,0.6)'}`,
+          }}>
+            {isWinner ? 'VICTORY!' : 'ELIMINATED'}
           </h1>
-          <p className="mobile-result-subtitle">
-            Winner: {winner ? `${winner.slice(0,4)}…${winner.slice(-4)}` : '—'}
-          </p>
-          {typeof prize === 'number' && (
-            <div className="mobile-prize-won">{prize.toFixed(4)} SOL</div>
+          <div style={{
+            fontSize: 14,
+            color: 'rgba(255,255,255,0.7)',
+            marginBottom: 16,
+          }}>
+            #{myRank} of {totalPlayers} players
+          </div>
+          
+          {/* Animated Prize */}
+          {typeof prize === 'number' && prize > 0 && isWinner && (
+            <div style={{
+              padding: '16px 24px',
+              background: 'rgba(0,0,0,0.4)',
+              borderRadius: 12,
+              border: '1px solid rgba(16,185,129,0.3)',
+            }}>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>
+                Prize Won
+              </div>
+              <div style={{
+                fontSize: 36,
+                fontWeight: 900,
+                color: '#10b981',
+                fontFamily: '"JetBrains Mono", monospace',
+                textShadow: '0 0 20px rgba(16,185,129,0.8)',
+              }}>
+                +{animatedPrize.toFixed(4)} SOL
+              </div>
+            </div>
           )}
         </div>
         
+        {/* Podium - Top 3 */}
+        {topThree.length > 0 && (
+          <div style={{
+            background: 'rgba(15,23,42,0.6)',
+            borderRadius: 16,
+            padding: '20px 16px',
+            border: '1px solid rgba(255,255,255,0.1)',
+          }}>
+            <div style={{
+              fontSize: 12,
+              letterSpacing: 2,
+              textTransform: 'uppercase',
+              color: 'rgba(255,255,255,0.5)',
+              marginBottom: 16,
+              textAlign: 'center',
+            }}>
+              Top Performers
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-end', gap: 8 }}>
+              {topThree.map((player, idx) => {
+                const medals = ['🥇', '🥈', '🥉'];
+                const heights = [80, 64, 52];
+                const colors = ['#ffd700', '#c0c0c0', '#cd7f32'];
+                const isMe = player.id === selfId;
+                return (
+                  <div key={player.id} style={{
+                    flex: 1,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                  }}>
+                    <div style={{ fontSize: 24, marginBottom: 4 }}>{medals[idx]}</div>
+                    <div style={{
+                      width: '100%',
+                      height: heights[idx],
+                      background: isMe 
+                        ? `linear-gradient(135deg, ${colors[idx]}50, ${colors[idx]}30)`
+                        : 'rgba(255,255,255,0.05)',
+                      borderRadius: '8px 8px 0 0',
+                      border: isMe ? `2px solid ${colors[idx]}` : '1px solid rgba(255,255,255,0.1)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: 8,
+                    }}>
+                      <div style={{
+                        fontSize: 10,
+                        color: 'rgba(255,255,255,0.6)',
+                        marginBottom: 2,
+                        fontFamily: '"JetBrains Mono", monospace',
+                      }}>
+                        {player.id.slice(0,4)}…
+                      </div>
+                      <div style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: '#fff',
+                      }}>
+                        {player.kills} kills
+                      </div>
+                      {isMe && (
+                        <div style={{
+                          marginTop: 4,
+                          padding: '2px 6px',
+                          background: colors[idx],
+                          color: '#000',
+                          fontSize: 8,
+                          fontWeight: 800,
+                          borderRadius: 4,
+                        }}>
+                          YOU
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        
+        {/* Performance Stats */}
+        <div style={{
+          background: 'rgba(15,23,42,0.6)',
+          borderRadius: 16,
+          padding: '20px 16px',
+          border: '1px solid rgba(255,255,255,0.1)',
+        }}>
+          <div style={{
+            fontSize: 12,
+            letterSpacing: 2,
+            textTransform: 'uppercase',
+            color: 'rgba(255,255,255,0.5)',
+            marginBottom: 16,
+            textAlign: 'center',
+          }}>
+            Your Performance
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 24, fontWeight: 900, color: '#00f5ff', fontFamily: '"JetBrains Mono", monospace' }}>
+                #{myRank}
+              </div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 4 }}>
+                Final Rank
+              </div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 24, fontWeight: 900, color: '#00f5ff', fontFamily: '"JetBrains Mono", monospace' }}>
+                {myKills}
+              </div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 4 }}>
+                Eliminations
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Solscan Link */}
         {solscan && (
-          <a href={solscan} target="_blank" rel="noreferrer" className="mobile-solscan-btn">
-            <LinkSimple size={16} weight="bold" style={{ marginRight: 6 }} />
-            View on Solscan
+          <a href={solscan} target="_blank" rel="noreferrer" style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            padding: '12px 20px',
+            background: 'rgba(0,245,255,0.1)',
+            border: '1px solid rgba(0,245,255,0.3)',
+            borderRadius: 12,
+            color: '#00f5ff',
+            fontSize: 14,
+            fontWeight: 600,
+            textDecoration: 'none',
+            transition: 'all 0.2s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(0,245,255,0.15)';
+            e.currentTarget.style.borderColor = 'rgba(0,245,255,0.5)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'rgba(0,245,255,0.1)';
+            e.currentTarget.style.borderColor = 'rgba(0,245,255,0.3)';
+          }}>
+            <LinkSimple size={18} weight="bold" />
+            <span>View Transaction on Solscan</span>
           </a>
         )}
         
-        <div className="mobile-result-stats">
-          {rankText && <div className="stat">Rank: {rankText}</div>}
-          <div className="stat">Kills: {wsState.kills?.[selfId] || 0}</div>
-        </div>
-        
-        <div className="mobile-result-actions">
-          <button className="mobile-btn-primary" onClick={onPlayAgain}>
-            <ArrowClockwise size={18} weight="bold" style={{ marginRight: 6 }} />
-            Play Again
+        {/* Action Buttons */}
+        <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+          <button
+            onClick={onPlayAgain}
+            style={{
+              flex: 1,
+              padding: '16px 24px',
+              background: 'linear-gradient(135deg, #00f5ff, #00ff88)',
+              border: 'none',
+              borderRadius: 12,
+              color: '#000',
+              fontSize: 16,
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              boxShadow: '0 8px 24px rgba(0,245,255,0.3)',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,245,255,0.4)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,245,255,0.3)';
+            }}
+          >
+            <ArrowClockwise size={20} weight="bold" />
+            <span>PLAY AGAIN</span>
           </button>
-          <button className="mobile-btn-secondary" onClick={onChangeTier}>
-            <House size={18} weight="fill" style={{ marginRight: 6 }} />
-            Menu
+          <button
+            onClick={onChangeTier}
+            style={{
+              padding: '16px 24px',
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.15)',
+              borderRadius: 12,
+              color: '#fff',
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+            }}
+          >
+            <House size={20} weight="fill" />
           </button>
         </div>
       </div>
