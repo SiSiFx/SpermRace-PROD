@@ -4,6 +4,7 @@ import { MobileTouchControls } from './MobileTouchControls';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { AnimatedCounter } from './components/AnimatedCounter';
 import { SpermLoadingAnimation } from './components/SpermLoadingAnimation';
+import * as Sentry from '@sentry/react';
 
 // Lazy load heavy components
 const MobileTutorial = lazy(() => import('./MobileTutorial'));
@@ -533,6 +534,29 @@ function Landing({
               </span>
               <span>Enter Tournament</span>
             </button>
+
+            {/* Sentry Test Button (Remove after testing) */}
+            {import.meta.env.DEV && (
+              <button
+                type="button"
+                style={{
+                  padding: '8px 12px',
+                  background: '#ef4444',
+                  border: '2px solid #dc2626',
+                  borderRadius: '8px',
+                  color: '#fff',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  marginTop: '12px',
+                }}
+                onClick={() => {
+                  throw new Error('🧪 Sentry Test Error - This is your first error!');
+                }}
+              >
+                🧪 Test Sentry Error
+              </button>
+            )}
 
             <button
               type="button"
