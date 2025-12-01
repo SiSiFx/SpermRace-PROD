@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import * as PIXI from 'pixi.js';
 import { useWs } from './WsProvider';
 import { HudManager } from './HudManager';
+import { logger } from './utils/logger';
 
 interface Car {
   x: number;
@@ -476,11 +477,13 @@ class SpermRaceGame {
     
     // High-quality rendering settings
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const isAndroid = /Android/i.test(navigator.userAgent);
     const rawPixelRatio = window.devicePixelRatio || 1;
-    // Cap at 2x on mobile to prevent 3x (9x pixels) on high-end phones - massive performance boost
-    const pixelRatio = isMobile ? Math.min(rawPixelRatio, 2) : rawPixelRatio;
+    // Android gets lower pixel ratio for better performance (many Android devices struggle with high DPR)
+    // iOS can handle 2x, Android gets 1.5x max
+    const pixelRatio = isAndroid ? Math.min(rawPixelRatio, 1.5) : isMobile ? Math.min(rawPixelRatio, 2) : rawPixelRatio;
     
-    console.log('[RENDERER] Resolution:', pixelRatio, 'Device:', isMobile ? 'Mobile' : 'Desktop', 'Raw DPR:', rawPixelRatio);
+    logger.log('[RENDERER] Resolution:', pixelRatio, 'Device:', isAndroid ? 'Android' : isMobile ? 'Mobile' : 'Desktop', 'Raw DPR:', rawPixelRatio);
     
     this.app = new PIXI.Application();
     await this.app.init({
@@ -535,11 +538,11 @@ class SpermRaceGame {
     // WebGL context loss recovery (prevents black screen on mobile)
     const handleContextLost = (e: Event) => {
       e.preventDefault();
-      console.warn('[GAME] WebGL context lost, pausing game...');
+      logger.warn('[GAME] WebGL context lost, pausing game...');
       try { (this.app as any)?.ticker?.stop?.(); } catch {}
     };
     const handleContextRestored = () => {
-      console.log('[GAME] WebGL context restored, resuming game...');
+      logger.log('[GAME] WebGL context restored, resuming game...');
       try { (this.app as any)?.ticker?.start?.(); } catch {}
     };
     try {
@@ -552,7 +555,7 @@ class SpermRaceGame {
         });
       }
     } catch (e) {
-      console.warn('[GAME] Could not add WebGL context handlers:', e);
+      logger.warn('[GAME] Could not add WebGL context handlers:', e);
     }
 
     // *** MOBILE ORIENTATION & RESIZE FIX ***
@@ -638,10 +641,10 @@ class SpermRaceGame {
     this.preStart = { startAt: Date.now(), durationMs: 3000 };
     this.roundInProgress = true; // Start first round
     this.dbg('spawnQueue[0..3]', this.spawnQueue.slice(0, 4));
-    try { this.createPlayer(); } catch (e) { console.warn('createPlayer failed', e); }
+    try { this.createPlayer(); } catch (e) { logger.error('createPlayer failed', e); }
     // Only create local dev bots in practice (when tournament HUD is not active)
     if (!(this.wsHud && this.wsHud.active)) {
-      try { this.createBot(); } catch (e) { console.warn('createBot failed', e); }
+      try { this.createBot(); } catch (e) { logger.error('createBot failed', e); }
     }
     this.createUI();
 
@@ -1343,14 +1346,14 @@ class SpermRaceGame {
     const onMobileBoost = () => {
       // Don't allow boost during preStart countdown
       if (this.preStart) {
-        console.log('[BOOST] Blocked during countdown');
+        logger.debug('[BOOST] Blocked during countdown');
         return;
       }
       
       if (this.player?.isBoosting) {
         this.stopBoost();
       } else {
-        console.log('[BOOST] Attempting boost, energy:', this.player?.boostEnergy);
+        logger.debug('[BOOST] Attempting boost, energy:', this.player?.boostEnergy);
         this.startBoost();
       }
     };
@@ -1714,9 +1717,9 @@ class SpermRaceGame {
       try {
         targetContainer.addChild(this.player.sprite);
         (this.player.sprite as any).zIndex = 50; // Above trails (20) but below border (1000)
-      } catch (e) { console.warn('addChild player failed', e); }
+      } catch (e) { logger.error('addChild player failed', e); }
     } else {
-      console.warn('No container available for player sprite');
+      logger.error('No container available for player sprite');
     }
     this.spawnQueueIndex++;
     // Force camera center on player on spawn (hard snap)
@@ -1753,7 +1756,7 @@ class SpermRaceGame {
         try {
           targetContainer2.addChild(this.bot.sprite);
           (this.bot.sprite as any).zIndex = 50; // Above trails but below border
-        } catch (e) { console.warn('addChild bot failed', e); }
+        } catch (e) { logger.error('addChild bot failed', e); }
       }
     }
     // Create additional bots for testing
@@ -1771,7 +1774,7 @@ class SpermRaceGame {
           try {
             targetContainer3.addChild(bot.sprite);
             (bot.sprite as any).zIndex = 50; // Above trails but below border
-          } catch (e) { console.warn('addChild extrabot failed', e); }
+          } catch (e) { logger.error('addChild extrabot failed', e); }
         }
       }
     }
@@ -2603,7 +2606,7 @@ class SpermRaceGame {
 
       localStorage.setItem('spermrace_stats', JSON.stringify(stats));
     } catch (e) {
-      console.error('Failed to save stats:', e);
+      logger.error('Failed to save stats:', e);
     }
   }
 
@@ -5284,7 +5287,7 @@ class SpermRaceGame {
         try {
           cleanup();
         } catch (error) {
-          console.warn('Error in cleanup function:', error);
+          logger.warn('Error in cleanup function:', error);
         }
       });
       this.cleanupFunctions = [];
@@ -5295,7 +5298,7 @@ class SpermRaceGame {
           this.uiContainer.remove();
         }
       } catch (error) {
-        console.warn('Error removing UI container:', error);
+        logger.warn('Error removing UI container:', error);
       }
 
       // Also clean up any document.body elements (like game-over-overlay)
@@ -5305,7 +5308,7 @@ class SpermRaceGame {
           const el = document.getElementById(id);
           if (el) el.remove();
         } catch (error) {
-          console.warn(`Error removing body element ${id}:`, error);
+          logger.warn(`Error removing body element ${id}:`, error);
         }
       });
       
@@ -5313,7 +5316,7 @@ class SpermRaceGame {
       try {
         document.body.style.transform = 'translate(0px, 0px)';
       } catch (error) {
-        console.warn('Error resetting body transform:', error);
+        logger.warn('Error resetting body transform:', error);
       }
       
       // Radar is now cleaned up as part of uiContainer removal
@@ -5333,7 +5336,7 @@ class SpermRaceGame {
               canvasEl.parentElement.removeChild(canvasEl);
             }
           } catch (error) {
-            console.warn('Error detaching canvas:', error);
+            logger.warn('Error detaching canvas:', error);
           }
 
           // Destroy containers if present
@@ -5345,10 +5348,10 @@ class SpermRaceGame {
           this.app = null;
         }
       } catch (error) {
-        console.warn('Error destroying PIXI app:', error);
+        logger.warn('Error destroying PIXI app:', error);
       }
     } catch (error) {
-      console.error('Error in destroy method:', error);
+      logger.error('Error in destroy method:', error);
     }
   }
 }
@@ -5403,9 +5406,9 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
     if (!mountRef.current) return;
     const game = new SpermRaceGame(mountRef.current, onReplay, onExit);
     gameRef.current = game;
-    game.init().catch(console.error);
+    game.init().catch(logger.error);
     return () => {
-      try { game.destroy(); } catch (error) { console.error('Error destroying game:', error); }
+      try { game.destroy(); } catch (error) { logger.error('Error destroying game:', error); }
     };
   }, []);
 

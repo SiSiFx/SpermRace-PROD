@@ -188,9 +188,9 @@ function Modes({ exposeJoin }: ModesProps = {}) {
             style={{
               position: 'relative',
               background: 'rgba(3,3,5,0.85)',
-              borderRadius: 18,
+              borderRadius: isMobile ? 14 : 18,
               border: '1px solid var(--border-dim)',
-              padding: '18px 18px',
+              padding: isMobile ? '14px 16px' : '18px 18px',
               cursor: disabled ? 'not-allowed' : 'pointer',
               textAlign: 'left',
               boxShadow: disabled ? 'none' : 'var(--shadow-premium)',

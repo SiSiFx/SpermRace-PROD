@@ -3,6 +3,8 @@ import { OrientationWarning } from './OrientationWarning';
 import { MobileTouchControls } from './MobileTouchControls';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { AnimatedCounter } from './components/AnimatedCounter';
+import { SpermLoadingAnimation } from './components/SpermLoadingAnimation';
+import * as Sentry from '@sentry/react';
 
 // Lazy load heavy components
 const MobileTutorial = lazy(() => import('./MobileTutorial'));
@@ -60,7 +62,7 @@ import {
 } from 'phosphor-react';
 import './leaderboard.css';
 
-type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
+type AppScreen = 'landing' | 'practice' | 'tournament' | 'wallet' | 'lobby' | 'game' | 'results';
 
 export default function AppMobile() {
   return (
@@ -77,9 +79,25 @@ function AppInner() {
   const [solPrice, setSolPrice] = useState<number | null>(null);
   const { state: wsState, signAuthentication, leave } = useWs() as any;
   const [toast, setToast] = useState<string | null>(null);
+  const [showSpermLoading, setShowSpermLoading] = useState(false);
+  const [pendingScreen, setPendingScreen] = useState<AppScreen | null>(null);
   const showToast = (msg: string, duration = 2000) => {
     setToast(msg);
     window.setTimeout(() => setToast(null), duration);
+  };
+
+  // Screen transition with loading animation
+  const transitionToScreen = (newScreen: AppScreen) => {
+    setPendingScreen(newScreen);
+    setShowSpermLoading(true);
+  };
+
+  const handleLoadingComplete = () => {
+    if (pendingScreen) {
+      setScreen(pendingScreen);
+      setPendingScreen(null);
+    }
+    setShowSpermLoading(false);
   };
   const wallet = useWallet();
   const { publicKey } = wallet;
@@ -129,7 +147,7 @@ function AppInner() {
   }, []);
 
   const onPractice = () => setScreen('practice');
-  const onTournament = () => setScreen('modes');
+  const onTournament = () => setScreen('tournament');
   const onWallet = () => setScreen('wallet');
 
   useEffect(() => {
@@ -153,9 +171,9 @@ function AppInner() {
       if (screen !== 'landing') {
         e.preventDefault();
         // Handle back with our screen logic
-        if (screen === 'modes') setScreen('landing');
+        if (screen === 'tournament') setScreen('landing');
         else if (screen === 'practice') setScreen('landing');
-        else if (screen === 'wallet') setScreen('modes');
+        else if (screen === 'wallet') setScreen('tournament');
       }
     };
     window.addEventListener('popstate', preventBack);
@@ -249,17 +267,17 @@ function AppInner() {
           <Practice onFinish={() => setScreen('results')} onBack={() => setScreen('landing')} />
         </Suspense>
       )}
-      {screen === 'modes' && (
+      {screen === 'tournament' && (
         <TournamentModesScreen onSelect={() => setScreen('wallet')} onClose={() => setScreen('landing')} onNotify={showToast} />
       )}
       {screen === 'wallet' && (
-        <Wallet onConnected={() => setScreen('lobby')} onClose={() => setScreen('modes')} />
+        <Wallet onConnected={() => setScreen('lobby')} onClose={() => setScreen('tournament')} />
       )}
       {screen === 'lobby' && (
         <Lobby 
           onStart={() => setScreen('game')} 
-          onBack={() => setScreen('modes')}
-          onRefund={() => setScreen('modes')}
+          onBack={() => setScreen('tournament')}
+          onRefund={() => setScreen('tournament')}
         />
       )}
       {screen === 'game' && (
@@ -268,7 +286,7 @@ function AppInner() {
         </Suspense>
       )}
       {screen === 'results' && (
-        <Results onPlayAgain={() => setScreen('practice')} onChangeTier={() => setScreen('modes')} />
+        <Results onPlayAgain={() => setScreen('practice')} onChangeTier={() => setScreen('tournament')} />
       )}
       
       {toast && (
@@ -292,6 +310,11 @@ function AppInner() {
       )}
 
       {/* Leaderboard Modal */}
+      {/* Sperm Loading Animation */}
+      {showSpermLoading && (
+        <SpermLoadingAnimation onComplete={handleLoadingComplete} />
+      )}
+
       {showLeaderboard && (
         <Suspense fallback={<div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.9)', zIndex: 10000 }}><LoadingSpinner message="Loading Leaderboard..." size="large" /></div>}>
           <Leaderboard
@@ -498,7 +521,13 @@ function Landing({
             <button
               type="button"
               className="mobile-cta-primary"
-              onClick={() => onTournament?.()}
+              onClick={() => {
+                setShowSpermLoading(true);
+                setTimeout(() => {
+                  setShowSpermLoading(false);
+                  onTournament?.();
+                }, 800);
+              }}
             >
               <span className="icon">
                 <Trophy size={18} weight="fill" />
@@ -506,10 +535,39 @@ function Landing({
               <span>Enter Tournament</span>
             </button>
 
+            {/* Sentry Test Button (Remove after testing) */}
+            {import.meta.env.DEV && (
+              <button
+                type="button"
+                style={{
+                  padding: '8px 12px',
+                  background: '#ef4444',
+                  border: '2px solid #dc2626',
+                  borderRadius: '8px',
+                  color: '#fff',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  marginTop: '12px',
+                }}
+                onClick={() => {
+                  throw new Error('🧪 Sentry Test Error - This is your first error!');
+                }}
+              >
+                🧪 Test Sentry Error
+              </button>
+            )}
+
             <button
               type="button"
               className="mobile-btn-secondary"
-              onClick={onPractice}
+              onClick={() => {
+                setShowSpermLoading(true);
+                setTimeout(() => {
+                  setShowSpermLoading(false);
+                  onPractice();
+                }, 800);
+              }}
             >
               <span className="icon">
                 <GameController size={18} weight="fill" />

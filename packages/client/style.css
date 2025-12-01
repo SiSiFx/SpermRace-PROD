@@ -2517,3 +2517,159 @@ button, a, .tournament-card, .mode-card, .wallet-connect-btn {
   transform: translateX(-50%) scale(0.96) !important;
   box-shadow: 0 6px 20px rgba(0,0,0,0.6) !important;
 }
+/* Android-specific fixes for better rendering and performance */
+
+/* Detect Android devices */
+@supports (-webkit-appearance: none) {
+  /* Fix Android Chrome rendering issues */
+  * {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Force hardware acceleration on Android */
+  canvas,
+  .screen,
+  .mobile-joystick,
+  .mobile-boost-button {
+    transform: translate3d(0, 0, 0);
+    -webkit-transform: translate3d(0, 0, 0);
+    will-change: transform;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
+
+  /* Fix Android text rendering */
+  body,
+  button,
+  input,
+  textarea {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Android glassmorphism fix - backdrop-filter can be slow */
+  @media (max-width: 768px) {
+    .mobile-landing-container,
+    .mobile-stat,
+    .mode-card {
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+  }
+
+  /* Better touch targets for Android */
+  button,
+  a[role="button"],
+  .mobile-cta-primary,
+  .mobile-btn-secondary {
+    min-height: 44px;
+    min-width: 44px;
+    -webkit-tap-highlight-color: rgba(0, 245, 255, 0.2);
+  }
+
+  /* Fix Android viewport issues */
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  /* Prevent Android from dimming bright colors */
+  body {
+    -webkit-font-smoothing: subpixel-antialiased;
+  }
+
+  /* Fix Android Chrome address bar issues */
+  .screen {
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
+  }
+
+  /* Optimize Android Canvas rendering */
+  canvas {
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+  }
+
+  /* Fix Android color banding */
+  .landing-container,
+  .mobile-landing-container {
+    background-attachment: fixed;
+  }
+
+  /* Android-specific gradient fixes */
+  [style*="gradient"] {
+    background-attachment: scroll;
+  }
+}
+
+/* Android-specific media query */
+@media only screen and (max-width: 768px) and (-webkit-min-device-pixel-ratio: 1) {
+  /* Reduce complexity of shadows on Android */
+  * {
+    box-shadow: none !important;
+  }
+
+  /* Keep only essential shadows */
+  .mobile-cta-primary,
+  .mobile-boost-button,
+  .mobile-joystick {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6) !important;
+  }
+
+  /* Simplify gradients on low-end Android */
+  .mobile-cta-primary {
+    background: linear-gradient(135deg, #00f5ff, #00b4cc) !important;
+  }
+
+  /* Reduce animation complexity */
+  * {
+    animation-duration: 0.15s !important;
+    transition-duration: 0.15s !important;
+  }
+}
+
+/* Fix for Android Chrome sticky elements */
+@supports (position: -webkit-sticky) or (position: sticky) {
+  .mobile-wallet-badge,
+  #unified-top-bar {
+    position: -webkit-sticky;
+    position: sticky;
+  }
+}
+
+/* Android performance mode - reduce visual complexity */
+@media (max-width: 768px) and (max-height: 812px) {
+  /* Simplify blur effects */
+  [style*="blur"] {
+    backdrop-filter: blur(4px) !important;
+    -webkit-backdrop-filter: blur(4px) !important;
+  }
+
+  /* Reduce filter complexity */
+  [style*="drop-shadow"],
+  [style*="filter"] {
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)) !important;
+  }
+}
+
+/* Fix Android input zoom issue */
+@media screen and (max-width: 768px) {
+  input[type="text"],
+  input[type="number"],
+  input[type="email"],
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Android safe area handling */
+@supports (padding: max(0px)) {
+  body {
+    padding-left: max(0px, env(safe-area-inset-left));
+    padding-right: max(0px, env(safe-area-inset-right));
+  }
+}
