@@ -95,6 +95,7 @@ function Modes({ exposeJoin }: ModesProps = {}) {
   const [isJoining, setIsJoining] = useState(false);
   const [preflight, setPreflight] = useState<PrizePreflight>(null);
   const [preflightError, setPreflightError] = useState(false);
+  const [cardsVisible, setCardsVisible] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -114,6 +115,12 @@ function Modes({ exposeJoin }: ModesProps = {}) {
     return () => {
       cancelled = true;
     };
+  }, []);
+  
+  // Trigger card entrance animations
+  useEffect(() => {
+    const timer = setTimeout(() => setCardsVisible(true), 100);
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -167,7 +174,7 @@ function Modes({ exposeJoin }: ModesProps = {}) {
         gap: 20,
       }}
     >
-      {TIERS.map((tier) => {
+      {TIERS.map((tier, index) => {
         const estPrizeUsd = (tier.usd * tier.maxPlayers * 0.85).toFixed(2);
         const disabled = busy || globalDisabled;
         const theme = getTierTheme(tier.id);
@@ -188,8 +195,10 @@ function Modes({ exposeJoin }: ModesProps = {}) {
               textAlign: 'left',
               boxShadow: disabled ? 'none' : 'var(--shadow-premium)',
               transition:
-                'border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease',
-              opacity: disabled ? 0.6 : 1,
+                'border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease, opacity 0.4s ease, transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+              opacity: disabled ? 0.6 : (cardsVisible ? 1 : 0),
+              transform: cardsVisible ? 'translateY(0) scale(1)' : 'translateY(20px) scale(0.95)',
+              transitionDelay: cardsVisible ? `${index * 80}ms` : '0ms',
               overflow: 'hidden',
             }}
             onClick={() => handleJoin(tier.usd)}
