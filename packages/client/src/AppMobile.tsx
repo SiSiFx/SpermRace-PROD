@@ -366,18 +366,18 @@ function Landing({
           maxWidth: 960,
           margin: '0 auto',
           minHeight: '100vh',
-          padding: '24px 16px calc(32px + env(safe-area-inset-bottom, 0px))',
+          padding: '16px 16px calc(40px + env(safe-area-inset-bottom, 0px))',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
-          gap: 20,
-          paddingBottom: 'calc(32px + env(safe-area-inset-bottom, 0px))',
+          gap: 16,
+          paddingBottom: 'calc(40px + env(safe-area-inset-bottom, 0px))',
         }}
       >
-        <header style={{ textAlign: 'center' }}>
-          <div style={{ marginBottom: 16 }}>
+        <header style={{ textAlign: 'center', marginTop: '-32px' }}>
+          <div style={{ marginBottom: 12 }}>
             <Atom 
-              size={56} 
+              size={52} 
               weight="duotone" 
               color="#00f5ff"
               style={{ 
@@ -389,10 +389,10 @@ function Landing({
             style={{
               fontFamily: 'Orbitron, system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
               letterSpacing: '0.3em',
-              fontSize: 10,
+              fontSize: 9,
               textTransform: 'uppercase',
               color: '#00f5ff',
-              marginBottom: 16,
+              marginBottom: 12,
               textShadow: '0 0 10px rgba(0, 245, 255, 0.5)',
             }}
           >
@@ -404,7 +404,7 @@ function Landing({
               justifyContent: 'center',
               alignItems: 'baseline',
               gap: 10,
-              fontSize: 44,
+              fontSize: 42,
               lineHeight: 1,
               textShadow: '0 0 30px rgba(0, 245, 255, 0.4), 0 0 60px rgba(0, 245, 255, 0.2)',
             }}
@@ -424,8 +424,8 @@ function Landing({
           </h1>
           <p
             style={{
-              marginTop: 14,
-              fontSize: 11,
+              marginTop: 10,
+              fontSize: 10,
               letterSpacing: '0.12em',
               textTransform: 'uppercase',
               color: 'rgba(255,255,255,0.7)',
@@ -435,8 +435,8 @@ function Landing({
           </p>
           <div
             style={{
-              marginTop: 8,
-              fontSize: 11,
+              marginTop: 6,
+              fontSize: 10,
               color: 'rgba(148,163,184,0.78)',
               fontFamily: 'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, monospace',
             }}
@@ -447,7 +447,7 @@ function Landing({
           {totalGames > 0 && (
             <div
               style={{
-                marginTop: 12,
+                marginTop: 10,
                 display: 'flex',
                 justifyContent: 'center',
               }}
