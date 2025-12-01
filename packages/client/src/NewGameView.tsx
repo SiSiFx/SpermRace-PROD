@@ -4573,34 +4573,18 @@ class SpermRaceGame {
 
   setupZone() {
     if (!this.app) return;
-    // Initialize zone params to arena
+    // Initialize circular zone
     this.zone.centerX = 0;
     this.zone.centerY = 0;
     this.zone.startRadius = Math.min(this.arena.width, this.arena.height) * 0.48;
+    this.zone.currentRadius = this.zone.startRadius;
+    this.zone.targetRadius = this.zone.startRadius;
+    this.zone.endRadius = 400; // Minimum final circle
     this.zone.startAtMs = Date.now();
-  // Sharper pacing: ~42s core rounds with aggressive finale
-  this.zone.durationMs = 42000;
+    this.zone.durationMs = 42000; // 42 seconds
     this.zoneGraphics = new PIXI.Graphics();
     this.worldContainer.addChild(this.zoneGraphics);
     this.finalSurgeBannerShown = false;
-
-    // Rectangular slicer init
-    this.rectZone.left = -this.arena.width / 2;
-    this.rectZone.right = this.arena.width / 2;
-    this.rectZone.top = -this.arena.height / 2;
-    this.rectZone.bottom = this.arena.height / 2;
-    // Seed-of-the-day pattern and first slice selection
-    this.daySeed = this.computeDaySeed();
-    this.slicePattern = this.buildSlicePattern(this.daySeed);
-    this.sliceIndex = 0;
-    // Avoid slicing toward first spawns: pick opposite of dominant spawn side (left/right) for first slice
-    const dominantEdge: 'left'|'right'|'top'|'bottom' = 'left';
-    const opposite: Record<'left'|'right'|'top'|'bottom','left'|'right'|'top'|'bottom'> = { left: 'right', right: 'left', top: 'bottom', bottom: 'top' };
-    this.firstSliceSide = opposite[dominantEdge];
-    this.rectZone.pendingSide = this.firstSliceSide;
-    this.rectZone.lastSide = null;
-    this.rectZone.nextSliceAt = Date.now() + this.rectZone.telegraphMs; // telegraph the first one sooner
-    this.rectZone.pendingSide = null;
   }
 
   updateZoneAndDamage(deltaTime: number) {
@@ -4610,110 +4594,44 @@ class SpermRaceGame {
     const elapsed = Math.max(0, now - zoneStart);
     const progress = this.zone.durationMs > 0 ? Math.min(1, Math.max(0, elapsed / this.zone.durationMs)) : 0;
     const tension = Math.pow(progress, 1.35);
-    const targetInterval = 3200 - Math.min(2200, 2200 * tension);
-    this.rectZone.sliceIntervalMs = Math.max(900, targetInterval);
-    this.rectZone.sliceStep = Math.round(260 + 240 * tension);
-
-    // Rectangular slicer: periodically push one side inward
-    if (!this.rectZone.pendingSide && now >= this.rectZone.nextSliceAt - this.rectZone.telegraphMs) {
-      // Use seeded daily pattern, avoid immediate repeats
-      let side: 'left'|'right'|'top'|'bottom';
-      if (this.firstSliceSide) {
-        side = this.firstSliceSide;
-        this.firstSliceSide = null;
-      } else {
-        if (!this.slicePattern || this.slicePattern.length === 0) {
-          this.slicePattern = this.buildSlicePattern(this.daySeed || this.computeDaySeed());
-          this.sliceIndex = 0;
-        }
-        let tries = 0;
-        do {
-          side = this.slicePattern[this.sliceIndex % this.slicePattern.length];
-          this.sliceIndex++;
-          tries++;
-        } while (tries < 4 && side === this.rectZone.lastSide);
-      }
-      this.rectZone.pendingSide = side!;
-    }
-    if (now >= this.rectZone.nextSliceAt) {
-      // Perform slice
-      const side = this.rectZone.pendingSide || 'left';
-      const step = this.rectZone.sliceStep;
-      if (side === 'left') this.rectZone.left = Math.min(this.rectZone.right - this.rectZone.minWidth, this.rectZone.left + step);
-      if (side === 'right') this.rectZone.right = Math.max(this.rectZone.left + this.rectZone.minWidth, this.rectZone.right - step);
-      if (side === 'top') this.rectZone.top = Math.min(this.rectZone.bottom - this.rectZone.minHeight, this.rectZone.top + step);
-      if (side === 'bottom') this.rectZone.bottom = Math.max(this.rectZone.top + this.rectZone.minHeight, this.rectZone.bottom - step);
-      this.rectZone.lastSide = side;
-      this.rectZone.pendingSide = null;
-      this.rectZone.nextSliceAt = now + this.rectZone.sliceIntervalMs;
-    }
-    // Draw rectangular safe zone and telegraph
+    
+    // Smooth circular shrinking
+    this.zone.targetRadius = this.zone.startRadius - (this.zone.startRadius - this.zone.endRadius) * progress;
+    
+    // Smooth interpolation toward target radius
+    const lerpSpeed = 2.5; // How quickly current catches up to target
+    this.zone.currentRadius += (this.zone.targetRadius - this.zone.currentRadius) * lerpSpeed * deltaTime;
+    
+    // Draw circular zone
     this.zoneGraphics.clear();
-
-    const safeLeft = this.rectZone.left;
-    const safeTop = this.rectZone.top;
-    const safeWidth = this.rectZone.right - this.rectZone.left;
-    const safeHeight = this.rectZone.bottom - this.rectZone.top;
-
-    // 1) Safe zone fill + bold border so it's clearly distinct from map edge
+    
+    const cx = this.zone.centerX;
+    const cy = this.zone.centerY;
+    const safeRadius = this.zone.currentRadius;
+    
+    // 1) Safe zone circle with border
     this.zoneGraphics
-      .rect(safeLeft, safeTop, safeWidth, safeHeight)
-      .fill({ color: 0x020617, alpha: 0.55 })
+      .circle(cx, cy, safeRadius)
+      .fill({ color: 0x020617, alpha: 0.4 })
       .stroke({ width: 6, color: this.theme.accent, alpha: 0.9 });
-    // Inner crisp line for extra clarity
+    
+    // Inner ring for clarity
     this.zoneGraphics
-      .rect(safeLeft + 4, safeTop + 4, Math.max(0, safeWidth - 8), Math.max(0, safeHeight - 8))
+      .circle(cx, cy, Math.max(0, safeRadius - 6))
       .stroke({ width: 2, color: 0xffffff, alpha: 0.6 });
-
-    // 2) Darken everything outside the safe zone with a strong danger tint
+    
+    // 2) Outer danger zone (red fog circles)
     const dangerPulse = 0.3 + 0.2 * Math.sin(now * 0.003);
     const outerAlpha = 0.16 + dangerPulse * 0.16;
-    const worldLeft = -this.arena.width / 2;
-    const worldTop = -this.arena.height / 2;
-    const worldRight = this.arena.width / 2;
-    const worldBottom = this.arena.height / 2;
-
-    // Top band
-    this.zoneGraphics
-      .rect(worldLeft, worldTop, this.arena.width, Math.max(0, safeTop - worldTop))
-      .fill({ color: 0x450a0a, alpha: outerAlpha });
-    // Bottom band
-    this.zoneGraphics
-      .rect(worldLeft, this.rectZone.bottom, this.arena.width, Math.max(0, worldBottom - this.rectZone.bottom))
-      .fill({ color: 0x450a0a, alpha: outerAlpha });
-    // Left band
-    this.zoneGraphics
-      .rect(worldLeft, safeTop, Math.max(0, safeLeft - worldLeft), safeHeight)
-      .fill({ color: 0x450a0a, alpha: outerAlpha });
-    // Right band
-    this.zoneGraphics
-      .rect(this.rectZone.right, safeTop, Math.max(0, worldRight - this.rectZone.right), safeHeight)
-      .fill({ color: 0x450a0a, alpha: outerAlpha });
-      
-    // 3) Telegraph arrow on pending side
-    if (this.rectZone.pendingSide) {
-      const remain = Math.max(0, this.rectZone.nextSliceAt - now);
-      const pulse = 0.5 + 0.5 * Math.sin(now * 0.01);
-      const alpha = 0.25 + 0.5 * (1 - remain / this.rectZone.telegraphMs);
-      const g = this.zoneGraphics;
-      const size = 80;
-      g.moveTo(0,0); // reset path start
-      if (this.rectZone.pendingSide === 'left') {
-        const x = this.rectZone.left; const cy = (this.rectZone.top + this.rectZone.bottom) / 2;
-        g.poly([x-10, cy, x-10-size, cy-size, x-10-size, cy+size]).fill({ color: this.theme.accent, alpha: 0.08 + 0.15*pulse }).stroke({ width: 2, color: this.theme.accent, alpha });
-      }
-      if (this.rectZone.pendingSide === 'right') {
-        const x = this.rectZone.right; const cy = (this.rectZone.top + this.rectZone.bottom) / 2;
-        g.poly([x+10, cy, x+10+size, cy-size, x+10+size, cy+size]).fill({ color: this.theme.accent, alpha: 0.08 + 0.15*pulse }).stroke({ width: 2, color: this.theme.accent, alpha });
-      }
-      if (this.rectZone.pendingSide === 'top') {
-        const y = this.rectZone.top; const cx = (this.rectZone.left + this.rectZone.right) / 2;
-        g.poly([cx, y-10, cx-size, y-10-size, cx+size, y-10-size]).fill({ color: this.theme.accent, alpha: 0.08 + 0.15*pulse }).stroke({ width: 2, color: this.theme.accent, alpha });
-      }
-      if (this.rectZone.pendingSide === 'bottom') {
-        const y = this.rectZone.bottom; const cx = (this.rectZone.left + this.rectZone.right) / 2;
-        g.poly([cx, y+10, cx-size, y+10+size, cx+size, y+10+size]).fill({ color: this.theme.accent, alpha: 0.08 + 0.15*pulse }).stroke({ width: 2, color: this.theme.accent, alpha });
-      }
+    const maxRadius = Math.sqrt(Math.pow(this.arena.width / 2, 2) + Math.pow(this.arena.height / 2, 2));
+    
+    // Create gradient effect with multiple circles
+    for (let i = 0; i < 3; i++) {
+      const r = safeRadius + (maxRadius - safeRadius) * ((i + 1) / 3);
+      const alpha = outerAlpha * (1 - i / 3);
+      this.zoneGraphics
+        .circle(cx, cy, r)
+        .fill({ color: 0x450a0a, alpha });
     }
 
     // Update HUD timer
@@ -4729,27 +4647,27 @@ class SpermRaceGame {
       this.hudManager.updateZoneTimer(secs);
     }
 
-    // Apply soft damage outside rectangular zone
+    // Apply soft damage outside circular zone
     const applyZone = (car?: Car | null) => {
       if (!car || car.destroyed) return;
-      const inside = car.x >= this.rectZone.left && car.x <= this.rectZone.right && car.y >= this.rectZone.top && car.y <= this.rectZone.bottom;
+      const dx = car.x - cx;
+      const dy = car.y - cy;
+      const distFromCenter = Math.sqrt(dx * dx + dy * dy);
+      const inside = distFromCenter <= safeRadius;
+      
       if (!inside) {
         // Show warning for player outside zone
         if (car === this.player) {
           this.showZoneWarning();
         }
         
-        // Compute shortest push vector toward rectangle
-        const clampedX = Math.max(this.rectZone.left, Math.min(this.rectZone.right, car.x));
-        const clampedY = Math.max(this.rectZone.top, Math.min(this.rectZone.bottom, car.y));
-        const dx = car.x - clampedX;
-        const dy = car.y - clampedY;
-        const dist = Math.sqrt(dx*dx + dy*dy) || 1;
-        const dirX = dx / dist;
-        const dirY = dy / dist;
+        // Push vector toward circle center
+        const dist = distFromCenter || 1;
+        const dirX = -dx / dist; // Toward center
+        const dirY = -dy / dist;
         const pushStrength = 14 + tension * 36;
-        car.vx -= dirX * pushStrength * deltaTime;
-        car.vy -= dirY * pushStrength * deltaTime;
+        car.vx += dirX * pushStrength * deltaTime;
+        car.vy += dirY * pushStrength * deltaTime;
         car.outZoneTime = (car.outZoneTime || 0) + deltaTime;
         // If prolonged outside, eliminate
         const grace = Math.max(2.4, 6 - tension * 3.5);
@@ -4875,17 +4793,16 @@ class SpermRaceGame {
       dangerLevel = Math.max(dangerLevel, 1 - (remainMs / 5000)); // 0 to 1 as time runs out
     }
     
-    // 2. Zone proximity - when near zone edges
+    // 2. Zone proximity - when near zone edge
     if (this.player) {
-      const distToLeft = Math.abs(this.player.x - this.rectZone.left);
-      const distToRight = Math.abs(this.player.x - this.rectZone.right);
-      const distToTop = Math.abs(this.player.y - this.rectZone.top);
-      const distToBottom = Math.abs(this.player.y - this.rectZone.bottom);
-      const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
+      const dx = this.player.x - this.zone.centerX;
+      const dy = this.player.y - this.zone.centerY;
+      const distFromCenter = Math.sqrt(dx * dx + dy * dy);
+      const distToEdge = this.zone.currentRadius - distFromCenter;
       const dangerThreshold = 200; // Distance at which warning starts
       
-      if (minDist < dangerThreshold) {
-        const proximityDanger = 1 - (minDist / dangerThreshold);
+      if (distToEdge < dangerThreshold) {
+        const proximityDanger = 1 - (distToEdge / dangerThreshold);
         dangerLevel = Math.max(dangerLevel, proximityDanger * 0.6); // Max 0.6 from proximity
       }
     }
@@ -5271,16 +5188,11 @@ class SpermRaceGame {
     resetCar(this.bot);
     this.extraBots.forEach(b => resetCar(b));
     
-    // Reset zone for new round (faster closing for urgency)
-  this.zone.startAtMs = Date.now() + 3000; // Start zone after countdown
-  this.zone.durationMs = 26000; // Later rounds stay fast but allow finale
-    this.rectZone.left = -this.arena.width / 2;
-    this.rectZone.right = this.arena.width / 2;
-    this.rectZone.top = -this.arena.height / 2;
-    this.rectZone.bottom = this.arena.height / 2;
-    this.rectZone.nextSliceAt = this.zone.startAtMs + 5000; // First slice at 5s
-    this.rectZone.pendingSide = null;
-    this.sliceIndex = 0;
+    // Reset zone for new round
+    this.zone.startAtMs = Date.now() + 3000; // Start zone after countdown
+    this.zone.durationMs = 26000; // Faster for later rounds
+    this.zone.currentRadius = this.zone.startRadius;
+    this.zone.targetRadius = this.zone.startRadius;
     this.finalSurgeBannerShown = false;
     
     // Clear trails
