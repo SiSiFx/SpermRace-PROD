@@ -5445,6 +5445,16 @@ function injectHudAnimationStylesOnce() {
     style.textContent = `
 @keyframes srFadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes srPulse { 0%{ transform: scale(1);} 50%{ transform: scale(1.035);} 100%{ transform: scale(1);} }
+@keyframes proximityPulse { 
+  0%, 100% { 
+    transform: translate(-50%, -50%) scale(1); 
+    opacity: 1;
+  } 
+  50% { 
+    transform: translate(-50%, -50%) scale(1.08); 
+    opacity: 0.7;
+  } 
+}
 .hud-fade-in { animation: srFadeIn 220ms ease-out; will-change: opacity, transform; }
 .hud-pulse { animation: srPulse 180ms ease-out; }
 `;
