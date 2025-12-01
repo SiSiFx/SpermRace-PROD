@@ -1911,7 +1911,7 @@ class SpermRaceGame {
       lastTrailBoostStatus: undefined,
       sprite: new PIXI.Container(),
       headGraphics: new PIXI.Graphics(),
-      tailGraphics: this.smallTailEnabled ? new PIXI.Graphics() : null,
+      tailGraphics: new PIXI.Graphics(),
       tailWaveT: 0,
       tailLength: 34,
       tailSegments: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 6 : 10, // Fewer segments on mobile for performance
@@ -3003,7 +3003,7 @@ class SpermRaceGame {
     // Animate sperm tail (tapered ribbon) and head (static oval) with kill-based growth
     try {
       const sizeMul = this.getSizeMultiplierForCar(car);
-      if (this.smallTailEnabled && car.tailGraphics) {
+      if (car.tailGraphics) {
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
         const isTournament = !!(this.wsHud && this.wsHud.active);
         const isMobilePracticePlayer = isMobile && !isTournament && car.type === 'player';
