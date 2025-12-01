@@ -366,11 +366,12 @@ function Landing({
           maxWidth: 960,
           margin: '0 auto',
           minHeight: '100vh',
-          padding: '32px 16px 24px',
+          padding: '24px 16px calc(32px + env(safe-area-inset-bottom, 0px))',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
-          gap: 24,
+          gap: 20,
+          paddingBottom: 'calc(32px + env(safe-area-inset-bottom, 0px))',
         }}
       >
         <header style={{ textAlign: 'center' }}>
@@ -446,7 +447,7 @@ function Landing({
           {totalGames > 0 && (
             <div
               style={{
-                marginTop: 16,
+                marginTop: 12,
                 display: 'flex',
                 justifyContent: 'center',
               }}
