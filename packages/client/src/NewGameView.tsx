@@ -267,6 +267,12 @@ class SpermRaceGame {
   private lastRadarUpdate: number = 0;
   private radarUpdateInterval: number = 50; // Update every 50ms (~20fps) instead of 60fps
 
+  // Proximity alert system
+  private proximityAlertEl: HTMLDivElement | null = null;
+  private lastProximityCheck: number = 0;
+  private proximityCheckInterval: number = 200; // Check every 200ms
+  private lastProximityHaptic: number = 0;
+
   // Seeded RNG for procedural generation
   public seed: number = Math.floor(Math.random() * 1e9);
 
@@ -1521,6 +1527,32 @@ class SpermRaceGame {
 
     // Create emote buttons (mobile-friendly)
     this.createEmoteButtons();
+    
+    // Create proximity alert indicator
+    this.createProximityAlert();
+  }
+  
+  createProximityAlert() {
+    if (!this.uiContainer) return;
+    
+    this.proximityAlertEl = document.createElement('div');
+    this.proximityAlertEl.id = 'proximity-alert';
+    Object.assign(this.proximityAlertEl.style, {
+      position: 'absolute',
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+      width: '280px',
+      height: '280px',
+      borderRadius: '50%',
+      border: '3px solid rgba(239, 68, 68, 0)',
+      pointerEvents: 'none',
+      zIndex: '5',
+      transition: 'border-color 0.3s ease, box-shadow 0.3s ease',
+      boxShadow: 'none'
+    });
+    
+    this.uiContainer.appendChild(this.proximityAlertEl);
   }
 
   createEmoteButtons() {
@@ -2417,6 +2449,9 @@ class SpermRaceGame {
     // Update sonar radar
     this.radarAngle = (this.radarAngle + deltaTime * 2) % (Math.PI * 2);
     this.updateRadar();
+    
+    // Update proximity alert
+    this.updateProximityAlert();
     
     // Update alive count (legacy HUD removed; kept for practice header only)
     this.updateAliveCount();
@@ -4159,6 +4194,66 @@ class SpermRaceGame {
 
   respawnCar(_car: Car, _x: number, _y: number) {
     // BR mode has no respawn. Method kept for future modes.
+  }
+
+  updateProximityAlert() {
+    if (!this.proximityAlertEl || !this.player || this.player.destroyed) return;
+    
+    const now = Date.now();
+    if (now - this.lastProximityCheck < this.proximityCheckInterval) return;
+    this.lastProximityCheck = now;
+    
+    // Find nearby enemies
+    const allEnemies = [this.bot, ...this.extraBots].filter((car): car is Car => car !== null && !car.destroyed);
+    
+    // Check distances
+    const dangerRadius = 300; // Very close
+    const warningRadius = 500; // Medium distance
+    const cautionRadius = 700; // Far but trackable
+    
+    let closestDistance = Infinity;
+    let enemyCount = { danger: 0, warning: 0, caution: 0 };
+    
+    for (const enemy of allEnemies) {
+      const dx = enemy.x - this.player.x;
+      const dy = enemy.y - this.player.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      
+      if (dist < closestDistance) closestDistance = dist;
+      
+      if (dist < dangerRadius) enemyCount.danger++;
+      else if (dist < warningRadius) enemyCount.warning++;
+      else if (dist < cautionRadius) enemyCount.caution++;
+    }
+    
+    // Update visual state
+    if (enemyCount.danger > 0) {
+      // DANGER: Red pulsing ring
+      this.proximityAlertEl.style.borderColor = 'rgba(239, 68, 68, 0.9)';
+      this.proximityAlertEl.style.boxShadow = '0 0 40px rgba(239, 68, 68, 0.8), inset 0 0 40px rgba(239, 68, 68, 0.3)';
+      this.proximityAlertEl.style.animation = 'proximityPulse 0.6s ease-in-out infinite';
+      
+      // Haptic feedback (throttled)
+      if (now - this.lastProximityHaptic > 800) {
+        this.hapticFeedback('medium');
+        this.lastProximityHaptic = now;
+      }
+    } else if (enemyCount.warning > 0) {
+      // WARNING: Orange steady ring
+      this.proximityAlertEl.style.borderColor = 'rgba(251, 146, 60, 0.7)';
+      this.proximityAlertEl.style.boxShadow = '0 0 30px rgba(251, 146, 60, 0.6), inset 0 0 30px rgba(251, 146, 60, 0.2)';
+      this.proximityAlertEl.style.animation = 'proximityPulse 1.2s ease-in-out infinite';
+    } else if (enemyCount.caution > 0) {
+      // CAUTION: Yellow subtle ring
+      this.proximityAlertEl.style.borderColor = 'rgba(234, 179, 8, 0.5)';
+      this.proximityAlertEl.style.boxShadow = '0 0 20px rgba(234, 179, 8, 0.4), inset 0 0 20px rgba(234, 179, 8, 0.1)';
+      this.proximityAlertEl.style.animation = 'proximityPulse 1.8s ease-in-out infinite';
+    } else {
+      // CLEAR: No threats nearby
+      this.proximityAlertEl.style.borderColor = 'rgba(239, 68, 68, 0)';
+      this.proximityAlertEl.style.boxShadow = 'none';
+      this.proximityAlertEl.style.animation = 'none';
+    }
   }
 
   updateRadar() {
