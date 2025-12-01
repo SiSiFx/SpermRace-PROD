@@ -4643,18 +4643,43 @@ class SpermRaceGame {
       .circle(cx, cy, Math.max(0, safeRadius - 8))
       .stroke({ width: 2, color: 0xffffff, alpha: 0.7 });
     
-    // 2) Outer danger zone (red fog circles)
+    // 2) Outer danger zone (toxic gas effect with irregular edges)
     const dangerPulse = 0.3 + 0.2 * Math.sin(now * 0.003);
     const outerAlpha = 0.16 + dangerPulse * 0.16;
     const maxRadius = Math.sqrt(Math.pow(this.arena.width / 2, 2) + Math.pow(this.arena.height / 2, 2));
     
-    // Create gradient effect with multiple circles
-    for (let i = 0; i < 3; i++) {
-      const r = safeRadius + (maxRadius - safeRadius) * ((i + 1) / 3);
-      const alpha = outerAlpha * (1 - i / 3);
-      this.zoneGraphics
-        .circle(cx, cy, r)
-        .fill({ color: 0x450a0a, alpha });
+    // Create toxic gas effect with multiple irregular circles
+    for (let i = 0; i < 5; i++) {
+      const baseR = safeRadius + (maxRadius - safeRadius) * ((i + 1) / 5);
+      const alpha = outerAlpha * (1 - i / 5) * 0.7;
+      
+      // Create irregular toxic gas cloud
+      const points: Array<{x: number, y: number}> = [];
+      const segments = 32; // More segments for smoother irregularity
+      
+      for (let j = 0; j < segments; j++) {
+        const angle = (j / segments) * Math.PI * 2;
+        
+        // Multi-layered noise for toxic gas effect
+        const noiseFreq1 = 3; // Large waves
+        const noiseFreq2 = 8; // Medium turbulence
+        const noiseFreq3 = 16; // Fine detail
+        
+        const noise1 = Math.sin(angle * noiseFreq1 + now * 0.0005 + i * 0.5) * 0.15;
+        const noise2 = Math.sin(angle * noiseFreq2 + now * 0.0008 + i * 0.3) * 0.08;
+        const noise3 = Math.sin(angle * noiseFreq3 + now * 0.001 + i * 0.2) * 0.04;
+        
+        const totalNoise = noise1 + noise2 + noise3;
+        const irregularR = baseR * (1 + totalNoise);
+        
+        const px = cx + Math.cos(angle) * irregularR;
+        const py = cy + Math.sin(angle) * irregularR;
+        points.push({ x: px, y: py });
+      }
+      
+      // Draw irregular polygon
+      this.zoneGraphics.poly(points.flatMap(p => [p.x, p.y]));
+      this.zoneGraphics.fill({ color: 0x450a0a, alpha });
     }
 
     // Update HUD timer
