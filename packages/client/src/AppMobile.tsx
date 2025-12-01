@@ -401,13 +401,12 @@ function Landing({
           padding: '16px 16px calc(40px + env(safe-area-inset-bottom, 0px))',
           display: 'flex',
           flexDirection: 'column',
-          justifyContent: 'flex-start',
+          justifyContent: 'center',
           gap: 16,
-          paddingTop: '60px',
           paddingBottom: 'calc(40px + env(safe-area-inset-bottom, 0px))',
         }}
       >
-        <header style={{ textAlign: 'center' }}>
+        <header style={{ textAlign: 'center', marginTop: '-32px' }}>
           <div style={{ marginBottom: 12 }}>
             <Atom 
               size={52} 
