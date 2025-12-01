@@ -146,7 +146,7 @@ function AppInner() {
   }, []);
 
   const onPractice = () => setScreen('practice');
-  const onTournament = () => setScreen('modes');
+  const onTournament = () => setScreen('tournament');
   const onWallet = () => setScreen('wallet');
 
   useEffect(() => {
@@ -170,9 +170,9 @@ function AppInner() {
       if (screen !== 'landing') {
         e.preventDefault();
         // Handle back with our screen logic
-        if (screen === 'modes') setScreen('landing');
+        if (screen === 'tournament') setScreen('landing');
         else if (screen === 'practice') setScreen('landing');
-        else if (screen === 'wallet') setScreen('modes');
+        else if (screen === 'wallet') setScreen('tournament');
       }
     };
     window.addEventListener('popstate', preventBack);
@@ -275,8 +275,8 @@ function AppInner() {
       {screen === 'lobby' && (
         <Lobby 
           onStart={() => setScreen('game')} 
-          onBack={() => setScreen('modes')}
-          onRefund={() => setScreen('modes')}
+          onBack={() => setScreen('tournament')}
+          onRefund={() => setScreen('tournament')}
         />
       )}
       {screen === 'game' && (
@@ -285,7 +285,7 @@ function AppInner() {
         </Suspense>
       )}
       {screen === 'results' && (
-        <Results onPlayAgain={() => setScreen('practice')} onChangeTier={() => setScreen('modes')} />
+        <Results onPlayAgain={() => setScreen('practice')} onChangeTier={() => setScreen('tournament')} />
       )}
       
       {toast && (
