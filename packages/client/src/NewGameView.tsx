@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import * as PIXI from 'pixi.js';
 import { useWs } from './WsProvider';
 import { HudManager } from './HudManager';
+import { logger } from './utils/logger';
 
 interface Car {
   x: number;
