@@ -43,7 +43,7 @@
 		"@sveltejs/mcp": "^0.1.0",
 		"concurrently": "^8.2.2",
 		"cross-env": "^7.0.3",
-		"playwright": "^1.56.1"
+		"playwright": "^1.57.0"
 	},
 	"dependencies": {
 		"@sentry/react": "^10.27.0",
