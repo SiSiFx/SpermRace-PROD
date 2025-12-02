@@ -783,7 +783,8 @@ class SpermRaceGame {
   
   createAmbientParticles() {
     // Add subtle floating colored particles for atmosphere
-    const particleCount = 40;
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const particleCount = isMobile ? 15 : 40; // Much fewer on mobile
     const colors = [0x22d3ee, 0x6366f1, 0x10b981, 0xfbbf24]; // Cyan, purple, green, yellow
     
     for (let i = 0; i < particleCount; i++) {
@@ -2016,7 +2017,7 @@ class SpermRaceGame {
     
     // More particles for dramatic boost effect
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const particleCount = isMobile ? 12 : 18; // Increased from 8/12
+    const particleCount = isMobile ? 6 : 12; // Reduced for mobile performance
     
     for (let i = 0; i < particleCount; i++) {
       const angle = (Math.PI * 2 * i) / particleCount;
@@ -2376,7 +2377,8 @@ class SpermRaceGame {
       const sinceStart = Date.now() - (this.gameStartTime || Date.now());
       if (!this.pickupsUnlocked && sinceStart >= this.unlockPickupsAfterMs) {
         this.pickupsUnlocked = true;
-        try { this.spawnPickups(35); } catch {}
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        try { this.spawnPickups(isMobile ? 20 : 35); } catch {} // Fewer orbs on mobile
         if (this.pickupsContainer) this.pickupsContainer.visible = true;
         // HUD cue: energy orbs phase begins
         this.showHotspotToast('Energy orbs active • refill boost and chase kills', '#4ade80');
@@ -3713,7 +3715,8 @@ class SpermRaceGame {
   }
 
   createExplosion(x: number, y: number, color: number) {
-    const particleCount = 30; // More particles for visibility
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const particleCount = isMobile ? 15 : 30; // Fewer particles on mobile
     for (let i = 0; i < particleCount; i++) {
       const angle = (Math.PI * 2 / particleCount) * i + (Math.random() - 0.5) * 0.3;
       const speed = 150 + Math.random() * 200; // Faster explosion
@@ -3822,7 +3825,10 @@ class SpermRaceGame {
       }
     }
 
-    if (this.pickups.length < 25) this.spawnPickups(8);
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const maxPickups = isMobile ? 15 : 25;
+    const spawnAmount = isMobile ? 4 : 8;
+    if (this.pickups.length < maxPickups) this.spawnPickups(spawnAmount);
   }
 
   handleRespawning(_deltaTime: number) {
