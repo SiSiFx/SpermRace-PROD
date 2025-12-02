@@ -778,6 +778,11 @@ class SpermRaceGame {
     
     // Matte grid only (remove veins that could look like a border)
     this.gridGraphics.stroke({ width: 1, color: this.theme.grid, alpha: this.theme.gridAlpha });
+    
+    // Hide grid on mobile to reduce visual clutter
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    this.gridGraphics.visible = !isMobile;
+    
     this.worldContainer.addChild(this.gridGraphics);
   }
   
@@ -1903,7 +1908,7 @@ class SpermRaceGame {
       tailGraphics: new PIXI.Graphics(),
       tailWaveT: 0,
       tailLength: 34,
-      tailSegments: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 6 : 10, // Fewer segments on mobile for performance
+      tailSegments: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 4 : 10, // Fewer segments on mobile for performance
       tailAmplitude: 5,
       turnResponsiveness: type === 'player' ? 10.0 : 6.5, // Snappier turning
       lateralDragScalar: 1.15,
