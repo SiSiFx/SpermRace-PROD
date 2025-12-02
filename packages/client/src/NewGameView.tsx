@@ -790,7 +790,7 @@ class SpermRaceGame {
     // Add subtle floating colored particles for atmosphere
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     const particleCount = isMobile ? 15 : 40; // Much fewer on mobile
-    const colors = [0x22d3ee, 0x6366f1, 0x10b981, 0xfbbf24]; // Cyan, purple, green, yellow
+    const colors = [0x22d3ee, 0x6366f1]; // Reduced to 2 colors: Cyan, purple (was 4: cyan, purple, green, yellow)
     
     for (let i = 0; i < particleCount; i++) {
       const x = (Math.random() - 0.5) * this.arena.width;

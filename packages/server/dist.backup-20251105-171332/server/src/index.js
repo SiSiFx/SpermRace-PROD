@@ -1,0 +1,1202 @@
+import 'dotenv/config.js';
+import { WebSocketServer, WebSocket } from 'ws';
+import http from 'http';
+import { randomUUID } from 'crypto';
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import { GameWorld } from './GameWorld.js';
+import { LobbyManager } from './LobbyManager.js';
+import { AuthService } from './AuthService.js';
+import { SmartContractService } from './SmartContractService.js';
+import { clientToServerMessageSchema } from 'shared/dist/schemas.js';
+import { v4 as uuidv4 } from 'uuid';
+// =================================================================================================
+// Constants
+// =================================================================================================
+const PORT = parseInt(process.env.PORT || '8080', 10);
+const BROADCAST_INTERVAL = 1000 / 20; // 20 FPS to reduce bandwidth
+const NONCE_TTL_MS = parseInt(process.env.SIWS_NONCE_TTL_MS || '60000', 10);
+const AUTH_GRACE_MS = parseInt(process.env.AUTH_GRACE_MS || '30000', 10);
+const UNAUTH_MAX = parseInt(process.env.WS_UNAUTH_MAX || '3', 10);
+const IS_PRODUCTION = (process.env.NODE_ENV || '').toLowerCase() === 'production';
+const LOG_LEVEL = (process.env.LOG_LEVEL || 'info').toLowerCase();
+const BACKPRESSURE_MAX_BUFFERED = parseInt(process.env.BACKPRESSURE_MAX_BUFFERED || '1048576', 10); // 1MB
+const SLOW_CONSUMER_STRIKES_MAX = parseInt(process.env.SLOW_CONSUMER_STRIKES_MAX || '5', 10);
+const RATE_VIOLATION_STRIKES_MAX = parseInt(process.env.RATE_VIOLATION_STRIKES_MAX || '8', 10);
+const LEVELS = { silent: 0, error: 1, warn: 2, info: 3, debug: 4 };
+function shouldLog(level) { return LEVELS[LOG_LEVEL] >= LEVELS[level]; }
+const log = {
+    debug: (...args) => { if (shouldLog('debug'))
+        console.log(...args); },
+    info: (...args) => { if (shouldLog('info'))
+        console.log(...args); },
+    warn: (...args) => { if (shouldLog('warn'))
+        console.warn(...args); },
+    error: (...args) => { if (shouldLog('error'))
+        console.error(...args); },
+};
+function maskPk(pk) { return pk ? (pk.length > 10 ? `${pk.slice(0, 6)}…${pk.slice(-4)}` : pk) : String(pk); }
+// Rate limits (token bucket)
+const RATE_LIMITS = {
+    auth: { capacity: 3, refillPerMs: 3 / 60000 }, // 3/min
+    join: { capacity: 10, refillPerMs: 10 / 60000 }, // 10/min
+    tx: { capacity: 20, refillPerMs: 20 / 60000 }, // 20/min
+    input: { capacity: 25, refillPerMs: 25 / 1000 } // 25/sec
+};
+// =================================================================================================
+// Server Setup
+// =================================================================================================
+// Enforce production safety flags (no bots, no skip-fee)
+if (IS_PRODUCTION) {
+    if (process.env.SKIP_ENTRY_FEE === 'true') {
+        console.error('[FATAL] SKIP_ENTRY_FEE must be false in production');
+        process.exit(1);
+    }
+    if (process.env.ENABLE_DEV_BOTS === 'true') {
+        console.error('[FATAL] ENABLE_DEV_BOTS must be false in production');
+        process.exit(1);
+    }
+}
+// Single HTTP server hosting both API and WebSocket (path /ws)
+const app = express();
+const server = http.createServer(app);
+const wss = new WebSocketServer({
+    server,
+    path: '/ws',
+    perMessageDeflate: { threshold: 1024 }
+});
+const smartContractService = new SmartContractService();
+const gameWorld = new GameWorld(smartContractService);
+const lobbyManager = new LobbyManager(smartContractService);
+const pendingSockets = new Set();
+const playerIdToSocket = new Map();
+const socketToPlayerId = new Map();
+const socketToNonce = new Map();
+const socketToSessionId = new Map();
+const socketToAuthTimeout = new Map();
+const socketUnauthViolations = new Map();
+const socketRate = new Map();
+const socketRateViolations = new Map();
+const socketSlowStrikes = new Map();
+const socketPendingState = new Map(); // coalesced latest game state
+const paidPlayers = new Set();
+const expectedLamportsByPlayerId = new Map();
+const expectedTierByPlayerId = new Map();
+const pendingPaymentByPlayerId = new Map();
+const usedPaymentIds = new Set();
+// Session tokens for HTTP-based authentication (mobile-friendly)
+const sessionTokens = new Map();
+const SESSION_TOKEN_TTL_MS = 300000; // 5 minutes
+gameWorld.start();
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:5174')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+log.info(`🚀 SpermRace.io server starting on http://localhost:${PORT} (WS path /ws)`);
+log.info(`[ENV] SOLANA_RPC_ENDPOINT=${process.env.SOLANA_RPC_ENDPOINT || 'default'} ENABLE_DEV_BOTS=${process.env.ENABLE_DEV_BOTS} DEV_BOTS_TARGET=${process.env.DEV_BOTS_TARGET} SKIP_ENTRY_FEE=${process.env.SKIP_ENTRY_FEE}`);
+log.info(`[SEC] ALLOWED_ORIGINS=${ALLOWED_ORIGINS.join(' | ')}`);
+// Production safety: forbid example/localhost origins in prod
+if (IS_PRODUCTION) {
+    const hasLocal = ALLOWED_ORIGINS.some(o => /localhost|127\.0\.0\.1/i.test(o));
+    const looksExample = ALLOWED_ORIGINS.some(o => /yourdomain|your-frontend-domain/i.test(o));
+    if (hasLocal || looksExample || ALLOWED_ORIGINS.length === 0) {
+        console.error('[FATAL] ALLOWED_ORIGINS must be set to real production domains (no localhost, no example values).');
+        process.exit(1);
+    }
+}
+// =================================================================================================
+// Lightweight HTTP API (price proxy)
+// =================================================================================================
+// Attach middleware to the unified app
+app.set('trust proxy', 1);
+// Correlation IDs and optional JSON request logging
+app.use((req, res, next) => {
+    const incoming = req.headers['x-request-id'] || undefined;
+    const requestId = incoming || randomUUID();
+    req.requestId = requestId;
+    res.setHeader('x-request-id', requestId);
+    if ((process.env.LOG_JSON || '').toLowerCase() === 'true') {
+        const started = Date.now();
+        res.on('finish', () => {
+            try {
+                const entry = {
+                    level: 'info',
+                    ts: Date.now(),
+                    requestId,
+                    method: req.method,
+                    url: req.originalUrl || req.url,
+                    status: res.statusCode,
+                    durationMs: Date.now() - started,
+                    ip: req.ip,
+                };
+                console.log(JSON.stringify(entry));
+            }
+            catch { }
+        });
+    }
+    next();
+});
+app.use(helmet({
+    contentSecurityPolicy: {
+        useDefaults: true,
+        directives: {
+            defaultSrc: ["'self'"],
+            connectSrc: ["'self'", 'https:', 'wss:', ...ALLOWED_ORIGINS],
+        },
+    },
+}));
+const corsOptions = {
+    origin: (origin, cb) => {
+        if (!origin)
+            return cb(null, true);
+        if (ALLOWED_ORIGINS.includes(origin))
+            return cb(null, true);
+        return cb(new Error('Not allowed by CORS'));
+    },
+    credentials: true,
+};
+app.use(cors(corsOptions));
+// Global baseline limiter
+app.use(rateLimit({ windowMs: 60_000, max: 120, standardHeaders: true, legacyHeaders: false }));
+// Route-specific stricter limiters
+const limiterSensitive = rateLimit({ windowMs: 60_000, max: 60, standardHeaders: true, legacyHeaders: false });
+const limiterAnalytics = rateLimit({ windowMs: 60_000, max: 30, standardHeaders: true, legacyHeaders: false });
+app.use(express.json({ limit: '256kb' }));
+let cachedPrice = { usd: null, ts: 0 };
+app.get('/api/sol-price', limiterSensitive, async (_req, res) => {
+    const now = Date.now();
+    try {
+        if (cachedPrice.usd && (now - cachedPrice.ts) < 30_000) {
+            res.json({ usd: cachedPrice.usd, ts: cachedPrice.ts, source: 'cache' });
+            return;
+        }
+        const sources = [
+            { name: 'jupiter', url: 'https://price.jup.ag/v6/price?ids=SOL', pick: j => Number(j?.data?.SOL?.price) || null },
+            { name: 'coingecko', url: 'https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', pick: j => Number(j?.solana?.usd) || null },
+        ];
+        let lastErr = null;
+        for (const s of sources) {
+            try {
+                const r = await fetch(s.url);
+                if (!r.ok) {
+                    lastErr = new Error(`${s.name} ${r.status}`);
+                    continue;
+                }
+                const j = await r.json();
+                const usd = s.pick(j);
+                if (usd && Number.isFinite(usd)) {
+                    cachedPrice = { usd, ts: now };
+                    res.json({ usd, ts: now, source: s.name });
+                    return;
+                }
+                lastErr = new Error(`${s.name} invalid payload`);
+            }
+            catch (e) {
+                lastErr = e;
+            }
+        }
+        // Fallback to stale cache (up to 10 min) instead of failing
+        if (cachedPrice.usd && (now - cachedPrice.ts) < 600_000) {
+            res.json({ usd: cachedPrice.usd, ts: cachedPrice.ts, source: 'stale-cache' });
+            return;
+        }
+        res.status(502).json({ error: 'Price fetch failed', reason: lastErr?.message || String(lastErr || 'unknown') });
+    }
+    catch (e) {
+        res.status(502).json({ error: 'Price fetch failed', reason: e?.message || String(e) });
+    }
+});
+// Version/build info
+app.get('/api/version', (_req, res) => {
+    res.json({
+        version: process.env.APP_VERSION || '0.0.0',
+        buildId: process.env.APP_BUILD_ID || null,
+        buildTime: process.env.APP_BUILD_TIME || null,
+        env: (process.env.NODE_ENV || 'development'),
+    });
+});
+// Health and readiness endpoints
+app.get('/api/healthz', (_req, res) => {
+    try {
+        res.json({ ok: true, port: PORT, now: Date.now() });
+    }
+    catch (e) {
+        res.status(500).json({ ok: false, error: e?.message || String(e) });
+    }
+});
+// WebSocket health (alive count and avg latency)
+app.get('/api/ws-healthz', (_req, res) => {
+    try {
+        const total = wss.clients.size;
+        let alive = 0;
+        const latencies = [];
+        wsHeartbeat.forEach((hb, ws) => {
+            if (ws.isAlive)
+                alive++;
+            if (typeof hb.latencyMs === 'number' && hb.latencyMs > 0)
+                latencies.push(hb.latencyMs);
+        });
+        const avgLatencyMs = latencies.length ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length) : null;
+        res.json({ ok: true, total, alive, avgLatencyMs });
+    }
+    catch (e) {
+        res.status(500).json({ ok: false, error: e?.message || String(e) });
+    }
+});
+app.get('/api/readyz', async (_req, res) => {
+    const rpcEndpoint = process.env.SOLANA_RPC_ENDPOINT || 'https://api.devnet.solana.com';
+    try {
+        const { Connection, PublicKey } = await import('@solana/web3.js');
+        const conn = new Connection(rpcEndpoint, 'processed');
+        const { blockhash } = await conn.getLatestBlockhash('processed');
+        const prize = (process.env.PRIZE_POOL_WALLET || '').trim();
+        let prizeBalance = null;
+        if (prize) {
+            try {
+                prizeBalance = await conn.getBalance(new PublicKey(prize), { commitment: 'processed' });
+            }
+            catch { }
+        }
+        res.json({ ok: true, rpc: { ok: !!blockhash, endpoint: rpcEndpoint }, prizePool: { address: prize || null, balance: prizeBalance } });
+    }
+    catch (e) {
+        res.status(503).json({ ok: false, reason: e?.message || String(e) });
+    }
+});
+// Prize pool preflight
+app.get('/api/prize-preflight', async (_req, res) => {
+    try {
+        const addr = smartContractService.getPrizePoolAddressBase58();
+        const lamports = await smartContractService.getPrizePoolBalanceLamports();
+        // In non-production, always consider preflight configured to enable local tournaments;
+        // in production, require a configured payout OR explicit skip flag (should be false in prod).
+        const configured = !IS_PRODUCTION || smartContractService.isPayoutConfigured() || process.env.SKIP_ENTRY_FEE === 'true';
+        res.json({ address: addr, lamports, sol: lamports >= 0 ? lamports / 1_000_000_000 : null, configured });
+    }
+    catch (e) {
+        res.status(500).json({ error: e?.message || String(e) });
+    }
+});
+// ================================================================================================
+// Metrics (Prometheus text format)
+// ================================================================================================
+let metrics = {
+    ws_connections_total: 0,
+    ws_connected_current: 0,
+    http_requests_total: 0,
+    lobby_active: 0,
+};
+app.use((_req, _res, next) => { metrics.http_requests_total++; next(); });
+app.get('/api/metrics', (_req, res) => {
+    const lines = [];
+    lines.push('# TYPE ws_connections_total counter');
+    lines.push(`ws_connections_total ${metrics.ws_connections_total}`);
+    lines.push('# TYPE ws_connected_current gauge');
+    lines.push(`ws_connected_current ${metrics.ws_connected_current}`);
+    lines.push('# TYPE http_requests_total counter');
+    lines.push(`http_requests_total ${metrics.http_requests_total}`);
+    lines.push('# TYPE lobby_active gauge');
+    lines.push(`lobby_active ${lobbyManager ? lobbyManager.lobbies?.size || 0 : 0}`);
+    res.setHeader('Content-Type', 'text/plain');
+    res.send(lines.join('\n'));
+});
+// ================================================================================================
+// Analytics ingestion (basic)
+// ================================================================================================
+app.post('/api/analytics', limiterAnalytics, (req, res) => {
+    try {
+        const { type, payload } = req.body || {};
+        if (!type || typeof type !== 'string') {
+            res.status(400).json({ ok: false });
+            return;
+        }
+        // Redact sensitive fields if any
+        const safe = JSON.parse(JSON.stringify(payload || {}));
+        if (safe.signedMessage)
+            safe.signedMessage = '[redacted]';
+        log.info(`[ANALYTICS] ${type}`, safe);
+        res.json({ ok: true });
+    }
+    catch (e) {
+        res.status(400).json({ ok: false, error: e?.message || String(e) });
+    }
+});
+// ================================================================================================
+// HTTP-based SIWS Authentication (mobile-friendly)
+// ================================================================================================
+app.post('/api/siws-auth', limiterSensitive, async (req, res) => {
+    try {
+        const { publicKey, signedMessage, message, nonce } = req.body || {};
+        if (!publicKey || !signedMessage || !message) {
+            res.status(400).json({ ok: false, error: 'Missing required fields' });
+            return;
+        }
+        // Verify the signature using the original message that was signed
+        const isValid = AuthService.verifySignature(publicKey, signedMessage, message);
+        if (!isValid) {
+            log.warn(`[HTTP AUTH] Invalid signature from ${maskPk(publicKey)}`);
+            res.status(401).json({ ok: false, error: 'Invalid signature' });
+            return;
+        }
+        // Clean up expired tokens periodically
+        const now = Date.now();
+        for (const [token, data] of sessionTokens.entries()) {
+            if (now - data.createdAt > SESSION_TOKEN_TTL_MS) {
+                sessionTokens.delete(token);
+            }
+        }
+        // Generate session token
+        const sessionToken = randomUUID();
+        sessionTokens.set(sessionToken, { playerId: publicKey, createdAt: now });
+        log.info(`[HTTP AUTH] ✓ Authenticated ${maskPk(publicKey)} → token ${sessionToken.slice(0, 8)}…`);
+        res.json({
+            ok: true,
+            sessionToken,
+            expiresIn: SESSION_TOKEN_TTL_MS
+        });
+    }
+    catch (e) {
+        log.error('[HTTP AUTH] Error:', e);
+        res.status(500).json({ ok: false, error: 'Authentication failed' });
+    }
+});
+// ================================================================================================
+// Get SIWS Challenge (for HTTP auth flow)
+// ================================================================================================
+app.get('/api/siws-challenge', limiterSensitive, (req, res) => {
+    try {
+        const nonce = AuthService.createNonce();
+        const message = AuthService.getMessageToSign(nonce);
+        res.json({ ok: true, message, nonce });
+    }
+    catch (e) {
+        res.status(500).json({ ok: false, error: e?.message || String(e) });
+    }
+});
+// ================================================================================================
+// Dev-only payout test endpoint (DEV/DEMO ONLY)
+// ================================================================================================
+if (!IS_PRODUCTION) {
+    app.post('/api/dev/test-payout', async (req, res) => {
+        try {
+            const { winnerPubkey, lamports, sol, platformFeeBps } = req.body || {};
+            if (!winnerPubkey || (!lamports && !sol)) {
+                res.status(400).json({ ok: false, error: 'winnerPubkey and lamports|sol required' });
+                return;
+            }
+            if (!smartContractService.isPayoutConfigured()) {
+                res.status(400).json({ ok: false, error: 'Prize pool key not configured' });
+                return;
+            }
+            const { PublicKey } = await import('@solana/web3.js');
+            const to = new PublicKey(winnerPubkey);
+            const amountLamports = Number.isFinite(lamports) && lamports > 0 ? Math.floor(lamports) : Math.floor(Number(sol) * 1_000_000_000);
+            if (!Number.isFinite(amountLamports) || amountLamports <= 0) {
+                res.status(400).json({ ok: false, error: 'Invalid amount' });
+                return;
+            }
+            const sig = await smartContractService.payoutPrizeLamports(to, amountLamports, typeof platformFeeBps === 'number' ? platformFeeBps : 1500);
+            res.json({ ok: true, signature: sig, explorer: `https://explorer.solana.com/tx/${sig}?cluster=devnet` });
+        }
+        catch (e) {
+            res.status(500).json({ ok: false, error: e?.message || String(e) });
+        }
+    });
+}
+server.listen(PORT, () => {
+    log.info(`📈 Unified API listening on http://localhost:${PORT}/api/sol-price | WS at /ws`);
+});
+// =================================================================================================
+// Event Handling from LobbyManager
+// =================================================================================================
+lobbyManager.onLobbyUpdate = (lobby) => {
+    const message = { type: 'lobbyState', payload: lobby };
+    broadcastToLobby(lobby, message);
+};
+lobbyManager.onGameStart = (lobby) => {
+    log.info(`📢 Fertilization race starting for lobby ${lobby.lobbyId}`);
+    // Consume paid tickets for players admitted to this game round
+    try {
+        lobby.players.forEach(pid => {
+            if (paidPlayers.has(pid)) {
+                paidPlayers.delete(pid);
+                expectedTierByPlayerId.delete(pid);
+            }
+        });
+    }
+    catch { }
+    gameWorld.startRound(lobby.players, lobby.entryFee);
+    const rules = [
+        'Contrôles: pointez la souris pour nager',
+        'Votre spermatozoïde laisse une trace ~5s',
+        'Collision avec une trace = élimination',
+        'Premier à féconder gagne (85% du prize pool)'
+    ];
+    const gameStarting = { type: 'gameStarting', payload: { countdown: 0, rules } };
+    broadcastToLobby(lobby, gameStarting);
+};
+lobbyManager.onLobbyCountdown = (lobby, remaining, startAtMs) => {
+    const msg = { type: 'lobbyCountdown', payload: { lobbyId: lobby.lobbyId, remaining, startAtMs } };
+    broadcastToLobby(lobby, msg);
+    // If solo player, show discrete countdown
+    // Timeline: 0-30s = silent waiting, 30-50s = show countdown every second
+    if (lobby.players.length === 1) {
+        // Show countdown for every second in the last 20 seconds
+        const shouldWarn = remaining <= 20 && remaining > 0;
+        if (shouldWarn) {
+            const refundWarning = {
+                type: 'soloPlayerWarning',
+                payload: { secondsUntilRefund: remaining }
+            };
+            broadcastToLobby(lobby, refundWarning);
+        }
+    }
+};
+lobbyManager.onLobbyRefund = async (lobby, playerId, _calculatedLamports) => {
+    // Use ACTUAL amount paid, not recalculated amount
+    const actualLamportsPaid = expectedLamportsByPlayerId.get(playerId) || _calculatedLamports;
+    // Deduct network fee buffer (5000 lamports = ~$0.001)
+    // The original payment had ~5000 lamports deducted for network fee
+    // So prize pool has slightly less than what player sent
+    const NETWORK_FEE_BUFFER = 5000; // Standard Solana transaction fee
+    const refundAmount = Math.max(0, actualLamportsPaid - NETWORK_FEE_BUFFER);
+    console.log(`[REFUND] Processing refund for ${playerId}:`);
+    console.log(`[REFUND]   - Expected payment: ${actualLamportsPaid} lamports`);
+    console.log(`[REFUND]   - Network fee buffer: ${NETWORK_FEE_BUFFER} lamports`);
+    console.log(`[REFUND]   - Refund amount: ${refundAmount} lamports`);
+    try {
+        // Issue refund transaction with network fee deducted
+        const txSignature = await smartContractService.refundPlayer(playerId, refundAmount);
+        // Clear payment tracking - player needs to pay again if they want to rejoin
+        paidPlayers.delete(playerId);
+        expectedLamportsByPlayerId.delete(playerId);
+        console.log(`[REFUND] Cleared payment cache for ${maskPk(playerId)}`);
+        // Notify player
+        const socket = playerIdToSocket.get(playerId);
+        if (socket) {
+            const msg = {
+                type: 'lobbyRefund',
+                payload: {
+                    reason: 'Not enough players joined the tournament (network fee deducted)',
+                    lamports: refundAmount,
+                    txSignature
+                }
+            };
+            try {
+                socket.send(JSON.stringify(msg));
+            }
+            catch (e) {
+                log.error('[REFUND] Failed to send message:', e);
+            }
+            // Also send them back to mode selection
+            setTimeout(() => {
+                const backMsg = { type: 'lobbyError', payload: { message: 'Lobby cancelled - entry fee refunded' } };
+                try {
+                    socket.send(JSON.stringify(backMsg));
+                }
+                catch (e) {
+                    log.error('[REFUND] Failed to send back message:', e);
+                }
+            }, 2000);
+        }
+        console.log(`[REFUND] ✅ Refund completed for ${playerId}: ${txSignature}`);
+    }
+    catch (error) {
+        console.error(`[REFUND] ❌ Failed to refund ${playerId}:`, error);
+        // ✅ FIX #2: Notify player of refund failure with details
+        const socket = playerIdToSocket.get(playerId);
+        if (socket) {
+            let errorMessage = 'Refund failed - please contact support with your wallet address.';
+            // Parse common errors
+            if (error instanceof Error) {
+                if (error.message.includes('insufficient') || error.message.includes('Insufficient')) {
+                    errorMessage = 'Refund failed: Prize pool balance insufficient. Contact support immediately.';
+                }
+                else if (error.message.includes('block height') || error.message.includes('expired')) {
+                    errorMessage = 'Refund transaction expired. Please refresh and try again.';
+                }
+            }
+            const msg = {
+                type: 'refundFailed',
+                payload: {
+                    message: errorMessage,
+                    playerId: maskPk(playerId),
+                    timestamp: Date.now()
+                }
+            };
+            try {
+                socket.send(JSON.stringify(msg));
+                console.log(`[REFUND] Sent error notification to ${maskPk(playerId)}`);
+            }
+            catch (e) {
+                log.error('[REFUND] Failed to send error message:', e);
+            }
+        }
+    }
+};
+gameWorld.onPlayerEliminated = (playerId) => {
+    const message = { type: 'playerEliminated', payload: { playerId } };
+    broadcastToAll(message);
+};
+// Extended eliminations with killer
+gameWorld.onPlayerEliminatedExt = (victimId, killerId, debug) => {
+    const message = { type: 'playerEliminated', payload: { playerId: victimId, eliminatorId: killerId } };
+    broadcastToAll(message);
+    try {
+        const allowDebug = (process.env.ENABLE_DEBUG_COLLISIONS || '').toLowerCase() === 'true';
+        if (allowDebug && debug && debug.type === 'trail') {
+            const dbg = { type: 'debugCollision', payload: { victimId, killerId, hit: debug.hit, segment: debug.segment, normal: debug.normal, relSpeed: debug.relSpeed, ts: Date.now() } };
+            broadcastToAll(dbg);
+        }
+    }
+    catch { }
+};
+gameWorld.onRoundEnd = (winnerId, prizeAmount, txSignature) => {
+    const message = { type: 'roundEnd', payload: { winnerId, prizeAmount, txSignature } };
+    broadcastToAll(message);
+};
+// =================================================================================================
+// Connection Handling
+// =================================================================================================
+wss.on('connection', (ws, req) => {
+    try {
+        const origin = req?.headers?.origin || '';
+        if (origin && !ALLOWED_ORIGINS.includes(origin)) {
+            console.warn(`[SEC] Rejecting WS connection from origin: ${origin}`);
+            ws.close(1008, 'Origin not allowed');
+            return;
+        }
+    }
+    catch { }
+    // Check for session token in URL query parameter (HTTP auth flow)
+    let sessionToken = null;
+    let authenticatedPlayerId = null;
+    try {
+        const url = new URL(req.url || '', `http://${req.headers.host}`);
+        sessionToken = url.searchParams.get('token');
+        if (sessionToken) {
+            const sessionData = sessionTokens.get(sessionToken);
+            if (sessionData && (Date.now() - sessionData.createdAt < SESSION_TOKEN_TTL_MS)) {
+                authenticatedPlayerId = sessionData.playerId;
+                // Consume the token (one-time use)
+                sessionTokens.delete(sessionToken);
+                log.info(`[WS] Client authenticated via HTTP token: ${maskPk(authenticatedPlayerId)}`);
+            }
+            else {
+                log.warn(`[WS] Invalid or expired session token: ${sessionToken.slice(0, 8)}…`);
+                sessionToken = null;
+            }
+        }
+    }
+    catch (e) {
+        log.error('[WS] Error parsing session token:', e);
+    }
+    setupHeartbeat(ws);
+    metrics.ws_connections_total++;
+    metrics.ws_connected_current = pendingSockets.size + playerIdToSocket.size;
+    const sessionId = uuidv4();
+    socketToSessionId.set(ws, sessionId);
+    socketRate.set(ws, {
+        auth: { tokens: RATE_LIMITS.auth.capacity, lastRefill: Date.now() },
+        join: { tokens: RATE_LIMITS.join.capacity, lastRefill: Date.now() },
+        tx: { tokens: RATE_LIMITS.tx.capacity, lastRefill: Date.now() },
+        input: { tokens: RATE_LIMITS.input.capacity, lastRefill: Date.now() },
+    });
+    // If authenticated via HTTP token, skip SIWS challenge
+    if (authenticatedPlayerId) {
+        // Move directly to authenticated state
+        playerIdToSocket.set(authenticatedPlayerId, ws);
+        socketToPlayerId.set(ws, authenticatedPlayerId);
+        const authMessage = { type: 'authenticated', payload: { playerId: authenticatedPlayerId } };
+        ws.send(JSON.stringify(authMessage));
+        log.info(`🔌 Client connected & authenticated via token (${pendingSockets.size + playerIdToSocket.size} total)`);
+    }
+    else {
+        // Traditional WebSocket SIWS flow
+        pendingSockets.add(ws);
+        // Enforce authenticate-within timeout
+        try {
+            const t = setTimeout(() => {
+                try {
+                    if (pendingSockets.has(ws)) {
+                        ws.close(4001, 'Authentication timeout');
+                    }
+                }
+                catch { }
+            }, AUTH_GRACE_MS);
+            socketToAuthTimeout.set(ws, t);
+        }
+        catch { }
+        const nonce = AuthService.createNonce();
+        socketToNonce.set(ws, { nonce, issuedAt: Date.now(), consumed: false });
+        const challenge = { type: 'siwsChallenge', payload: { message: AuthService.getMessageToSign(nonce), nonce } };
+        ws.send(JSON.stringify(challenge));
+        log.info(`🔌 Client connected (${pendingSockets.size + playerIdToSocket.size} total)`);
+    }
+    ws.on('message', (data) => {
+        try {
+            const raw = data.toString();
+            console.log(`[WS=>] Message received: ${raw.length} bytes at ${Date.now()}`);
+            if (raw.length > 64_000) {
+                ws.send(JSON.stringify({ type: 'error', payload: { message: 'Payload too large' } }));
+                return;
+            }
+            const parsed = JSON.parse(raw);
+            console.log(`[WS=>] Parsed message type: ${parsed?.type || 'unknown'}`);
+            const result = clientToServerMessageSchema.safeParse(parsed);
+            if (!result.success) {
+                console.warn(`[WS=>] Invalid schema for type ${parsed?.type}:`, result.error.errors);
+                ws.send(JSON.stringify({ type: 'error', payload: { message: 'Invalid message schema' } }));
+                return;
+            }
+            const message = result.data;
+            handleClientMessage(message, ws);
+        }
+        catch (error) {
+            log.error(`❌ Invalid message:`, error);
+        }
+    });
+    ws.on('close', (code, reason) => {
+        const reasonStr = reason?.toString() || 'no reason';
+        console.log(`🔌 WebSocket closed: code=${code}, reason="${reasonStr}"`);
+        pendingSockets.delete(ws);
+        try {
+            wsHeartbeat.delete(ws);
+        }
+        catch { }
+        try {
+            const t = socketToAuthTimeout.get(ws);
+            if (t) {
+                clearTimeout(t);
+                socketToAuthTimeout.delete(ws);
+            }
+        }
+        catch { }
+        const playerId = socketToPlayerId.get(ws);
+        if (playerId) {
+            playerIdToSocket.delete(playerId);
+            socketToPlayerId.delete(ws);
+            // Grace period: keep the player in the lobby for quick reconnects
+            // GameWorld will remove from active round on disconnect as needed
+            gameWorld.removePlayer(playerId);
+        }
+        socketToNonce.delete(ws);
+        socketToSessionId.delete(ws);
+        socketRate.delete(ws);
+        socketUnauthViolations.delete(ws);
+        // Clean up pending payment state on disconnect
+        const disconnectedPlayerId = socketToPlayerId.get(ws) || playerId;
+        if (disconnectedPlayerId) {
+            const hadPendingPayment = pendingPaymentByPlayerId.has(disconnectedPlayerId);
+            if (hadPendingPayment) {
+                log.info(`[PAYMENT] 🧹 Clearing pending payment for disconnected player ${maskPk(disconnectedPlayerId)}`);
+                pendingPaymentByPlayerId.delete(disconnectedPlayerId);
+                expectedLamportsByPlayerId.delete(disconnectedPlayerId);
+                expectedTierByPlayerId.delete(disconnectedPlayerId);
+            }
+        }
+        log.info(`🔌 Client disconnected (${pendingSockets.size + playerIdToSocket.size} total)`);
+        metrics.ws_connected_current = pendingSockets.size + playerIdToSocket.size;
+    });
+    ws.on('error', (error) => {
+        log.error(`❌ WebSocket error for client:`, error);
+        ws.close();
+    });
+    // If this player reconnects (same wallet), restore lobby state if already paid
+    const playerId = socketToPlayerId.get(ws);
+    if (playerId) {
+        // Note: Pending payments are now cleared on disconnect to avoid stale transaction issues
+        // Players must re-initiate payment flow if they disconnect before completing
+        if (paidPlayers.has(playerId)) {
+            // If already paid, try to restore to lobby if exists
+            const lobby = lobbyManager.getLobbyForPlayer(playerId);
+            if (lobby) {
+                const msg = { type: 'lobbyState', payload: lobby };
+                ws.send(JSON.stringify(msg));
+            }
+            else {
+                const tier = expectedTierByPlayerId.get(playerId);
+                if (tier) {
+                    lobbyManager.joinLobby(playerId, tier).catch(() => { });
+                }
+            }
+        }
+    }
+});
+// =================================================================================================
+// Message Handling
+// =================================================================================================
+async function handleClientMessage(message, ws) {
+    // WS auth gate: deny all messages except 'authenticate' until authenticated
+    try {
+        const t = message?.type;
+        const isAuth = t === 'authenticate';
+        const authed = socketToPlayerId.has(ws);
+        if (!isAuth && !authed) {
+            const v = (socketUnauthViolations.get(ws) || 0) + 1;
+            socketUnauthViolations.set(ws, v);
+            try {
+                ws.send(JSON.stringify({ type: 'error', payload: { message: 'Authenticate first' } }));
+            }
+            catch { }
+            if (v >= UNAUTH_MAX) {
+                try {
+                    ws.close(4003, 'Too many unauthenticated messages');
+                }
+                catch { }
+            }
+            return;
+        }
+    }
+    catch { }
+    function take(name) {
+        const rates = socketRate.get(ws);
+        if (!rates)
+            return true;
+        const cfg = RATE_LIMITS[name];
+        const bucket = rates[name];
+        const now = Date.now();
+        const elapsed = now - bucket.lastRefill;
+        const refill = elapsed * cfg.refillPerMs;
+        bucket.tokens = Math.min(cfg.capacity, bucket.tokens + refill);
+        bucket.lastRefill = now;
+        if (bucket.tokens >= 1) {
+            bucket.tokens -= 1;
+            return true;
+        }
+        // strike on rate violation and possibly disconnect
+        const strikes = (socketRateViolations.get(ws) || 0) + 1;
+        socketRateViolations.set(ws, strikes);
+        if (strikes >= RATE_VIOLATION_STRIKES_MAX) {
+            try {
+                ws.close(4005, 'Rate limit exceeded');
+            }
+            catch { }
+        }
+        return false;
+    }
+    switch (message.type) {
+        case 'authenticate': {
+            if (!take('auth')) {
+                ws.send(JSON.stringify({ type: 'error', payload: { message: 'Rate limited (auth)' } }));
+                return;
+            }
+            const { publicKey, signedMessage, nonce } = message.payload;
+            const nonceRec = socketToNonce.get(ws);
+            const expired = !nonceRec || (Date.now() - nonceRec.issuedAt) > NONCE_TTL_MS || nonceRec.consumed;
+            const expected = nonceRec?.nonce || '';
+            const original = AuthService.getMessageToSign(expected);
+            const ok = !expired && expected === nonce && AuthService.verifySignature(publicKey, signedMessage, original);
+            if (!ok) {
+                ws.send(JSON.stringify({ type: 'error', payload: { message: 'Authentication failed' } }));
+                ws.close();
+                return;
+            }
+            if (nonceRec)
+                nonceRec.consumed = true;
+            // Promote socket to authenticated mapping
+            pendingSockets.delete(ws);
+            playerIdToSocket.set(publicKey, ws);
+            socketToPlayerId.set(ws, publicKey);
+            // Clear auth timeout and reset violation count
+            try {
+                const t = socketToAuthTimeout.get(ws);
+                if (t) {
+                    clearTimeout(t);
+                    socketToAuthTimeout.delete(ws);
+                }
+            }
+            catch { }
+            socketUnauthViolations.delete(ws);
+            const authMessage = { type: 'authenticated', payload: { playerId: publicKey } };
+            ws.send(JSON.stringify(authMessage));
+            // Reconnect/restore: if there is a pending payment and SKIP_ENTRY_FEE is not enabled, resend it
+            const pending = pendingPaymentByPlayerId.get(publicKey);
+            if (pending) {
+                if (process.env.SKIP_ENTRY_FEE === 'true') {
+                    // Drop pending in dev skip mode and route to lobby directly
+                    pendingPaymentByPlayerId.delete(publicKey);
+                    const tier = expectedTierByPlayerId.get(publicKey);
+                    if (tier)
+                        await lobbyManager.joinLobby(publicKey, tier, 'practice');
+                }
+                else if (!paidPlayers.has(publicKey)) {
+                    (async () => {
+                        const { lamports, tier, paymentId } = pending;
+                        const { txBase64, recentBlockhash, prizePool } = await smartContractService.createEntryFeeTransactionBase64((new (await import('@solana/web3.js')).PublicKey(publicKey)), lamports);
+                        const entryFeeTxMessage = { type: 'entryFeeTx', payload: { txBase64, lamports, recentBlockhash, prizePool, entryFeeTier: tier, paymentId, sessionNonce: socketToNonce.get(ws)?.nonce } };
+                        ws.send(JSON.stringify(entryFeeTxMessage));
+                    })().catch(() => { });
+                }
+            }
+            else if (paidPlayers.has(publicKey)) {
+                // If already paid and game in progress with this player, resume immediately
+                const inProgress = gameWorld.gameState.status === 'in_progress' && !!gameWorld.gameState.players[publicKey];
+                if (inProgress) {
+                    const rules = [
+                        'Contrôles: pointez la souris pour diriger',
+                        'Votre voiture laisse une trace ~5s',
+                        'Collision avec une trace = élimination',
+                        'Dernier en vie gagne (85% du prize pool en tournoi)'
+                    ];
+                    const gameStarting = { type: 'gameStarting', payload: { countdown: 0, rules } };
+                    ws.send(JSON.stringify(gameStarting));
+                }
+                // If paid but not in a game, requeue into a lobby so they don't lose their ticket
+                const tier = expectedTierByPlayerId.get(publicKey) || 1;
+                await lobbyManager.joinLobby(publicKey, tier, 'tournament');
+            }
+            break;
+        }
+        case 'joinLobby': {
+            if (!take('join')) {
+                ws.send(JSON.stringify({ type: 'error', payload: { message: 'Rate limited (join)' } }));
+                return;
+            }
+            const playerId = socketToPlayerId.get(ws);
+            if (!playerId)
+                return;
+            log.info(`[LOBBY] joinLobby request from ${maskPk(playerId)}`);
+            log.debug(`[LOBBY] - mode: ${message.payload?.mode}`);
+            log.debug(`[LOBBY] - entryFeeTier: ${message.payload?.entryFeeTier}`);
+            log.debug(`[LOBBY] - SKIP_ENTRY_FEE: ${process.env.SKIP_ENTRY_FEE}`);
+            log.debug(`[LOBBY] - player already paid: ${paidPlayers.has(playerId)}`);
+            try {
+                const requestedMode = message.payload?.mode;
+                // Always allow practice mode without fee
+                if (requestedMode === 'practice') {
+                    pendingPaymentByPlayerId.delete(playerId);
+                    expectedLamportsByPlayerId.delete(playerId);
+                    await lobbyManager.joinLobby(playerId, message.payload.entryFeeTier, 'practice');
+                    break;
+                }
+                // If a round is already in progress and the player is part of it, ignore join and resume
+                if (gameWorld.gameState.status === 'in_progress' && gameWorld.gameState.players[playerId]) {
+                    const rules = [
+                        'Contrôles: pointez la souris pour diriger',
+                        'Votre voiture laisse une trace ~5s',
+                        'Collision avec une trace = élimination',
+                        'Dernier en vie gagne (85% du prize pool en tournoi)'
+                    ];
+                    const gameStarting = { type: 'gameStarting', payload: { countdown: 0, rules } };
+                    ws.send(JSON.stringify(gameStarting));
+                    break;
+                }
+                if (process.env.SKIP_ENTRY_FEE === 'true') {
+                    // Practice-like dev mode: no payment, bots allowed, treat as tournament UI but skip tx
+                    pendingPaymentByPlayerId.delete(playerId);
+                    expectedLamportsByPlayerId.delete(playerId);
+                    paidPlayers.add(playerId);
+                    await lobbyManager.joinLobby(playerId, message.payload.entryFeeTier, message.payload.mode ?? 'practice');
+                    break;
+                }
+                if (paidPlayers.has(playerId)) {
+                    log.info(`[LOBBY] Player ${maskPk(playerId)} already paid, joining lobby directly`);
+                    await lobbyManager.joinLobby(playerId, message.payload.entryFeeTier, message.payload.mode ?? 'tournament');
+                }
+                else if (pendingPaymentByPlayerId.has(playerId)) {
+                    log.info(`[LOBBY] Player ${maskPk(playerId)} has pending payment verification, ignoring duplicate join request`);
+                    // Payment verification in progress, ignore this request - player will auto-join after verification
+                }
+                else {
+                    // Create entry-fee transaction and send to client
+                    const tier = message.payload.entryFeeTier;
+                    const lamports = await smartContractService.getEntryFeeInLamports(tier);
+                    const solAmount = (lamports / 1_000_000_000).toFixed(6);
+                    log.info(`[PAYMENT] 💵 Entry fee for tier $${tier}: ${lamports} lamports (${solAmount} SOL)`);
+                    expectedLamportsByPlayerId.set(playerId, lamports);
+                    expectedTierByPlayerId.set(playerId, tier);
+                    const { txBase64, recentBlockhash, prizePool } = await smartContractService.createEntryFeeTransactionBase64((new (await import('@solana/web3.js')).PublicKey(playerId)), lamports);
+                    const paymentId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+                    pendingPaymentByPlayerId.set(playerId, { paymentId, createdAt: Date.now(), lamports, tier });
+                    const entryFeeTxMessage = { type: 'entryFeeTx', payload: { txBase64, lamports, recentBlockhash, prizePool, entryFeeTier: tier, paymentId, sessionNonce: socketToNonce.get(ws)?.nonce } };
+                    ws.send(JSON.stringify(entryFeeTxMessage));
+                }
+            }
+            catch (e) {
+                ws.send(JSON.stringify({ type: 'error', payload: { message: `Entry fee init failed: ${e?.message || e}` } }));
+            }
+            break;
+        }
+        case 'entryFeeSignature': {
+            if (!take('tx')) {
+                ws.send(JSON.stringify({ type: 'error', payload: { message: 'Rate limited (tx)' } }));
+                return;
+            }
+            const playerId = socketToPlayerId.get(ws);
+            if (!playerId)
+                return;
+            log.info(`[PAYMENT] 📝 Received entryFeeSignature from ${maskPk(playerId)}`);
+            log.debug(`[PAYMENT] - signature: ${message.payload.signature?.slice(0, 20)}...`);
+            log.debug(`[PAYMENT] - paymentId: ${message.payload.paymentId}`);
+            log.debug(`[PAYMENT] - sessionNonce: ${message.payload.sessionNonce}`);
+            log.debug(`[PAYMENT] - player in paidPlayers: ${paidPlayers.has(playerId)}`);
+            log.debug(`[PAYMENT] - pending payment exists: ${pendingPaymentByPlayerId.has(playerId)}`);
+            log.debug(`[PAYMENT] - expected lamports: ${expectedLamportsByPlayerId.get(playerId)}`);
+            log.debug(`[PAYMENT] Starting verification...`);
+            const playerPk = new (await import('@solana/web3.js')).PublicKey(playerId);
+            const expectedLamports = expectedLamportsByPlayerId.get(playerId);
+            const pending = pendingPaymentByPlayerId.get(playerId);
+            if (pending && usedPaymentIds.has(pending.paymentId)) {
+                ws.send(JSON.stringify({ type: 'error', payload: { message: 'Payment already used' } }));
+                return;
+            }
+            const signature = message.payload.signature;
+            const providedPaymentId = message.payload.paymentId;
+            const providedNonce = message.payload.sessionNonce;
+            const sessionNonceObj = socketToNonce.get(ws);
+            const sessionNonce = sessionNonceObj?.nonce;
+            if (!pending || !providedPaymentId || pending.paymentId !== providedPaymentId || (providedNonce && providedNonce !== sessionNonce)) {
+                ws.send(JSON.stringify({ type: 'error', payload: { message: 'Invalid payment context' } }));
+                return;
+            }
+            console.log(`[PAYMENT] 🔍 Starting verification for signature: ${signature}`);
+            console.log(`[PAYMENT] Expected lamports: ${expectedLamports}`);
+            console.log(`[PAYMENT] Player: ${maskPk(playerId)}`);
+            console.log(`[PAYMENT] Solscan: https://solscan.io/tx/${signature}`);
+            // Retry verification to allow confirmation on-chain
+            let attempts = 0;
+            let verified = false;
+            let lastErr = null;
+            let errorReason = undefined;
+            if (expectedLamports) {
+                while (attempts < 40 && !verified) { // up to ~60s (increased from 20 to 40 attempts)
+                    try {
+                        const res = await smartContractService.verifyEntryFee(signature, expectedLamports);
+                        verified = res.ok;
+                        if (verified) {
+                            console.log(`[PAYMENT] ✅ Verification succeeded on attempt ${attempts + 1}`);
+                            break;
+                        }
+                        // If transaction explicitly failed (not just not found yet)
+                        if (res.error) {
+                            console.log(`[PAYMENT] ❌ Transaction failed: ${res.error}`);
+                            errorReason = res.error;
+                            break; // Don't keep retrying if transaction failed
+                        }
+                    }
+                    catch (e) {
+                        lastErr = e;
+                        if (attempts % 10 === 0) {
+                            console.log(`[PAYMENT] Attempt ${attempts}: Not found yet...`);
+                        }
+                    }
+                    await new Promise(r => setTimeout(r, 1500));
+                    attempts++;
+                }
+            }
+            const timedOut = attempts >= 40 && !errorReason;
+            log.info(`[PAYMENT] 🔍 Verification complete after ${attempts} attempts: verified=${verified}, timedOut=${timedOut}, error=${errorReason}`);
+            const reason = errorReason || (timedOut ? 'Timeout waiting for confirmation' : 'Payment not found');
+            const resp = { type: 'entryFeeVerified', payload: { ok: verified, reason: verified ? undefined : reason } };
+            ws.send(JSON.stringify(resp));
+            if (verified) {
+                log.info(`[PAYMENT] ✅ Adding player ${maskPk(playerId)} to paidPlayers set`);
+                paidPlayers.add(playerId);
+                if (pending) {
+                    usedPaymentIds.add(pending.paymentId);
+                    pendingPaymentByPlayerId.delete(playerId);
+                }
+                const tier = expectedTierByPlayerId.get(playerId);
+                if (tier) {
+                    log.info(`[PAYMENT] 🎯 Auto-joining player ${maskPk(playerId)} to lobby (tier=${tier})`);
+                    await lobbyManager.joinLobby(playerId, tier);
+                }
+                // DON'T delete expectedLamportsByPlayerId - needed for refunds!
+                // expectedLamportsByPlayerId.delete(playerId);
+                expectedTierByPlayerId.delete(playerId);
+            }
+            else {
+                // Payment failed - kick player out
+                log.warn(`[PAYMENT] ❌ Payment verification failed for ${maskPk(playerId)} - disconnecting`);
+                expectedLamportsByPlayerId.delete(playerId);
+                expectedTierByPlayerId.delete(playerId);
+                pendingPaymentByPlayerId.delete(playerId);
+                // Give client 2 seconds to show the error message, then disconnect
+                setTimeout(() => {
+                    try {
+                        ws.close(1008, 'Payment verification failed');
+                    }
+                    catch (e) {
+                        log.error('[PAYMENT] Error closing socket:', e);
+                    }
+                }, 2000);
+            }
+            break;
+        }
+        case 'playerInput': {
+            if (!take('input'))
+                return;
+            const playerId = socketToPlayerId.get(ws);
+            if (!playerId)
+                return;
+            // Clamp bursts: accept at most one input per 40ms (~25/s) in addition to token bucket
+            const now = Date.now();
+            const last = socketRate.lastInputAt?.get?.(ws);
+            if (!socketRate.lastInputAt)
+                socketRate.lastInputAt = new Map();
+            if (!last || (now - last) >= 40) {
+                socketRate.lastInputAt.set(ws, now);
+                gameWorld.handlePlayerInput(playerId, message.payload);
+            }
+            break;
+        }
+        case 'leaveLobby': {
+            const playerId = socketToPlayerId.get(ws);
+            if (!playerId)
+                return;
+            lobbyManager.leaveLobby(playerId);
+            break;
+        }
+        default:
+            log.warn(`⚠️ Unknown message type`, message.type);
+    }
+}
+// =================================================================================================
+// Broadcasting
+// =================================================================================================
+function broadcastToLobby(lobby, message) {
+    const messageString = JSON.stringify(message);
+    lobby.players.forEach(playerId => {
+        const ws = playerIdToSocket.get(playerId);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(messageString);
+        }
+    });
+}
+function safeSend(ws, data, kind) {
+    try {
+        const buffered = ws.bufferedAmount || 0;
+        if (buffered > BACKPRESSURE_MAX_BUFFERED) {
+            const strikes = (socketSlowStrikes.get(ws) || 0) + 1;
+            socketSlowStrikes.set(ws, strikes);
+            if (kind === 'game')
+                socketPendingState.set(ws, data); // coalesce latest game state
+            if (strikes >= SLOW_CONSUMER_STRIKES_MAX) {
+                try {
+                    ws.close(4004, 'Slow consumer');
+                }
+                catch { }
+            }
+            return;
+        }
+        ws.send(data);
+    }
+    catch { }
+}
+function broadcastGameState() {
+    const gameState = gameWorld.gameState;
+    const message = {
+        type: 'gameStateUpdate',
+        payload: {
+            timestamp: Date.now(),
+            players: Object.values(gameState.players).map((p) => ({
+                id: p.id,
+                sperm: p.sperm,
+                isAlive: p.isAlive,
+                trail: p.trail,
+                status: p.status,
+            })),
+            world: gameState.world,
+            aliveCount: Object.values(gameState.players).filter((p) => p.isAlive).length,
+        },
+    };
+    const messageString = JSON.stringify(message);
+    // Broadcast only to players who are actually in the game round (with backpressure)
+    Object.keys(gameState.players).forEach((playerId) => {
+        const ws = playerIdToSocket.get(playerId);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            safeSend(ws, messageString, 'game');
+        }
+    });
+}
+setInterval(broadcastGameState, BROADCAST_INTERVAL);
+function broadcastToAll(message) {
+    const str = JSON.stringify(message);
+    playerIdToSocket.forEach(ws => {
+        if (ws.readyState === WebSocket.OPEN)
+            safeSend(ws, str, 'generic');
+    });
+}
+// =================================================================================================
+// Global error handling
+// =================================================================================================
+process.on('unhandledRejection', (reason) => {
+    try {
+        log.error('UnhandledPromiseRejection', typeof reason === 'object' ? (reason?.stack || reason) : String(reason));
+    }
+    catch { }
+});
+process.on('uncaughtException', (err) => {
+    try {
+        log.error('UncaughtException', err?.stack || err);
+    }
+    catch { }
+});
+// =================================================================================================
+// WebSocket Keepalive (Ping/Pong)
+// =================================================================================================
+const HEARTBEAT_INTERVAL_MS = 30_000;
+const CLIENT_GRACE_MS = 45_000;
+const wsHeartbeat = new Map();
+function setupHeartbeat(ws) {
+    ws.isAlive = true;
+    wsHeartbeat.set(ws, { lastPing: 0, lastPong: Date.now(), latencyMs: 0 });
+    ws.on('pong', () => {
+        const hb = wsHeartbeat.get(ws);
+        const now = Date.now();
+        if (hb) {
+            hb.lastPong = now;
+            if (hb.lastPing)
+                hb.latencyMs = now - hb.lastPing;
+        }
+        ws.isAlive = true;
+    });
+}
+const pingTimer = setInterval(() => {
+    try {
+        wss.clients.forEach((ws) => {
+            const hb = wsHeartbeat.get(ws);
+            const now = Date.now();
+            if (hb && (now - hb.lastPong) > CLIENT_GRACE_MS) {
+                try {
+                    ws.terminate();
+                }
+                catch { }
+                wsHeartbeat.delete(ws);
+                return;
+            }
+            if (ws.readyState === WebSocket.OPEN) {
+                if (hb)
+                    hb.lastPing = Date.now();
+                ws.isAlive = false;
+                try {
+                    ws.ping();
+                }
+                catch { }
+                // Attempt to flush coalesced state if buffer has drained sufficiently
+                try {
+                    const buffered = ws.bufferedAmount || 0;
+                    if (buffered < BACKPRESSURE_MAX_BUFFERED / 2) {
+                        const pending = socketPendingState.get(ws);
+                        if (pending) {
+                            ws.send(pending);
+                            socketPendingState.delete(ws);
+                            const s = (socketSlowStrikes.get(ws) || 0);
+                            if (s > 0)
+                                socketSlowStrikes.set(ws, s - 1);
+                        }
+                    }
+                }
+                catch { }
+            }
+        });
+    }
+    catch { }
+}, HEARTBEAT_INTERVAL_MS);
+wss.on('close', () => { try {
+    clearInterval(pingTimer);
+}
+catch { } });
