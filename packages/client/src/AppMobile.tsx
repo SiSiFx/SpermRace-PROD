@@ -651,40 +651,72 @@ function Landing({
 
         <footer
           style={{
+            width: '100%',
+            maxWidth: '400px',
+            marginTop: '32px',
             display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginTop: 4,
-            gap: 12,
-            fontSize: 11,
-            color: 'rgba(148,163,184,0.85)',
+            justifyContent: 'center',
+            gap: '16px',
+            flexWrap: 'wrap',
           }}
         >
-          <div style={{ display: 'flex', gap: 8 }}>
+          {onLeaderboard && (
             <button
               type="button"
-              className="mobile-btn-secondary"
-              style={{ padding: '4px 8px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em' }}
-              onClick={onPractice}
+              onClick={onLeaderboard}
+              style={{
+                flex: '1',
+                minWidth: '140px',
+                padding: '14px 24px',
+                background: 'rgba(0, 245, 255, 0.12)',
+                border: '1px solid rgba(0, 245, 255, 0.4)',
+                borderRadius: '12px',
+                color: 'rgba(0, 245, 255, 0.95)',
+                fontSize: '14px',
+                fontWeight: '700',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+              onTouchStart={(e) => {
+                e.currentTarget.style.background = 'rgba(0, 245, 255, 0.18)';
+                e.currentTarget.style.transform = 'scale(0.98)';
+              }}
+              onTouchEnd={(e) => {
+                e.currentTarget.style.background = 'rgba(0, 245, 255, 0.12)';
+                e.currentTarget.style.transform = 'scale(1)';
+              }}
             >
-              Practice
+              Ranks
             </button>
-            {onLeaderboard && (
-              <button
-                type="button"
-                className="mobile-btn-secondary"
-                style={{ padding: '4px 8px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em' }}
-                onClick={onLeaderboard}
-              >
-                Leaderboard
-              </button>
-            )}
-          </div>
+          )}
           <button
             type="button"
-            className="mobile-btn-secondary"
-            style={{ padding: '4px 8px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em' }}
             onClick={onWallet}
+            style={{
+              flex: '1',
+              minWidth: '140px',
+              padding: '14px 24px',
+              background: 'rgba(0, 245, 255, 0.12)',
+              border: '1px solid rgba(0, 245, 255, 0.4)',
+              borderRadius: '12px',
+              color: 'rgba(0, 245, 255, 0.95)',
+              fontSize: '14px',
+              fontWeight: '700',
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+            onTouchStart={(e) => {
+              e.currentTarget.style.background = 'rgba(0, 245, 255, 0.18)';
+              e.currentTarget.style.transform = 'scale(0.98)';
+            }}
+            onTouchEnd={(e) => {
+              e.currentTarget.style.background = 'rgba(0, 245, 255, 0.12)';
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
           >
             Wallet
           </button>
