@@ -453,38 +453,18 @@ function HeaderWallet({
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         {isLanding && (
           <>
-            <button 
+            <button
+              className="btn-secondary"
               onClick={onTournament}
-              style={{
-                padding: '6px 12px',
-                background: 'none',
-                border: '1px solid rgba(255,255,255,0.2)',
-                borderRadius: 4,
-                color: 'rgba(255,255,255,0.8)',
-                fontSize: 11,
-                fontWeight: 600,
-                letterSpacing: '0.1em',
-                cursor: 'pointer',
-              }}
             >
-              PLAY
+              Play
             </button>
             {onLeaderboard && (
-              <button 
+              <button
+                className="btn-secondary"
                 onClick={onLeaderboard}
-                style={{
-                  padding: '6px 12px',
-                  background: 'none',
-                  border: '1px solid rgba(255,255,255,0.2)',
-                  borderRadius: 4,
-                  color: 'rgba(255,255,255,0.8)',
-                  fontSize: 11,
-                  fontWeight: 600,
-                  letterSpacing: '0.1em',
-                  cursor: 'pointer',
-                }}
               >
-                RANKS
+                Ranks
               </button>
             )}
           </>
@@ -659,24 +639,24 @@ function Landing({
               flexWrap: 'wrap',
             }}
           >
+            {/* Primary: Tournament */}
             <button
               type="button"
-              className="cta-primary"
-              style={{ minWidth: 280, position: 'relative', fontSize: 14, padding: '16px 36px' }}
+              className="btn-primary pc-btn-large"
               onClick={() => onTournament?.()}
+              style={{ minWidth: 320 }}
             >
-              <span className="cta-text">Enter Tournament</span>
-              <div className="cta-glow" />
+              Enter Tournament
             </button>
 
+            {/* Secondary: Practice */}
             <button
               type="button"
-              className="cta-primary"
-              style={{ minWidth: 280, position: 'relative', fontSize: 14, padding: '16px 36px' }}
+              className="btn-secondary pc-btn-large pc-btn-secondary"
               onClick={onPractice}
+              style={{ minWidth: 280 }}
             >
-              <span className="cta-text">Practice Mode (Free)</span>
-              <div className="cta-glow" />
+              Practice Mode (Free)
             </button>
           </section>
 

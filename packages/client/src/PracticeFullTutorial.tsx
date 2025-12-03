@@ -123,7 +123,7 @@ export function PracticeFullTutorial({ visible, onDone }: PracticeFullTutorialPr
             gap: 8,
           }}
         >
-          <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 }}>Race starts in</span>
+          <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 }}>RACE STARTS IN</span>
           <span
             style={{
               fontSize: 18,

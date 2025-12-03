@@ -5,6 +5,24 @@ import { useWs } from './WsProvider';
 import { HudManager } from './HudManager';
 import { logger } from './utils/logger';
 
+// Guard against rare Pixi transform null refs by short-circuiting container updates
+// when the internal transform object has been destroyed but the display object
+// is still referenced in the scene graph.
+(function patchPixiTransformGuard() {
+  try {
+    const proto: any = (PIXI as any)?.Container?.prototype;
+    if (!proto || proto.__srGuardPatched) return;
+    const orig = proto.updateLocalTransform;
+    if (typeof orig !== 'function') return;
+    proto.updateLocalTransform = function (...args: any[]) {
+      const t = (this as any).transform as any;
+      if (!t || !t.position) return;
+      return orig.apply(this, args);
+    };
+    proto.__srGuardPatched = true;
+  } catch {}
+})();
+
 interface Car {
   x: number;
   y: number;
@@ -3649,10 +3667,16 @@ class SpermRaceGame {
     }
 
     // Ensure all visual parts are removed/destroyed to avoid lingering head/tail
-    try { if (car.headGraphics) { car.headGraphics.destroy(); car.headGraphics = undefined; } } catch {}
-    try { if (car.tailGraphics) { car.tailGraphics.destroy(); car.tailGraphics = null; } } catch {}
-    try { if ((car.sprite as any)?.parent) { (car.sprite as any).parent.removeChild(car.sprite); } } catch {}
-    try { (car.sprite as any)?.destroy?.({ children: false }); } catch {}
+    try {
+      if ((car.sprite as any)?.parent) {
+        (car.sprite as any).parent.removeChild(car.sprite);
+      }
+      // Destroy sprite and all its children in one pass to avoid leaving destroyed
+      // PIXI objects in the display tree (which can cause null transform errors).
+      (car.sprite as any)?.destroy?.({ children: true });
+    } catch {}
+    car.headGraphics = undefined;
+    car.tailGraphics = null;
     try { const np = (car as any).nameplate as HTMLDivElement | undefined; if (np && np.parentElement) np.parentElement.removeChild(np); (car as any).nameplate = undefined; } catch {}
 
     // Battle Royale: No respawning, permanent elimination

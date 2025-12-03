@@ -48,9 +48,9 @@ const fs = require('fs');
     const page = await context.newPage();
 
     try {
-      // Go to production site
-      console.log(`  → Loading https://spermrace.io`);
-      await page.goto('https://spermrace.io', {
+      // Go to localhost dev site
+      console.log(`  → Loading http://localhost:5174`);
+      await page.goto('http://localhost:5174', {
         waitUntil: 'networkidle',
         timeout: 30000
       });

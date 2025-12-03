@@ -534,6 +534,7 @@ function Landing({
             {/* Primary CTA - Tournament */}
             <button
               type="button"
+              className="btn-primary"
               onClick={() => {
                 if (onShowLoading && onTournament) {
                   onShowLoading(onTournament);
@@ -543,21 +544,12 @@ function Landing({
               }}
               style={{
                 width: '100%',
-                padding: '18px 24px',
-                background: 'linear-gradient(135deg, #00f5ff 0%, #00d4ff 100%)',
-                border: 'none',
-                borderRadius: '16px',
-                color: '#000',
-                fontSize: '18px',
-                fontWeight: '800',
-                letterSpacing: '0.02em',
-                cursor: 'pointer',
+                maxWidth: '400px',
+                padding: '18px 28px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '12px',
-                boxShadow: '0 8px 24px rgba(0, 245, 255, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1) inset',
-                transition: 'all 0.2s ease',
                 position: 'relative',
                 overflow: 'hidden',
               }}
@@ -575,6 +567,7 @@ function Landing({
             {/* Secondary CTA - Practice */}
             <button
               type="button"
+              className="btn-secondary"
               onClick={() => {
                 if (onShowLoading) {
                   onShowLoading(onPractice);
@@ -584,29 +577,18 @@ function Landing({
               }}
               style={{
                 width: '100%',
-                padding: '16px 24px',
-                background: 'rgba(0, 245, 255, 0.08)',
-                border: '2px solid rgba(0, 245, 255, 0.3)',
-                borderRadius: '16px',
-                color: '#00f5ff',
-                fontSize: '16px',
-                fontWeight: '700',
-                letterSpacing: '0.02em',
-                cursor: 'pointer',
+                maxWidth: '400px',
+                padding: '14px 24px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '10px',
-                boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)',
-                transition: 'all 0.2s ease',
               }}
               onTouchStart={(e) => {
                 e.currentTarget.style.transform = 'scale(0.98)';
-                e.currentTarget.style.background = 'rgba(0, 245, 255, 0.12)';
               }}
               onTouchEnd={(e) => {
                 e.currentTarget.style.transform = 'scale(1)';
-                e.currentTarget.style.background = 'rgba(0, 245, 255, 0.08)';
               }}
             >
               <GameController size={20} weight="fill" />
@@ -663,28 +645,17 @@ function Landing({
           {onLeaderboard && (
             <button
               type="button"
+              className="btn-secondary"
               onClick={onLeaderboard}
               style={{
                 flex: '1',
                 minWidth: '140px',
-                padding: '14px 24px',
-                background: 'rgba(0, 245, 255, 0.12)',
-                border: '1px solid rgba(0, 245, 255, 0.4)',
-                borderRadius: '12px',
-                color: 'rgba(0, 245, 255, 0.95)',
-                fontSize: '14px',
-                fontWeight: '700',
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
+                padding: '12px 20px',
               }}
               onTouchStart={(e) => {
-                e.currentTarget.style.background = 'rgba(0, 245, 255, 0.18)';
                 e.currentTarget.style.transform = 'scale(0.98)';
               }}
               onTouchEnd={(e) => {
-                e.currentTarget.style.background = 'rgba(0, 245, 255, 0.12)';
                 e.currentTarget.style.transform = 'scale(1)';
               }}
             >
@@ -693,28 +664,17 @@ function Landing({
           )}
           <button
             type="button"
+            className="btn-secondary"
             onClick={onWallet}
             style={{
               flex: '1',
               minWidth: '140px',
-              padding: '14px 24px',
-              background: 'rgba(0, 245, 255, 0.12)',
-              border: '1px solid rgba(0, 245, 255, 0.4)',
-              borderRadius: '12px',
-              color: 'rgba(0, 245, 255, 0.95)',
-              fontSize: '14px',
-              fontWeight: '700',
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
+              padding: '12px 20px',
             }}
             onTouchStart={(e) => {
-              e.currentTarget.style.background = 'rgba(0, 245, 255, 0.18)';
               e.currentTarget.style.transform = 'scale(0.98)';
             }}
             onTouchEnd={(e) => {
-              e.currentTarget.style.background = 'rgba(0, 245, 255, 0.12)';
               e.currentTarget.style.transform = 'scale(1)';
             }}
           >
