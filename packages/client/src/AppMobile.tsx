@@ -76,6 +76,7 @@ export default function AppMobile() {
 
 function AppInner() {
   const [screen, setScreen] = useState<AppScreen>('landing');
+  const [walletReturnScreen, setWalletReturnScreen] = useState<AppScreen>('landing');
   const [solPrice, setSolPrice] = useState<number | null>(null);
   const { state: wsState, signAuthentication, leave } = useWs() as any;
   const [toast, setToast] = useState<string | null>(null);
@@ -148,7 +149,10 @@ function AppInner() {
 
   const onPractice = () => setScreen('practice');
   const onTournament = () => setScreen('tournament');
-  const onWallet = () => setScreen('wallet');
+  const onWallet = () => {
+    setWalletReturnScreen(screen);
+    setScreen('wallet');
+  };
 
   useEffect(() => {
     if (wsState.phase === 'lobby') setScreen('lobby');
@@ -173,12 +177,12 @@ function AppInner() {
         // Handle back with our screen logic
         if (screen === 'tournament') setScreen('landing');
         else if (screen === 'practice') setScreen('landing');
-        else if (screen === 'wallet') setScreen('tournament');
+        else if (screen === 'wallet') setScreen(walletReturnScreen);
       }
     };
     window.addEventListener('popstate', preventBack);
     return () => window.removeEventListener('popstate', preventBack);
-  }, [screen]);
+  }, [screen, walletReturnScreen]);
 
   return (
     <div id="app-root" className="mobile-optimized">
@@ -275,10 +279,17 @@ function AppInner() {
         </Suspense>
       )}
       {screen === 'tournament' && (
-        <TournamentModesScreen onSelect={() => setScreen('wallet')} onClose={() => setScreen('landing')} onNotify={showToast} />
+        <TournamentModesScreen
+          onSelect={() => {
+            setWalletReturnScreen('tournament');
+            setScreen('wallet');
+          }}
+          onClose={() => setScreen('landing')}
+          onNotify={showToast}
+        />
       )}
       {screen === 'wallet' && (
-        <Wallet onConnected={() => setScreen('lobby')} onClose={() => setScreen('tournament')} />
+        <Wallet onConnected={() => setScreen('lobby')} onClose={() => setScreen(walletReturnScreen)} />
       )}
       {screen === 'lobby' && (
         <Lobby 
