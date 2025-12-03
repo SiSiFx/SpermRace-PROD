@@ -1574,88 +1574,32 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
         
         {/* Solscan Link */}
         {solscan && (
-          <a href={solscan} target="_blank" rel="noreferrer" style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 8,
-            padding: '12px 20px',
-            background: 'rgba(0,245,255,0.1)',
-            border: '1px solid rgba(0,245,255,0.3)',
-            borderRadius: 12,
-            color: '#00f5ff',
-            fontSize: 14,
-            fontWeight: 600,
-            textDecoration: 'none',
-            transition: 'all 0.2s',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'rgba(0,245,255,0.15)';
-            e.currentTarget.style.borderColor = 'rgba(0,245,255,0.5)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'rgba(0,245,255,0.1)';
-            e.currentTarget.style.borderColor = 'rgba(0,245,255,0.3)';
-          }}>
+          <a
+            href={solscan}
+            target="_blank"
+            rel="noreferrer"
+            className="mobile-solscan-btn"
+          >
             <LinkSimple size={18} weight="bold" />
             <span>View Transaction on Solscan</span>
           </a>
         )}
-        
+
         {/* Action Buttons */}
-        <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+        <div className="mobile-result-actions">
           <button
             onClick={onPlayAgain}
-            style={{
-              flex: 1,
-              padding: '16px 24px',
-              background: 'linear-gradient(135deg, #00f5ff, #00ff88)',
-              border: 'none',
-              borderRadius: 12,
-              color: '#000',
-              fontSize: 16,
-              fontWeight: 800,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-              boxShadow: '0 8px 24px rgba(0,245,255,0.3)',
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,245,255,0.4)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,245,255,0.3)';
-            }}
+            className="mobile-btn-primary"
           >
             <ArrowClockwise size={20} weight="bold" />
-            <span>PLAY AGAIN</span>
+            <span>Play Again</span>
           </button>
           <button
             onClick={onChangeTier}
-            style={{
-              padding: '16px 24px',
-              background: 'rgba(255,255,255,0.05)',
-              border: '1px solid rgba(255,255,255,0.15)',
-              borderRadius: 12,
-              color: '#fff',
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
-            }}
+            className="mobile-btn-secondary"
           >
             <House size={20} weight="fill" />
+            <span>Menu</span>
           </button>
         </div>
       </div>
