@@ -690,6 +690,12 @@ class SpermRaceGame {
       (this.app as any)?.stage?.addChild?.(this.borderOverlay);
     } catch {}
 
+    // Initialize ParticleSystem module
+    this.particleSystem = new ParticleSystem({
+      worldContainer: this.worldContainer,
+      maxPoolSize: 100,
+    });
+
     // Visibility handling: pause ticker when tab hidden to save CPU and avoid desync stutters
     const onVis = () => {
       try {
@@ -3604,62 +3610,20 @@ class SpermRaceGame {
   }
 
   createExplosion(x: number, y: number, color: number) {
-    const isMobile = isMobileDevice();
-    const particleCount = isMobile ? 15 : 30; // Fewer particles on mobile
-    for (let i = 0; i < particleCount; i++) {
-      const angle = (Math.PI * 2 / particleCount) * i + (Math.random() - 0.5) * 0.3;
-      const speed = 150 + Math.random() * 200; // Faster explosion
-      
-      // Bright explosion colors (mix victim color with bright white/yellow)
-      const explosionColors = [0xFFFFFF, 0xFFFF00, 0xFF6600, color];
-      const particleColor = explosionColors[Math.floor(Math.random() * explosionColors.length)];
-      
-      const particle: Particle = {
-        x: x,
-        y: y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        life: 1.2, // Longer lifetime
-        color: particleColor,
-        graphics: new PIXI.Graphics()
-      };
-      
-      // Bigger particles (5-8px radius)
-      const size = 5 + Math.random() * 3;
-      particle.graphics.circle(0, 0, size).fill(particleColor);
-      particle.graphics.x = x;
-      particle.graphics.y = y;
-      
-      this.worldContainer.addChild(particle.graphics);
-      this.particles.push(particle);
-    }
-
-    // Add screen shake on explosion
-    try {
-      this.camera.shakeX = 6;
-      this.camera.shakeY = 6;
-    } catch {
-      this.camera.shakeX = 6;
-      this.camera.shakeY = 6;
+    // Use ParticleSystem module for explosions
+    if (this.particleSystem) {
+      this.particleSystem.createExplosion(x, y, color, () => {
+        // Screen shake callback
+        this.camera.shakeX = 6;
+        this.camera.shakeY = 6;
+      });
     }
   }
 
   updateParticles(deltaTime: number) {
-    for (let i = this.particles.length - 1; i >= 0; i--) {
-      const particle = this.particles[i];
-      
-      particle.x += particle.vx * deltaTime;
-      particle.y += particle.vy * deltaTime;
-      particle.life -= deltaTime * 2;
-      
-      particle.graphics.x = particle.x;
-      particle.graphics.y = particle.y;
-      particle.graphics.alpha = Math.max(0, particle.life);
-      
-      if (particle.life <= 0) {
-        this.worldContainer.removeChild(particle.graphics);
-        this.particles.splice(i, 1);
-      }
+    // Use ParticleSystem module for particle updates
+    if (this.particleSystem) {
+      this.particleSystem.update(deltaTime);
     }
   }
 
@@ -5263,6 +5227,10 @@ class SpermRaceGame {
             logger.warn('Error detaching canvas:', error);
           }
 
+          // Destroy game modules
+          try { this.particleSystem?.destroy?.(); } catch {}
+          try { this.inputHandler?.destroy?.(); } catch {}
+          
           // Destroy containers if present
           try { this.worldContainer?.destroy?.({ children: true }); } catch {}
           try { this.trailContainer?.destroy?.({ children: true }); } catch {}
