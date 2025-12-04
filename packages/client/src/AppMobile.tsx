@@ -4,7 +4,6 @@ import { MobileTouchControls } from './MobileTouchControls';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { AnimatedCounter } from './components/AnimatedCounter';
 import { SpermLoadingAnimation } from './components/SpermLoadingAnimation';
-import * as Sentry from '@sentry/react';
 
 // Lazy load heavy components
 const MobileTutorial = lazy(() => import('./MobileTutorial'));
@@ -47,9 +46,6 @@ const NewGameView = lazy(() => import('./NewGameView'));
 const Leaderboard = lazy(() => import('./Leaderboard').then(module => ({ default: module.Leaderboard })));
 const HowToPlayOverlay = lazy(() => import('./HowToPlayOverlay'));
 import {
-  CrownSimple,
-  Lightning,
-  Diamond,
   WarningCircle,
   GameController,
   Trophy,
@@ -85,12 +81,6 @@ function AppInner() {
   const showToast = (msg: string, duration = 2000) => {
     setToast(msg);
     window.setTimeout(() => setToast(null), duration);
-  };
-
-  // Screen transition with loading animation
-  const transitionToScreen = (newScreen: AppScreen) => {
-    setPendingScreen(newScreen);
-    setShowSpermLoading(true);
   };
 
   const handleLoadingComplete = () => {
@@ -408,7 +398,6 @@ function Landing({
         style={{
           maxWidth: 960,
           margin: '0 auto',
-          minHeight: '100vh',
           minHeight: '100dvh',
           padding: '0 20px',
           paddingBottom: 'max(40px, env(safe-area-inset-bottom))',
@@ -509,19 +498,19 @@ function Landing({
                 }}
               >
                 <div className="mobile-stat">
-                  <div className="label">Games</div>
+                  <div className="label">Practice Games</div>
                   <div className="value">
                     <AnimatedCounter value={totalGames} duration={1000} />
                   </div>
                 </div>
                 <div className="mobile-stat">
-                  <div className="label">Win%</div>
+                  <div className="label">Practice Win%</div>
                   <div className="value">
                     <AnimatedCounter value={parseFloat(winRate)} duration={1200} decimals={1} suffix="%" />
                   </div>
                 </div>
                 <div className="mobile-stat">
-                  <div className="label">Kills</div>
+                  <div className="label">Practice Kills</div>
                   <div className="value">
                     <AnimatedCounter value={totalKills} duration={1400} />
                   </div>
@@ -846,7 +835,6 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
   const { publicKey, connect } = useWallet();
   const { connectAndJoin, state: wsState } = useWs();
   const [isJoining, setIsJoining] = useState<boolean>(false);
-  const [preflight, setPreflight] = useState<{ address: string | null; sol: number | null; configured: boolean } | null>(null);
   const [preflightError, setPreflightError] = useState<boolean>(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   
@@ -856,7 +844,6 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
         const r = await fetch(`${API_BASE}/prize-preflight`);
         if (!r.ok) throw new Error(`preflight ${r.status}`);
         const j = await r.json();
-        setPreflight(j);
         setPreflightError(!j?.configured || !j?.address || j?.sol == null);
       } catch {
         setPreflightError(true);
@@ -1260,30 +1247,8 @@ function Lobby({ onStart: _onStart, onBack, onRefund }: { onStart: () => void; o
   );
 }
 
-import { GameEffects } from './GameEffects'; // Import type for ref if needed, though NewGameView handles instantiation
-
-// ... inside Game component ...
-
 function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void; }) {
   const [gameCountdown, setGameCountdown] = useState<number>(6); // 6 seconds to match game engine preStart
-  const { state } = useWs();
-  const meId = state.playerId;
-  
-  // Effect to listen for high-impact events from server state and trigger haptics via GameEffects
-  // Note: Since GameEffects is inside NewGameView (pixi context), we can't easily call its methods directly here.
-  // BUT, NewGameView is responsible for rendering. 
-  // Actually, GameEffects is instantiated inside NewGameView. 
-  // Let's dispatch a custom event that GameEffects (inside NewGameView) can listen to, OR
-  // simpler: handle haptics right here if we want, but GameEffects has the visual context.
-  
-  // Better approach: NewGameView already instantiates GameEffects. We should let NewGameView handle
-  // the "business logic to visual/haptic" bridge.
-  // However, for *global* haptics like impacts, we can add a listener here if needed,
-  // but NewGameView is the authority on the game loop.
-  
-  // Let's stick to passing props/callbacks if we need to bridge, but `NewGameView` 
-  // is likely where the update loop is. Let's check NewGameView...
-  // NewGameView receives `wsState`. It can detect collisions/kills and trigger GameEffects.
   
   useEffect(() => {
     const timer = setInterval(() => {

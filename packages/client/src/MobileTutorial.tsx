@@ -9,9 +9,9 @@ interface MobileTutorialProps {
 }
 
 const PRESTART_TIPS: string[] = [
-  'Your trail kills on contact – even you after a short spawn grace.',
-  'Stay inside the shrinking safe zone as the walls close in.',
-  'Grab glowing energy orbs to refill boost and keep dashing.',
+	'Your trail kills on contact – but your own tail is safe.',
+	'Stay inside the shrinking safe zone as the walls close in.',
+	'Grab glowing energy orbs to refill boost and keep dashing.',
 ];
 
 export function MobileTutorial({ countdown, onComplete, context = 'tournament' }: MobileTutorialProps) {

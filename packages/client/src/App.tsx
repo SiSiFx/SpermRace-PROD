@@ -31,7 +31,7 @@ const SOLANA_CLUSTER: 'devnet' | 'mainnet' = (() => {
 import { WalletProvider, useWallet } from './WalletProvider';
 import { WsProvider, useWs } from './WsProvider';
 import NewGameView from './NewGameView';
-import HowToPlayOverlay from './HowToPlayOverlay';
+import { Leaderboard } from './Leaderboard';
 import { WarningCircle, CreditCard, LinkSimple } from 'phosphor-react';
 import { Modes } from './components/Modes';
 import './leaderboard.css';

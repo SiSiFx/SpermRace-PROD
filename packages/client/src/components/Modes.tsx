@@ -96,6 +96,7 @@ function Modes({ exposeJoin }: ModesProps = {}) {
   const [preflight, setPreflight] = useState<PrizePreflight>(null);
   const [preflightError, setPreflightError] = useState(false);
   const [cardsVisible, setCardsVisible] = useState(false);
+  const isMobile = window.innerWidth <= 768;
 
   useEffect(() => {
     let cancelled = false;

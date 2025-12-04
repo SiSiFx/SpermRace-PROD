@@ -33,7 +33,7 @@ const SOLANA_CLUSTER: 'devnet' | 'mainnet' = (() => {
 })();
 import { WalletProvider, useWallet } from './WalletProvider';
 import { WsProvider, useWs } from './WsProvider';
-import { CrownSimple, Lightning, Diamond, Atom } from 'phosphor-react';
+import { CrownSimple, Atom, LinkSimple } from 'phosphor-react';
 
 // Lazy load heavy components for code splitting
 const NewGameView = lazy(() => import('./NewGameView'));
@@ -63,7 +63,6 @@ function AppInner() {
     setToast(msg);
     window.setTimeout(() => setToast(null), duration);
   };
-  const [showHelp] = useState<boolean>(false);
   const [showHowTo, setShowHowTo] = useState<boolean>(false);
   const [showLeaderboard, setShowLeaderboard] = useState<boolean>(false);
   
@@ -130,7 +129,6 @@ function AppInner() {
 
   const onPractice = () => setScreen('practice');
   const onTournament = () => setScreen('modes');
-  const onWallet = () => setScreen('wallet');
   const openLeaderboard = () => setShowLeaderboard(true);
   const openHowTo = () => setShowHowTo(true);
 
@@ -168,7 +166,6 @@ function AppInner() {
         screen={screen}
         status={statusText}
         solPrice={solPrice}
-        onPractice={onPractice}
         onTournament={onTournament}
         onLeaderboard={openLeaderboard}
         onShowHowTo={openHowTo}
@@ -311,11 +308,8 @@ function AppInner() {
 
       {screen === 'landing' && (
         <Landing
-          solPrice={solPrice}
           onPractice={onPractice}
           onTournament={onTournament}
-          onWallet={onWallet}
-          onLeaderboard={openLeaderboard}
         />
       )}
       {screen === 'practice' && (
@@ -380,7 +374,6 @@ function HeaderWallet({
   screen,
   status,
   solPrice,
-  onPractice,
   onTournament,
   onLeaderboard,
   onShowHowTo,
@@ -388,7 +381,6 @@ function HeaderWallet({
   screen: string;
   status: string;
   solPrice: number | null;
-  onPractice: () => void;
   onTournament: () => void;
   onLeaderboard?: () => void;
   onShowHowTo?: () => void;
@@ -467,6 +459,14 @@ function HeaderWallet({
                 Ranks
               </button>
             )}
+            {onShowHowTo && (
+              <button
+                className="btn-secondary"
+                onClick={onShowHowTo}
+              >
+                How to play
+              </button>
+            )}
           </>
         )}
         {showStatusPill && (
@@ -521,19 +521,13 @@ function HeaderWallet({
 }
 
 interface LandingProps {
-  solPrice: number | null;
   onPractice: () => void;
   onTournament?: () => void;
-  onWallet: () => void;
-  onLeaderboard?: () => void;
 }
 
 function Landing({
-  solPrice,
   onPractice,
   onTournament,
-  onWallet,
-  onLeaderboard,
 }: LandingProps) {
 
   const getPlayerStats = () => {
@@ -675,19 +669,19 @@ function Landing({
             <section style={{ marginTop: 32 }}>
               <div className="pc-stats-grid">
                 <div className="pc-stat-card">
-                  <div className="stat-label">Games</div>
+                  <div className="stat-label">Practice Games</div>
                   <div className="stat-value">
                     <AnimatedCounter value={totalGames} duration={1000} />
                   </div>
                 </div>
                 <div className="pc-stat-card highlight">
-                  <div className="stat-label">Win%</div>
+                  <div className="stat-label">Practice Win%</div>
                   <div className="stat-value">
                     <AnimatedCounter value={parseFloat(winRate)} duration={1200} decimals={1} suffix="%" />
                   </div>
                 </div>
                 <div className="pc-stat-card">
-                  <div className="stat-label">Kills</div>
+                  <div className="stat-label">Practice Kills</div>
                   <div className="stat-value">
                     <AnimatedCounter value={totalKills} duration={1400} />
                   </div>
@@ -816,7 +810,6 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify, solPric
   const { publicKey, connect } = useWallet();
   const { connectAndJoin, state: wsState } = useWs();
   const [isJoining, setIsJoining] = useState<boolean>(false);
-  const [preflight, setPreflight] = useState<{ address: string | null; sol: number | null; configured: boolean } | null>(null);
   const [preflightError, setPreflightError] = useState<boolean>(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   
@@ -826,7 +819,6 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify, solPric
         const r = await fetch(`${API_BASE}/prize-preflight`);
         if (!r.ok) throw new Error(`preflight ${r.status}`);
         const j = await r.json();
-        setPreflight(j);
         setPreflightError(!j?.configured || !j?.address || j?.sol == null);
       } catch {
         setPreflightError(true);
@@ -1271,7 +1263,7 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void }
               whiteSpace: 'nowrap',
             }}
           >
-            {tipIndex === 0 && 'Your trail kills on contact  even you after a short grace.'}
+            {tipIndex === 0 && 'Your trail kills on contact – but your own tail is safe.'}
             {tipIndex === 1 && 'Stay inside the shrinking zone as the arena slices in.'}
             {tipIndex === 2 && 'Collect energy orbs to refill boost and chase kills.'}
           </div>
