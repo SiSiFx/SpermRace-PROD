@@ -4,7 +4,6 @@ import { MobileTouchControls } from './MobileTouchControls';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { AnimatedCounter } from './components/AnimatedCounter';
 import { SpermLoadingAnimation } from './components/SpermLoadingAnimation';
-import * as Sentry from '@sentry/react';
 
 // Lazy load heavy components
 const MobileTutorial = lazy(() => import('./MobileTutorial'));
@@ -47,9 +46,6 @@ const NewGameView = lazy(() => import('./NewGameView'));
 const Leaderboard = lazy(() => import('./Leaderboard').then(module => ({ default: module.Leaderboard })));
 const HowToPlayOverlay = lazy(() => import('./HowToPlayOverlay'));
 import {
-  CrownSimple,
-  Lightning,
-  Diamond,
   WarningCircle,
   GameController,
   Trophy,
@@ -76,6 +72,7 @@ export default function AppMobile() {
 
 function AppInner() {
   const [screen, setScreen] = useState<AppScreen>('landing');
+  const [walletReturnScreen, setWalletReturnScreen] = useState<AppScreen>('landing');
   const [solPrice, setSolPrice] = useState<number | null>(null);
   const { state: wsState, signAuthentication, leave } = useWs() as any;
   const [toast, setToast] = useState<string | null>(null);
@@ -84,12 +81,6 @@ function AppInner() {
   const showToast = (msg: string, duration = 2000) => {
     setToast(msg);
     window.setTimeout(() => setToast(null), duration);
-  };
-
-  // Screen transition with loading animation
-  const transitionToScreen = (newScreen: AppScreen) => {
-    setPendingScreen(newScreen);
-    setShowSpermLoading(true);
   };
 
   const handleLoadingComplete = () => {
@@ -148,7 +139,10 @@ function AppInner() {
 
   const onPractice = () => setScreen('practice');
   const onTournament = () => setScreen('tournament');
-  const onWallet = () => setScreen('wallet');
+  const onWallet = () => {
+    setWalletReturnScreen(screen);
+    setScreen('wallet');
+  };
 
   useEffect(() => {
     if (wsState.phase === 'lobby') setScreen('lobby');
@@ -173,12 +167,12 @@ function AppInner() {
         // Handle back with our screen logic
         if (screen === 'tournament') setScreen('landing');
         else if (screen === 'practice') setScreen('landing');
-        else if (screen === 'wallet') setScreen('tournament');
+        else if (screen === 'wallet') setScreen(walletReturnScreen);
       }
     };
     window.addEventListener('popstate', preventBack);
     return () => window.removeEventListener('popstate', preventBack);
-  }, [screen]);
+  }, [screen, walletReturnScreen]);
 
   return (
     <div id="app-root" className="mobile-optimized">
@@ -260,6 +254,13 @@ function AppInner() {
           onTournament={onTournament}
           onWallet={onWallet}
           onLeaderboard={() => setShowLeaderboard(true)}
+          onShowLoading={(callback) => {
+            setShowSpermLoading(true);
+            setTimeout(() => {
+              setShowSpermLoading(false);
+              callback();
+            }, 800);
+          }}
         />
       )}
       {screen === 'practice' && (
@@ -268,10 +269,17 @@ function AppInner() {
         </Suspense>
       )}
       {screen === 'tournament' && (
-        <TournamentModesScreen onSelect={() => setScreen('wallet')} onClose={() => setScreen('landing')} onNotify={showToast} />
+        <TournamentModesScreen
+          onSelect={() => {
+            setWalletReturnScreen('tournament');
+            setScreen('wallet');
+          }}
+          onClose={() => setScreen('landing')}
+          onNotify={showToast}
+        />
       )}
       {screen === 'wallet' && (
-        <Wallet onConnected={() => setScreen('lobby')} onClose={() => setScreen('tournament')} />
+        <Wallet onConnected={() => setScreen('lobby')} onClose={() => setScreen(walletReturnScreen)} />
       )}
       {screen === 'lobby' && (
         <Lobby 
@@ -358,6 +366,7 @@ interface LandingProps {
   onTournament?: () => void;
   onWallet: () => void;
   onLeaderboard?: () => void;
+  onShowLoading?: (callback: () => void) => void;
 }
 
 function Landing({
@@ -366,6 +375,7 @@ function Landing({
   onTournament,
   onWallet,
   onLeaderboard,
+  onShowLoading,
 }: LandingProps) {
 
   const getPlayerStats = () => {
@@ -388,23 +398,24 @@ function Landing({
         style={{
           maxWidth: 960,
           margin: '0 auto',
-          minHeight: '100vh',
-          padding: '16px 16px calc(40px + env(safe-area-inset-bottom, 0px))',
+          minHeight: '100dvh',
+          padding: '0 20px',
+          paddingBottom: 'max(40px, env(safe-area-inset-bottom))',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
-          gap: 16,
-          paddingBottom: 'calc(40px + env(safe-area-inset-bottom, 0px))',
+          alignItems: 'center',
+          gap: 20,
         }}
       >
-        <header style={{ textAlign: 'center', marginTop: '-32px' }}>
-          <div style={{ marginBottom: 12 }}>
+        <header style={{ textAlign: 'center', width: '100%' }}>
+          <div style={{ marginBottom: 16 }}>
             <Atom 
-              size={52} 
+              size={56} 
               weight="duotone" 
               color="#00f5ff"
               style={{ 
-                filter: 'drop-shadow(0 0 12px rgba(0, 245, 255, 0.6))',
+                filter: 'drop-shadow(0 0 16px rgba(0, 245, 255, 0.7))',
               }} 
             />
           </div>
@@ -487,19 +498,19 @@ function Landing({
                 }}
               >
                 <div className="mobile-stat">
-                  <div className="label">Games</div>
+                  <div className="label">Practice Games</div>
                   <div className="value">
                     <AnimatedCounter value={totalGames} duration={1000} />
                   </div>
                 </div>
                 <div className="mobile-stat">
-                  <div className="label">Win%</div>
+                  <div className="label">Practice Win%</div>
                   <div className="value">
                     <AnimatedCounter value={parseFloat(winRate)} duration={1200} decimals={1} suffix="%" />
                   </div>
                 </div>
                 <div className="mobile-stat">
-                  <div className="label">Kills</div>
+                  <div className="label">Practice Kills</div>
                   <div className="value">
                     <AnimatedCounter value={totalKills} duration={1400} />
                   </div>
@@ -512,27 +523,76 @@ function Landing({
         <main>
           <section
             style={{
-              marginTop: 18,
+              width: '100%',
+              maxWidth: '400px',
+              marginTop: '32px',
               display: 'flex',
               flexDirection: 'column',
-              gap: 10,
+              gap: '16px',
             }}
           >
+            {/* Primary CTA - Tournament */}
             <button
               type="button"
-              className="mobile-cta-primary"
+              className="btn-primary"
               onClick={() => {
-                setShowSpermLoading(true);
-                setTimeout(() => {
-                  setShowSpermLoading(false);
+                if (onShowLoading && onTournament) {
+                  onShowLoading(onTournament);
+                } else {
                   onTournament?.();
-                }, 800);
+                }
+              }}
+              style={{
+                width: '100%',
+                maxWidth: '400px',
+                padding: '18px 28px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '12px',
+                position: 'relative',
+                overflow: 'hidden',
+              }}
+              onTouchStart={(e) => {
+                e.currentTarget.style.transform = 'scale(0.98)';
+              }}
+              onTouchEnd={(e) => {
+                e.currentTarget.style.transform = 'scale(1)';
               }}
             >
-              <span className="icon">
-                <Trophy size={18} weight="fill" />
-              </span>
+              <Trophy size={22} weight="fill" />
               <span>Enter Tournament</span>
+            </button>
+
+            {/* Secondary CTA - Practice */}
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => {
+                if (onShowLoading) {
+                  onShowLoading(onPractice);
+                } else {
+                  onPractice();
+                }
+              }}
+              style={{
+                width: '100%',
+                maxWidth: '400px',
+                padding: '14px 24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '10px',
+              }}
+              onTouchStart={(e) => {
+                e.currentTarget.style.transform = 'scale(0.98)';
+              }}
+              onTouchEnd={(e) => {
+                e.currentTarget.style.transform = 'scale(1)';
+              }}
+            >
+              <GameController size={20} weight="fill" />
+              <span>Practice Mode (Free)</span>
             </button>
 
             {/* Sentry Test Button (Remove after testing) */}
@@ -548,7 +608,6 @@ function Landing({
                   fontSize: '12px',
                   fontWeight: '600',
                   cursor: 'pointer',
-                  marginTop: '12px',
                 }}
                 onClick={() => {
                   throw new Error('🧪 Sentry Test Error - This is your first error!');
@@ -557,23 +616,6 @@ function Landing({
                 🧪 Test Sentry Error
               </button>
             )}
-
-            <button
-              type="button"
-              className="mobile-btn-secondary"
-              onClick={() => {
-                setShowSpermLoading(true);
-                setTimeout(() => {
-                  setShowSpermLoading(false);
-                  onPractice();
-                }, 800);
-              }}
-            >
-              <span className="icon">
-                <GameController size={18} weight="fill" />
-              </span>
-              <span>Practice Mode (Free)</span>
-            </button>
           </section>
 
           <div
@@ -591,40 +633,50 @@ function Landing({
 
         <footer
           style={{
+            width: '100%',
+            maxWidth: '400px',
+            marginTop: '32px',
             display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginTop: 4,
-            gap: 12,
-            fontSize: 11,
-            color: 'rgba(148,163,184,0.85)',
+            justifyContent: 'center',
+            gap: '16px',
+            flexWrap: 'wrap',
           }}
         >
-          <div style={{ display: 'flex', gap: 8 }}>
+          {onLeaderboard && (
             <button
               type="button"
-              className="mobile-btn-secondary"
-              style={{ padding: '4px 8px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em' }}
-              onClick={onPractice}
+              className="btn-secondary"
+              onClick={onLeaderboard}
+              style={{
+                flex: '1',
+                minWidth: '140px',
+                padding: '12px 20px',
+              }}
+              onTouchStart={(e) => {
+                e.currentTarget.style.transform = 'scale(0.98)';
+              }}
+              onTouchEnd={(e) => {
+                e.currentTarget.style.transform = 'scale(1)';
+              }}
             >
-              Practice
+              Ranks
             </button>
-            {onLeaderboard && (
-              <button
-                type="button"
-                className="mobile-btn-secondary"
-                style={{ padding: '4px 8px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em' }}
-                onClick={onLeaderboard}
-              >
-                Leaderboard
-              </button>
-            )}
-          </div>
+          )}
           <button
             type="button"
-            className="mobile-btn-secondary"
-            style={{ padding: '4px 8px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em' }}
+            className="btn-secondary"
             onClick={onWallet}
+            style={{
+              flex: '1',
+              minWidth: '140px',
+              padding: '12px 20px',
+            }}
+            onTouchStart={(e) => {
+              e.currentTarget.style.transform = 'scale(0.98)';
+            }}
+            onTouchEnd={(e) => {
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
           >
             Wallet
           </button>
@@ -783,7 +835,6 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
   const { publicKey, connect } = useWallet();
   const { connectAndJoin, state: wsState } = useWs();
   const [isJoining, setIsJoining] = useState<boolean>(false);
-  const [preflight, setPreflight] = useState<{ address: string | null; sol: number | null; configured: boolean } | null>(null);
   const [preflightError, setPreflightError] = useState<boolean>(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   
@@ -793,7 +844,6 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
         const r = await fetch(`${API_BASE}/prize-preflight`);
         if (!r.ok) throw new Error(`preflight ${r.status}`);
         const j = await r.json();
-        setPreflight(j);
         setPreflightError(!j?.configured || !j?.address || j?.sol == null);
       } catch {
         setPreflightError(true);
@@ -1197,30 +1247,8 @@ function Lobby({ onStart: _onStart, onBack, onRefund }: { onStart: () => void; o
   );
 }
 
-import { GameEffects } from './GameEffects'; // Import type for ref if needed, though NewGameView handles instantiation
-
-// ... inside Game component ...
-
 function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void; }) {
   const [gameCountdown, setGameCountdown] = useState<number>(6); // 6 seconds to match game engine preStart
-  const { state } = useWs();
-  const meId = state.playerId;
-  
-  // Effect to listen for high-impact events from server state and trigger haptics via GameEffects
-  // Note: Since GameEffects is inside NewGameView (pixi context), we can't easily call its methods directly here.
-  // BUT, NewGameView is responsible for rendering. 
-  // Actually, GameEffects is instantiated inside NewGameView. 
-  // Let's dispatch a custom event that GameEffects (inside NewGameView) can listen to, OR
-  // simpler: handle haptics right here if we want, but GameEffects has the visual context.
-  
-  // Better approach: NewGameView already instantiates GameEffects. We should let NewGameView handle
-  // the "business logic to visual/haptic" bridge.
-  // However, for *global* haptics like impacts, we can add a listener here if needed,
-  // but NewGameView is the authority on the game loop.
-  
-  // Let's stick to passing props/callbacks if we need to bridge, but `NewGameView` 
-  // is likely where the update loop is. Let's check NewGameView...
-  // NewGameView receives `wsState`. It can detect collisions/kills and trigger GameEffects.
   
   useEffect(() => {
     const timer = setInterval(() => {
@@ -1522,88 +1550,32 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
         
         {/* Solscan Link */}
         {solscan && (
-          <a href={solscan} target="_blank" rel="noreferrer" style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 8,
-            padding: '12px 20px',
-            background: 'rgba(0,245,255,0.1)',
-            border: '1px solid rgba(0,245,255,0.3)',
-            borderRadius: 12,
-            color: '#00f5ff',
-            fontSize: 14,
-            fontWeight: 600,
-            textDecoration: 'none',
-            transition: 'all 0.2s',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'rgba(0,245,255,0.15)';
-            e.currentTarget.style.borderColor = 'rgba(0,245,255,0.5)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'rgba(0,245,255,0.1)';
-            e.currentTarget.style.borderColor = 'rgba(0,245,255,0.3)';
-          }}>
+          <a
+            href={solscan}
+            target="_blank"
+            rel="noreferrer"
+            className="mobile-solscan-btn"
+          >
             <LinkSimple size={18} weight="bold" />
             <span>View Transaction on Solscan</span>
           </a>
         )}
-        
+
         {/* Action Buttons */}
-        <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+        <div className="mobile-result-actions">
           <button
             onClick={onPlayAgain}
-            style={{
-              flex: 1,
-              padding: '16px 24px',
-              background: 'linear-gradient(135deg, #00f5ff, #00ff88)',
-              border: 'none',
-              borderRadius: 12,
-              color: '#000',
-              fontSize: 16,
-              fontWeight: 800,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-              boxShadow: '0 8px 24px rgba(0,245,255,0.3)',
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,245,255,0.4)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,245,255,0.3)';
-            }}
+            className="mobile-btn-primary"
           >
             <ArrowClockwise size={20} weight="bold" />
-            <span>PLAY AGAIN</span>
+            <span>Play Again</span>
           </button>
           <button
             onClick={onChangeTier}
-            style={{
-              padding: '16px 24px',
-              background: 'rgba(255,255,255,0.05)',
-              border: '1px solid rgba(255,255,255,0.15)',
-              borderRadius: 12,
-              color: '#fff',
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
-            }}
+            className="mobile-btn-secondary"
           >
             <House size={20} weight="fill" />
+            <span>Menu</span>
           </button>
         </div>
       </div>

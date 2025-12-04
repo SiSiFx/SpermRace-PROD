@@ -18,11 +18,6 @@ export function initSentry() {
           maskAllText: true, // Privacy: mask all text
           blockAllMedia: true, // Privacy: don't record images/video
         }),
-        
-        // React-specific error boundary
-        Sentry.reactRouterV6BrowserTracingIntegration({
-          // Add if using React Router
-        }),
       ],
 
       // Send default PII (IP addresses, user info)
@@ -42,7 +37,7 @@ export function initSentry() {
       release: `spermrace@${import.meta.env.VITE_APP_VERSION || '1.0.0'}`,
       
       // Configure which errors to send
-      beforeSend(event, hint) {
+      beforeSend(event) {
         // Filter out localhost errors (unless forced)
         if (!forceEnable && window.location.hostname === 'localhost') {
           return null;
@@ -92,7 +87,7 @@ export function initSentry() {
       ],
       
       // Don't send breadcrumbs for these actions (privacy)
-      beforeBreadcrumb(breadcrumb, hint) {
+      beforeBreadcrumb(breadcrumb) {
         // Don't log keypresses (privacy)
         if (breadcrumb.category === 'ui.input') {
           return null;

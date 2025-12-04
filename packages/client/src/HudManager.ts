@@ -33,17 +33,19 @@ export class HudManager {
       transform: 'translateX(-50%)',
       display: 'flex',
       alignItems: 'center',
-      gap: isMobile ? '8px' : '12px',
-      background: 'rgba(0, 0, 0, 0.85)',
-      padding: isMobile ? '6px 12px' : '10px 20px',
-      borderRadius: '24px',
-      border: '1px solid rgba(0, 255, 255, 0.2)',
+      gap: isMobile ? '6px' : '10px',
+      background: 'linear-gradient(135deg, rgba(15,23,42,0.96), rgba(15,23,42,0.9))',
+      padding: isMobile ? '6px 14px' : '8px 20px',
+      borderRadius: '999px',
+      border: '1px solid rgba(148,163,184,0.7)',
       zIndex: '100',
-      backdropFilter: 'blur(10px)',
-      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.5)',
-      fontSize: isMobile ? '12px' : '14px',
-      fontWeight: '700',
-      color: '#ffffff'
+      backdropFilter: 'blur(14px)',
+      boxShadow: '0 18px 45px rgba(15,23,42,0.9)',
+      fontSize: isMobile ? '11px' : '12px',
+      fontWeight: '600',
+      letterSpacing: isMobile ? '0.12em' : '0.14em',
+      textTransform: 'uppercase',
+      color: '#e5e7eb'
     });
 
     // Zone timer section
@@ -54,12 +56,22 @@ export class HudManager {
       gap: '6px'
     });
 
+    const zoneLabel = document.createElement('div');
+    zoneLabel.textContent = 'ZONE';
+    Object.assign(zoneLabel.style, {
+      opacity: '0.7',
+      fontSize: isMobile ? '10px' : '11px'
+    });
+
     this.zoneTimerEl = document.createElement('div');
     this.zoneTimerEl.textContent = 'TIME 1:30';
     Object.assign(this.zoneTimerEl.style, {
-      color: '#22d3ee',
-      whiteSpace: 'nowrap'
+      color: '#e5f9ff',
+      whiteSpace: 'nowrap',
+      fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace"
     });
+
+    zoneSection.appendChild(zoneLabel);
     zoneSection.appendChild(this.zoneTimerEl);
 
     this.topBar.appendChild(zoneSection);
@@ -80,8 +92,9 @@ export class HudManager {
     boostIcon.id = 'boost-icon';
     boostIcon.textContent = 'BOOST';
     Object.assign(boostIcon.style, {
-      fontSize: isMobile ? '14px' : '16px',
-      color: '#22d3ee'
+      fontSize: isMobile ? '11px' : '12px',
+      color: '#e5f9ff',
+      letterSpacing: '0.16em'
     });
     boostSection.appendChild(boostIcon);
 
@@ -141,7 +154,7 @@ export class HudManager {
     Object.assign(aliveSection.style, {
       display: 'flex',
       alignItems: 'center',
-      gap: '4px'
+      gap: '6px'
     });
 
     this.aliveCountEl = document.createElement('div');
@@ -165,8 +178,8 @@ export class HudManager {
     const sep = document.createElement('div');
     Object.assign(sep.style, {
       width: '1px',
-      height: '16px',
-      background: 'rgba(255, 255, 255, 0.15)'
+      height: '18px',
+      background: 'rgba(148, 163, 184, 0.35)'
     });
     return sep;
   }

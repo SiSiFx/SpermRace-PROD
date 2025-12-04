@@ -37,23 +37,42 @@ const ANALYTICS_API_BASE: string | null = (() => {
 
 if ((import.meta as any).env?.PROD === true && ANALYTICS_API_BASE) {
   try {
+    let errorCount = 0;
+    const MAX_ERRORS_PER_SESSION = 10;
+    
     const send = (type: string, payload: any) => {
+      // Rate limiting - don't spam analytics
+      if (errorCount >= MAX_ERRORS_PER_SESSION) return;
+      
       try {
+        errorCount++;
         fetch(`${ANALYTICS_API_BASE}/analytics`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ type, payload })
-        });
+          body: JSON.stringify({ type, payload }),
+          mode: 'no-cors' // Prevent CORS errors
+        }).catch(() => {}); // Silently fail
       } catch {}
     };
+    
     window.addEventListener('error', (e) => {
+      // Ignore analytics fetch errors to prevent loops
+      if (e?.message?.includes('Failed to fetch') || e?.message?.includes('analytics')) {
+        return;
+      }
+      
       const msg = e?.message || 'unknown';
       const src = (e as any)?.filename || '';
       const ln = (e as any)?.lineno || 0;
       send('client_error', { msg, src, ln });
     });
+    
     window.addEventListener('unhandledrejection', (e: any) => {
+      // Ignore analytics errors
       const reason = e?.reason?.message || String(e?.reason || 'unknown');
+      if (reason.includes('Failed to fetch') || reason.includes('analytics')) {
+        return;
+      }
       send('client_unhandled_rejection', { reason });
     });
   } catch {}

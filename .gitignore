@@ -1,43 +1,7 @@
-# Dependencies
 node_modules/
-.pnpm-store/
-
-# Build outputs
 dist/
-dist.backup-*/
-build/
-
-# Environment variables
 .env
 .env.local
-.env.*.local
-
-# Logs
 *.log
-logs/
-npm-debug.log*
-pnpm-debug.log*
-
-# OS files
 .DS_Store
-Thumbs.db
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Data
-packages/server/data/*
-
-# PM2
-.pm2/
-pids/
-*.pid
-*.seed
-
-# Temporary files
-*.tmp
-.cache/
-.vercel
+debug-mobile-game.html

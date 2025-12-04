@@ -5,6 +5,24 @@ import { useWs } from './WsProvider';
 import { HudManager } from './HudManager';
 import { logger } from './utils/logger';
 
+// Guard against rare Pixi transform null refs by short-circuiting container updates
+// when the internal transform object has been destroyed but the display object
+// is still referenced in the scene graph.
+(function patchPixiTransformGuard() {
+  try {
+    const proto: any = (PIXI as any)?.Container?.prototype;
+    if (!proto || proto.__srGuardPatched) return;
+    const orig = proto.updateLocalTransform;
+    if (typeof orig !== 'function') return;
+    proto.updateLocalTransform = function (...args: any[]) {
+      const t = (this as any).transform as any;
+      if (!t || !t.position) return;
+      return orig.apply(this, args);
+    };
+    proto.__srGuardPatched = true;
+  } catch {}
+})();
+
 interface Car {
   x: number;
   y: number;
@@ -778,13 +796,19 @@ class SpermRaceGame {
     
     // Matte grid only (remove veins that could look like a border)
     this.gridGraphics.stroke({ width: 1, color: this.theme.grid, alpha: this.theme.gridAlpha });
+    
+    // Hide grid on mobile to reduce visual clutter
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    this.gridGraphics.visible = !isMobile;
+    
     this.worldContainer.addChild(this.gridGraphics);
   }
   
   createAmbientParticles() {
     // Add subtle floating colored particles for atmosphere
-    const particleCount = 40;
-    const colors = [0x22d3ee, 0x6366f1, 0x10b981, 0xfbbf24]; // Cyan, purple, green, yellow
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const particleCount = isMobile ? 15 : 40; // Much fewer on mobile
+    const colors = [0x22d3ee, 0x6366f1]; // Reduced to 2 colors: Cyan, purple (was 4: cyan, purple, green, yellow)
     
     for (let i = 0; i < particleCount; i++) {
       const x = (Math.random() - 0.5) * this.arena.width;
@@ -1677,7 +1701,23 @@ class SpermRaceGame {
   }
 
   createPlayer() {
-    const s = this.spawnQueue[this.spawnQueueIndex] || this.randomEdgeSpawn();
+    const rawSpawn = this.spawnQueue[this.spawnQueueIndex] || this.randomEdgeSpawn();
+    const isTournament = !!(this.wsHud && this.wsHud.active);
+    let spawnX = rawSpawn.x;
+    let spawnY = rawSpawn.y;
+    // In Practice, always spawn inside the initial safe zone for clarity
+    if (!isTournament && this.zone && this.zone.startRadius) {
+      const dx = spawnX - this.zone.centerX;
+      const dy = spawnY - this.zone.centerY;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 0;
+      const maxRadius = this.zone.startRadius * 0.8; // keep a margin from edge
+      if (dist > maxRadius && dist > 0) {
+        const scale = maxRadius / dist;
+        spawnX = this.zone.centerX + dx * scale;
+        spawnY = this.zone.centerY + dy * scale;
+      }
+    }
+    const s = { x: spawnX, y: spawnY, angle: rawSpawn.angle };
     // First slice steering: if the chosen first slice would cut toward this spawn, flip it
     if (this.firstSliceSide) {
       const nearLeft = s.x < -this.arena.width * 0.25;
@@ -1744,7 +1784,24 @@ class SpermRaceGame {
   }
 
   createBot() {
-    const s0 = this.spawnQueue[this.spawnQueueIndex] || this.randomEdgeSpawn();
+    const isTournament = !!(this.wsHud && this.wsHud.active);
+    const clampIfPractice = (spawn: { x: number; y: number; angle: number }) => {
+      if (!this.zone || !this.zone.startRadius || isTournament) return spawn;
+      let { x, y } = spawn;
+      const dx = x - this.zone.centerX;
+      const dy = y - this.zone.centerY;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 0;
+      const maxRadius = this.zone.startRadius * 0.8;
+      if (dist > maxRadius && dist > 0) {
+        const scale = maxRadius / dist;
+        x = this.zone.centerX + dx * scale;
+        y = this.zone.centerY + dy * scale;
+      }
+      return { x, y, angle: spawn.angle };
+    };
+
+    const s0Raw = this.spawnQueue[this.spawnQueueIndex] || this.randomEdgeSpawn();
+    const s0 = clampIfPractice(s0Raw);
     const botColor = BOT_COLORS[Math.floor(Math.random() * BOT_COLORS.length)] || 0xff00ff;
     this.bot = this.createCar(s0.x, s0.y, botColor, 'bot');
     if (this.bot) {
@@ -1762,7 +1819,8 @@ class SpermRaceGame {
     // Create additional bots for testing
     this.extraBots = [];
     for (let i = 0; i < 31; i++) {
-      const s = this.spawnQueue[this.spawnQueueIndex + 1 + i] || this.randomEdgeSpawn();
+      const sRaw = this.spawnQueue[this.spawnQueueIndex + 1 + i] || this.randomEdgeSpawn();
+      const s = clampIfPractice(sRaw);
       const bColor = BOT_COLORS[i % BOT_COLORS.length] || 0xff00ff;
       const bot = this.createCar(s.x, s.y, bColor, `bot${i}`);
       if (bot) {
@@ -1902,7 +1960,7 @@ class SpermRaceGame {
       tailGraphics: new PIXI.Graphics(),
       tailWaveT: 0,
       tailLength: 34,
-      tailSegments: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 6 : 10, // Fewer segments on mobile for performance
+      tailSegments: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 4 : 10, // Fewer segments on mobile for performance
       tailAmplitude: 5,
       turnResponsiveness: type === 'player' ? 10.0 : 6.5, // Snappier turning
       lateralDragScalar: 1.15,
@@ -2016,7 +2074,7 @@ class SpermRaceGame {
     
     // More particles for dramatic boost effect
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const particleCount = isMobile ? 12 : 18; // Increased from 8/12
+    const particleCount = isMobile ? 6 : 12; // Reduced for mobile performance
     
     for (let i = 0; i < particleCount; i++) {
       const angle = (Math.PI * 2 * i) / particleCount;
@@ -2321,7 +2379,7 @@ class SpermRaceGame {
                   0 0 15px rgba(251, 191, 36, 0.4),
                   0 2px 8px rgba(0, 0, 0, 0.6);
                 transition: opacity 0.3s ease;
-              ">Zone closes in 10 seconds</div>
+              ">Stay inside the safe zone</div>
             `;
           }
         } else {
@@ -2376,7 +2434,8 @@ class SpermRaceGame {
       const sinceStart = Date.now() - (this.gameStartTime || Date.now());
       if (!this.pickupsUnlocked && sinceStart >= this.unlockPickupsAfterMs) {
         this.pickupsUnlocked = true;
-        try { this.spawnPickups(35); } catch {}
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        try { this.spawnPickups(isMobile ? 20 : 35); } catch {} // Fewer orbs on mobile
         if (this.pickupsContainer) this.pickupsContainer.visible = true;
         // HUD cue: energy orbs phase begins
         this.showHotspotToast('Energy orbs active • refill boost and chase kills', '#4ade80');
@@ -3642,10 +3701,16 @@ class SpermRaceGame {
     }
 
     // Ensure all visual parts are removed/destroyed to avoid lingering head/tail
-    try { if (car.headGraphics) { car.headGraphics.destroy(); car.headGraphics = undefined; } } catch {}
-    try { if (car.tailGraphics) { car.tailGraphics.destroy(); car.tailGraphics = null; } } catch {}
-    try { if ((car.sprite as any)?.parent) { (car.sprite as any).parent.removeChild(car.sprite); } } catch {}
-    try { (car.sprite as any)?.destroy?.({ children: false }); } catch {}
+    try {
+      if ((car.sprite as any)?.parent) {
+        (car.sprite as any).parent.removeChild(car.sprite);
+      }
+      // Destroy sprite and all its children in one pass to avoid leaving destroyed
+      // PIXI objects in the display tree (which can cause null transform errors).
+      (car.sprite as any)?.destroy?.({ children: true });
+    } catch {}
+    car.headGraphics = undefined;
+    car.tailGraphics = null;
     try { const np = (car as any).nameplate as HTMLDivElement | undefined; if (np && np.parentElement) np.parentElement.removeChild(np); (car as any).nameplate = undefined; } catch {}
 
     // Battle Royale: No respawning, permanent elimination
@@ -3713,7 +3778,8 @@ class SpermRaceGame {
   }
 
   createExplosion(x: number, y: number, color: number) {
-    const particleCount = 30; // More particles for visibility
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const particleCount = isMobile ? 15 : 30; // Fewer particles on mobile
     for (let i = 0; i < particleCount; i++) {
       const angle = (Math.PI * 2 / particleCount) * i + (Math.random() - 0.5) * 0.3;
       const speed = 150 + Math.random() * 200; // Faster explosion
@@ -3822,7 +3888,10 @@ class SpermRaceGame {
       }
     }
 
-    if (this.pickups.length < 25) this.spawnPickups(8);
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const maxPickups = isMobile ? 15 : 25;
+    const spawnAmount = isMobile ? 4 : 8;
+    if (this.pickups.length < maxPickups) this.spawnPickups(spawnAmount);
   }
 
   handleRespawning(_deltaTime: number) {
@@ -4583,8 +4652,20 @@ class SpermRaceGame {
     this.zone.currentRadius = this.zone.startRadius;
     this.zone.targetRadius = this.zone.startRadius;
     this.zone.endRadius = 400; // Minimum final circle
-    this.zone.startAtMs = Date.now();
-    this.zone.durationMs = 42000; // 42 seconds
+
+    const now = Date.now();
+    const isTournament = !!(this.wsHud && this.wsHud.active);
+    if (isTournament) {
+      // Tournament: zone active for most of the round
+      this.zone.startAtMs = now;
+      this.zone.durationMs = 42000; // 42 seconds total shrink
+    } else {
+      // Practice: give players breathing room before zone matters
+      const preStartMs = this.preStart?.durationMs ?? 3000;
+      const practiceDelayMs = 7000; // extra on-field time after countdown
+      this.zone.startAtMs = now + preStartMs + practiceDelayMs;
+      this.zone.durationMs = 60000; // slower, gentler shrink
+    }
     this.zoneGraphics = new PIXI.Graphics();
     this.worldContainer.addChild(this.zoneGraphics);
     this.finalSurgeBannerShown = false;
@@ -4593,6 +4674,9 @@ class SpermRaceGame {
   updateZoneAndDamage(deltaTime: number) {
     if (!this.zoneGraphics) return;
     const now = Date.now();
+    const preStartActive = this.preStart
+      ? Math.max(0, this.preStart.durationMs - (now - this.preStart.startAt)) > 0
+      : false;
     const zoneStart = this.zone.startAtMs || now;
     const elapsed = Math.max(0, now - zoneStart);
     const progress = this.zone.durationMs > 0 ? Math.min(1, Math.max(0, elapsed / this.zone.durationMs)) : 0;
@@ -4686,7 +4770,9 @@ class SpermRaceGame {
     }
 
     // Update HUD timer
-    const remainMs = Math.max(0, this.zone.startAtMs + this.zone.durationMs - Date.now());
+    const remainMs = Math.max(0, this.zone.startAtMs + this.zone.durationMs - now);
+    const zoneNotStarted = this.zone.startAtMs ? now < this.zone.startAtMs : false;
+    const zoneDamageActive = !preStartActive && !zoneNotStarted;
     if (!this.finalSurgeBannerShown && remainMs <= 10000) {
       this.showFinalSurgeBanner();
       this.finalSurgeBannerShown = true;
@@ -4731,12 +4817,24 @@ class SpermRaceGame {
         }
       }
     };
-    applyZone(this.player);
-    applyZone(this.bot);
-    for (const b of this.extraBots) applyZone(b);
-    
-    // Update danger overlay based on zone proximity and time
-    this.updateDangerOverlay(remainMs);
+    if (zoneDamageActive) {
+      applyZone(this.player);
+      applyZone(this.bot);
+      for (const b of this.extraBots) applyZone(b);
+
+      // Update danger overlay based on zone proximity and time
+      this.updateDangerOverlay(remainMs);
+    } else {
+      // During countdown or before the zone officially starts, never damage
+      // players for being outside the circle and keep danger overlay subtle.
+      if (this.player) {
+        (this.player as any).outZoneTime = 0;
+        this.hideZoneWarning();
+      }
+      if (this.bot) (this.bot as any).outZoneTime = 0;
+      for (const b of this.extraBots) (b as any).outZoneTime = 0;
+      this.updateDangerOverlay(0);
+    }
   }
 
   private showFinalSurgeBanner() {
