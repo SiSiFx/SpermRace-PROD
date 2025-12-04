@@ -5,9 +5,40 @@ import { useWs } from './WsProvider';
 import { HudManager } from './HudManager';
 import { logger } from './utils/logger';
 
-// Guard against rare Pixi transform null refs by short-circuiting container updates
-// when the internal transform object has been destroyed but the display object
-// is still referenced in the scene graph.
+// Import game engine modules
+import {
+  Car,
+  Trail,
+  Particle,
+  Pickup,
+  RadarPing,
+  BoostPad,
+  Hotspot,
+  Arena,
+  Camera,
+  RectZone,
+  Zone,
+  Theme,
+  WsHud,
+  SpawnPoint,
+  DebugCollision,
+  KillRecord,
+  NearMiss,
+  KillStreakNotification,
+  Emote,
+  PreStart,
+  BOT_COLORS,
+  normalizeAngle,
+  isPortraitMobile,
+  isMobileDevice,
+  isAndroidDevice,
+} from './game/types';
+
+import { InputHandler } from './game/InputHandler';
+import { CameraController } from './game/CameraController';
+import { ParticleSystem } from './game/ParticleSystem';
+
+// Guard against rare Pixi transform null refs
 (function patchPixiTransformGuard() {
   try {
     const proto: any = (PIXI as any)?.Container?.prototype;
@@ -21,129 +52,13 @@ import { logger } from './utils/logger';
     };
     proto.__srGuardPatched = true;
   } catch {}
-})();
+})()
 
-interface Car {
-  x: number;
-  y: number;
-  angle: number;
-  targetAngle: number;
-  speed: number;
-  baseSpeed: number;
-  boostSpeed: number;
-  targetSpeed: number;
-  speedTransitionRate: number;
-  driftFactor: number;
-  maxDriftFactor: number;
-  vx: number;
-  vy: number;
-  color: number;
-  type: string;
-  id: string;
-  name: string;
-  kills: number;
-  destroyed: boolean;
-  respawnTimer: number;
-  isBoosting: boolean;
-  boostTimer: number;
-  boostCooldown: number;
-  boostEnergy: number;
-  maxBoostEnergy: number;
-  boostRegenRate: number;
-  boostConsumptionRate: number;
-  minBoostEnergy: number;
-  trailPoints: any[];
-  trailGraphics: PIXI.Graphics | null;
-  lastTrailTime: number;
-  turnTimer: number;
-  boostAITimer: number;
-  currentTrailId: string | null;
-  lastTrailBoostStatus: boolean | undefined;
-  sprite: PIXI.Container;
-  // Sperm visuals
-  headGraphics?: PIXI.Graphics;
-  tailGraphics?: PIXI.Graphics | null;
-  tailWaveT?: number;
-  tailLength?: number;
-  tailSegments?: number;
-  tailAmplitude?: number;
-  nameplate?: HTMLDivElement;
-  outZoneTime?: number;
-  elimAtMs?: number;
-  turnResponsiveness?: number;
-  lateralDragScalar?: number;
-  tailColor?: number;
-  accelerationScalar?: number;
-  handlingAssist?: number;
-  impactMitigation?: number;
-  hotspotBuffExpiresAt?: number;
-  spotlightUntil?: number;
-  contactCooldown?: number;
-  spawnTime?: number; // For growth over time
-  killBoostUntil?: number; // Speed boost from kills
-}
-
-interface Trail {
-  carId: string;
-  car: Car;
-  points: Array<{ x: number; y: number; time: number; isBoosting: boolean }>;
-  graphics: PIXI.Graphics;
-}
-
-interface Particle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  life: number;
-  color: number;
-  graphics: PIXI.Graphics;
-}
-
-interface Pickup {
-  x: number;
-  y: number;
-  radius: number;
-  type: 'energy' | 'overdrive';
-  amount: number; // boost energy restored
-  graphics: PIXI.Container;
-  shape: PIXI.Graphics;
-  aura: PIXI.Graphics;
-  pulseT: number;
-  rotationSpeed: number;
-  color: number;
-  expiresAt?: number;
-  source?: 'ambient' | 'hotspot';
-}
-
-interface RadarPing {
-  x: number;
-  y: number;
-  timestamp: number;
-  playerId: string;
-  kind?: 'sweep' | 'echo' | 'bounty';
-  ttlMs?: number;
-}
-
-interface BoostPad {
-  x: number; y: number; radius: number;
-  cooldownMs: number; lastTriggeredAt: number;
-  graphics: PIXI.Graphics;
-}
-
-interface Hotspot {
-  id: string;
-  x: number;
-  y: number;
-  radius: number;
-  state: 'telegraph' | 'active';
-  spawnAtMs: number;
-  activateAtMs: number;
-  expiresAtMs: number;
-  graphics: PIXI.Graphics;
-  label?: HTMLDivElement;
-  hasSpawnedLoot: boolean;
-}
+// Local type aliases for compatibility (interfaces imported from ./game/types)
+type LocalPickup = Pickup;
+type LocalRadarPing = RadarPing;
+type LocalBoostPad = BoostPad;
+type LocalHotspot = Hotspot;
 
 class SpermRaceGame {
   public app: PIXI.Application | null = null;
@@ -5454,13 +5369,6 @@ class SpermRaceGame {
   }
 }
 
-// Normalize angle to [-PI, PI]
-function normalizeAngle(a: number): number {
-  while (a > Math.PI) a -= Math.PI * 2;
-  while (a < -Math.PI) a += Math.PI * 2;
-  return a;
-}
-
 // Inject small HUD animation keyframes
 function injectHudAnimationStylesOnce() {
   try {
@@ -5487,8 +5395,7 @@ function injectHudAnimationStylesOnce() {
   } catch {}
 }
 
-// Bot color palette for variety
-const BOT_COLORS: number[] = [0xff6b6b, 0x4ecdc4, 0x45b7d1, 0x96ceb4, 0xfeca57, 0xff9ff3, 0x54a0ff, 0x5f27cd, 0x00d2d3, 0xff9f43];
+// BOT_COLORS imported from ./game/types
 
 export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onExit }: { 
   meIdOverride?: string; 
