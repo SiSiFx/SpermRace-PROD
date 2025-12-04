@@ -263,10 +263,23 @@ class SpermRaceGame {
   public onExit?: () => void;
   public notifiedServerEnd: boolean = false;
 
+  // Game engine modules
+  private inputHandler: InputHandler | null = null;
+  private cameraController: CameraController | null = null;
+  private particleSystem: ParticleSystem | null = null;
+
   constructor(container: HTMLElement, onReplay?: () => void, onExit?: () => void) {
     this.container = container;
     this.onReplay = onReplay;
     this.onExit = onExit;
+    
+    // Initialize camera controller
+    this.cameraController = new CameraController({
+      arena: this.arena,
+      cameraSmoothing: this.cameraSmoothing,
+    });
+    // Sync camera reference
+    this.camera = this.cameraController.camera;
     
     // Listen for mobile boost events to trigger haptics
     window.addEventListener('mobile-boost', this.handleMobileBoost.bind(this));
@@ -409,7 +422,7 @@ class SpermRaceGame {
     const height = this.container.clientHeight || window.innerHeight;
     
     // High-quality rendering settings
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const isMobile = isMobileDevice();
     const isAndroid = /Android/i.test(navigator.userAgent);
     const rawPixelRatio = window.devicePixelRatio || 1;
     // Android gets lower pixel ratio for better performance (many Android devices struggle with high DPR)
@@ -713,7 +726,7 @@ class SpermRaceGame {
     this.gridGraphics.stroke({ width: 1, color: this.theme.grid, alpha: this.theme.gridAlpha });
     
     // Hide grid on mobile to reduce visual clutter
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const isMobile = isMobileDevice();
     this.gridGraphics.visible = !isMobile;
     
     this.worldContainer.addChild(this.gridGraphics);
@@ -721,7 +734,7 @@ class SpermRaceGame {
   
   createAmbientParticles() {
     // Add subtle floating colored particles for atmosphere
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const isMobile = isMobileDevice();
     const particleCount = isMobile ? 15 : 40; // Much fewer on mobile
     const colors = [0x22d3ee, 0x6366f1]; // Reduced to 2 colors: Cyan, purple (was 4: cyan, purple, green, yellow)
     
@@ -1162,154 +1175,49 @@ class SpermRaceGame {
   setupControls() {
     if (!this.app) return;
     
-    // Keyboard controls
-    const onKeyDown = (e: KeyboardEvent) => {
-      this.keys[e.code] = true;
-    };
-    const onKeyUp = (e: KeyboardEvent) => {
-      this.keys[e.code] = false;
-    };
-    
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
-    this.cleanupFunctions.push(() => {
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
-    });
-    
-    // Mouse controls
-    const onMouseMove = (e: MouseEvent) => {
-      const rect = this.app!.canvas.getBoundingClientRect();
-      this.mouse.x = e.clientX - rect.left;
-      this.mouse.y = e.clientY - rect.top;
-    };
-    
-    window.addEventListener('mousemove', onMouseMove);
-    this.cleanupFunctions.push(() => window.removeEventListener('mousemove', onMouseMove));
-    
-    // Touch controls - Enhanced for mobile
-    const onTouchStart = (e: TouchEvent) => {
-      e.preventDefault();
-      const touch = e.touches[0];
-      const rect = this.app!.canvas.getBoundingClientRect();
-      const now = Date.now();
-
-      this.touch.active = true;
-      this.touch.x = touch.clientX - rect.left;
-      this.touch.y = touch.clientY - rect.top;
-
-      // Two-finger tap = boost (better for mobile)
-      if (e.touches.length === 2) {
+    // Use InputHandler module for all input handling
+    this.inputHandler = new InputHandler(this.app.canvas, {
+      onStartBoost: () => {
         if (this.player?.isBoosting) {
           this.stopBoost();
         } else {
           this.startBoost();
-          // Haptic feedback on boost
-          try { navigator.vibrate?.(50); } catch {}
         }
-      }
-      // Double tap detection for boost (fallback)
-      else if (now - this.touch.lastTap < 300) {
-        if (this.player?.isBoosting) {
-          this.stopBoost();
-        } else {
-          this.startBoost();
-          // Haptic feedback
-          try { navigator.vibrate?.(50); } catch {}
+      },
+      onStopBoost: () => this.stopBoost(),
+      onZoom: (delta) => {
+        if (this.cameraController) {
+          this.cameraController.setZoom(delta);
         }
-      }
-      this.touch.lastTap = now;
-    };
-    
-    const onTouchMove = (e: TouchEvent) => {
-      e.preventDefault();
-      if (this.touch.active && e.touches.length > 0) {
-        const touch = e.touches[0];
-        const rect = this.app!.canvas.getBoundingClientRect();
-        this.touch.x = touch.clientX - rect.left;
-        this.touch.y = touch.clientY - rect.top;
-      }
-    };
-    
-    const onTouchEnd = (e: TouchEvent) => {
-      e.preventDefault();
-      this.touch.active = false;
-    };
-    
-    this.app.canvas.addEventListener('touchstart', onTouchStart, { passive: false });
-    this.app.canvas.addEventListener('touchmove', onTouchMove, { passive: false });
-    this.app.canvas.addEventListener('touchend', onTouchEnd, { passive: false });
-    this.cleanupFunctions.push(() => {
-      this.app!.canvas.removeEventListener('touchstart', onTouchStart);
-      this.app!.canvas.removeEventListener('touchmove', onTouchMove);
-      this.app!.canvas.removeEventListener('touchend', onTouchEnd);
+      },
+      isPreStart: () => !!this.preStart,
     });
     
-    // Zoom controls
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const zoomSpeed = 0.001;
-      const zoomDelta = -e.deltaY * zoomSpeed;
-      this.camera.targetZoom = Math.max(this.camera.minZoom, Math.min(this.camera.maxZoom, this.camera.targetZoom + zoomDelta));
-    };
+    this.inputHandler.setup();
     
-    window.addEventListener('wheel', onWheel);
-    this.cleanupFunctions.push(() => window.removeEventListener('wheel', onWheel));
-    
-    // Mobile virtual controls integration
-    const onMobileJoystick = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (!detail) return;
-      
-      // Convert joystick offset to screen position for aiming
-      const rect = this.app!.canvas.getBoundingClientRect();
-      const centerX = rect.width / 2;
-      const centerY = rect.height / 2;
-      
-      // Improved sensitivity and smoothing
-      const scale = 4; // Increased sensitivity
-      const targetX = centerX + (detail.x * scale);
-      const targetY = centerY + (detail.y * scale);
-      
-      // Smooth input for better feel
-      if (this.touch.active) {
-        this.touch.x = this.touch.x * 0.4 + targetX * 0.6;
-        this.touch.y = this.touch.y * 0.4 + targetY * 0.6;
-      } else {
-        this.touch.x = targetX;
-        this.touch.y = targetY;
-      }
-      this.touch.active = true;
-    };
-    
-    const onMobileBoost = () => {
-      // Don't allow boost during preStart countdown
-      if (this.preStart) {
-        logger.debug('[BOOST] Blocked during countdown');
-        return;
-      }
-      
-      if (this.player?.isBoosting) {
-        this.stopBoost();
-      } else {
-        logger.debug('[BOOST] Attempting boost, energy:', this.player?.boostEnergy);
-        this.startBoost();
-      }
-    };
-    
-    window.addEventListener('mobile-joystick', onMobileJoystick as EventListener);
-    window.addEventListener('mobile-boost', onMobileBoost);
+    // Sync input state to legacy properties
     this.cleanupFunctions.push(() => {
-      window.removeEventListener('mobile-joystick', onMobileJoystick as EventListener);
-      window.removeEventListener('mobile-boost', onMobileBoost);
+      if (this.inputHandler) {
+        this.inputHandler.destroy();
+        this.inputHandler = null;
+      }
     });
+  }
+  
+  // Sync input state from InputHandler to legacy properties (called in game loop)
+  private syncInputState() {
+    if (!this.inputHandler) return;
+    const state = this.inputHandler.getState();
+    this.keys = state.keys;
+    this.mouse = state.mouse;
+    this.touch = state.touch;
   }
 
   setupRadar() {
     // Radar disabled - cleaner UI
     return;
     // Check if mobile - if yes, use proximity radar instead
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const isMobile = isMobileDevice();
     
     if (isMobile) {
       // Create proximity radar overlay (full screen, edge indicators)
@@ -1875,7 +1783,7 @@ class SpermRaceGame {
       tailGraphics: new PIXI.Graphics(),
       tailWaveT: 0,
       tailLength: 34,
-      tailSegments: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 4 : 10, // Fewer segments on mobile for performance
+      tailSegments: isMobileDevice() ? 4 : 10, // Fewer segments on mobile for performance
       tailAmplitude: 5,
       turnResponsiveness: type === 'player' ? 10.0 : 6.5, // Snappier turning
       lateralDragScalar: 1.15,
@@ -1946,7 +1854,7 @@ class SpermRaceGame {
       this.player.targetSpeed = this.player.boostSpeed;
       
       // Enhanced boost feedback for mobile
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const isMobile = isMobileDevice();
       
       // Haptic feedback - makes boost feel punchy
       this.hapticFeedback('medium');
@@ -1988,7 +1896,7 @@ class SpermRaceGame {
     if (!this.worldContainer) return;
     
     // More particles for dramatic boost effect
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const isMobile = isMobileDevice();
     const particleCount = isMobile ? 6 : 12; // Reduced for mobile performance
     
     for (let i = 0; i < particleCount; i++) {
@@ -2040,7 +1948,7 @@ class SpermRaceGame {
     if (!this.player || !this.app) return;
     
     // Detect mobile once for all camera adjustments
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const isMobile = isMobileDevice();
     
     // During countdown, keep targetZoom as set in gameLoop and center as needed
     const inCountdown = !!this.preStart;
@@ -2057,7 +1965,7 @@ class SpermRaceGame {
         if (!b.destroyed) { const dx = b.x - camX; const dy = b.y - camY; if (dx*dx + dy*dy < nearbyRadius*nearbyRadius) nearbyCount++; }
       }
       const crowdFactor = Math.min(1, nearbyCount / 8);
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const isMobile = isMobileDevice();
       const baseZoom = isMobile ? 0.55 : 0.75; // Wider for better tactical view
       
       // BOOST ZOOM: Zoom IN when boosting for speed sensation
@@ -2156,8 +2064,11 @@ class SpermRaceGame {
   gameLoop() {
     if (!this.app) return;
     
+    // Sync input state from InputHandler module
+    this.syncInputState();
+    
     // FPS limiter for mobile (prevent overheating & battery drain)
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const isMobile = isMobileDevice();
     if (isMobile) {
       const now = performance.now();
       const elapsed = now - this.lastFrameTime;
@@ -2349,7 +2260,7 @@ class SpermRaceGame {
       const sinceStart = Date.now() - (this.gameStartTime || Date.now());
       if (!this.pickupsUnlocked && sinceStart >= this.unlockPickupsAfterMs) {
         this.pickupsUnlocked = true;
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        const isMobile = isMobileDevice();
         try { this.spawnPickups(isMobile ? 20 : 35); } catch {} // Fewer orbs on mobile
         if (this.pickupsContainer) this.pickupsContainer.visible = true;
         // HUD cue: energy orbs phase begins
@@ -2779,7 +2690,7 @@ class SpermRaceGame {
     
     // Boost control - hold to boost (DESKTOP ONLY - mobile uses button)
     // Don't interfere with mobile boost controls
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const isMobile = isMobileDevice();
     if (!isMobile) {
       if (this.keys['Space']) {
         if (!this.player.isBoosting && this.player.boostEnergy >= (this.player.minBoostEnergy + 5)) {
@@ -3693,7 +3604,7 @@ class SpermRaceGame {
   }
 
   createExplosion(x: number, y: number, color: number) {
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const isMobile = isMobileDevice();
     const particleCount = isMobile ? 15 : 30; // Fewer particles on mobile
     for (let i = 0; i < particleCount; i++) {
       const angle = (Math.PI * 2 / particleCount) * i + (Math.random() - 0.5) * 0.3;
@@ -3803,7 +3714,7 @@ class SpermRaceGame {
       }
     }
 
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const isMobile = isMobileDevice();
     const maxPickups = isMobile ? 15 : 25;
     const spawnAmount = isMobile ? 4 : 8;
     if (this.pickups.length < maxPickups) this.spawnPickups(spawnAmount);
@@ -4442,7 +4353,7 @@ class SpermRaceGame {
     if (!this.radarCtx || !this.player || !this.app) return;
     
     // Throttle radar updates on mobile for better performance
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const isMobile = isMobileDevice();
     if (isMobile) {
       const now = performance.now();
       if (now - this.lastRadarUpdate < this.radarUpdateInterval) {
