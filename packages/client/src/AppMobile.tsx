@@ -46,7 +46,6 @@ const NewGameView = lazy(() => import('./NewGameView'));
 const Leaderboard = lazy(() => import('./Leaderboard').then(module => ({ default: module.Leaderboard })));
 const HowToPlayOverlay = lazy(() => import('./HowToPlayOverlay'));
 import {
-  WarningCircle,
   GameController,
   Trophy,
   Skull,
@@ -56,6 +55,8 @@ import {
   CheckCircle,
   Atom,
 } from 'phosphor-react';
+import { ConnectionOverlay } from './components/ConnectionOverlay';
+import { Toast } from './components/Toast';
 import './leaderboard.css';
 
 type AppScreen = 'landing' | 'practice' | 'tournament' | 'wallet' | 'lobby' | 'game' | 'results';
@@ -72,6 +73,7 @@ export default function AppMobile() {
 
 function AppInner() {
   const [screen, setScreen] = useState<AppScreen>('landing');
+  const [practiceReplay, setPracticeReplay] = useState<boolean>(false);
   const [walletReturnScreen, setWalletReturnScreen] = useState<AppScreen>('landing');
   const [solPrice, setSolPrice] = useState<number | null>(null);
   const { state: wsState, signAuthentication, leave } = useWs() as any;
@@ -137,7 +139,10 @@ function AppInner() {
     return () => clearInterval(id);
   }, []);
 
-  const onPractice = () => setScreen('practice');
+  const onPractice = () => {
+    setPracticeReplay(false);
+    setScreen('practice');
+  };
   const onTournament = () => setScreen('tournament');
   const onWallet = () => {
     setWalletReturnScreen(screen);
@@ -201,51 +206,16 @@ function AppInner() {
         </>
       )}
 
-      {wsState.lastError && (
-        <div className="loading-overlay mobile-overlay" style={{ display: 'flex', background: 'rgba(0,0,0,0.85)' }}>
-          <div className="modal-card mobile-modal">
-            <div
-              className="modal-title"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
-            >
-              <WarningCircle size={20} weight="fill" />
-              <span>Error</span>
-            </div>
-            <div className="modal-subtitle" style={{ marginTop: 8 }}>{wsState.lastError}</div>
-            <button className="btn-primary mobile-btn-large" style={{ marginTop: 16 }} onClick={() => location.reload()}>
-              Reload App
-            </button>
-          </div>
-        </div>
-      )}
-      
-      {(wsState.phase === 'connecting' || wsState.phase === 'authenticating' || wsState.entryFee.pending) && (
-        <div className="loading-overlay mobile-overlay" style={{ display: 'flex' }}>
-          <div className="loading-spinner mobile-spinner"></div>
-          <div className="loading-text mobile-loading-text">{
-            wsState.entryFee.pending ? 'Verifying entry fee transaction on Solana…'
-            : wsState.phase === 'authenticating' ? 'Approve signature in your wallet to continue…'
-            : 'Opening WebSocket connection…'
-          }</div>
-          <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', marginTop: '8px', maxWidth: '280px', textAlign: 'center', padding: '0 16px' }}>
-            {wsState.entryFee.pending
-              ? 'Waiting for transaction confirmation (finalized commitment)'
-              : wsState.phase === 'authenticating'
-              ? 'Check your wallet app for the signature request'
-              : 'Establishing secure connection to game server'
-            }
-          </div>
-          <div className="mobile-progress-bar">
-            <div className="mobile-progress-fill" style={{ width: `${loadProg}%` }}></div>
-          </div>
-          {wsState.phase === 'authenticating' && (
-            <div className="mobile-action-buttons">
-              <button className="btn-primary mobile-btn" onClick={() => signAuthentication?.()}>Request signature again</button>
-              <button className="btn-secondary mobile-btn" onClick={() => { leave?.(); setScreen('landing'); }}>Cancel</button>
-            </div>
-          )}
-        </div>
-      )}
+      {/* Connection overlay - handles error, loading, and auth states */}
+      <ConnectionOverlay
+        wsState={wsState}
+        publicKey={publicKey}
+        loadProg={loadProg}
+        signAuthentication={signAuthentication}
+        leave={leave}
+        onBack={() => setScreen('landing')}
+        variant="mobile"
+      />
 
       {screen === 'landing' && (
         <Landing
@@ -265,7 +235,7 @@ function AppInner() {
       )}
       {screen === 'practice' && (
         <Suspense fallback={<div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.95)' }}><LoadingSpinner message="Loading Practice..." size="large" /></div>}>
-          <Practice onFinish={() => setScreen('results')} onBack={() => setScreen('landing')} />
+          <Practice onFinish={() => setScreen('results')} onBack={() => setScreen('landing')} skipLobby={practiceReplay} />
         </Suspense>
       )}
       {screen === 'tournament' && (
@@ -294,14 +264,11 @@ function AppInner() {
         </Suspense>
       )}
       {screen === 'results' && (
-        <Results onPlayAgain={() => setScreen('practice')} onChangeTier={() => setScreen('tournament')} />
+        <Results onPlayAgain={() => { setPracticeReplay(true); setScreen('practice'); }} onChangeTier={() => setScreen('tournament')} />
       )}
       
-      {toast && (
-        <div className="mobile-toast">
-          {toast}
-        </div>
-      )}
+      {/* Toast notification */}
+      <Toast message={toast} variant="mobile" />
 
       {showHowTo && (
         <Suspense fallback={<div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.9)', zIndex: 10000 }}><LoadingSpinner message="Loading..." size="large" /></div>}>
@@ -686,8 +653,8 @@ function Landing({
   );
 }
 
-function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBack: () => void; }) {
-  const [step, setStep] = useState<'lobby' | 'game'>('lobby');
+function Practice({ onFinish: _onFinish, onBack, skipLobby = false }: { onFinish: () => void; onBack: () => void; skipLobby?: boolean }) {
+  const [step, setStep] = useState<'lobby' | 'game'>(skipLobby ? 'game' : 'lobby');
   const [meId] = useState<string>('PLAYER_' + Math.random().toString(36).slice(2, 8));
   const [players, setPlayers] = useState<string[]>([]);
   const [showPracticeIntro, setShowPracticeIntro] = useState<boolean>(() => {

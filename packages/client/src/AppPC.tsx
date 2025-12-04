@@ -34,6 +34,8 @@ const SOLANA_CLUSTER: 'devnet' | 'mainnet' = (() => {
 import { WalletProvider, useWallet } from './WalletProvider';
 import { WsProvider, useWs } from './WsProvider';
 import { CrownSimple, Atom, LinkSimple } from 'phosphor-react';
+import { ConnectionOverlay } from './components/ConnectionOverlay';
+import { Toast } from './components/Toast';
 
 // Lazy load heavy components for code splitting
 const NewGameView = lazy(() => import('./NewGameView'));
@@ -55,6 +57,7 @@ export default function AppPC() {
 
 function AppInner() {
   const [screen, setScreen] = useState<AppScreen>('landing');
+  const [practiceReplay, setPracticeReplay] = useState<boolean>(false);
   const [solPrice, setSolPrice] = useState<number | null>(null);
   const { state: wsState, signAuthentication, leave } = useWs() as any;
   const { publicKey } = useWallet() as any;
@@ -127,7 +130,10 @@ function AppInner() {
     return () => clearInterval(id);
   }, []);
 
-  const onPractice = () => setScreen('practice');
+  const onPractice = () => {
+    setPracticeReplay(false);
+    setScreen('practice');
+  };
   const onTournament = () => setScreen('modes');
   const openLeaderboard = () => setShowLeaderboard(true);
   const openHowTo = () => setShowHowTo(true);
@@ -174,137 +180,16 @@ function AppInner() {
       
 
 
-      {/* UNIFIED OVERLAY SYSTEM - Only ONE overlay shows at a time, priority: Error > Payment > Auth > Connecting */}
-      {wsState.lastError ? (
-        <div className="loading-overlay" style={{ display: 'flex', background: 'rgba(0,0,0,0.92)', backdropFilter: 'blur(8px)', zIndex: 10000 }}>
-          <div className="modal-card pc-modal" style={{
-            padding: '28px 24px',
-            maxWidth: '440px',
-            background: 'linear-gradient(135deg, rgba(239,68,68,0.12) 0%, rgba(251,146,60,0.12) 100%)',
-            border: '2px solid rgba(239,68,68,0.3)',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1)'
-          }}>
-            <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-              <div className="modal-title" style={{ fontSize: '26px', fontWeight: 800 }}>
-                {wsState.lastError.toLowerCase().includes('insufficient') ? 'Insufficient Funds' : 'Something Went Wrong'}
-              </div>
-            </div>
-
-            <div style={{
-              background: 'rgba(0,0,0,0.3)',
-              padding: '14px 16px',
-              borderRadius: '12px',
-              marginBottom: '16px',
-              border: '1px solid rgba(255,255,255,0.1)'
-            }}>
-              <div className="modal-subtitle" style={{ fontSize: '14px', lineHeight: '1.5', color: 'rgba(255,255,255,0.9)' }}>
-                {wsState.lastError}
-              </div>
-            </div>
-
-            {wsState.lastError.toLowerCase().includes('insufficient') && (
-              <div style={{
-                fontSize: '14px',
-                color: 'rgba(255,255,255,0.7)',
-                textAlign: 'center',
-                marginBottom: '16px',
-                lineHeight: '1.5'
-              }}>
-                {publicKey
-                  ? 'Top up your wallet with SOL to continue racing'
-                  : 'Connect a wallet or buy SOL to get started'}
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-              {wsState.lastError.toLowerCase().includes('insufficient') ? (
-                <>
-                  <button
-                    className="btn-primary"
-                    style={{
-                      flex: '1',
-                      minWidth: '150px',
-                      padding: '14px 24px',
-                      fontSize: '16px',
-                      fontWeight: 700,
-                      background: 'linear-gradient(90deg, #22d3ee 0%, #6366f1 100%)',
-                      boxShadow: '0 8px 20px rgba(34,211,238,0.3)',
-                      transition: 'all 0.2s ease'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                      e.currentTarget.style.boxShadow = '0 12px 28px rgba(34,211,238,0.4)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = '0 8px 20px rgba(34,211,238,0.3)';
-                    }}
-                    onClick={() => {
-                      if (publicKey && (window as any).phantom?.solana?.isPhantom) {
-                        window.open('https://phantom.app/buy', '_blank');
-                      } else if (publicKey) {
-                        window.open('https://www.coinbase.com/buy-solana', '_blank');
-                      } else {
-                        window.open('https://www.moonpay.com/buy/sol', '_blank');
-                      }
-                    }}
-                  >Buy SOL</button>
-                  <button
-                    className="btn-secondary"
-                    style={{
-                      flex: '0.7',
-                      minWidth: '110px',
-                      padding: '14px 20px',
-                      fontSize: '16px',
-                      fontWeight: 600
-                    }}
-                    onClick={() => location.reload()}
-                  >Reload</button>
-                </>
-              ) : (
-                <button
-                  className="btn-primary"
-                  style={{
-                    width: '100%',
-                    padding: '14px 24px',
-                    fontSize: '16px',
-                    fontWeight: 700
-                  }}
-                  onClick={() => location.reload()}
-                >Reload App</button>
-              )}
-            </div>
-          </div>
-        </div>
-      ) : (wsState.phase === 'connecting' || wsState.phase === 'authenticating' || wsState.entryFee.pending) ? (
-        <div className="loading-overlay" style={{ display: 'flex', zIndex: 9999 }}>
-          <div className="loading-spinner"></div>
-          <div className="loading-text">{
-            wsState.entryFee.pending ? 'Verifying entry fee transaction on Solana…'
-            : wsState.phase === 'authenticating' ? 'Approve signature in your wallet to continue…'
-            : 'Opening WebSocket connection…'
-          }</div>
-          <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.5)', marginTop: '8px', maxWidth: '340px', textAlign: 'center' }}>
-            {wsState.entryFee.pending
-              ? 'Waiting for transaction confirmation (finalized commitment)'
-              : wsState.phase === 'authenticating'
-              ? 'Check your wallet extension for the signature request'
-              : 'Establishing secure connection to game server'
-            }
-          </div>
-          {/* Smooth loading bar */}
-          <div style={{ width: 320, height: 10, borderRadius: 6, overflow: 'hidden', marginTop: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.08)' }}>
-            <div style={{ width: `${loadProg}%`, height: '100%', background: 'linear-gradient(90deg, #22d3ee, #14b8a6)', transition: 'width 100ms linear' }}></div>
-          </div>
-          {/* Only show auth buttons when ACTUALLY in auth phase (not during payment) */}
-          {wsState.phase === 'authenticating' && !wsState.entryFee.pending && (
-            <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
-              <button className="btn-primary" onClick={() => signAuthentication?.()}>Request signature again</button>
-              <button className="btn-secondary" onClick={() => { leave?.(); setScreen('landing'); }}>Cancel</button>
-            </div>
-          )}
-        </div>
-      ) : null}
+      {/* Connection overlay - handles error, loading, and auth states */}
+      <ConnectionOverlay
+        wsState={wsState}
+        publicKey={publicKey}
+        loadProg={loadProg}
+        signAuthentication={signAuthentication}
+        leave={leave}
+        onBack={() => setScreen('landing')}
+        variant="pc"
+      />
 
       {screen === 'landing' && (
         <Landing
@@ -314,7 +199,7 @@ function AppInner() {
       )}
       {screen === 'practice' && (
         <Suspense fallback={<div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.95)' }}><LoadingSpinner message="Loading Practice..." size="large" /></div>}>
-          <Practice onFinish={() => setScreen('results')} onBack={() => setScreen('landing')} />
+          <Practice onFinish={() => setScreen('results')} onBack={() => setScreen('landing')} skipLobby={practiceReplay} />
         </Suspense>
       )}
       {screen === 'modes' && (
@@ -332,17 +217,13 @@ function AppInner() {
         </Suspense>
       )}
       {screen === 'results' && (
-        <Results onPlayAgain={() => setScreen('practice')} onChangeTier={() => setScreen('modes')} />
+        <Results onPlayAgain={() => { setPracticeReplay(true); setScreen('practice'); }} onChangeTier={() => setScreen('modes')} />
       )}
 
 
 
-      {/* Toast - appears ABOVE overlays for visibility */}
-      {toast && (
-        <div className="pc-toast" style={{ zIndex: 10001 }}>
-          {toast}
-        </div>
-      )}
+      {/* Toast notification */}
+      <Toast message={toast} />
 
       {showHowTo && (
         <HowToPlayOverlay
@@ -696,8 +577,9 @@ function Landing({
   );
 }
 
-function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBack: () => void }) {
+function Practice({ onFinish: _onFinish, onBack, skipLobby = false }: { onFinish: () => void; onBack: () => void; skipLobby?: boolean }) {
   const [step, setStep] = useState<'lobby' | 'game'>(() => {
+    if (skipLobby) return 'game';
     try {
       return localStorage.getItem('sr_practice_full_tuto_seen') ? 'game' : 'lobby';
     } catch {

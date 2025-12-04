@@ -32,8 +32,10 @@ import { WalletProvider, useWallet } from './WalletProvider';
 import { WsProvider, useWs } from './WsProvider';
 import NewGameView from './NewGameView';
 import { Leaderboard } from './Leaderboard';
-import { WarningCircle, CreditCard, LinkSimple } from 'phosphor-react';
+import { LinkSimple } from 'phosphor-react';
 import { Modes } from './components/Modes';
+import { ConnectionOverlay } from './components/ConnectionOverlay';
+import { Toast } from './components/Toast';
 import './leaderboard.css';
 
 type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
@@ -50,6 +52,7 @@ export default function App() {
 
 function AppInner() {
   const [screen, setScreen] = useState<AppScreen>('landing');
+  const [practiceReplay, setPracticeReplay] = useState<boolean>(false);
   const [solPrice, setSolPrice] = useState<number | null>(null);
   const { state: wsState, signAuthentication, leave } = useWs() as any;
   const { publicKey } = useWallet() as any;
@@ -95,145 +98,52 @@ function AppInner() {
     return () => clearInterval(id);
   }, []);
 
-  const onPractice = () => setScreen('practice');
+  const onPractice = () => {
+    setPracticeReplay(false);
+    setScreen('practice');
+  };
 
   useEffect(() => {
     if (wsState.phase === 'lobby') setScreen('lobby');
     else if (wsState.phase === 'game') setScreen('game');
   }, [wsState.phase]);
 
+  // Keyboard shortcuts (P for practice, T for tournament, ESC to go back)
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      // ESC to go back
+      if (e.key === 'Escape') {
+        if (screen === 'modes') setScreen('landing');
+        else if (screen === 'practice') setScreen('landing');
+        else if (screen === 'wallet') setScreen('modes');
+      }
+      // P for practice
+      if (e.key === 'p' && screen === 'landing') {
+        onPractice();
+      }
+      // T for tournament/modes
+      if (e.key === 't' && screen === 'landing') {
+        setScreen('modes');
+      }
+    };
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [screen]);
+
   return (
     <div id="app-root">
       {/* Header wallet short address or simulation badge */}
       <HeaderWallet screen={screen} />
       <div id="bg-particles" />
-      {/* UNIFIED OVERLAY SYSTEM - Only ONE overlay shows at a time, priority: Error > Payment > Auth > Connecting */}
-      {wsState.lastError ? (
-        <div className="loading-overlay" style={{ display: 'flex', background: 'rgba(0,0,0,0.92)', backdropFilter: 'blur(8px)', zIndex: 10000 }}>
-          <div className="modal-card" style={{
-            padding: '28px 24px',
-            maxWidth: '420px',
-            background: 'rgba(3,3,5,0.96)',
-            border: '1px solid rgba(255,255,255,0.12)',
-            boxShadow: '0 24px 80px rgba(0,0,0,0.9)'
-          }}>
-            <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-              <div className="modal-title" style={{ fontSize: '24px', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                <WarningCircle size={24} weight="fill" />
-                {wsState.lastError.toLowerCase().includes('insufficient') ? 'Insufficient Funds' : 'Something Went Wrong'}
-              </div>
-            </div>
-
-            <div style={{
-              background: 'rgba(0,0,0,0.3)',
-              padding: '14px 16px',
-              borderRadius: '12px',
-              marginBottom: '16px',
-              border: '1px solid rgba(255,255,255,0.1)'
-            }}>
-              <div className="modal-subtitle" style={{ fontSize: '14px', lineHeight: '1.5', color: 'rgba(255,255,255,0.9)' }}>
-                {wsState.lastError}
-              </div>
-            </div>
-
-            {wsState.lastError.toLowerCase().includes('insufficient') && (
-              <div style={{
-                fontSize: '13px',
-                color: 'rgba(255,255,255,0.7)',
-                textAlign: 'center',
-                marginBottom: '16px',
-                lineHeight: '1.5'
-              }}>
-                {publicKey
-                  ? 'Top up your wallet with SOL to continue racing'
-                  : 'Connect a wallet or buy SOL to get started'}
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
-              {wsState.lastError.toLowerCase().includes('insufficient') ? (
-                <>
-                  <button
-                    className="btn-primary"
-                    style={{
-                      flex: '1',
-                      minWidth: '140px',
-                      padding: '14px 20px',
-                      fontSize: '15px',
-                      fontWeight: 700,
-                    background: '#00F0FF',
-                    boxShadow: '0 8px 26px rgba(0,240,255,0.45)',
-                      transition: 'all 0.2s ease'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                      e.currentTarget.style.boxShadow = '0 12px 28px rgba(34,211,238,0.4)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = '0 8px 20px rgba(34,211,238,0.3)';
-                    }}
-                    onClick={() => {
-                      if (publicKey && (window as any).phantom?.solana?.isPhantom) {
-                        window.open('https://phantom.app/buy', '_blank');
-                      } else if (publicKey) {
-                        window.open('https://www.coinbase.com/buy-solana', '_blank');
-                      } else {
-                        window.open('https://www.moonpay.com/buy/sol', '_blank');
-                      }
-                    }}
-                  >
-                    <CreditCard size={18} weight="fill" style={{ marginRight: 8 }} />
-                    Buy SOL
-                  </button>
-                  <button
-                    className="btn-secondary"
-                    style={{
-                      flex: '0.8',
-                      minWidth: '100px',
-                      padding: '14px 20px',
-                      fontSize: '15px',
-                      fontWeight: 600
-                    }}
-                    onClick={() => location.reload()}
-                  >Reload</button>
-                </>
-              ) : (
-                <button
-                  className="btn-primary"
-                  style={{
-                    width: '100%',
-                    padding: '14px 20px',
-                    fontSize: '15px',
-                    fontWeight: 700
-                  }}
-                  onClick={() => location.reload()}
-                >Reload App</button>
-              )}
-            </div>
-          </div>
-        </div>
-      ) : (wsState.phase === 'connecting' || wsState.phase === 'authenticating' || wsState.entryFee.pending) ? (
-        <div className="loading-overlay" style={{ display: 'flex', zIndex: 9999 }}>
-          <div className="loading-spinner"></div>
-          <div className="loading-text">{
-            wsState.entryFee.pending ? 'Processing entry fee…'
-            : wsState.phase === 'authenticating' ? 'Please approve the wallet prompt to continue…'
-            : 'Connecting…'
-          }</div>
-          {/* Smooth loading bar */}
-          <div style={{ width: 280, height: 8, borderRadius: 6, overflow: 'hidden', marginTop: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.04)' }}>
-            <div style={{ width: `${loadProg}%`, height: '100%', background: '#00F0FF', transition: 'width 100ms linear' }}></div>
-          </div>
-          {/* Only show auth buttons when ACTUALLY in auth phase (not during payment) */}
-          {wsState.phase === 'authenticating' && !wsState.entryFee.pending && (
-            <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
-              <button className="btn-primary" onClick={() => signAuthentication?.()}>Sign again</button>
-              <button className="btn-secondary" onClick={() => { leave?.(); setScreen('landing'); }}>Back</button>
-            </div>
-          )}
-        </div>
-      ) : null}
+      {/* Connection overlay - handles error, loading, and auth states */}
+      <ConnectionOverlay
+        wsState={wsState}
+        publicKey={publicKey}
+        loadProg={loadProg}
+        signAuthentication={signAuthentication}
+        leave={leave}
+        onBack={() => setScreen('landing')}
+      />
       {screen === 'landing' && (
         <Landing
           solPrice={solPrice}
@@ -243,7 +153,7 @@ function AppInner() {
         />
       )}
       {screen === 'practice' && (
-        <Practice onFinish={() => setScreen('results')} onBack={() => setScreen('landing')} />
+        <Practice onFinish={() => setScreen('results')} onBack={() => setScreen('landing')} skipLobby={practiceReplay} />
       )}
       {screen === 'wallet' && (
         <Wallet onConnected={() => setScreen('lobby')} onClose={() => setScreen('landing')} />
@@ -255,14 +165,10 @@ function AppInner() {
         <Game onEnd={() => setScreen('results')} onRestart={() => setScreen('game')} />
       )}
       {screen === 'results' && (
-        <Results onPlayAgain={() => setScreen('practice')} onChangeTier={() => setScreen('landing')} />
+        <Results onPlayAgain={() => { setPracticeReplay(true); setScreen('practice'); }} onChangeTier={() => setScreen('landing')} />
       )}
-      {/* Toast - appears ABOVE overlays for visibility */}
-      {toast && (
-        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.72)', color: '#fff', padding: '10px 14px', borderRadius: 10, zIndex: 10001, fontSize: 12, border: '1px solid rgba(255,255,255,0.18)' }}>
-          {toast}
-        </div>
-      )}
+      {/* Toast notification */}
+      <Toast message={toast} />
 
       {/* Leaderboard Modal */}
       {showLeaderboard && (
@@ -419,8 +325,8 @@ function Landing({
   );
 }
 
-function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBack: () => void }) {
-  const [step, setStep] = useState<'lobby' | 'game'>('lobby');
+function Practice({ onFinish: _onFinish, onBack, skipLobby = false }: { onFinish: () => void; onBack: () => void; skipLobby?: boolean }) {
+  const [step, setStep] = useState<'lobby' | 'game'>(skipLobby ? 'game' : 'lobby');
   const [meId] = useState<string>('PLAYER_' + Math.random().toString(36).slice(2, 8));
   const [players, setPlayers] = useState<string[]>([]);
   const [countdown, setCountdown] = useState<number>(5);
