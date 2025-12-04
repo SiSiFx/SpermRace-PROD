@@ -80,34 +80,32 @@ if ((import.meta as any).env?.PROD === true && ANALYTICS_API_BASE) {
   console.log('[Analytics] Disabled - VITE_API_BASE not configured');
 }
 
-// Detect device type and load appropriate UI
+// Detect device type for style loading
 const isMobile = isMobileDevice();
 
 // Log which version is loading
-console.log(`🎮 Loading ${isMobile ? 'MOBILE' : 'PC'} optimized UI`);
+console.log(`🎮 Loading UNIFIED UI (${isMobile ? 'mobile' : 'desktop'} mode)`);
 
-// Dynamically import the appropriate App component and styles
+// Load app with appropriate styles
 const loadApp = async () => {
   const rootEl = document.getElementById('root');
   if (!rootEl) return;
 
   const root = createRoot(rootEl);
   
+  // Load styles based on device
   if (isMobile) {
-    // Load mobile-specific styles and component
     await import('./mobile-game-fixes.css');
     await import('./styles-mobile.css');
     await import('./mobile-controls.css');
-    const { default: AppMobile } = await import('./AppMobile');
-    console.log('📱 Mobile app loaded');
-    root.render(<AppMobile />);
   } else {
-    // Load PC-specific styles and component
     await import('./styles-pc.css');
-    const { default: AppPC } = await import('./AppPC');
-    console.log('🖥️ PC app loaded');
-    root.render(<AppPC />);
   }
+  
+  // Load unified app
+  const { default: AppUnified } = await import('./AppUnified');
+  console.log(`✅ Unified app loaded (${isMobile ? 'mobile' : 'desktop'})`);
+  root.render(<AppUnified />);
 };
 
 loadApp();
