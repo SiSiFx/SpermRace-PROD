@@ -14,6 +14,9 @@ importers:
       pnpm:
         specifier: ^10.13.1
         version: 10.21.0
+      spermrace.io:
+        specifier: 'file:'
+        version: file:(react@18.3.1)
     devDependencies:
       '@playwright/test':
         specifier: 1.56.1
@@ -4940,6 +4943,9 @@ packages:
 
   spawn-command@0.0.2:
     resolution: {integrity: sha512-zC8zGoGkmc8J9ndvml8Xksr1Amk9qBujgbF0JAIWO7kXr43w0h/0GJNM/Vustixu+YE8N/MTrQ7N31FvHUACxQ==}
+
+  'spermrace.io@file:':
+    resolution: {directory: '', type: directory}
 
   split-on-first@1.1.0:
     resolution: {integrity: sha512-43ZssAJaMusuKWL8sKUBQXHWOpq8d6CfN/u1p4gUzfJkM05C8rxTmYrkIPTXapZpORA6LkkzcUulJ8FqA7Uudw==}
@@ -12146,6 +12152,13 @@ snapshots:
   source-map@0.6.1: {}
 
   spawn-command@0.0.2: {}
+
+  spermrace.io@file:(react@18.3.1):
+    dependencies:
+      '@sentry/react': 10.27.0(react@18.3.1)
+      pnpm: 10.21.0
+    transitivePeerDependencies:
+      - react
 
   split-on-first@1.1.0: {}
 
