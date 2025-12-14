@@ -1,4 +1,3 @@
-import * as PIXI from 'pixi.js';
 import { logger } from '../utils/logger';
 
 export interface InputState {

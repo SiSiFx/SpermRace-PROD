@@ -37,7 +37,6 @@ export function HeaderWallet({
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: '0 12px',
-        paddingTop: 'env(safe-area-inset-top, 0px)',
         background: 'rgba(3, 7, 18, 0.9)',
         backdropFilter: 'blur(10px)',
         borderBottom: '1px solid rgba(255,255,255,0.08)',

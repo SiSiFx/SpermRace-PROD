@@ -1,21 +1,58 @@
 /**
- * Audio Manager - Handles all game sounds
- * Lazy loading for performance
+ * Enhanced Audio Manager - Handles all game sounds with dynamic audio feedback
+ * Lazy loading for performance with enhanced gameplay integration
  */
+
+export interface AudioConfig {
+  enabled?: boolean;
+  volume?: number;
+  musicVolume?: number;
+  sfxVolume?: number;
+}
+
+export interface AudioEvent {
+  type: 'boost' | 'kill' | 'death' | 'collision' | 'pickup' | 'streak' | 'button' | 'achievement' | 'nearMiss' | 'trailCollision' | 'zoneShrink' | 'playerJoin' | 'tournamentStart';
+  volume?: number;
+  pitch?: number;
+  position?: { x: number; y: number };
+  intensity?: number;
+}
 
 export class AudioManager {
   private sounds: Map<string, HTMLAudioElement> = new Map();
   private enabled: boolean = true;
   private volume: number = 0.7;
   private musicVolume: number = 0.4;
+  private sfxVolume: number = 0.8;
+  private audioContext: AudioContext | null = null;
+  private positionalAudio: boolean = true;
+  private lastSoundTimes: Map<string, number> = new Map();
 
-  constructor() {
+  constructor(config: AudioConfig = {}) {
     // Check user preference
     const savedEnabled = localStorage.getItem('audio_enabled');
-    this.enabled = savedEnabled !== 'false';
+    this.enabled = config.enabled ?? (savedEnabled !== 'false');
     
     const savedVolume = localStorage.getItem('audio_volume');
-    if (savedVolume) this.volume = parseFloat(savedVolume);
+    this.volume = config.volume ?? (savedVolume ? parseFloat(savedVolume) : 0.7);
+    
+    const savedSfxVolume = localStorage.getItem('audio_sfx_volume');
+    this.sfxVolume = config.sfxVolume ?? (savedSfxVolume ? parseFloat(savedSfxVolume) : 0.8);
+    
+    const savedMusicVolume = localStorage.getItem('audio_music_volume');
+    this.musicVolume = config.musicVolume ?? (savedMusicVolume ? parseFloat(savedMusicVolume) : 0.4);
+
+    // Initialize Web Audio API for advanced features
+    this.initWebAudioAPI();
+  }
+
+  private initWebAudioAPI() {
+    try {
+      this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    } catch (err) {
+      console.warn('[AudioManager] Web Audio API not supported:', err);
+      this.audioContext = null;
+    }
   }
 
   /**
@@ -31,9 +68,9 @@ export class AudioManager {
   }
 
   /**
-   * Play a sound effect
+   * Play a sound effect with enhanced options
    */
-  play(name: string, volumeMultiplier: number = 1.0) {
+  play(name: string, volumeMultiplier: number = 1.0, pitch?: number) {
     if (!this.enabled) return;
     
     const sound = this.sounds.get(name);
@@ -42,10 +79,30 @@ export class AudioManager {
       return;
     }
 
+    // Rate limiting for frequent sounds
+    const now = Date.now();
+    const lastPlay = this.lastSoundTimes.get(name) || 0;
+    if (now - lastPlay < 50) return; // Max 20 sounds per second per type
+    this.lastSoundTimes.set(name, now);
+
     try {
       // Clone for overlapping sounds
       const clone = sound.cloneNode() as HTMLAudioElement;
-      clone.volume = this.volume * volumeMultiplier;
+      clone.volume = this.volume * this.sfxVolume * volumeMultiplier;
+      
+      // Apply pitch variation if supported
+      if (pitch && this.audioContext) {
+        try {
+          clone.preservesPitch = true;
+          // Note: HTMLAudio pitch changing is limited, but we can simulate with playbackRate
+          if (pitch !== 1) {
+            clone.playbackRate = Math.max(0.5, Math.min(2.0, pitch));
+          }
+        } catch (err) {
+          // Ignore pitch errors
+        }
+      }
+      
       clone.play().catch(err => {
         // Ignore autoplay errors
         if (err.name !== 'NotAllowedError') {
@@ -60,6 +117,46 @@ export class AudioManager {
     } catch (err) {
       console.warn(`[AudioManager] Error playing ${name}:`, err);
     }
+  }
+
+  /**
+   * Enhanced sound play with full audio event support
+   */
+  playEvent(event: AudioEvent) {
+    const { type, volume = 1.0, pitch } = event;
+    
+    // Add intensity-based volume scaling
+    let finalVolume = volume;
+    if (event.intensity !== undefined) {
+      finalVolume *= Math.min(2.0, 0.5 + event.intensity * 1.5);
+    }
+    
+    this.play(type, finalVolume, pitch);
+  }
+
+  /**
+   * Dynamic sound variation for enhanced gameplay
+   */
+  playDynamic(type: 'boost' | 'collision' | 'kill' | 'trailCollision', intensity: number = 1.0, position?: { x: number; y: number }) {
+    if (!this.enabled) return;
+    
+    // Pitch variation based on intensity
+    const pitchVariation = 0.9 + (Math.random() - 0.5) * 0.2;
+    const dynamicPitch = intensity > 1.5 ? pitchVariation * 1.1 : pitchVariation;
+    
+    // Volume scaling based on intensity and distance
+    let volume = Math.min(1.5, 0.7 + intensity * 0.3);
+    
+    // Positional audio effects
+    if (position && this.positionalAudio) {
+      // Simulate distance-based volume attenuation
+      const distance = Math.sqrt(position.x * position.x + position.y * position.y);
+      const maxDistance = 800;
+      const attenuation = Math.max(0.1, 1 - (distance / maxDistance));
+      volume *= attenuation;
+    }
+    
+    this.play(type, volume, dynamicPitch);
   }
 
   /**
@@ -93,11 +190,22 @@ export class AudioManager {
   setVolume(volume: number) {
     this.volume = Math.max(0, Math.min(1, volume));
     localStorage.setItem('audio_volume', this.volume.toString());
-    
-    // Update all loaded sounds
-    this.sounds.forEach(sound => {
-      sound.volume = this.volume;
-    });
+  }
+
+  /**
+   * Set SFX volume specifically
+   */
+  setSfxVolume(volume: number) {
+    this.sfxVolume = Math.max(0, Math.min(1, volume));
+    localStorage.setItem('audio_sfx_volume', this.sfxVolume.toString());
+  }
+
+  /**
+   * Set music volume specifically
+   */
+  setMusicVolume(volume: number) {
+    this.musicVolume = Math.max(0, Math.min(1, volume));
+    localStorage.setItem('audio_music_volume', this.musicVolume.toString());
   }
 
   /**

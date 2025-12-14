@@ -1,5 +1,6 @@
 import * as PIXI from 'pixi.js';
-import { Camera, Car, Arena, PreStart, WsHud, isMobileDevice } from './types';
+import type { Camera, Car, Arena, PreStart, WsHud } from './types';
+import { isMobileDevice } from './types';
 
 export interface CameraControllerConfig {
   arena: Arena;
@@ -8,6 +9,9 @@ export interface CameraControllerConfig {
 
 export class CameraController {
   private config: CameraControllerConfig;
+  private shakeIntensity = 0;
+  private shakeFrequency = 0;
+  private shakePhase = 0;
   
   public camera: Camera;
 
@@ -32,9 +36,30 @@ export class CameraController {
     };
   }
 
-  screenShake(intensity: number = 1) {
-    this.camera.shakeX = (Math.random() - 0.5) * 8 * intensity;
-    this.camera.shakeY = (Math.random() - 0.5) * 8 * intensity;
+  screenShake(intensity: number = 1, frequency: number = 30) {
+    // Enhanced screen shake with frequency and intensity control
+    this.shakeIntensity = Math.min(this.shakeIntensity + intensity * 4, 15);
+    this.shakeFrequency = frequency;
+    this.shakePhase = 0;
+  }
+
+  // Get screen shake offset for particle system integration
+  getScreenShakeOffset(): { x: number; y: number } {
+    if (this.shakeIntensity <= 0) return { x: 0, y: 0 };
+    
+    this.shakePhase += this.shakeFrequency * 0.016; // Assuming 60fps
+    
+    const offsetX = Math.sin(this.shakePhase) * this.shakeIntensity * 0.3;
+    const offsetY = Math.cos(this.shakePhase * 1.3) * this.shakeIntensity * 0.3;
+    
+    // Apply some randomness
+    const randomX = (Math.random() - 0.5) * this.shakeIntensity * 0.4;
+    const randomY = (Math.random() - 0.5) * this.shakeIntensity * 0.4;
+    
+    return {
+      x: offsetX + randomX,
+      y: offsetY + randomY
+    };
   }
 
   update(
@@ -108,11 +133,14 @@ export class CameraController {
     this.camera.x += (targetCamX - this.camera.x) * followSmooth;
     this.camera.y += (targetCamY - this.camera.y) * followSmooth;
     
-    // Decay screen shake
-    this.camera.shakeX *= this.camera.shakeDecay;
-    this.camera.shakeY *= this.camera.shakeDecay;
-    if (Math.abs(this.camera.shakeX) < 0.1) this.camera.shakeX = 0;
-    if (Math.abs(this.camera.shakeY) < 0.1) this.camera.shakeY = 0;
+    // Enhanced screen shake with decay
+    const shakeOffset = this.getScreenShakeOffset();
+    this.camera.shakeX = shakeOffset.x;
+    this.camera.shakeY = shakeOffset.y;
+    
+    // Decay shake intensity
+    this.shakeIntensity *= this.camera.shakeDecay;
+    if (this.shakeIntensity < 0.1) this.shakeIntensity = 0;
   }
 
   private updateTargetZoom(player: Car, bots: Car[], isMobile: boolean) {

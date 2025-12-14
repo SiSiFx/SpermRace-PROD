@@ -1,5 +1,6 @@
 import * as PIXI from 'pixi.js';
-import { Arena, Theme, isMobileDevice, isPortraitMobile } from './types';
+import type { Arena, Theme } from './types';
+import { isMobileDevice, isPortraitMobile } from './types';
 
 export interface GameRendererConfig {
   container: HTMLElement;

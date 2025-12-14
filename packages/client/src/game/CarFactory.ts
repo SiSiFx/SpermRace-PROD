@@ -1,5 +1,6 @@
 import * as PIXI from 'pixi.js';
-import { Car, BOT_COLORS, isMobileDevice } from './types';
+import type { Car } from './types';
+import { BOT_COLORS, isMobileDevice } from './types';
 
 export interface CarFactoryConfig {
   theme: { text: string };
