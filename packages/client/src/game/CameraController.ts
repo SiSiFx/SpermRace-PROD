@@ -1,5 +1,5 @@
-import * as PIXI from 'pixi.js';
-import { Camera, Car, Arena, PreStart, WsHud, isMobileDevice } from './types';
+import type { Camera, Car, Arena, PreStart, WsHud } from './types';
+import { isMobileDevice } from './types';
 
 export interface CameraControllerConfig {
   arena: Arena;

@@ -205,6 +205,8 @@ export interface GameStateUpdateMessage {
     timestamp: number;
     players: Array<Pick<Player, 'id' | 'sperm' | 'isAlive'> & { trail: TrailPoint[] }>;
     world: { width: number; height: number };
+    /** Server-authoritative items (e.g., DNA fragments). */
+    items?: GameItem[];
     aliveCount: number;
   };
 }

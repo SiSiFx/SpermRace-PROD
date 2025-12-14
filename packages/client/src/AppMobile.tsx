@@ -667,6 +667,7 @@ function Practice({ onFinish: _onFinish, onBack, skipLobby = false }: { onFinish
   
   // Mobile control state (MUST be at top level, not inside conditionals!)
   const [gameCountdown, setGameCountdown] = useState<number>(6); // 6 seconds to account for game engine preStart
+  const [practiceBoostUi, setPracticeBoostUi] = useState<{ canBoost: boolean; boostCooldownPct: number }>({ canBoost: true, boostCooldownPct: 1 });
   
   const handleTouch = (x: number, y: number) => {
     const event = new CustomEvent('mobile-joystick', { detail: { x, y } });
@@ -678,6 +679,19 @@ function Practice({ onFinish: _onFinish, onBack, skipLobby = false }: { onFinish
     const event = new CustomEvent('mobile-boost');
     window.dispatchEvent(event);
   };
+
+  useEffect(() => {
+    const onUi = (e: Event) => {
+      try {
+        const detail = (e as CustomEvent).detail || {};
+        const canBoost = !!detail.canBoost;
+        const pct = Number(detail.boostCooldownPct);
+        setPracticeBoostUi({ canBoost, boostCooldownPct: Number.isFinite(pct) ? Math.max(0, Math.min(1, pct)) : 1 });
+      } catch {}
+    };
+    window.addEventListener('sr-practice-boost-ui', onUi as EventListener);
+    return () => window.removeEventListener('sr-practice-boost-ui', onUi as EventListener);
+  }, []);
 
   useEffect(() => {
     if (step === 'lobby') {
@@ -783,16 +797,16 @@ function Practice({ onFinish: _onFinish, onBack, skipLobby = false }: { onFinish
           onReplay={() => setStep('lobby')}
           onExit={onBack}
         />
-        <MobileTouchControls 
-          onTouch={handleTouch}
-          onBoost={handleBoost}
-          canBoost={true}
-          boostCooldownPct={1}
-        />
-        {/* Practice: continue quick tips during pre-start countdown */}
-        <MobileTutorial countdown={gameCountdown} context="practice" />
-      </div>
-    );
+      <MobileTouchControls 
+        onTouch={handleTouch}
+        onBoost={handleBoost}
+        canBoost={practiceBoostUi.canBoost}
+        boostCooldownPct={practiceBoostUi.boostCooldownPct}
+      />
+      {/* Practice: continue quick tips during pre-start countdown */}
+      <MobileTutorial countdown={gameCountdown} context="practice" />
+    </div>
+  );
   }
 
   return null;
@@ -1215,6 +1229,7 @@ function Lobby({ onStart: _onStart, onBack, onRefund }: { onStart: () => void; o
 }
 
 function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void; }) {
+  const { state: wsState } = useWs();
   const [gameCountdown, setGameCountdown] = useState<number>(6); // 6 seconds to match game engine preStart
   
   useEffect(() => {
@@ -1238,6 +1253,19 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void; 
     // But better to rely on NewGameView's state if possible or just fire the event.
     // We added a listener in NewGameView to catch this event and trigger screenshake.
   };
+
+  // Tournament boost cooldown (server authoritative)
+  let canBoost = true;
+  let boostCooldownPct = 1;
+  try {
+    const meId = wsState.playerId;
+    const me = meId && wsState.game?.players ? (wsState.game.players as any[]).find(p => p.id === meId) : null;
+    const status = me?.status;
+    const cooldownMs = Number(status?.boostCooldownMs) || 0;
+    const maxMs = Number(status?.boostMaxCooldownMs) || 1200;
+    canBoost = cooldownMs <= 0;
+    boostCooldownPct = maxMs > 0 ? Math.max(0, Math.min(1, 1 - (cooldownMs / maxMs))) : 1;
+  } catch {}
   
   return (
     <div className="screen active" style={{ padding: 0, position: 'fixed', inset: 0, width: '100vw', height: '100vh', zIndex: 100 }}>
@@ -1249,8 +1277,8 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void; 
       <MobileTouchControls 
         onTouch={handleTouch}
         onBoost={handleBoost}
-        canBoost={true}
-        boostCooldownPct={1}
+        canBoost={canBoost}
+        boostCooldownPct={boostCooldownPct}
       />
       <MobileTutorial countdown={gameCountdown} />
     </div>

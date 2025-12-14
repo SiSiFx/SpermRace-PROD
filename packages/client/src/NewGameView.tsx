@@ -6,7 +6,7 @@ import { HudManager } from './HudManager';
 import { logger } from './utils/logger';
 
 // Import game engine modules
-import {
+import type {
   Car,
   Trail,
   Particle,
@@ -27,12 +27,8 @@ import {
   KillStreakNotification,
   Emote,
   PreStart,
-  BOT_COLORS,
-  normalizeAngle,
-  isPortraitMobile,
-  isMobileDevice,
-  isAndroidDevice,
 } from './game/types';
+import { BOT_COLORS, normalizeAngle, isPortraitMobile, isMobileDevice, isAndroidDevice } from './game/types';
 
 import { InputHandler } from './game/InputHandler';
 import { CameraController } from './game/CameraController';
@@ -117,6 +113,34 @@ class SpermRaceGame {
   private hotspotToastEl: HTMLDivElement | null = null;
   private hotspotToastTimeout: number | undefined;
   private finalSurgeTimeout: number | undefined;
+  private practiceBotTotal: number = 8;
+
+  // Tournament (server-authoritative) bindings injected from React
+  public wsGame: any = null;
+  public wsPlayerId: string | null = null;
+  public wsSendInput: ((target: { x: number; y: number }, accelerate: boolean, boost?: boolean) => void) | null = null;
+  public wsDebugCollisions: any[] | null = null;
+  private tournamentExpected: boolean = false;
+
+  // Tournament runtime state
+  private serverCarsById: Map<string, Car> = new Map();
+  private serverTrailById: Map<string, Trail> = new Map();
+  private serverItemGraphicsById: Map<string, PIXI.Graphics> = new Map();
+  private serverItemsContainer: PIXI.Container | null = null;
+  private lastServerItemsById: Map<string, { x: number; y: number }> = new Map();
+  private lastArenaRedrawAtMs: number = 0;
+  private lastInputSendAtMs: number = 0;
+  private pendingBoostPulse: boolean = false;
+  private lastBoostPulseAtMs: number = 0;
+  private wsLocalStatus: { boosting?: boolean; boostCooldownMs?: number; boostMaxCooldownMs?: number } | null = null;
+  private lastKillFeedProcessedTs: number = 0;
+  private readonly PRACTICE_LUNGE = {
+    COST: 30,
+    COOLDOWN_MS: 1200,
+    VISUAL_MS: 350,
+    IMPULSE: 780, // tuned for the client kinematic model (base speed ~220)
+    DASH_DECAY_PER_S: 4.5, // exp decay; higher = shorter dash tail
+  } as const;
 
   // Theme colors loaded from CSS variables
   private theme = {
@@ -268,10 +292,11 @@ class SpermRaceGame {
   private cameraController: CameraController | null = null;
   private particleSystem: ParticleSystem | null = null;
 
-  constructor(container: HTMLElement, onReplay?: () => void, onExit?: () => void) {
+  constructor(container: HTMLElement, onReplay?: () => void, onExit?: () => void, tournamentExpected: boolean = false) {
     this.container = container;
     this.onReplay = onReplay;
     this.onExit = onExit;
+    this.tournamentExpected = tournamentExpected;
     
     // Initialize camera controller
     this.cameraController = new CameraController({
@@ -293,11 +318,13 @@ class SpermRaceGame {
   }
   
   private handleMobileBoost() {
-    // Check if boost actually happened
-    if (this.player?.isBoosting) {
-      // Haptic handled in MobileTouchControls, but we can add screen shake here
+    // Mobile boost button tap: in tournament, queue a lunge pulse; in practice, add extra feedback if boosting.
+    if (this.isTournamentMode()) {
+      this.queueBoostPulse('mobile-event');
       this.screenShake(0.2);
+      return;
     }
+    if (this.player?.isBoosting) this.screenShake(0.2);
   }
   
   // Public accessor for external haptic triggers
@@ -583,13 +610,14 @@ class SpermRaceGame {
     // Pre-spawn queue for spaced spawns and pre-start countdown
     this.spawnBounds = { left: -this.arena.width / 2, right: this.arena.width / 2, top: -this.arena.height / 2, bottom: this.arena.height / 2 };
     // Build more spawn points to accommodate extra bots without falling back to random edge spawns
-    this.buildSpawnQueue(40);
+    this.practiceBotTotal = isMobileDevice() ? 6 : 10;
+    this.buildSpawnQueue(Math.max(14, 1 + this.practiceBotTotal + 4));
     this.preStart = { startAt: Date.now(), durationMs: 3000 };
     this.roundInProgress = true; // Start first round
     this.dbg('spawnQueue[0..3]', this.spawnQueue.slice(0, 4));
     try { this.createPlayer(); } catch (e) { logger.error('createPlayer failed', e); }
-    // Only create local dev bots in practice (when tournament HUD is not active)
-    if (!(this.wsHud && this.wsHud.active)) {
+    // Only create local dev bots in practice (never in tournament)
+    if (!this.isTournamentMode()) {
       try { this.createBot(); } catch (e) { logger.error('createBot failed', e); }
     }
     this.createUI();
@@ -1184,11 +1212,7 @@ class SpermRaceGame {
     // Use InputHandler module for all input handling
     this.inputHandler = new InputHandler(this.app.canvas, {
       onStartBoost: () => {
-        if (this.player?.isBoosting) {
-          this.stopBoost();
-        } else {
-          this.startBoost();
-        }
+        this.startBoost();
       },
       onStopBoost: () => this.stopBoost(),
       onZoom: (delta) => {
@@ -1532,21 +1556,25 @@ class SpermRaceGame {
   createPlayer() {
     const rawSpawn = this.spawnQueue[this.spawnQueueIndex] || this.randomEdgeSpawn();
     const isTournament = !!(this.wsHud && this.wsHud.active);
-    let spawnX = rawSpawn.x;
-    let spawnY = rawSpawn.y;
-    // In Practice, always spawn inside the initial safe zone for clarity
-    if (!isTournament && this.zone && this.zone.startRadius) {
-      const dx = spawnX - this.zone.centerX;
-      const dy = spawnY - this.zone.centerY;
+    const clampSpawnInsideInitialZone = (spawn: { x: number; y: number; angle: number }) => {
+      if (!this.zone || !this.zone.startRadius) return spawn;
+      let { x, y } = spawn;
+      const dx = x - this.zone.centerX;
+      const dy = y - this.zone.centerY;
       const dist = Math.sqrt(dx * dx + dy * dy) || 0;
       const maxRadius = this.zone.startRadius * 0.8; // keep a margin from edge
       if (dist > maxRadius && dist > 0) {
-        const scale = maxRadius / dist;
-        spawnX = this.zone.centerX + dx * scale;
-        spawnY = this.zone.centerY + dy * scale;
+        // Don't pin spawns exactly on the border; pull them a bit inside with some randomness.
+        const targetRadius = maxRadius * (0.72 + Math.random() * 0.18); // 72%-90% of maxRadius
+        const scale = targetRadius / dist;
+        x = this.zone.centerX + dx * scale;
+        y = this.zone.centerY + dy * scale;
       }
-    }
-    const s = { x: spawnX, y: spawnY, angle: rawSpawn.angle };
+      return { x, y, angle: spawn.angle };
+    };
+
+    // In Practice, keep spawns inside the initial safe zone, but avoid spawning on the ring itself.
+    const s = !isTournament ? clampSpawnInsideInitialZone(rawSpawn) : rawSpawn;
     // First slice steering: if the chosen first slice would cut toward this spawn, flip it
     if (this.firstSliceSide) {
       const nearLeft = s.x < -this.arena.width * 0.25;
@@ -1622,7 +1650,8 @@ class SpermRaceGame {
       const dist = Math.sqrt(dx * dx + dy * dy) || 0;
       const maxRadius = this.zone.startRadius * 0.8;
       if (dist > maxRadius && dist > 0) {
-        const scale = maxRadius / dist;
+        const targetRadius = maxRadius * (0.72 + Math.random() * 0.18);
+        const scale = targetRadius / dist;
         x = this.zone.centerX + dx * scale;
         y = this.zone.centerY + dy * scale;
       }
@@ -1647,7 +1676,8 @@ class SpermRaceGame {
     }
     // Create additional bots for testing
     this.extraBots = [];
-    for (let i = 0; i < 31; i++) {
+    const extraCount = Math.max(0, (this.practiceBotTotal || 0) - 1);
+    for (let i = 0; i < extraCount; i++) {
       const sRaw = this.spawnQueue[this.spawnQueueIndex + 1 + i] || this.randomEdgeSpawn();
       const s = clampIfPractice(sRaw);
       const bColor = BOT_COLORS[i % BOT_COLORS.length] || 0xff00ff;
@@ -1665,7 +1695,7 @@ class SpermRaceGame {
         }
       }
     }
-    this.spawnQueueIndex += 1 + 31;
+    this.spawnQueueIndex += 1 + extraCount;
   }
 
   randomEdgeSpawn(): { x: number; y: number; angle: number } {
@@ -1775,8 +1805,11 @@ class SpermRaceGame {
       boostRegenRate: 24,
       boostConsumptionRate: 55,
       minBoostEnergy: 20,
+      dashVx: 0,
+      dashVy: 0,
       spawnTime: Date.now(), // For growth over time
       killBoostUntil: 0, // Speed boost from kills
+      spawnProtectedUntil: Date.now() + 2500,
       trailPoints: [],
       trailGraphics: null,
       lastTrailTime: 0,
@@ -1855,24 +1888,59 @@ class SpermRaceGame {
   }
 
   startBoost() {
-    if (this.player && this.player.boostEnergy >= (this.player.minBoostEnergy + 5) && !this.player.isBoosting) {
-      this.player.isBoosting = true;
-      this.player.targetSpeed = this.player.boostSpeed;
-      
-      // Enhanced boost feedback for mobile
-      const isMobile = isMobileDevice();
-      
-      // Haptic feedback - makes boost feel punchy
-      this.hapticFeedback('medium');
-      
-      // Light screen shake on boost start (zoom handled in updateCamera)
-      this.screenShake(0.3);
-      
-      // Skip heavy particle effect on mobile - causes visual glitches
-      if (!isMobile) {
-        this.createBoostEffect(this.player.x, this.player.y);
-      }
+    if (this.isTournamentMode()) {
+      this.queueBoostPulse('ui');
+      return;
     }
+    if (!this.player || this.player.destroyed) return;
+    this.tryActivatePracticeLunge(this.player);
+  }
+
+  private queueBoostPulse(_source: string) {
+    // Tournament boost is a momentary server-side lunge; queue a single boost flag for the next input send.
+    if (!this.isTournamentMode()) return;
+    if (this.preStart) return;
+    const now = Date.now();
+    if (now - this.lastBoostPulseAtMs < 120) return;
+    this.lastBoostPulseAtMs = now;
+    this.pendingBoostPulse = true;
+    try { this.hapticFeedback('medium'); } catch {}
+    try { this.screenShake(0.3); } catch {}
+  }
+
+  private tryActivatePracticeLunge(car: Car): boolean {
+    if (!car || car.destroyed) return false;
+    const now = Date.now();
+
+    // Cooldown stored in ms on the car (practice-only)
+    const cooldownMs = Math.max(0, Number((car as any).boostCooldown) || 0);
+    if (cooldownMs > 0) return false;
+
+    const cost = this.PRACTICE_LUNGE.COST;
+    if ((car.boostEnergy || 0) < cost) return false;
+
+    // Spend energy upfront (server parity)
+    car.boostEnergy = Math.max(0, (car.boostEnergy || 0) - cost);
+
+    // Apply dash impulse in facing direction (added into velocity later in updateCar)
+    const impulse = this.PRACTICE_LUNGE.IMPULSE;
+    const dvx = Math.cos(car.angle) * impulse;
+    const dvy = Math.sin(car.angle) * impulse;
+    (car as any).dashVx = ((car as any).dashVx || 0) + dvx;
+    (car as any).dashVy = ((car as any).dashVy || 0) + dvy;
+
+    // Visual boosting window
+    (car as any).boostTimer = this.PRACTICE_LUNGE.VISUAL_MS;
+    car.isBoosting = true;
+
+    // Set cooldown
+    (car as any).boostCooldown = this.PRACTICE_LUNGE.COOLDOWN_MS;
+
+    // Feedback
+    this.hapticFeedback('medium');
+    this.screenShake(0.35);
+    try { this.emitBoostEcho(car.x, car.y); } catch {}
+    return true;
   }
   
   // Get particle from pool or create new one
@@ -1944,6 +2012,7 @@ class SpermRaceGame {
   }
 
   stopBoost() {
+    if (this.isTournamentMode()) return;
     if (this.player?.isBoosting) {
       this.player.isBoosting = false;
       this.player.targetSpeed = this.player.baseSpeed;
@@ -1964,11 +2033,20 @@ class SpermRaceGame {
       const camY = this.player.y;
       const nearbyRadius = 600;
       let nearbyCount = 0;
-      if (this.bot && !this.bot.destroyed) {
-        const dx = this.bot.x - camX; const dy = this.bot.y - camY; if (dx*dx + dy*dy < nearbyRadius*nearbyRadius) nearbyCount++;
-      }
-      for (const b of this.extraBots) {
-        if (!b.destroyed) { const dx = b.x - camX; const dy = b.y - camY; if (dx*dx + dy*dy < nearbyRadius*nearbyRadius) nearbyCount++; }
+      if (this.isTournamentMode()) {
+        for (const c of Array.from(this.serverCarsById.values())) {
+          if (!c || c === this.player || c.destroyed) continue;
+          const dx = c.x - camX;
+          const dy = c.y - camY;
+          if (dx * dx + dy * dy < nearbyRadius * nearbyRadius) nearbyCount++;
+        }
+      } else {
+        if (this.bot && !this.bot.destroyed) {
+          const dx = this.bot.x - camX; const dy = this.bot.y - camY; if (dx*dx + dy*dy < nearbyRadius*nearbyRadius) nearbyCount++;
+        }
+        for (const b of this.extraBots) {
+          if (!b.destroyed) { const dx = b.x - camX; const dy = b.y - camY; if (dx*dx + dy*dy < nearbyRadius*nearbyRadius) nearbyCount++; }
+        }
       }
       const crowdFactor = Math.min(1, nearbyCount / 8);
       const isMobile = isMobileDevice();
@@ -2067,6 +2145,336 @@ class SpermRaceGame {
     }
   }
 
+  private isTournamentMode(): boolean {
+    return this.tournamentExpected || !!(this.wsHud && this.wsHud.active);
+  }
+
+  private parseColorToNumber(color: any): number {
+    if (typeof color === 'number' && Number.isFinite(color)) return color;
+    if (typeof color === 'string') {
+      const m = color.trim().match(/^#?([0-9a-fA-F]{6})$/);
+      if (m) return parseInt(m[1], 16);
+    }
+    return 0xff00ff;
+  }
+
+  private normalizeAngleLocal(a: number): number {
+    while (a > Math.PI) a -= Math.PI * 2;
+    while (a < -Math.PI) a += Math.PI * 2;
+    return a;
+  }
+
+  private syncTournamentFromServer(deltaTime: number) {
+    if (!this.app || !this.worldContainer) return;
+    const wsGame = this.wsGame;
+    if (!wsGame || !wsGame.world || !Array.isArray(wsGame.players)) return;
+
+    // Tournament is server-authoritative: hide any practice-only map entities.
+    try { if (this.boostPadsContainer) this.boostPadsContainer.visible = false; } catch {}
+    try { if (this.pickupsContainer) this.pickupsContainer.visible = false; } catch {}
+    try { if (this.artifactContainer) this.artifactContainer.visible = false; } catch {}
+
+    const worldW = Number(wsGame.world.width) || 0;
+    const worldH = Number(wsGame.world.height) || 0;
+    if (!worldW || !worldH) return;
+
+    const halfW = worldW / 2;
+    const halfH = worldH / 2;
+
+    // Keep arena in sync with server bounds (server origin is top-left; client uses centered coords)
+    const prevW = this.arena.width;
+    const prevH = this.arena.height;
+    this.arena.width = worldW;
+    this.arena.height = worldH;
+
+    // Ensure tournament zone radii match server-provided world size (zone runs in centered coords).
+    try {
+      if (this.isTournamentMode() && this.zone && this.zoneGraphics) {
+        const desiredStart = Math.max(0, Math.hypot(worldW, worldH) * 0.5 * 1.02);
+        const prevStart = Number(this.zone.startRadius) || desiredStart;
+        if (Number.isFinite(desiredStart) && Math.abs(desiredStart - prevStart) > 25) {
+          const ratio = prevStart > 0 ? desiredStart / prevStart : 1;
+          this.zone.startRadius = desiredStart;
+          this.zone.currentRadius = (Number(this.zone.currentRadius) || desiredStart) * ratio;
+          this.zone.targetRadius = (Number(this.zone.targetRadius) || desiredStart) * ratio;
+        }
+      }
+    } catch {}
+
+    // Throttle border redraw during shrink to avoid heavy work every tick
+    const now = Date.now();
+    const sizeDelta = Math.abs(prevW - worldW) + Math.abs(prevH - worldH);
+    if (sizeDelta > 30 && now - this.lastArenaRedrawAtMs > 750) {
+      this.lastArenaRedrawAtMs = now;
+      try { this.drawArenaBorder(); } catch {}
+      try { this.drawBorderOverlay(); } catch {}
+      // Keep collision bounds consistent for any local visual helpers (no local kills in tournament)
+      try { this.spawnBounds = { left: -halfW, right: halfW, top: -halfH, bottom: halfH }; } catch {}
+    }
+
+    const meId = this.wsPlayerId;
+    const aliveSet = new Set<string>();
+
+    // Create/update cars for each server player
+    for (const p of wsGame.players) {
+      if (!p || !p.id || !p.sperm) continue;
+      const id = String(p.id);
+      const isMe = !!meId && id === meId;
+      const isAlive = !!p.isAlive;
+      if (isAlive) aliveSet.add(id);
+
+      const targetX = (Number(p.sperm.position?.x) || 0) - halfW;
+      const targetY = (Number(p.sperm.position?.y) || 0) - halfH;
+      const targetAngle = Number(p.sperm.angle) || 0;
+      const color = this.parseColorToNumber((p.sperm as any).color);
+
+      let car = this.serverCarsById.get(id);
+      if (!car) {
+        const type = isMe ? 'player' : 'enemy';
+        car = this.createCar(targetX, targetY, color, type);
+        car.angle = targetAngle;
+        car.targetAngle = targetAngle;
+        car.sprite.rotation = targetAngle;
+        // Attach to world container
+        try { this.worldContainer.addChild(car.sprite); } catch {}
+        try { (car.sprite as any).zIndex = 50; } catch {}
+        // Set display name
+        try {
+          const nm = this.wsHud?.idToName?.[id] || `${id.slice(0, 4)}…${id.slice(-4)}`;
+          car.name = nm;
+          if ((car as any).nameplate) (car as any).nameplate.textContent = nm;
+        } catch {}
+        this.serverCarsById.set(id, car);
+      } else {
+        // Ensure color stays synced if server changes it
+        if (car.color !== color) car.color = color;
+      }
+
+      // Alive/dead transitions (visual only)
+      if (!isAlive && !car.destroyed) {
+        car.destroyed = true;
+        car.elimAtMs = now;
+        try { car.sprite.visible = false; } catch {}
+      } else if (isAlive && car.destroyed) {
+        car.destroyed = false;
+        try { car.sprite.visible = true; } catch {}
+      }
+
+      // Status for boost feel
+      const status = (p as any).status || null;
+      if (isMe) this.wsLocalStatus = status;
+      car.isBoosting = !!status?.boosting;
+
+      // Smoothly converge to server state (simple interpolation to hide 20Hz updates)
+      const posLerp = Math.min(1, deltaTime * 14);
+      car.x += (targetX - car.x) * posLerp;
+      car.y += (targetY - car.y) * posLerp;
+      const diff = this.normalizeAngleLocal(targetAngle - car.angle);
+      car.angle = car.angle + diff * Math.min(1, deltaTime * 18);
+      car.targetAngle = targetAngle;
+
+      // Update sprite transform
+      if (car.sprite) {
+        car.sprite.x = car.x;
+        car.sprite.y = car.y;
+        car.sprite.rotation = car.angle;
+        car.sprite.visible = !car.destroyed;
+      }
+    }
+
+    // Remove cars that no longer exist in snapshot (e.g., reconnect edge cases)
+    const presentIds = new Set<string>(wsGame.players.map((p: any) => String(p?.id || '')).filter(Boolean));
+    for (const [id, car] of Array.from(this.serverCarsById.entries())) {
+      if (presentIds.has(id)) continue;
+      try { (car as any).nameplate?.remove?.(); } catch {}
+      try { car.sprite?.parent?.removeChild?.(car.sprite); } catch {}
+      try { car.sprite?.destroy?.({ children: true }); } catch {}
+      this.serverCarsById.delete(id);
+    }
+
+    // Point this.player at the real local player entity for camera/HUD
+    if (meId && this.serverCarsById.has(meId)) {
+      const realMe = this.serverCarsById.get(meId)!;
+      // If we spawned a local placeholder player before WS state arrived, remove it to avoid duplicates.
+      if (this.player && this.player !== realMe && !Array.from(this.serverCarsById.values()).includes(this.player)) {
+        try { (this.player as any).nameplate?.remove?.(); } catch {}
+        try { this.player.sprite?.parent?.removeChild?.(this.player.sprite); } catch {}
+        try { this.player.sprite?.destroy?.({ children: true }); } catch {}
+      }
+      this.player = realMe;
+    }
+
+    // Update alive count from server snapshot
+    try {
+      this.alivePlayers = aliveSet.size;
+      if (this.hudManager) this.hudManager.updateAliveCount(this.alivePlayers);
+    } catch {}
+
+    // Trails: render from server points (createdAt timestamps)
+    this.syncTournamentTrailsFromServer(wsGame.players, halfW, halfH);
+
+    // Items: render DNA fragments + pickup feedback
+    this.syncTournamentItemsFromServer((wsGame as any).items || [], halfW, halfH);
+
+    // Debug collision overlays from server (dev only)
+    try {
+      if (Array.isArray(this.wsDebugCollisions)) {
+        this.debugCollisions = (this.wsDebugCollisions as any[]).map(d => ({
+          ...d,
+          // Convert to centered coords for overlay draw code
+          hit: { x: (d.hit?.x ?? 0) - halfW, y: (d.hit?.y ?? 0) - halfH },
+          segment: d.segment ? {
+            from: { x: (d.segment.from?.x ?? 0) - halfW, y: (d.segment.from?.y ?? 0) - halfH },
+            to: { x: (d.segment.to?.x ?? 0) - halfW, y: (d.segment.to?.y ?? 0) - halfH },
+          } : undefined
+        })) as any;
+      }
+    } catch {}
+  }
+
+  private syncTournamentTrailsFromServer(players: any[], halfW: number, halfH: number) {
+    if (!this.trailContainer) return;
+    const now = Date.now();
+
+    const ids = new Set<string>();
+    for (const p of players) {
+      const id = String(p?.id || '');
+      if (!id) continue;
+      ids.add(id);
+      const car = this.serverCarsById.get(id);
+      if (!car) continue;
+
+      let trail = this.serverTrailById.get(id);
+      if (!trail) {
+        trail = { carId: id, car, points: [], graphics: new PIXI.Graphics() } as any;
+        this.serverTrailById.set(id, trail);
+        try { this.trailContainer.addChild(trail.graphics); } catch {}
+      } else {
+        trail.car = car;
+      }
+
+      const ptsSrc = Array.isArray(p.trail) ? p.trail : [];
+      const pts: any[] = [];
+      for (let i = 0; i < ptsSrc.length; i++) {
+        const pt = ptsSrc[i];
+        const createdAt = Number((pt as any).createdAt) || 0;
+        // Keep recent window to match client visuals
+        if (createdAt && (now - createdAt) > 3500) continue;
+        pts.push({
+          x: (Number(pt.x) || 0) - halfW,
+          y: (Number(pt.y) || 0) - halfH,
+          time: createdAt || now,
+          isBoosting: false,
+        });
+      }
+      if (pts.length > 140) pts.splice(0, pts.length - 140);
+      (trail as any).points = pts;
+
+      // Render using existing helper (adds proximity glow and enemy ghost wiggle)
+      try { this.renderTrail(trail as any); } catch {}
+    }
+
+    // Remove trails that no longer exist
+    for (const [id, trail] of Array.from(this.serverTrailById.entries())) {
+      if (ids.has(id)) continue;
+      try { this.trailContainer.removeChild(trail.graphics); } catch {}
+      try { trail.graphics.destroy(); } catch {}
+      this.serverTrailById.delete(id);
+    }
+  }
+
+  private ensureServerItemsContainer() {
+    if (this.serverItemsContainer) return;
+    if (!this.worldContainer) return;
+    this.serverItemsContainer = new PIXI.Container();
+    try { (this.serverItemsContainer as any).zIndex = 12; } catch {}
+    try { this.worldContainer.addChild(this.serverItemsContainer); } catch {}
+  }
+
+  private syncTournamentItemsFromServer(items: any[], halfW: number, halfH: number) {
+    this.ensureServerItemsContainer();
+    if (!this.serverItemsContainer) return;
+
+    const now = Date.now();
+    const nextIds = new Set<string>();
+    const nextPos = new Map<string, { x: number; y: number }>();
+
+    for (const it of Array.isArray(items) ? items : []) {
+      if (!it || !it.id) continue;
+      const id = String(it.id);
+      nextIds.add(id);
+      const x = (Number(it.x) || 0) - halfW;
+      const y = (Number(it.y) || 0) - halfH;
+      nextPos.set(id, { x, y });
+
+      let g = this.serverItemGraphicsById.get(id);
+      if (!g) {
+        g = new PIXI.Graphics();
+        this.serverItemGraphicsById.set(id, g);
+        try { this.serverItemsContainer.addChild(g); } catch {}
+      }
+      g.clear();
+      const pulse = 0.5 + 0.5 * Math.sin(now * 0.006 + (id.length % 10));
+      const r = 9 + pulse * 2;
+      g.circle(x, y, r).fill({ color: 0xfacc15, alpha: 0.85 });
+      g.circle(x, y, r + 6).stroke({ width: 2, color: 0xfbbf24, alpha: 0.25 + pulse * 0.15 });
+    }
+
+    // Pickup feedback: if an item disappeared near the local player, punch feedback
+    try {
+      if (this.player && !this.player.destroyed) {
+        for (const [prevId, prev] of Array.from(this.lastServerItemsById.entries())) {
+          if (nextIds.has(prevId)) continue;
+          const dx = prev.x - this.player.x;
+          const dy = prev.y - this.player.y;
+          if ((dx * dx + dy * dy) < (70 * 70)) {
+            this.hapticFeedback('light');
+            this.screenShake(0.25);
+            this.showHotspotToast('DNA absorbed ƒ?½ boost refill + cooldown trim', '#fbbf24');
+            this.createExplosion(prev.x, prev.y, 0xfacc15);
+          }
+        }
+      }
+    } catch {}
+
+    // Remove stale graphics
+    for (const [id, g] of Array.from(this.serverItemGraphicsById.entries())) {
+      if (nextIds.has(id)) continue;
+      try { this.serverItemsContainer.removeChild(g); } catch {}
+      try { g.destroy(); } catch {}
+      this.serverItemGraphicsById.delete(id);
+    }
+
+    // Save for next frame
+    this.lastServerItemsById = nextPos;
+  }
+
+  private maybePlayTournamentKillFeedback() {
+    if (!this.isTournamentMode()) return;
+    const feed = this.wsHud?.killFeed;
+    if (!Array.isArray(feed) || feed.length === 0) return;
+
+    const top = feed[0] as any;
+    const ts = Number(top?.ts) || 0;
+    if (!ts || ts === this.lastKillFeedProcessedTs) return;
+    this.lastKillFeedProcessedTs = ts;
+
+    const meId = this.wsPlayerId;
+    if (!meId) return;
+
+    const killerId = top?.killerId as string | undefined;
+    const victimId = top?.victimId as string | undefined;
+
+    if (killerId && killerId === meId) {
+      this.hapticFeedback('success');
+      this.screenShake(0.7);
+      this.showHotspotToast('KO! ƒ?? keep chaining for pressure', '#ef4444');
+    } else if (victimId && victimId === meId) {
+      this.hapticFeedback('heavy');
+      this.screenShake(0.9);
+    }
+  }
+
   gameLoop() {
     if (!this.app) return;
     
@@ -2084,8 +2492,10 @@ class SpermRaceGame {
       this.lastFrameTime = now - (elapsed % this.frameInterval); // Carry over remainder
     }
     
-    const deltaTime = this.app.ticker.deltaMS / 1000;
-    const isTournament = !!(this.wsHud && this.wsHud.active);
+    const deltaTimeRaw = this.app.ticker.deltaMS / 1000;
+    // Clamp to avoid huge dt spikes (tab switch / timer throttling) causing instant deaths or physics explosions.
+    const deltaTime = Math.min(0.05, Math.max(0, deltaTimeRaw));
+    const isTournament = this.isTournamentMode();
     
     // Handle pre-start countdown (freeze inputs/boost/trails until GO)
     if (this.preStart) {
@@ -2259,8 +2669,29 @@ class SpermRaceGame {
     }
     // Handle player input only after countdown
     if (!this.preStart) this.handlePlayerInput();
-    
-    // Update cars only after countdown
+
+    // Tournament: server-authoritative render + no local simulation
+    if (!this.preStart && isTournament) {
+      try { this.syncTournamentFromServer(deltaTime); } catch {}
+      try { this.maybePlayTournamentKillFeedback(); } catch {}
+      try { this.updateCamera(); } catch {}
+      try { this.updateBoostBar(); } catch {}
+      try { this.updateNameplates(); } catch {}
+      try { this.updateLeaderboard(); } catch {}
+      try { this.renderDebugOverlays(); } catch {}
+
+      // If server ends the round, auto-navigate out once
+      if (this.wsHud?.active && !this.notifiedServerEnd) {
+        const aliveCount = this.wsHud.aliveSet?.size ?? 0;
+        if (aliveCount <= 1 && this.onExit) {
+          this.notifiedServerEnd = true;
+          setTimeout(() => { try { this.onExit && this.onExit(); } catch {} }, 500);
+        }
+      }
+      return;
+    }
+
+    // Practice/local simulation after countdown
     if (!this.preStart) {
       // Timed unlock of pickups to avoid early clutter (artifacts/hotspots disabled)
       const sinceStart = Date.now() - (this.gameStartTime || Date.now());
@@ -2398,6 +2829,10 @@ class SpermRaceGame {
       car.nameplate.style.left = `${sx}px`;
       car.nameplate.style.top = `${sy}px`;
     };
+    if (this.isTournamentMode()) {
+      for (const car of Array.from(this.serverCarsById.values())) updateFor(car);
+      return;
+    }
     updateFor(this.player);
     updateFor(this.bot);
     for (const b of this.extraBots) updateFor(b);
@@ -2693,22 +3128,43 @@ class SpermRaceGame {
     } else {
       (this.player as any).targetAngle = targetAngle;
     }
+
+    const isTournament = this.isTournamentMode();
+    if (isTournament && this.wsSendInput) {
+      // Convert local aim direction into a stable absolute target point in server coordinates (0..W / 0..H).
+      // Server uses absolute targets; client uses centered world coords.
+      const worldW = Number(this.wsGame?.world?.width) || this.arena.width || 0;
+      const worldH = Number(this.wsGame?.world?.height) || this.arena.height || 0;
+      if (!worldW || !worldH) return;
+      const serverPosX = this.player.x + worldW / 2;
+      const serverPosY = this.player.y + worldH / 2;
+      const safeLen = Math.max(worldW, worldH) * 0.75;
+      const tx = serverPosX + Math.cos(targetAngle) * safeLen;
+      const ty = serverPosY + Math.sin(targetAngle) * safeLen;
+
+      const boost = this.pendingBoostPulse;
+      // Basic throttle: avoid hammering every tick even though WsProvider also throttles
+      const now = Date.now();
+      if (now - this.lastInputSendAtMs > 12) {
+        this.lastInputSendAtMs = now;
+        try { this.wsSendInput({ x: tx, y: ty }, true, boost ? true : undefined); } catch {}
+      }
+      if (boost) this.pendingBoostPulse = false;
+    }
     
     // Boost control - hold to boost (DESKTOP ONLY - mobile uses button)
     // Don't interfere with mobile boost controls
     const isMobile = isMobileDevice();
-    if (!isMobile) {
-      if (this.keys['Space']) {
-        if (!this.player.isBoosting && this.player.boostEnergy >= (this.player.minBoostEnergy + 5)) {
-          this.player.isBoosting = true;
-          this.player.targetSpeed = this.player.boostSpeed;
-        }
-      } else {
-        if (this.player.isBoosting) {
-          this.player.isBoosting = false;
-          this.player.targetSpeed = this.player.baseSpeed;
-        }
-      }
+    // Practice: Space = lunge pulse (momentary)
+    if (!isMobile && !isTournament && this.keys['Space']) {
+      this.keys['Space'] = false; // single-shot
+      this.startBoost();
+    }
+
+    // Tournament: Space = lunge pulse (momentary)
+    if (!isMobile && isTournament && this.keys['Space']) {
+      this.keys['Space'] = false; // single-shot
+      this.queueBoostPulse('space');
     }
 
     // Quick emote: press 'E' to pop a short SR emote above your head
@@ -2749,56 +3205,50 @@ class SpermRaceGame {
     if (car.spotlightUntil && car.spotlightUntil <= now) car.spotlightUntil = undefined;
     const buffActive = !!(car.hotspotBuffExpiresAt && car.hotspotBuffExpiresAt > now);
     
-    // Update boost energy system
-    const wasBoosting = car.isBoosting;
-    if (car.isBoosting) {
-      car.boostEnergy -= car.boostConsumptionRate * deltaTime;
-      car.targetSpeed = car.boostSpeed;
-      if (buffActive) car.targetSpeed *= 1.08;
-      car.driftFactor = Math.min(car.maxDriftFactor, car.driftFactor + deltaTime * 2.0);
-      
-      // Stop boosting if energy depleted
-      if (car.boostEnergy <= 0) {
-        car.boostEnergy = 0;
-        car.isBoosting = false;
-        car.targetSpeed = car.baseSpeed;
-      }
-    } else {
-      // Regenerate boost energy when not boosting
-      // Progressive regen: faster in early game, slower in final seconds
-      let regenMultiplier = 1.0;
-      
-      if (this.zone && this.zone.startAtMs) {
-        const elapsed = Date.now() - this.zone.startAtMs;
-        const remainMs = Math.max(0, this.zone.durationMs - elapsed);
-        
-        // First 10 seconds: 50% faster regen (1.5x)
-        if (elapsed < 10000) {
-          regenMultiplier = 1.5;
-        }
-        // Final 5 seconds: 30% slower regen (0.7x) for tension
-        else if (remainMs < 5000) {
-          regenMultiplier = 0.7;
-        }
-      }
-      
-      car.boostEnergy += car.boostRegenRate * deltaTime * regenMultiplier;
-      if (car.boostEnergy > car.maxBoostEnergy) {
-        car.boostEnergy = car.maxBoostEnergy;
-      }
-      // Kill boost takes priority over normal speed
-      if (car.killBoostUntil && now < car.killBoostUntil) {
-        car.targetSpeed = car.boostSpeed * 0.8;
-      } else {
-        car.targetSpeed = car.baseSpeed;
-        if (buffActive) car.targetSpeed *= 1.05;
-      }
-      car.driftFactor = Math.max(0, car.driftFactor - deltaTime * 1.5);
+    // Practice lunge system: cooldown + short visual window + energy regen
+    const wasBoosting = !!car.isBoosting;
+    const boostCooldownMsPrev = Math.max(0, Number((car as any).boostCooldown) || 0);
+    if (boostCooldownMsPrev > 0) {
+      (car as any).boostCooldown = Math.max(0, boostCooldownMsPrev - deltaTime * 1000);
     }
+    const boostTimerPrev = Math.max(0, Number((car as any).boostTimer) || 0);
+    if (boostTimerPrev > 0) {
+      (car as any).boostTimer = Math.max(0, boostTimerPrev - deltaTime * 1000);
+    }
+    car.isBoosting = (Number((car as any).boostTimer) || 0) > 0;
+
+    // Regenerate boost energy (progressive pacing)
+    let regenMultiplier = 1.0;
+    if (this.zone && this.zone.startAtMs) {
+      const elapsed = Date.now() - this.zone.startAtMs;
+      const remainMs = Math.max(0, this.zone.durationMs - elapsed);
+      if (elapsed < 10000) regenMultiplier = 1.5;
+      else if (remainMs < 5000) regenMultiplier = 0.7;
+    }
+    car.boostEnergy += car.boostRegenRate * deltaTime * regenMultiplier;
+    if (car.boostEnergy > car.maxBoostEnergy) car.boostEnergy = car.maxBoostEnergy;
+
+    // Base target speed (dash is applied via impulse; we keep speed stable for control)
+    if (car.killBoostUntil && now < car.killBoostUntil) {
+      car.targetSpeed = car.boostSpeed * 0.8;
+    } else {
+      car.targetSpeed = car.baseSpeed;
+      if (buffActive) car.targetSpeed *= 1.05;
+    }
+
+    // Drift feel: a bit more slide during the visual lunge window
+    if (car.isBoosting) {
+      car.driftFactor = Math.min(car.maxDriftFactor, car.driftFactor + deltaTime * 4.0);
+    } else {
+      car.driftFactor = Math.max(0, car.driftFactor - deltaTime * 1.6);
+    }
+
     // Emit boost echo on start
     if (!wasBoosting && car.isBoosting) {
       this.emitBoostEcho(car.x, car.y);
     }
+
+    // Update boost energy system (legacy sustained boost removed for practice parity)
     
     // Boost pads trigger (simple distance check)
   for (const pad of this.boostPads) {
@@ -2806,24 +3256,13 @@ class SpermRaceGame {
       const within = (dx * dx + dy * dy) <= (pad.radius * pad.radius);
       if (within && (now - pad.lastTriggeredAt) >= pad.cooldownMs) {
         pad.lastTriggeredAt = now;
-        // Top up a bit of energy and force a short boost burst
+        // Top up a bit of energy and trigger a lunge
         car.boostEnergy = Math.min(car.maxBoostEnergy, car.boostEnergy + 20);
-        car.isBoosting = true;
-        car.targetSpeed = car.boostSpeed * 1.05;
+        // Pad also partially resets cooldown to encourage route planning
+        (car as any).boostCooldown = Math.max(0, Math.min(Number((car as any).boostCooldown) || 0, 250));
+        try { this.tryActivatePracticeLunge(car); } catch {}
         // brief visual pulse
         try { pad.graphics.alpha = 0.5; setTimeout(() => { try { pad.graphics.alpha = 1.0; } catch {} }, 180); } catch {}
-        // auto-stop after 0.7s to avoid sustained advantage
-        setTimeout(() => {
-          try {
-            if (!this.player || car.destroyed) return;
-            if (car.isBoosting) {
-              car.isBoosting = false;
-              car.targetSpeed = car.baseSpeed;
-            }
-          } catch {}
-        }, 700);
-        // echo ring
-        this.emitBoostEcho(pad.x, pad.y);
       }
     }
     
@@ -2869,10 +3308,24 @@ class SpermRaceGame {
     const lateralVel = car.vx * perpX + car.vy * perpY;
     car.vx -= lateralVel * perpX * lateralDrag;
     car.vy -= lateralVel * perpY * lateralDrag;
+
+    // Apply dash impulse velocity (practice lunge) and decay
+    const dashVx = Number((car as any).dashVx) || 0;
+    const dashVy = Number((car as any).dashVy) || 0;
+    car.vx += dashVx;
+    car.vy += dashVy;
     
     // Update position
     car.x += car.vx * deltaTime;
     car.y += car.vy * deltaTime;
+
+    if (dashVx || dashVy) {
+      const decay = Math.exp(-this.PRACTICE_LUNGE.DASH_DECAY_PER_S * deltaTime);
+      (car as any).dashVx = dashVx * decay;
+      (car as any).dashVy = dashVy * decay;
+      if (Math.abs((car as any).dashVx) < 1) (car as any).dashVx = 0;
+      if (Math.abs((car as any).dashVy) < 1) (car as any).dashVy = 0;
+    }
     
     // Update sprite
     car.sprite.x = car.x;
@@ -2981,16 +3434,12 @@ class SpermRaceGame {
     // Random boost
     car.boostAITimer -= deltaTime;
     if (car.boostAITimer <= 0) {
-      if (!car.isBoosting && car.boostEnergy >= car.minBoostEnergy && Math.random() < 0.3) {
-        car.isBoosting = true;
-        car.targetSpeed = car.boostSpeed;
-        car.boostAITimer = 2.0 + Math.random() * 3.0;
-      } else if (car.isBoosting && (car.boostEnergy < 10 || Math.random() < 0.4)) {
-        car.isBoosting = false;
-        car.targetSpeed = car.baseSpeed;
-        car.boostAITimer = 1.0 + Math.random() * 2.0;
+      // Practice parity: bots use the same lunge pulse system
+      if (Math.random() < 0.35) {
+        try { this.tryActivatePracticeLunge(car); } catch {}
+        car.boostAITimer = 0.9 + Math.random() * 1.6;
       } else {
-        car.boostAITimer = 0.5;
+        car.boostAITimer = 0.45 + Math.random() * 0.8;
       }
     }
     
@@ -3126,16 +3575,19 @@ class SpermRaceGame {
         if (!this.trailContainer) return;
       }
       // Get or create trail for this car
-      let trail = this.trails.find(t => t.carId === car.type);
+      const ownerId = car.id || car.type;
+      let trail = this.trails.find(t => t.carId === ownerId);
       if (!trail) {
         trail = {
-          carId: car.type,
+          carId: ownerId,
           car: car,
           points: [],
           graphics: new PIXI.Graphics()
         };
         this.trails.push(trail);
         try { this.trailContainer.addChild(trail.graphics); } catch {}
+      } else {
+        trail.car = car;
       }
       
       // Add new point
@@ -3262,14 +3714,15 @@ class SpermRaceGame {
     const cars = [this.player, this.bot, ...this.extraBots].filter((car): car is Car => car !== null && !car.destroyed);
 
     for (const car of cars) {
+      const now = Date.now();
+      if (car.spawnProtectedUntil && now < car.spawnProtectedUntil) continue;
       let closestMiss = Infinity; // Track closest near-miss for this frame
       let missX = 0, missY = 0;
       
       for (const trail of this.trails) {
         if (trail.points.length < 2) continue;
 
-        const now = Date.now();
-        const isSelfTrail = trail.car === car;
+        const isSelfTrail = trail.carId === car.id;
         
         // REMOVE SELF-COLLISION - Players can't die from their own trail
         if (isSelfTrail) continue;
@@ -4272,10 +4725,36 @@ class SpermRaceGame {
 
   updateBoostBar() {
     if (!this.player || !this.hudManager) return;
-    
-    const energyPercent = (this.player.boostEnergy / this.player.maxBoostEnergy) * 100;
-    const boostingNow = this.player.isBoosting && (this.player.boostEnergy >= (this.player.minBoostEnergy + 5));
-    const isLow = this.player.boostEnergy < this.player.minBoostEnergy;
+
+    const isTournament = this.isTournamentMode();
+    let energyPercent: number;
+    let boostingNow: boolean;
+    let isLow: boolean;
+
+    if (isTournament && this.wsLocalStatus) {
+      const cooldownMs = Number(this.wsLocalStatus.boostCooldownMs) || 0;
+      const maxCooldownMs = Number(this.wsLocalStatus.boostMaxCooldownMs) || 1200;
+      const pctReady = maxCooldownMs > 0 ? Math.max(0, Math.min(1, 1 - (cooldownMs / maxCooldownMs))) : 1;
+      energyPercent = pctReady * 100;
+      boostingNow = !!this.wsLocalStatus.boosting;
+      isLow = cooldownMs > 0;
+    } else {
+      // Practice: show lunge cooldown readiness (plus energy gate)
+      const cooldownMs = Math.max(0, Number((this.player as any).boostCooldown) || 0);
+      const maxCooldownMs = this.PRACTICE_LUNGE.COOLDOWN_MS;
+      const pctReady = maxCooldownMs > 0 ? Math.max(0, Math.min(1, 1 - (cooldownMs / maxCooldownMs))) : 1;
+      const hasEnergy = (this.player.boostEnergy || 0) >= this.PRACTICE_LUNGE.COST;
+      energyPercent = pctReady * 100;
+      boostingNow = !!this.player.isBoosting;
+      isLow = !hasEnergy || cooldownMs > 0;
+
+      // Mobile practice boost button UI (ring + disabled state)
+      try {
+        window.dispatchEvent(new CustomEvent('sr-practice-boost-ui', {
+          detail: { canBoost: hasEnergy && cooldownMs <= 0, boostCooldownPct: pctReady }
+        }));
+      } catch {}
+    }
     
     // Update HUD manager
     this.hudManager.updateBoost(energyPercent, boostingNow, isLow);
@@ -4435,16 +4914,19 @@ class SpermRaceGame {
 
   setupZone() {
     if (!this.app) return;
+    const now = Date.now();
+    const isTournament = this.isTournamentMode();
+    const minSide = Math.min(this.arena.width, this.arena.height) || 0;
+    const halfDiagonal = Math.hypot(this.arena.width, this.arena.height) * 0.5;
+
     // Initialize circular zone
     this.zone.centerX = 0;
     this.zone.centerY = 0;
-    this.zone.startRadius = Math.min(this.arena.width, this.arena.height) * 0.48;
+    // Tournament uses server-side rectangular spawns; start the circle large enough that nobody spawns "outside zone".
+    this.zone.startRadius = isTournament ? Math.max(0, halfDiagonal * 1.02) : (minSide * 0.48);
     this.zone.currentRadius = this.zone.startRadius;
     this.zone.targetRadius = this.zone.startRadius;
     this.zone.endRadius = 400; // Minimum final circle
-
-    const now = Date.now();
-    const isTournament = !!(this.wsHud && this.wsHud.active);
     if (isTournament) {
       // Tournament: zone active for most of the round
       this.zone.startAtMs = now;
@@ -4464,6 +4946,7 @@ class SpermRaceGame {
   updateZoneAndDamage(deltaTime: number) {
     if (!this.zoneGraphics) return;
     const now = Date.now();
+    const isTournament = this.isTournamentMode();
     const preStartActive = this.preStart
       ? Math.max(0, this.preStart.durationMs - (now - this.preStart.startAt)) > 0
       : false;
@@ -4583,10 +5066,15 @@ class SpermRaceGame {
       const inside = distFromCenter <= safeRadius;
       
       if (!inside) {
-        // Show warning for player outside zone
-        if (car === this.player) {
-          this.showZoneWarning();
+        // Tournament is server-authoritative: never apply client-side physics/elimination.
+        if (isTournament) {
+          if (car === this.player) this.hideZoneWarning();
+          car.outZoneTime = 0;
+          return;
         }
+
+        // Show warning for player outside zone
+        if (car === this.player) this.showZoneWarning();
         
         // Push vector toward circle center (stronger push)
         const dist = distFromCenter || 1;
@@ -4608,9 +5096,15 @@ class SpermRaceGame {
       }
     };
     if (zoneDamageActive) {
-      applyZone(this.player);
-      applyZone(this.bot);
-      for (const b of this.extraBots) applyZone(b);
+      if (!isTournament) {
+        applyZone(this.player);
+        applyZone(this.bot);
+        for (const b of this.extraBots) applyZone(b);
+      } else {
+        // Keep tournament HUD clean: no outside-zone warning, no timers accumulating.
+        if (this.player) (this.player as any).outZoneTime = 0;
+        this.hideZoneWarning();
+      }
 
       // Update danger overlay based on zone proximity and time
       this.updateDangerOverlay(remainMs);
@@ -4623,7 +5117,7 @@ class SpermRaceGame {
       }
       if (this.bot) (this.bot as any).outZoneTime = 0;
       for (const b of this.extraBots) (b as any).outZoneTime = 0;
-      this.updateDangerOverlay(0);
+      this.updateDangerOverlay(remainMs);
     }
   }
 
@@ -4723,12 +5217,20 @@ class SpermRaceGame {
   updateDangerOverlay(remainMs: number) {
     const overlay = document.getElementById('game-danger-overlay');
     if (!overlay || !this.player || this.player.destroyed) return;
+
+    // Tournament is server-authoritative; don't show local zone-time pressure vignettes.
+    if (this.isTournamentMode()) {
+      overlay.style.opacity = '0';
+      overlay.style.borderColor = 'transparent';
+      overlay.style.filter = 'none';
+      return;
+    }
     
     // Calculate danger level from multiple sources
     let dangerLevel = 0;
     
     // 1. Time pressure - final 5 seconds
-    if (remainMs <= 5000) {
+    if (Number.isFinite(remainMs) && remainMs > 0 && remainMs <= 5000) {
       dangerLevel = Math.max(dangerLevel, 1 - (remainMs / 5000)); // 0 to 1 as time runs out
     }
     
@@ -5276,19 +5778,21 @@ function injectHudAnimationStylesOnce() {
 
 // BOT_COLORS imported from ./game/types
 
-export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onExit }: { 
+export default function NewGameView({ meIdOverride, onReplay, onExit }: { 
   meIdOverride?: string; 
   onReplay?: () => void; 
   onExit?: () => void 
 }) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<SpermRaceGame | null>(null);
-  const { state: wsState } = useWs();
+  const { state: wsState, sendInput } = useWs();
+  const isPractice = !!meIdOverride;
 
   // Initialize Pixi only once on mount; update callbacks via a separate effect
   useEffect(() => {
     if (!mountRef.current) return;
-    const game = new SpermRaceGame(mountRef.current, onReplay, onExit);
+    const tournamentExpected = !isPractice && wsState?.phase === 'game';
+    const game = new SpermRaceGame(mountRef.current, onReplay, onExit, tournamentExpected);
     gameRef.current = game;
     game.init().catch(logger.error);
     return () => {
@@ -5309,6 +5813,16 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
   useEffect(() => {
     const game = gameRef.current;
     if (!game) return;
+    if (isPractice) {
+      game.wsHud = { active: false, kills: {}, killFeed: [], playerId: null, idToName: {}, aliveSet: new Set(), eliminationOrder: [] } as any;
+      try {
+        (game as any).wsGame = null;
+        (game as any).wsPlayerId = null;
+        (game as any).wsSendInput = null;
+        (game as any).wsDebugCollisions = null;
+      } catch {}
+      return;
+    }
     if (wsState?.phase === 'game' && wsState.game) {
       try {
         const players = wsState.game.players || [];
@@ -5333,7 +5847,14 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
     } else {
       game.wsHud = { active: false, kills: {}, killFeed: [], playerId: null, idToName: {}, aliveSet: new Set(), eliminationOrder: [] } as any;
     }
-  }, [wsState.phase, wsState.game, wsState.kills, wsState.killFeed, wsState.playerId]);
+    // Bind server snapshot + input sender for tournament mode (safe no-ops in practice)
+    try {
+      (game as any).wsGame = wsState?.phase === 'game' ? wsState.game : null;
+      (game as any).wsPlayerId = wsState?.playerId || null;
+      (game as any).wsSendInput = typeof sendInput === 'function' ? sendInput : null;
+      (game as any).wsDebugCollisions = (wsState as any)?.debugCollisions || null;
+    } catch {}
+  }, [isPractice, wsState.phase, wsState.game, wsState.kills, wsState.killFeed, wsState.playerId, (wsState as any)?.debugCollisions, sendInput]);
 
   return (
     <div

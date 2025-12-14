@@ -1157,6 +1157,7 @@ function broadcastGameState(): void {
         status: p.status,
       })),
       world: gameState.world,
+      items: Object.values((gameState as any).items || {}),
       aliveCount: Object.values(gameState.players).filter((p: any) => p.isAlive).length,
     },
   };

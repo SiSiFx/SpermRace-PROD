@@ -5,3 +5,8 @@ dist/
 *.log
 .DS_Store
 debug-mobile-game.html
+.factory/
+packages/server/packages/
+*.db
+*.db-shm
+*.db-wal

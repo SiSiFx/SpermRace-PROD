@@ -1,5 +1,5 @@
 import * as PIXI from 'pixi.js';
-import { Car, Zone, Theme, Arena, WsHud, PreStart } from './types';
+import type { Car, Zone, Theme, Arena, WsHud, PreStart } from './types';
 
 export interface ZoneSystemConfig {
   arena: Arena;
@@ -82,7 +82,7 @@ export class ZoneSystem {
     this.zone.currentRadius! += (this.zone.targetRadius! - this.zone.currentRadius!) * lerpSpeed * deltaTime;
     
     // Draw zone
-    this.drawZone(player, now, tension);
+    this.drawZone(player, now);
     
     // Update HUD timer
     const remainMs = Math.max(0, this.zone.startAtMs + this.zone.durationMs - now);
@@ -113,7 +113,7 @@ export class ZoneSystem {
     }
   }
 
-  private drawZone(player: Car | null, now: number, tension: number) {
+  private drawZone(player: Car | null, now: number) {
     this.zoneGraphics!.clear();
     
     const cx = this.zone.centerX;

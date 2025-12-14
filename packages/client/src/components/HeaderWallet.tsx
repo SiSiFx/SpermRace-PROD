@@ -32,7 +32,6 @@ export function HeaderWallet({
         left: 0,
         right: 0,
         height: 'calc(44px + env(safe-area-inset-top, 0px))',
-        paddingTop: 'env(safe-area-inset-top, 0px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',

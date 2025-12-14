@@ -1,4 +1,25 @@
-import * as Sentry from "@sentry/react";
+type SentryLike = {
+  init: (opts: any) => void;
+  captureMessage?: (msg: string, opts?: any) => void;
+  captureException?: (err: any, opts?: any) => void;
+  addBreadcrumb?: (crumb: any) => void;
+  setUser?: (user: any) => void;
+  setTag?: (key: string, value: string) => void;
+  browserTracingIntegration?: () => any;
+  replayIntegration?: (opts?: any) => any;
+};
+
+function getSentry(): SentryLike | null {
+  // This repo doesn't always ship with `@sentry/react` installed.
+  // If you want Sentry, add it as a dependency OR load Sentry via a global script that sets `window.Sentry`.
+  try {
+    const s = (globalThis as any).Sentry as SentryLike | undefined;
+    if (!s || typeof s.init !== 'function') return null;
+    return s;
+  } catch {
+    return null;
+  }
+}
 
 export function initSentry() {
   // Only initialize in production or when explicitly enabled
@@ -6,18 +27,21 @@ export function initSentry() {
   const forceEnable = localStorage.getItem('SENTRY_ENABLED') === '1';
   
   if (!isDev || forceEnable) {
+    const Sentry = getSentry();
+    if (!Sentry) return;
+
     Sentry.init({
       dsn: "https://7b26bd07a64c3a30c6857ede0f660faa@o4510460703473664.ingest.de.sentry.io/4510460715204688",
       
       integrations: [
         // Automatic instrumentation
-        Sentry.browserTracingIntegration(),
+        typeof Sentry.browserTracingIntegration === 'function' ? Sentry.browserTracingIntegration() : undefined,
         
         // Session Replay - see what users experienced
-        Sentry.replayIntegration({
+        typeof Sentry.replayIntegration === 'function' ? Sentry.replayIntegration({
           maskAllText: true, // Privacy: mask all text
           blockAllMedia: true, // Privacy: don't record images/video
-        }),
+        }) : undefined,
       ],
 
       // Send default PII (IP addresses, user info)
@@ -104,13 +128,16 @@ export function initSentry() {
 
 // Helper to manually capture errors (use in catch blocks)
 export function captureError(error: Error | string, context?: Record<string, any>) {
+  const Sentry = getSentry();
+  if (!Sentry) return;
+
   if (typeof error === 'string') {
-    Sentry.captureMessage(error, {
+    Sentry.captureMessage?.(error, {
       level: 'error',
       contexts: context ? { extra: context } : undefined,
     });
   } else {
-    Sentry.captureException(error, {
+    Sentry.captureException?.(error, {
       contexts: context ? { extra: context } : undefined,
     });
   }
@@ -118,7 +145,10 @@ export function captureError(error: Error | string, context?: Record<string, any
 
 // Helper to add breadcrumbs (for debugging)
 export function addBreadcrumb(message: string, data?: Record<string, any>) {
-  Sentry.addBreadcrumb({
+  const Sentry = getSentry();
+  if (!Sentry) return;
+
+  Sentry.addBreadcrumb?.({
     message,
     data,
     level: 'info',
@@ -127,14 +157,20 @@ export function addBreadcrumb(message: string, data?: Record<string, any>) {
 
 // Helper to set user context
 export function setSentryUser(publicKey: string | null) {
+  const Sentry = getSentry();
+  if (!Sentry) return;
+
   if (publicKey) {
-    Sentry.setUser({ id: publicKey });
+    Sentry.setUser?.({ id: publicKey });
   } else {
-    Sentry.setUser(null);
+    Sentry.setUser?.(null);
   }
 }
 
 // Helper to add tags
 export function setSentryTag(key: string, value: string) {
-  Sentry.setTag(key, value);
+  const Sentry = getSentry();
+  if (!Sentry) return;
+
+  Sentry.setTag?.(key, value);
 }

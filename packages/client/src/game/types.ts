@@ -58,6 +58,10 @@ export interface Car {
   contactCooldown?: number;
   spawnTime?: number;
   killBoostUntil?: number;
+  // Practice boost parity: dash impulse velocity (decays over time)
+  dashVx?: number;
+  dashVy?: number;
+  spawnProtectedUntil?: number;
 }
 
 export interface TrailPoint {

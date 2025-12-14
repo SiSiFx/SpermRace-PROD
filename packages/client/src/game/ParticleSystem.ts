@@ -1,5 +1,6 @@
 import * as PIXI from 'pixi.js';
-import { Particle, isMobileDevice } from './types';
+import type { Particle } from './types';
+import { isMobileDevice } from './types';
 
 export interface ParticleSystemConfig {
   worldContainer: PIXI.Container;

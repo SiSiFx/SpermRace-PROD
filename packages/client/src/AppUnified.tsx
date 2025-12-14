@@ -16,7 +16,7 @@ import { Modes } from './components/Modes';
 
 // Lazy loaded components
 const Leaderboard = lazy(() => import('./Leaderboard').then(m => ({ default: m.Leaderboard })));
-const HowToPlayOverlay = lazy(() => import('./HowToPlayOverlay'));
+const HowToPlayOverlay = lazy(() => import('./HowToPlayOverlay').then(m => ({ default: m.HowToPlayOverlay })));
 const NewGameView = lazy(() => import('./NewGameView'));
 
 // API Base URL
@@ -53,7 +53,7 @@ function AppInner() {
   const [loadProg, setLoadProg] = useState(0);
   
   const { state: wsState, signAuthentication, leave } = useWs() as any;
-  const { publicKey, connect } = useWallet() as any;
+  const { publicKey } = useWallet() as any;
   
   const showToast = (msg: string, duration = 2000) => {
     setToast(msg);
@@ -270,7 +270,7 @@ function AppInner() {
       
       {showHowTo && (
         <Suspense fallback={null}>
-          <HowToPlayOverlay onClose={() => setShowHowTo(false)} variant={isMobile ? 'mobile' : 'desktop'} />
+          <HowToPlayOverlay onClose={() => setShowHowTo(false)} mode={isMobile ? 'mobile' : 'pc'} />
         </Suspense>
       )}
     </div>
@@ -361,7 +361,6 @@ function Lobby({ onStart: _onStart, onBack }: { onStart: () => void; onBack: () 
 
 // Game component
 function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void }) {
-  const { state } = useWs() as any;
   const isMobile = isMobileDevice();
   
   return (

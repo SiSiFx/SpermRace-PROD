@@ -36,7 +36,19 @@ type WsState = {
   entryFee: { pending: boolean; verified: boolean };
   lastError: string | null;
   joining: boolean;
-  game: { timestamp: number; players: Array<{ id: string; isAlive: boolean; sperm: { position: { x: number; y: number }; angle: number; color: string }; trail: Array<{ x: number; y: number }> }>; world: { width: number; height: number }; aliveCount: number } | null;
+  game: {
+    timestamp: number;
+    players: Array<{
+      id: string;
+      isAlive: boolean;
+      sperm: { position: { x: number; y: number }; angle: number; color: string };
+      trail: Array<{ x: number; y: number; expiresAt?: number; createdAt?: number }>;
+      status?: { boosting?: boolean; boostCooldownMs?: number; boostMaxCooldownMs?: number };
+    }>;
+    world: { width: number; height: number };
+    items?: Array<{ id: string; type: 'dna'; x: number; y: number }>;
+    aliveCount: number;
+  } | null;
   hasFirstGameState?: boolean;
   kills: Record<string, number>;
   killFeed: Array<{ killerId?: string; victimId: string; ts: number }>;
@@ -531,7 +543,17 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
             }
             case 'gameStateUpdate': {
               const p = msg.payload;
-              setState(s => ({ ...s, game: { timestamp: p.timestamp, players: p.players, world: p.world, aliveCount: p.aliveCount }, hasFirstGameState: s.hasFirstGameState || true }));
+              setState(s => ({
+                ...s,
+                game: {
+                  timestamp: p.timestamp,
+                  players: p.players,
+                  world: p.world,
+                  items: (p as any).items,
+                  aliveCount: p.aliveCount
+                },
+                hasFirstGameState: s.hasFirstGameState || true
+              }));
               try { (window as any).__SR_HAS_FIRST_GAME_STATE__ = true; } catch {}
               break;
             }
