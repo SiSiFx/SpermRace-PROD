@@ -82,6 +82,12 @@ export interface Particle {
   life: number;
   color: number;
   graphics: PIXI.Graphics;
+  alpha?: number;
+  maxLife?: number;
+  gravity?: number;
+  friction?: number;
+  rotation?: number;
+  rotationSpeed?: number;
 }
 
 export interface Pickup {

@@ -53,7 +53,7 @@ function AppInner() {
   const [loadProg, setLoadProg] = useState(0);
   
   const { state: wsState, signAuthentication, leave } = useWs() as any;
-  const { publicKey, connect } = useWallet() as any;
+  const { publicKey } = useWallet() as any;
   
   const showToast = (msg: string, duration = 2000) => {
     setToast(msg);
@@ -270,7 +270,7 @@ function AppInner() {
       
       {showHowTo && (
         <Suspense fallback={null}>
-          <HowToPlayOverlay onClose={() => setShowHowTo(false)} variant={isMobile ? 'mobile' : 'desktop'} />
+          <HowToPlayOverlay onClose={() => setShowHowTo(false)} mode={isMobile ? 'mobile' : 'pc'} />
         </Suspense>
       )}
     </div>
@@ -312,7 +312,6 @@ function Wallet({ onConnected, onClose }: { onConnected: () => void; onClose: ()
 
 // Lobby component
 function Lobby({ onStart: _onStart, onBack }: { onStart: () => void; onBack: () => void }) {
-  const { state } = useWs() as any;
   const isMobile = isMobileDevice();
   const players = state.lobby?.players || [];
   const realPlayers = players.filter((p: string) => !String(p).startsWith('BOT_'));
@@ -361,7 +360,6 @@ function Lobby({ onStart: _onStart, onBack }: { onStart: () => void; onBack: () 
 
 // Game component
 function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void }) {
-  const { state } = useWs() as any;
   const isMobile = isMobileDevice();
   
   return (

@@ -1,5 +1,5 @@
 import * as PIXI from 'pixi.js';
-import { Car, Trail, TrailPoint, Theme } from './types';
+import type { Car, Trail, TrailPoint, Theme } from './types';
 
 export interface TrailSystemConfig {
   theme: Theme;
@@ -10,7 +10,6 @@ export interface TrailSystemConfig {
 export class TrailSystem {
   private trails: Trail[] = [];
   private config: TrailSystemConfig;
-  private lastToastAt = 0;
 
   constructor(config: TrailSystemConfig) {
     this.config = config;

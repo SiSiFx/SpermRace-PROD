@@ -3609,14 +3609,37 @@ class SpermRaceGame {
     }
   }
 
-  createExplosion(x: number, y: number, color: number) {
-    // Use ParticleSystem module for explosions
+  createExplosion(x: number, y: number, color: number, intensity: number = 1.0) {
+    // Use enhanced ParticleSystem module for explosions
     if (this.particleSystem) {
       this.particleSystem.createExplosion(x, y, color, () => {
-        // Screen shake callback
-        this.camera.shakeX = 6;
-        this.camera.shakeY = 6;
+        // Enhanced screen shake with camera controller integration
+        this.cameraController?.screenShake(8 * intensity, 25);
+        this.hapticFeedback('medium');
       });
+      
+      // Add collision effect if intensity is high
+      if (intensity > 1.2) {
+        this.particleSystem.createCollisionEffect(x, y, intensity * 8);
+      }
+    }
+  }
+
+  createBoostEffect(x: number, y: number, angle: number, isPlayer: boolean = false) {
+    if (this.particleSystem) {
+      this.particleSystem.createBoostTrail(x, y, angle, isPlayer);
+    }
+  }
+
+  createTrailCollision(x: number, y: number, isPlayer: boolean = false) {
+    if (this.particleSystem) {
+      this.particleSystem.createTrailSpark(x, y, isPlayer);
+    }
+  }
+
+  createNearMissEffect(x: number, y: number) {
+    if (this.particleSystem) {
+      this.particleSystem.createShockwave(x, y, 0x00ffff);
     }
   }
 
