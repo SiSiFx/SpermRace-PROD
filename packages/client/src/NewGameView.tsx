@@ -287,9 +287,13 @@ class SpermRaceGame {
 
   // JUICE METHODS - Make game feel amazing!
   private screenShake(intensity: number = 1) {
-    // Consistent screen shake on all platforms
-    this.camera.shakeX = (Math.random() - 0.5) * 8 * intensity;
-    this.camera.shakeY = (Math.random() - 0.5) * 8 * intensity;
+    // Enhanced screen shake using camera controller
+    this.cameraController?.screenShake(intensity, 25);
+    // Fallback to old method if camera controller not available
+    if (!this.cameraController) {
+      this.camera.shakeX = (Math.random() - 0.5) * 8 * intensity;
+      this.camera.shakeY = (Math.random() - 0.5) * 8 * intensity;
+    }
   }
   
   private handleMobileBoost() {
@@ -1953,13 +1957,36 @@ class SpermRaceGame {
   updateCamera() {
     if (!this.player || !this.app) return;
     
-    // Detect mobile once for all camera adjustments
-    const isMobile = isMobileDevice();
+    // Use enhanced CameraController if available, fallback to old logic
+    if (this.cameraController) {
+      const bots = [this.bot, ...this.extraBots].filter((b): b is Car => b !== null);
+      const wsHud = this.wsHud && this.wsHud.active ? this.wsHud : null;
+      
+      this.cameraController.update(
+        this.player,
+        bots,
+        this.app.screen.width,
+        this.app.screen.height,
+        this.preStart,
+        wsHud
+      );
+      
+      // Sync camera reference
+      this.camera = this.cameraController.camera;
+      
+      // Apply camera to world container
+      if (this.worldContainer) {
+        this.cameraController.applyToContainer(this.worldContainer);
+      }
+      
+      return;
+    }
     
-    // During countdown, keep targetZoom as set in gameLoop and center as needed
+    // Fallback to original camera logic
+    const isMobile = isMobileDevice();
     const inCountdown = !!this.preStart;
+    
     if (!inCountdown) {
-      // Compute target zoom by local density (removed speed factor for smoother camera)
       const camX = this.player.x;
       const camY = this.player.y;
       const nearbyRadius = 600;
@@ -1971,23 +1998,19 @@ class SpermRaceGame {
         if (!b.destroyed) { const dx = b.x - camX; const dy = b.y - camY; if (dx*dx + dy*dy < nearbyRadius*nearbyRadius) nearbyCount++; }
       }
       const crowdFactor = Math.min(1, nearbyCount / 8);
-      const isMobile = isMobileDevice();
-      const baseZoom = isMobile ? 0.55 : 0.75; // Wider for better tactical view
+      const baseZoom = isMobile ? 0.55 : 0.75;
       
-      // BOOST ZOOM: Zoom IN when boosting for speed sensation
       if (this.player.isBoosting) {
-        const boostZoom = isMobile ? 0.65 : 0.85; // Tighter view = feels faster
+        const boostZoom = isMobile ? 0.65 : 0.85;
         this.camera.targetZoom = boostZoom;
       } else {
-        // Normal zoom with slight crowd-based pullback
         const out = isMobile ? 0.05 * crowdFactor : 0.15 * crowdFactor;
         const target = baseZoom - out;
         this.camera.targetZoom = Math.max(this.camera.minZoom, Math.min(this.camera.maxZoom, target));
       }
     }
     
-    // Smooth target zoom - very slow to prevent jiggle when spamming boost
-    const zoomSpeed = isMobile ? 0.03 : 0.025; // Much slower = no jiggle
+    const zoomSpeed = isMobile ? 0.03 : 0.025;
     if (this.preStart && (Math.max(0, this.preStart.durationMs - (Date.now() - this.preStart.startAt)) > 2000)) {
       this.camera.zoom = this.camera.targetZoom;
     } else {

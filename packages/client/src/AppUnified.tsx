@@ -312,6 +312,7 @@ function Wallet({ onConnected, onClose }: { onConnected: () => void; onClose: ()
 
 // Lobby component
 function Lobby({ onStart: _onStart, onBack }: { onStart: () => void; onBack: () => void }) {
+  const { state } = useWs() as any;
   const isMobile = isMobileDevice();
   const players = state.lobby?.players || [];
   const realPlayers = players.filter((p: string) => !String(p).startsWith('BOT_'));
