@@ -33,6 +33,8 @@ import { BOT_COLORS, normalizeAngle, isPortraitMobile, isMobileDevice, isAndroid
 import { InputHandler } from './game/InputHandler';
 import { CameraController } from './game/CameraController';
 import { ParticleSystem } from './game/ParticleSystem';
+import { RenderDebug } from './game/RenderDebug';
+import { WORLD_WIDTH, WORLD_HEIGHT } from './gameConstants';
 
 // Guard against rare Pixi transform null refs
 (function patchPixiTransformGuard() {
@@ -205,12 +207,23 @@ class SpermRaceGame {
       const qs = new URLSearchParams(window.location.search);
       if (qs.get('debug') === '1') return true;
       if (qs.get('debug') === '0') return false;
-      const ls = window.localStorage.getItem('SR_DEBUG');
+      const ls = window.localStorage.getItem('SR_DEBUG') ?? window.localStorage.getItem('sr_debug');
       if (ls === '1' || ls === 'true') return true;
       if (ls === '0' || ls === 'false') return false;
     } catch {}
     return ((import.meta as any).env?.DEV === true);
   })();
+
+  public debugRenderEnabled: boolean = (() => {
+    try {
+      const qs = new URLSearchParams(window.location.search);
+      return qs.get('debug') === '1';
+    } catch {
+      return false;
+    }
+  })();
+
+  private renderDebug: RenderDebug | null = null;
   private lastVisCheckAt: number = 0;
 
   // Mobile FPS limiting (cap at 60 FPS to prevent overheating)
@@ -297,6 +310,11 @@ class SpermRaceGame {
     this.onReplay = onReplay;
     this.onExit = onExit;
     this.tournamentExpected = tournamentExpected;
+
+    // In tournament mode, default to server-synced world bounds (prevents a 8k×6k/portrait 3.5k×7.7k "virtual arena" from zooming everything into invisibility before the first server snapshot arrives).
+    if (tournamentExpected) {
+      this.arena = { width: WORLD_WIDTH, height: WORLD_HEIGHT };
+    }
     
     // Initialize camera controller
     this.cameraController = new CameraController({
@@ -444,8 +462,84 @@ class SpermRaceGame {
     try { console.log('[GAME][DBG]', ...args); } catch {}
   }
 
+  private getRenderDebugSnapshot() {
+    const stageChildren = (this.app as any)?.stage?.children?.length ?? 0;
+    const worldChildren = (this.worldContainer as any)?.children?.length ?? 0;
+
+    const isTournament = this.isTournamentMode();
+
+    const knownEntities = isTournament
+      ? (Array.isArray((this.wsGame as any)?.players) ? (this.wsGame as any).players.length : 0)
+      : (1 + (this.bot ? 1 : 0) + (Array.isArray(this.extraBots) ? this.extraBots.length : 0));
+
+    const renderedEntities = isTournament
+      ? (this.serverCarsById?.size ?? 0)
+      : (() => {
+          let c = 0;
+          if (this.player && !this.player.destroyed) c++;
+          if (this.bot && !this.bot.destroyed) c++;
+          for (const b of (this.extraBots || [])) if (b && !b.destroyed) c++;
+          return c;
+        })();
+
+    const worldBounds = { width: Number(this.arena?.width) || 0, height: Number(this.arena?.height) || 0 };
+
+    const camera = {
+      x: Number((this.worldContainer as any)?.x ?? this.camera?.x ?? 0),
+      y: Number((this.worldContainer as any)?.y ?? this.camera?.y ?? 0),
+      zoom: Number((this.worldContainer as any)?.scale?.x ?? this.camera?.zoom ?? 1),
+    };
+
+    const playerWorldPos = this.player
+      ? { x: Number(this.player.x) || 0, y: Number(this.player.y) || 0 }
+      : undefined;
+
+    // Sample entity
+    let sample: any = undefined;
+    try {
+      if (isTournament && Array.isArray((this.wsGame as any)?.players) && (this.wsGame as any)?.world) {
+        const ps = (this.wsGame as any).players as any[];
+        const pick = (this.wsPlayerId && ps.find(p => p?.id === this.wsPlayerId)) || ps[0];
+        if (pick?.id) {
+          const id = String(pick.id);
+          const serverPos = {
+            x: Number(pick?.sperm?.position?.x) || 0,
+            y: Number(pick?.sperm?.position?.y) || 0,
+          };
+          const halfW = (Number((this.wsGame as any)?.world?.width) || 0) / 2;
+          const halfH = (Number((this.wsGame as any)?.world?.height) || 0) / 2;
+          const worldPos = { x: serverPos.x - halfW, y: serverPos.y - halfH };
+          const car = this.serverCarsById?.get(id);
+          sample = {
+            id,
+            serverPos,
+            worldPos,
+            spritePos: car?.sprite ? { x: Number(car.sprite.x) || 0, y: Number(car.sprite.y) || 0 } : undefined,
+          };
+        }
+      } else if (this.player) {
+        sample = {
+          id: this.player.id || 'player',
+          worldPos: { x: Number(this.player.x) || 0, y: Number(this.player.y) || 0 },
+          spritePos: this.player.sprite ? { x: Number(this.player.sprite.x) || 0, y: Number(this.player.sprite.y) || 0 } : undefined,
+        };
+      }
+    } catch {}
+
+    return {
+      knownEntities,
+      renderedEntities,
+      stageChildren,
+      worldChildren,
+      worldBounds,
+      camera,
+      playerWorldPos,
+      sample,
+    };
+  }
+
   async init() {
-    const width = this.container.clientWidth || window.innerWidth;
+
     const height = this.container.clientHeight || window.innerHeight;
     
     // High-quality rendering settings
@@ -486,6 +580,15 @@ class SpermRaceGame {
       try { (canvas as any).tabIndex = 0; } catch {}
       try { (canvas as any).style.outline = 'none'; } catch {}
       try { (canvas as any).style.touchAction = 'none'; } catch {} // Prevent browser gestures (pinch, zoom, pull-to-refresh)
+      // Ensure the Pixi canvas actually fills the mount node (avoids 300×150 default canvas sizing / layout surprises in flex screens)
+      try {
+        (canvas as any).style.position = 'absolute';
+        (canvas as any).style.top = '0';
+        (canvas as any).style.left = '0';
+        (canvas as any).style.width = '100%';
+        (canvas as any).style.height = '100%';
+        (canvas as any).style.display = 'block';
+      } catch {}
       try { if (!this.container.contains(canvas)) this.container.appendChild(canvas); } catch {}
     } else {
       // Fallback: create a canvas to avoid null deref; Pixi will still render to its internal view
@@ -603,6 +706,20 @@ class SpermRaceGame {
         (this.app as any)?.stage?.addChild?.(this.worldContainer);
       } catch {}
     }
+
+    // Render debug overlay (?debug=1)
+    if (this.debugRenderEnabled && this.app && this.worldContainer && !this.renderDebug) {
+      try {
+        this.renderDebug = new RenderDebug({
+          app: this.app,
+          worldContainer: this.worldContainer,
+          getSnapshot: () => this.getRenderDebugSnapshot(),
+        });
+      } catch (e) {
+        logger.warn('[render][dbg] init failed', e);
+      }
+    }
+
     this.setupControls();
     // Mount HUD layers immediately
     this.setupRadar();
@@ -635,8 +752,17 @@ class SpermRaceGame {
     
     // Start game loop after one microtask to ensure stage is fully assembled
     Promise.resolve().then(() => {
-      try { (this.app as any)?.ticker?.add?.(() => this.gameLoop()); } catch {}
-      try { (this.app as any)?.ticker?.start?.(); } catch {}
+      const tk = (this.app as any)?.ticker;
+      if (tk?.add) {
+        try {
+          tk.add(() => {
+            this.gameLoop();
+            // Fail-safe: explicitly render once per tick in case auto-render is disabled/missing.
+            try { (this.app as any)?.render?.(); } catch {}
+          });
+        } catch {}
+      }
+      try { tk?.start?.(); } catch {}
     });
   }
 
@@ -2121,6 +2247,12 @@ class SpermRaceGame {
     // Ensure player sprite stays visible after camera changes
     try { if (this.player?.sprite) this.player.sprite.visible = true; } catch {}
     
+    // Prevent NaN/Infinity transforms from breaking the entire scene graph
+    if (!Number.isFinite(this.camera.x) || !Number.isFinite(this.camera.y) || !Number.isFinite(this.camera.zoom) || this.camera.zoom <= 0) {
+      this.dbg('camera invalid', { x: this.camera.x, y: this.camera.y, z: this.camera.zoom });
+      return;
+    }
+
     // Pixel-snapped placement with shake applied to avoid subpixel shimmer on thin lines
     this.worldContainer.x = Math.round(this.camera.x + this.camera.shakeX);
     this.worldContainer.y = Math.round(this.camera.y + this.camera.shakeY);
@@ -2226,6 +2358,7 @@ class SpermRaceGame {
       const targetX = (Number(p.sperm.position?.x) || 0) - halfW;
       const targetY = (Number(p.sperm.position?.y) || 0) - halfH;
       const targetAngle = Number(p.sperm.angle) || 0;
+      if (!Number.isFinite(targetX) || !Number.isFinite(targetY) || !Number.isFinite(targetAngle)) continue;
       const color = this.parseColorToNumber((p.sperm as any).color);
 
       let car = this.serverCarsById.get(id);
@@ -2688,6 +2821,8 @@ class SpermRaceGame {
           setTimeout(() => { try { this.onExit && this.onExit(); } catch {} }, 500);
         }
       }
+
+      try { this.renderDebug?.update(deltaTime); } catch {}
       return;
     }
 
@@ -2810,6 +2945,8 @@ class SpermRaceGame {
         setTimeout(() => { try { this.onExit && this.onExit(); } catch {} }, 500);
       }
     }
+
+    try { this.renderDebug?.update(deltaTime); } catch {}
   }
 
   updateNameplates() {
@@ -5732,10 +5869,12 @@ class SpermRaceGame {
           // Destroy game modules
           try { this.particleSystem?.destroy?.(); } catch {}
           try { this.inputHandler?.destroy?.(); } catch {}
-          
+          try { this.renderDebug?.destroy?.(); } catch {}
+          this.renderDebug = null;
+
           // Destroy containers if present
           try { this.worldContainer?.destroy?.({ children: true }); } catch {}
-          try { this.trailContainer?.destroy?.({ children: true }); } catch {}
+
 
           // Finally destroy the app (guard signature across Pixi versions)
           try { (this.app as any)?.destroy?.(true, { children: true, texture: true }); } catch {}
