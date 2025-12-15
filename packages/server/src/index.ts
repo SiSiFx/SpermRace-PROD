@@ -2,6 +2,8 @@ import 'dotenv/config.js';
 import { WebSocketServer, WebSocket } from 'ws';
 import http from 'http';
 import { randomUUID } from 'crypto';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -77,7 +79,9 @@ const gameWorld = new GameWorld(smartContractService);
 const lobbyManager = new LobbyManager(smartContractService);
 
 // Database for leaderboards and player stats
-const DB_PATH = process.env.DB_PATH || './packages/server/data/spermrace.db';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'spermrace.db');
 const db = new DatabaseService(DB_PATH);
 log.info(`[DB] Using database: ${DB_PATH}`);
 const pendingSockets = new Set<WebSocket>();

@@ -61,7 +61,7 @@ export function initSentry() {
       release: `spermrace@${import.meta.env.VITE_APP_VERSION || '1.0.0'}`,
       
       // Configure which errors to send
-      beforeSend(event) {
+      beforeSend(event: any) {
         // Filter out localhost errors (unless forced)
         if (!forceEnable && window.location.hostname === 'localhost') {
           return null;
@@ -74,7 +74,7 @@ export function initSentry() {
             if (value.stacktrace?.frames) {
               const frames = value.stacktrace.frames;
               // Check if error is from extension
-              if (frames.some(frame => frame.filename?.includes('extension://'))) {
+              if (frames.some((frame: any) => frame.filename?.includes('extension://'))) {
                 return null; // Don't send
               }
             }
@@ -111,7 +111,7 @@ export function initSentry() {
       ],
       
       // Don't send breadcrumbs for these actions (privacy)
-      beforeBreadcrumb(breadcrumb) {
+      beforeBreadcrumb(breadcrumb: any) {
         // Don't log keypresses (privacy)
         if (breadcrumb.category === 'ui.input') {
           return null;

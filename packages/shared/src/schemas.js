@@ -5,6 +5,7 @@ export const playerInputSchema = z.object({
     target: vector2Schema,
     accelerate: z.boolean(),
     boost: z.boolean().optional(),
+    drift: z.boolean().optional(),
 });
 export const entryFeeTierSchema = z.union([
     z.literal(1),

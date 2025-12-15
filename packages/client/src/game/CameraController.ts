@@ -1,3 +1,4 @@
+import * as PIXI from 'pixi.js';
 import type { Camera, Car, Arena, PreStart, WsHud } from './types';
 import { isMobileDevice } from './types';
 

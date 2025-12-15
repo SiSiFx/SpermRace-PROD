@@ -33,6 +33,7 @@ import { BOT_COLORS, normalizeAngle, isPortraitMobile, isMobileDevice, isAndroid
 import { InputHandler } from './game/InputHandler';
 import { CameraController } from './game/CameraController';
 import { ParticleSystem } from './game/ParticleSystem';
+import GameEffects from './GameEffects';
 
 // Guard against rare Pixi transform null refs
 (function patchPixiTransformGuard() {
