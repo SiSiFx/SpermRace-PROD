@@ -1039,47 +1039,51 @@ body {
   color: var(--text-quaternary);
 }
 
-/* Buttons */
-.btn-primary,
-.mode-select-btn {
+/* Buttons – unified premium CTAs (PC + Mobile overlays) */
+.btn-primary, .mode-select-btn {
   padding: 12px 24px;
-  border-radius: var(--radius-sm);
-  font-weight: 500;
+  border-radius: 999px;
+  font-weight: 700;
   cursor: pointer;
   transition: var(--transition);
   border: none;
-  font-size: 1rem;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
 }
 
-.btn-primary,
-.mode-select-btn.primary {
-  background: var(--primary);
-  color: var(--bg-primary);
+.btn-primary, .mode-select-btn.primary {
+  background: linear-gradient(135deg, #22d3ee 0%, #0ea5e9 45%, #6366f1 100%);
+  color: #020617;
+  box-shadow:
+    0 8px 24px rgba(15, 23, 42, 0.9),
+    0 0 20px rgba(34, 211, 238, 0.45);
 }
 
-.btn-primary:hover,
-.mode-select-btn.primary:hover {
-  background: var(--primary-dark);
+.btn-primary:hover, .mode-select-btn.primary:hover {
   transform: translateY(-2px);
+  box-shadow:
+    0 12px 32px rgba(15, 23, 42, 0.95),
+    0 0 32px rgba(34, 211, 238, 0.7);
 }
 
 .btn-secondary {
-  background: transparent;
+  background: rgba(15, 23, 42, 0.85);
   border: 1px solid var(--border-dim);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 0.7rem;
   text-transform: uppercase;
-  letter-spacing: 1px;
-  padding: 10px 20px;
-  border-radius: var(--radius);
+  letter-spacing: 0.14em;
+  padding: 9px 18px;
+  border-radius: 999px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
 }
 
 .btn-secondary:hover {
-  border-color: var(--text-primary);
-  color: var(--text-primary);
-  background: var(--bg-glass-hover);
+  border-color: var(--accent);
+  color: #e5f9ff;
+  background: rgba(15, 23, 42, 0.95);
 }
 
 .mode-select-btn {

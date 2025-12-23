@@ -3,6 +3,25 @@ import { useEffect, useRef } from 'react';
 import * as PIXI from 'pixi.js';
 import { useWs } from './WsProvider';
 import { HudManager } from './HudManager';
+import { logger } from './utils/logger';
+
+// Guard against rare Pixi transform null refs by short-circuiting container updates
+// when the internal transform object has been destroyed but the display object
+// is still referenced in the scene graph.
+(function patchPixiTransformGuard() {
+  try {
+    const proto: any = (PIXI as any)?.Container?.prototype;
+    if (!proto || proto.__srGuardPatched) return;
+    const orig = proto.updateLocalTransform;
+    if (typeof orig !== 'function') return;
+    proto.updateLocalTransform = function (...args: any[]) {
+      const t = (this as any).transform as any;
+      if (!t || !t.position) return;
+      return orig.apply(this, args);
+    };
+    proto.__srGuardPatched = true;
+  } catch {}
+})();
 
 interface Car {
   x: number;
@@ -267,6 +286,12 @@ class SpermRaceGame {
   private lastRadarUpdate: number = 0;
   private radarUpdateInterval: number = 50; // Update every 50ms (~20fps) instead of 60fps
 
+  // Proximity alert system
+  private proximityAlertEl: HTMLDivElement | null = null;
+  private lastProximityCheck: number = 0;
+  private proximityCheckInterval: number = 200; // Check every 200ms
+  private lastProximityHaptic: number = 0;
+
   // Seeded RNG for procedural generation
   public seed: number = Math.floor(Math.random() * 1e9);
 
@@ -334,12 +359,7 @@ class SpermRaceGame {
 
   // JUICE METHODS - Make game feel amazing!
   private screenShake(intensity: number = 1) {
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const isTournament = !!(this.wsHud && this.wsHud.active);
-    // Disable screen shake in mobile practice for a stable feel
-    if (isMobile && !isTournament) return;
-
-    // Reduced shake - less disorienting on mobile
+    // Consistent screen shake on all platforms
     this.camera.shakeX = (Math.random() - 0.5) * 8 * intensity;
     this.camera.shakeY = (Math.random() - 0.5) * 8 * intensity;
   }
@@ -475,11 +495,13 @@ class SpermRaceGame {
     
     // High-quality rendering settings
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const isAndroid = /Android/i.test(navigator.userAgent);
     const rawPixelRatio = window.devicePixelRatio || 1;
-    // Cap at 2x on mobile to prevent 3x (9x pixels) on high-end phones - massive performance boost
-    const pixelRatio = isMobile ? Math.min(rawPixelRatio, 2) : rawPixelRatio;
+    // Android gets lower pixel ratio for better performance (many Android devices struggle with high DPR)
+    // iOS can handle 2x, Android gets 1.5x max
+    const pixelRatio = isAndroid ? Math.min(rawPixelRatio, 1.5) : isMobile ? Math.min(rawPixelRatio, 2) : rawPixelRatio;
     
-    console.log('[RENDERER] Resolution:', pixelRatio, 'Device:', isMobile ? 'Mobile' : 'Desktop', 'Raw DPR:', rawPixelRatio);
+    logger.log('[RENDERER] Resolution:', pixelRatio, 'Device:', isAndroid ? 'Android' : isMobile ? 'Mobile' : 'Desktop', 'Raw DPR:', rawPixelRatio);
     
     this.app = new PIXI.Application();
     await this.app.init({
@@ -534,11 +556,11 @@ class SpermRaceGame {
     // WebGL context loss recovery (prevents black screen on mobile)
     const handleContextLost = (e: Event) => {
       e.preventDefault();
-      console.warn('[GAME] WebGL context lost, pausing game...');
+      logger.warn('[GAME] WebGL context lost, pausing game...');
       try { (this.app as any)?.ticker?.stop?.(); } catch {}
     };
     const handleContextRestored = () => {
-      console.log('[GAME] WebGL context restored, resuming game...');
+      logger.log('[GAME] WebGL context restored, resuming game...');
       try { (this.app as any)?.ticker?.start?.(); } catch {}
     };
     try {
@@ -551,7 +573,7 @@ class SpermRaceGame {
         });
       }
     } catch (e) {
-      console.warn('[GAME] Could not add WebGL context handlers:', e);
+      logger.warn('[GAME] Could not add WebGL context handlers:', e);
     }
 
     // *** MOBILE ORIENTATION & RESIZE FIX ***
@@ -637,10 +659,10 @@ class SpermRaceGame {
     this.preStart = { startAt: Date.now(), durationMs: 3000 };
     this.roundInProgress = true; // Start first round
     this.dbg('spawnQueue[0..3]', this.spawnQueue.slice(0, 4));
-    try { this.createPlayer(); } catch (e) { console.warn('createPlayer failed', e); }
+    try { this.createPlayer(); } catch (e) { logger.error('createPlayer failed', e); }
     // Only create local dev bots in practice (when tournament HUD is not active)
     if (!(this.wsHud && this.wsHud.active)) {
-      try { this.createBot(); } catch (e) { console.warn('createBot failed', e); }
+      try { this.createBot(); } catch (e) { logger.error('createBot failed', e); }
     }
     this.createUI();
 
@@ -774,13 +796,19 @@ class SpermRaceGame {
     
     // Matte grid only (remove veins that could look like a border)
     this.gridGraphics.stroke({ width: 1, color: this.theme.grid, alpha: this.theme.gridAlpha });
+    
+    // Hide grid on mobile to reduce visual clutter
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    this.gridGraphics.visible = !isMobile;
+    
     this.worldContainer.addChild(this.gridGraphics);
   }
   
   createAmbientParticles() {
     // Add subtle floating colored particles for atmosphere
-    const particleCount = 40;
-    const colors = [0x22d3ee, 0x6366f1, 0x10b981, 0xfbbf24]; // Cyan, purple, green, yellow
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const particleCount = isMobile ? 15 : 40; // Much fewer on mobile
+    const colors = [0x22d3ee, 0x6366f1]; // Reduced to 2 colors: Cyan, purple (was 4: cyan, purple, green, yellow)
     
     for (let i = 0; i < particleCount; i++) {
       const x = (Math.random() - 0.5) * this.arena.width;
@@ -1342,14 +1370,14 @@ class SpermRaceGame {
     const onMobileBoost = () => {
       // Don't allow boost during preStart countdown
       if (this.preStart) {
-        console.log('[BOOST] Blocked during countdown');
+        logger.debug('[BOOST] Blocked during countdown');
         return;
       }
       
       if (this.player?.isBoosting) {
         this.stopBoost();
       } else {
-        console.log('[BOOST] Attempting boost, energy:', this.player?.boostEnergy);
+        logger.debug('[BOOST] Attempting boost, energy:', this.player?.boostEnergy);
         this.startBoost();
       }
     };
@@ -1478,18 +1506,35 @@ class SpermRaceGame {
     });
     this.uiContainer.appendChild(this.leaderboardContainer);
 
-    // Create kill feed container (top-left)
+    // Create kill feed container (top-right for better visibility)
     this.killFeedContainer = document.createElement('div');
     Object.assign(this.killFeedContainer.style, {
       position: 'absolute',
-      top: '20px',
-      left: '20px',
-      width: '320px',
+      top: '80px',
+      right: '24px',
+      width: '340px',
       display: 'flex',
       flexDirection: 'column',
-      gap: '6px',
+      gap: '8px',
       zIndex: '10'
     });
+    
+    // Add CSS animation for slide-in effect
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes killFeedSlide {
+        0% {
+          opacity: 0;
+          transform: translateX(20px);
+        }
+        100% {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+    `;
+    document.head.appendChild(style);
+    
     this.uiContainer.appendChild(this.killFeedContainer);
 
     // Settings UI toggle removed
@@ -1504,6 +1549,32 @@ class SpermRaceGame {
 
     // Create emote buttons (mobile-friendly)
     this.createEmoteButtons();
+    
+    // Create proximity alert indicator
+    this.createProximityAlert();
+  }
+  
+  createProximityAlert() {
+    if (!this.uiContainer) return;
+    
+    this.proximityAlertEl = document.createElement('div');
+    this.proximityAlertEl.id = 'proximity-alert';
+    Object.assign(this.proximityAlertEl.style, {
+      position: 'absolute',
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+      width: '280px',
+      height: '280px',
+      borderRadius: '50%',
+      border: '3px solid rgba(239, 68, 68, 0)',
+      pointerEvents: 'none',
+      zIndex: '5',
+      transition: 'border-color 0.3s ease, box-shadow 0.3s ease',
+      boxShadow: 'none'
+    });
+    
+    this.uiContainer.appendChild(this.proximityAlertEl);
   }
 
   createEmoteButtons() {
@@ -1630,7 +1701,23 @@ class SpermRaceGame {
   }
 
   createPlayer() {
-    const s = this.spawnQueue[this.spawnQueueIndex] || this.randomEdgeSpawn();
+    const rawSpawn = this.spawnQueue[this.spawnQueueIndex] || this.randomEdgeSpawn();
+    const isTournament = !!(this.wsHud && this.wsHud.active);
+    let spawnX = rawSpawn.x;
+    let spawnY = rawSpawn.y;
+    // In Practice, always spawn inside the initial safe zone for clarity
+    if (!isTournament && this.zone && this.zone.startRadius) {
+      const dx = spawnX - this.zone.centerX;
+      const dy = spawnY - this.zone.centerY;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 0;
+      const maxRadius = this.zone.startRadius * 0.8; // keep a margin from edge
+      if (dist > maxRadius && dist > 0) {
+        const scale = maxRadius / dist;
+        spawnX = this.zone.centerX + dx * scale;
+        spawnY = this.zone.centerY + dy * scale;
+      }
+    }
+    const s = { x: spawnX, y: spawnY, angle: rawSpawn.angle };
     // First slice steering: if the chosen first slice would cut toward this spawn, flip it
     if (this.firstSliceSide) {
       const nearLeft = s.x < -this.arena.width * 0.25;
@@ -1653,17 +1740,7 @@ class SpermRaceGame {
     } catch {}
     this.player = this.createCar(s.x, s.y, headHex, 'player');
     if (this.player) {
-      // Slightly faster feel in mobile practice (no ws HUD)
-      try {
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        const isTournament = !!(this.wsHud && this.wsHud.active);
-        if (isMobile && !isTournament) {
-          this.player.baseSpeed *= 1.2;
-          this.player.speed = this.player.baseSpeed;
-          this.player.targetSpeed = this.player.baseSpeed;
-          this.player.boostSpeed *= 1.2;
-        }
-      } catch {}
+      // Mobile adjustments removed - same gameplay on all platforms
 
       (this.player as any).tailColor = tailHex ?? headHex;
       this.player.angle = s.angle;
@@ -1680,9 +1757,9 @@ class SpermRaceGame {
       try {
         targetContainer.addChild(this.player.sprite);
         (this.player.sprite as any).zIndex = 50; // Above trails (20) but below border (1000)
-      } catch (e) { console.warn('addChild player failed', e); }
+      } catch (e) { logger.error('addChild player failed', e); }
     } else {
-      console.warn('No container available for player sprite');
+      logger.error('No container available for player sprite');
     }
     this.spawnQueueIndex++;
     // Force camera center on player on spawn (hard snap)
@@ -1707,7 +1784,24 @@ class SpermRaceGame {
   }
 
   createBot() {
-    const s0 = this.spawnQueue[this.spawnQueueIndex] || this.randomEdgeSpawn();
+    const isTournament = !!(this.wsHud && this.wsHud.active);
+    const clampIfPractice = (spawn: { x: number; y: number; angle: number }) => {
+      if (!this.zone || !this.zone.startRadius || isTournament) return spawn;
+      let { x, y } = spawn;
+      const dx = x - this.zone.centerX;
+      const dy = y - this.zone.centerY;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 0;
+      const maxRadius = this.zone.startRadius * 0.8;
+      if (dist > maxRadius && dist > 0) {
+        const scale = maxRadius / dist;
+        x = this.zone.centerX + dx * scale;
+        y = this.zone.centerY + dy * scale;
+      }
+      return { x, y, angle: spawn.angle };
+    };
+
+    const s0Raw = this.spawnQueue[this.spawnQueueIndex] || this.randomEdgeSpawn();
+    const s0 = clampIfPractice(s0Raw);
     const botColor = BOT_COLORS[Math.floor(Math.random() * BOT_COLORS.length)] || 0xff00ff;
     this.bot = this.createCar(s0.x, s0.y, botColor, 'bot');
     if (this.bot) {
@@ -1719,13 +1813,14 @@ class SpermRaceGame {
         try {
           targetContainer2.addChild(this.bot.sprite);
           (this.bot.sprite as any).zIndex = 50; // Above trails but below border
-        } catch (e) { console.warn('addChild bot failed', e); }
+        } catch (e) { logger.error('addChild bot failed', e); }
       }
     }
     // Create additional bots for testing
     this.extraBots = [];
     for (let i = 0; i < 31; i++) {
-      const s = this.spawnQueue[this.spawnQueueIndex + 1 + i] || this.randomEdgeSpawn();
+      const sRaw = this.spawnQueue[this.spawnQueueIndex + 1 + i] || this.randomEdgeSpawn();
+      const s = clampIfPractice(sRaw);
       const bColor = BOT_COLORS[i % BOT_COLORS.length] || 0xff00ff;
       const bot = this.createCar(s.x, s.y, bColor, `bot${i}`);
       if (bot) {
@@ -1737,7 +1832,7 @@ class SpermRaceGame {
           try {
             targetContainer3.addChild(bot.sprite);
             (bot.sprite as any).zIndex = 50; // Above trails but below border
-          } catch (e) { console.warn('addChild extrabot failed', e); }
+          } catch (e) { logger.error('addChild extrabot failed', e); }
         }
       }
     }
@@ -1862,10 +1957,10 @@ class SpermRaceGame {
       lastTrailBoostStatus: undefined,
       sprite: new PIXI.Container(),
       headGraphics: new PIXI.Graphics(),
-      tailGraphics: this.smallTailEnabled ? new PIXI.Graphics() : null,
+      tailGraphics: new PIXI.Graphics(),
       tailWaveT: 0,
       tailLength: 34,
-      tailSegments: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 6 : 10, // Fewer segments on mobile for performance
+      tailSegments: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 4 : 10, // Fewer segments on mobile for performance
       tailAmplitude: 5,
       turnResponsiveness: type === 'player' ? 10.0 : 6.5, // Snappier turning
       lateralDragScalar: 1.15,
@@ -1979,7 +2074,7 @@ class SpermRaceGame {
     
     // More particles for dramatic boost effect
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const particleCount = isMobile ? 12 : 18; // Increased from 8/12
+    const particleCount = isMobile ? 6 : 12; // Reduced for mobile performance
     
     for (let i = 0; i < particleCount; i++) {
       const angle = (Math.PI * 2 * i) / particleCount;
@@ -2284,7 +2379,7 @@ class SpermRaceGame {
                   0 0 15px rgba(251, 191, 36, 0.4),
                   0 2px 8px rgba(0, 0, 0, 0.6);
                 transition: opacity 0.3s ease;
-              ">Zone closes in 10 seconds</div>
+              ">Stay inside the safe zone</div>
             `;
           }
         } else {
@@ -2339,7 +2434,8 @@ class SpermRaceGame {
       const sinceStart = Date.now() - (this.gameStartTime || Date.now());
       if (!this.pickupsUnlocked && sinceStart >= this.unlockPickupsAfterMs) {
         this.pickupsUnlocked = true;
-        try { this.spawnPickups(35); } catch {}
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        try { this.spawnPickups(isMobile ? 20 : 35); } catch {} // Fewer orbs on mobile
         if (this.pickupsContainer) this.pickupsContainer.visible = true;
         // HUD cue: energy orbs phase begins
         this.showHotspotToast('Energy orbs active • refill boost and chase kills', '#4ade80');
@@ -2400,6 +2496,9 @@ class SpermRaceGame {
     // Update sonar radar
     this.radarAngle = (this.radarAngle + deltaTime * 2) % (Math.PI * 2);
     this.updateRadar();
+    
+    // Update proximity alert
+    this.updateProximityAlert();
     
     // Update alive count (legacy HUD removed; kept for practice header only)
     this.updateAliveCount();
@@ -2566,7 +2665,7 @@ class SpermRaceGame {
 
       localStorage.setItem('spermrace_stats', JSON.stringify(stats));
     } catch (e) {
-      console.error('Failed to save stats:', e);
+      logger.error('Failed to save stats:', e);
     }
   }
 
@@ -2598,52 +2697,104 @@ class SpermRaceGame {
     const KILL_LIFETIME = 6000;
     
     // Merge local and server kill feed (server preferred when active)
-    let feed: Array<{ killer: string; victim: string; time: number }> = [];
+    let feed: Array<{ killer: string; victim: string; time: number; isMe?: boolean }> = [];
+    const myId = this.wsHud?.playerId || null;
+    
     if (this.wsHud?.active && Array.isArray(this.wsHud.killFeed)) {
-      feed = (this.wsHud.killFeed || []).map(ev => ({
-        killer: ev.killerId ? (this.wsHud!.idToName[ev.killerId] || `${ev.killerId.slice(0,4)}…${ev.killerId.slice(-4)}`) : 'ZONE',
-        victim: this.wsHud!.idToName[ev.victimId] || `${ev.victimId.slice(0,4)}…${ev.victimId.slice(-4)}`,
-        time: ev.ts || now
-      }));
+      feed = (this.wsHud.killFeed || []).map(ev => {
+        const killerName = ev.killerId ? (this.wsHud!.idToName[ev.killerId] || `${ev.killerId.slice(0,4)}…${ev.killerId.slice(-4)}`) : 'ZONE';
+        const victimName = this.wsHud!.idToName[ev.victimId] || `${ev.victimId.slice(0,4)}…${ev.victimId.slice(-4)}`;
+        return {
+          killer: killerName,
+          victim: victimName,
+          time: ev.ts || now,
+          isMe: ev.killerId === myId || ev.victimId === myId
+        };
+      });
     } else {
-      // Local practice - clean expired kills
+      // Local practice
       this.recentKills = this.recentKills.filter(k => now - k.time < KILL_LIFETIME);
-      feed = this.recentKills;
+      feed = this.recentKills.map(k => ({ ...k, isMe: false }));
     }
     
-    // Only show last 6 kills, most recent at bottom
+    // Only show last 6 kills
     const items = feed.slice(-6);
     
-    // Build HTML in one go to prevent flickering
-    const html = items.map(k => {
+    // Premium kill feed with game-like styling
+    const html = items.map((k, idx) => {
       const age = now - k.time;
       const alpha = Math.max(0, 1 - (age / KILL_LIFETIME));
-      const slideIn = age < 300; // Slide in animation for first 300ms
-      const translateY = slideIn ? `translateY(${(1 - age / 300) * 20}px)` : 'translateY(0)';
       
-      return `<div class="killfeed-item" style="
-        display: flex;
-        gap: 8px;
-        align-items: center;
-        background: rgba(0,0,0,0.7);
-        border: 1px solid rgba(255,100,0,0.3);
-        border-radius: 8px;
-        padding: 8px 12px;
-        margin-bottom: 4px;
-        color: ${this.theme.text};
-        opacity: ${alpha};
-        transform: ${translateY};
-        transition: transform 0.3s ease-out, opacity 0.3s;
+      // Detect kill streak
+      let isStreak = false;
+      if (idx > 0 && items[idx-1].killer === k.killer && k.killer !== 'ZONE') {
+        isStreak = true;
+      }
+      
+      // Premium colors
+      const bgColor = k.isMe ? `rgba(34,211,238,${0.2 * alpha})` : `rgba(0,0,0,${0.85 * alpha})`;
+      const borderColor = k.isMe ? `rgba(34,211,238,${0.6 * alpha})` : `rgba(255,100,0,${0.4 * alpha})`;
+      const glowColor = k.isMe ? `rgba(34,211,238,${0.5 * alpha})` : `rgba(0,0,0,${0.4 * alpha})`;
+      
+      return `<div style="
+        display:flex;
+        gap:10px;
+        align-items:center;
+        justify-content:space-between;
+        background:${bgColor};
+        border:1px solid ${borderColor};
+        border-radius:10px;
+        padding:10px 14px;
+        margin-bottom:6px;
+        color:#ffffff;
+        opacity:${alpha};
+        animation: killFeedSlide 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 4px 12px ${glowColor};
+        backdrop-filter: blur(8px);
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
         will-change: transform, opacity;
       ">
-        <span style="width:6px;height:6px;border-radius:50%;background:#ef4444;flex-shrink:0;"></span>
-        <span style="color:#ff6b6b;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;">${k.killer}</span>
-        <span style="opacity:0.7;flex-shrink:0;font-size:11px;margin:0 4px;letter-spacing:1px;">KO</span>
-        <span style="color:#fbbf24;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;">${k.victim}</span>
+        <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
+          <span style="
+            color:#00f5ff;
+            font-weight:800;
+            white-space:nowrap;
+            overflow:hidden;
+            text-overflow:ellipsis;
+            max-width:110px;
+            font-size:13px;
+            text-shadow: 0 0 8px rgba(0,245,255,0.5);
+          ">${k.killer}</span>
+          <span style="
+            color:#ef4444;
+            font-size:14px;
+            filter: drop-shadow(0 0 4px rgba(239,68,68,0.6));
+          ">⚔️</span>
+          <span style="
+            color:#fbbf24;
+            font-weight:600;
+            white-space:nowrap;
+            overflow:hidden;
+            text-overflow:ellipsis;
+            max-width:110px;
+            font-size:13px;
+          ">${k.victim}</span>
+        </div>
+        ${isStreak ? `<div style="
+          padding:3px 10px;
+          background:linear-gradient(135deg, #ef4444, #dc2626);
+          border-radius:6px;
+          font-size:10px;
+          font-weight:900;
+          color:#ffffff;
+          text-transform:uppercase;
+          letter-spacing:0.8px;
+          box-shadow: 0 0 12px rgba(239,68,68,0.7);
+        ">STREAK</div>` : ''}
       </div>`;
     }).join('');
     
-    // Only update if content changed to prevent glitching
+    // Only update if content changed
     if (this.killFeedContainer.innerHTML !== html) {
       this.killFeedContainer.innerHTML = html;
     }
@@ -2899,25 +3050,15 @@ class SpermRaceGame {
     // Animate sperm tail (tapered ribbon) and head (static oval) with kill-based growth
     try {
       const sizeMul = this.getSizeMultiplierForCar(car);
-      if (this.smallTailEnabled && car.tailGraphics) {
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        const isTournament = !!(this.wsHud && this.wsHud.active);
-        const isMobilePracticePlayer = isMobile && !isTournament && car.type === 'player';
-
-        const waveSpeed = isMobilePracticePlayer
-          ? (car.isBoosting ? 6 : 3)
-          : (car.isBoosting ? 18 : 10); // Default faster wave animation
+      if (car.tailGraphics) {
+        const waveSpeed = car.isBoosting ? 18 : 10; // Consistent wave animation
         car.tailWaveT = (car.tailWaveT || 0) + deltaTime * waveSpeed;
 
-        const segsBase = car.tailSegments || 16;
-        const segs = isMobilePracticePlayer ? Math.max(6, segsBase) : Math.max(8, segsBase);
+        const segs = Math.max(8, car.tailSegments || 16);
         const len = (car.tailLength || 48) * sizeMul;
         const speedMag = Math.hypot(car.vx, car.vy);
         const speedScale = 0.5 + Math.min(1, speedMag / 350);
-        let ampBase = (car.tailAmplitude || 6) * (car.isBoosting ? 1.5 : 1.0) * sizeMul; // More dramatic boost wave
-        if (isMobilePracticePlayer) {
-          ampBase *= 0.4; // Much calmer tail motion in mobile practice
-        }
+        const ampBase = (car.tailAmplitude || 6) * (car.isBoosting ? 1.5 : 1.0) * sizeMul;
         const amp = ampBase;
         const baseWidth = 3 * (0.75 + 0.25 * speedScale) * sizeMul;
         const step = len / segs;
@@ -3071,11 +3212,7 @@ class SpermRaceGame {
 
   updateTrails(_deltaTime: number) {
     // Add trail points for active cars
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const isTournament = !!(this.wsHud && this.wsHud.active);
-    const hidePlayerTrailInMobilePractice = isMobile && !isTournament;
-
-    if (this.player && !this.player.destroyed && !hidePlayerTrailInMobilePractice) {
+    if (this.player && !this.player.destroyed) {
       this.addTrailPoint(this.player);
     }
     if (this.bot && !this.bot.destroyed) {
@@ -3564,10 +3701,16 @@ class SpermRaceGame {
     }
 
     // Ensure all visual parts are removed/destroyed to avoid lingering head/tail
-    try { if (car.headGraphics) { car.headGraphics.destroy(); car.headGraphics = undefined; } } catch {}
-    try { if (car.tailGraphics) { car.tailGraphics.destroy(); car.tailGraphics = null; } } catch {}
-    try { if ((car.sprite as any)?.parent) { (car.sprite as any).parent.removeChild(car.sprite); } } catch {}
-    try { (car.sprite as any)?.destroy?.({ children: false }); } catch {}
+    try {
+      if ((car.sprite as any)?.parent) {
+        (car.sprite as any).parent.removeChild(car.sprite);
+      }
+      // Destroy sprite and all its children in one pass to avoid leaving destroyed
+      // PIXI objects in the display tree (which can cause null transform errors).
+      (car.sprite as any)?.destroy?.({ children: true });
+    } catch {}
+    car.headGraphics = undefined;
+    car.tailGraphics = null;
     try { const np = (car as any).nameplate as HTMLDivElement | undefined; if (np && np.parentElement) np.parentElement.removeChild(np); (car as any).nameplate = undefined; } catch {}
 
     // Battle Royale: No respawning, permanent elimination
@@ -3635,7 +3778,8 @@ class SpermRaceGame {
   }
 
   createExplosion(x: number, y: number, color: number) {
-    const particleCount = 30; // More particles for visibility
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const particleCount = isMobile ? 15 : 30; // Fewer particles on mobile
     for (let i = 0; i < particleCount; i++) {
       const angle = (Math.PI * 2 / particleCount) * i + (Math.random() - 0.5) * 0.3;
       const speed = 150 + Math.random() * 200; // Faster explosion
@@ -3664,17 +3808,10 @@ class SpermRaceGame {
       this.particles.push(particle);
     }
 
-    // Add screen shake on explosion (reduced) - but skip in mobile practice for stability
+    // Add screen shake on explosion
     try {
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      const isTournament = !!(this.wsHud && this.wsHud.active);
-      if (isMobile && !isTournament) {
-        this.camera.shakeX = 0;
-        this.camera.shakeY = 0;
-      } else {
-        this.camera.shakeX = 6;
-        this.camera.shakeY = 6;
-      }
+      this.camera.shakeX = 6;
+      this.camera.shakeY = 6;
     } catch {
       this.camera.shakeX = 6;
       this.camera.shakeY = 6;
@@ -3751,7 +3888,10 @@ class SpermRaceGame {
       }
     }
 
-    if (this.pickups.length < 25) this.spawnPickups(8);
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const maxPickups = isMobile ? 15 : 25;
+    const spawnAmount = isMobile ? 4 : 8;
+    if (this.pickups.length < maxPickups) this.spawnPickups(spawnAmount);
   }
 
   handleRespawning(_deltaTime: number) {
@@ -4090,6 +4230,66 @@ class SpermRaceGame {
 
   respawnCar(_car: Car, _x: number, _y: number) {
     // BR mode has no respawn. Method kept for future modes.
+  }
+
+  updateProximityAlert() {
+    if (!this.proximityAlertEl || !this.player || this.player.destroyed) return;
+    
+    const now = Date.now();
+    if (now - this.lastProximityCheck < this.proximityCheckInterval) return;
+    this.lastProximityCheck = now;
+    
+    // Find nearby enemies
+    const allEnemies = [this.bot, ...this.extraBots].filter((car): car is Car => car !== null && !car.destroyed);
+    
+    // Check distances
+    const dangerRadius = 300; // Very close
+    const warningRadius = 500; // Medium distance
+    const cautionRadius = 700; // Far but trackable
+    
+    let closestDistance = Infinity;
+    let enemyCount = { danger: 0, warning: 0, caution: 0 };
+    
+    for (const enemy of allEnemies) {
+      const dx = enemy.x - this.player.x;
+      const dy = enemy.y - this.player.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      
+      if (dist < closestDistance) closestDistance = dist;
+      
+      if (dist < dangerRadius) enemyCount.danger++;
+      else if (dist < warningRadius) enemyCount.warning++;
+      else if (dist < cautionRadius) enemyCount.caution++;
+    }
+    
+    // Update visual state
+    if (enemyCount.danger > 0) {
+      // DANGER: Red pulsing ring
+      this.proximityAlertEl.style.borderColor = 'rgba(239, 68, 68, 0.9)';
+      this.proximityAlertEl.style.boxShadow = '0 0 40px rgba(239, 68, 68, 0.8), inset 0 0 40px rgba(239, 68, 68, 0.3)';
+      this.proximityAlertEl.style.animation = 'proximityPulse 0.6s ease-in-out infinite';
+      
+      // Haptic feedback (throttled)
+      if (now - this.lastProximityHaptic > 800) {
+        this.hapticFeedback('medium');
+        this.lastProximityHaptic = now;
+      }
+    } else if (enemyCount.warning > 0) {
+      // WARNING: Orange steady ring
+      this.proximityAlertEl.style.borderColor = 'rgba(251, 146, 60, 0.7)';
+      this.proximityAlertEl.style.boxShadow = '0 0 30px rgba(251, 146, 60, 0.6), inset 0 0 30px rgba(251, 146, 60, 0.2)';
+      this.proximityAlertEl.style.animation = 'proximityPulse 1.2s ease-in-out infinite';
+    } else if (enemyCount.caution > 0) {
+      // CAUTION: Yellow subtle ring
+      this.proximityAlertEl.style.borderColor = 'rgba(234, 179, 8, 0.5)';
+      this.proximityAlertEl.style.boxShadow = '0 0 20px rgba(234, 179, 8, 0.4), inset 0 0 20px rgba(234, 179, 8, 0.1)';
+      this.proximityAlertEl.style.animation = 'proximityPulse 1.8s ease-in-out infinite';
+    } else {
+      // CLEAR: No threats nearby
+      this.proximityAlertEl.style.borderColor = 'rgba(239, 68, 68, 0)';
+      this.proximityAlertEl.style.boxShadow = 'none';
+      this.proximityAlertEl.style.animation = 'none';
+    }
   }
 
   updateRadar() {
@@ -4445,151 +4645,134 @@ class SpermRaceGame {
 
   setupZone() {
     if (!this.app) return;
-    // Initialize zone params to arena
+    // Initialize circular zone
     this.zone.centerX = 0;
     this.zone.centerY = 0;
     this.zone.startRadius = Math.min(this.arena.width, this.arena.height) * 0.48;
-    this.zone.startAtMs = Date.now();
-  // Sharper pacing: ~42s core rounds with aggressive finale
-  this.zone.durationMs = 42000;
+    this.zone.currentRadius = this.zone.startRadius;
+    this.zone.targetRadius = this.zone.startRadius;
+    this.zone.endRadius = 400; // Minimum final circle
+
+    const now = Date.now();
+    const isTournament = !!(this.wsHud && this.wsHud.active);
+    if (isTournament) {
+      // Tournament: zone active for most of the round
+      this.zone.startAtMs = now;
+      this.zone.durationMs = 42000; // 42 seconds total shrink
+    } else {
+      // Practice: give players breathing room before zone matters
+      const preStartMs = this.preStart?.durationMs ?? 3000;
+      const practiceDelayMs = 7000; // extra on-field time after countdown
+      this.zone.startAtMs = now + preStartMs + practiceDelayMs;
+      this.zone.durationMs = 60000; // slower, gentler shrink
+    }
     this.zoneGraphics = new PIXI.Graphics();
     this.worldContainer.addChild(this.zoneGraphics);
     this.finalSurgeBannerShown = false;
-
-    // Rectangular slicer init
-    this.rectZone.left = -this.arena.width / 2;
-    this.rectZone.right = this.arena.width / 2;
-    this.rectZone.top = -this.arena.height / 2;
-    this.rectZone.bottom = this.arena.height / 2;
-    // Seed-of-the-day pattern and first slice selection
-    this.daySeed = this.computeDaySeed();
-    this.slicePattern = this.buildSlicePattern(this.daySeed);
-    this.sliceIndex = 0;
-    // Avoid slicing toward first spawns: pick opposite of dominant spawn side (left/right) for first slice
-    const dominantEdge: 'left'|'right'|'top'|'bottom' = 'left';
-    const opposite: Record<'left'|'right'|'top'|'bottom','left'|'right'|'top'|'bottom'> = { left: 'right', right: 'left', top: 'bottom', bottom: 'top' };
-    this.firstSliceSide = opposite[dominantEdge];
-    this.rectZone.pendingSide = this.firstSliceSide;
-    this.rectZone.lastSide = null;
-    this.rectZone.nextSliceAt = Date.now() + this.rectZone.telegraphMs; // telegraph the first one sooner
-    this.rectZone.pendingSide = null;
   }
 
   updateZoneAndDamage(deltaTime: number) {
     if (!this.zoneGraphics) return;
     const now = Date.now();
+    const preStartActive = this.preStart
+      ? Math.max(0, this.preStart.durationMs - (now - this.preStart.startAt)) > 0
+      : false;
     const zoneStart = this.zone.startAtMs || now;
     const elapsed = Math.max(0, now - zoneStart);
     const progress = this.zone.durationMs > 0 ? Math.min(1, Math.max(0, elapsed / this.zone.durationMs)) : 0;
     const tension = Math.pow(progress, 1.35);
-    const targetInterval = 3200 - Math.min(2200, 2200 * tension);
-    this.rectZone.sliceIntervalMs = Math.max(900, targetInterval);
-    this.rectZone.sliceStep = Math.round(260 + 240 * tension);
-
-    // Rectangular slicer: periodically push one side inward
-    if (!this.rectZone.pendingSide && now >= this.rectZone.nextSliceAt - this.rectZone.telegraphMs) {
-      // Use seeded daily pattern, avoid immediate repeats
-      let side: 'left'|'right'|'top'|'bottom';
-      if (this.firstSliceSide) {
-        side = this.firstSliceSide;
-        this.firstSliceSide = null;
-      } else {
-        if (!this.slicePattern || this.slicePattern.length === 0) {
-          this.slicePattern = this.buildSlicePattern(this.daySeed || this.computeDaySeed());
-          this.sliceIndex = 0;
-        }
-        let tries = 0;
-        do {
-          side = this.slicePattern[this.sliceIndex % this.slicePattern.length];
-          this.sliceIndex++;
-          tries++;
-        } while (tries < 4 && side === this.rectZone.lastSide);
-      }
-      this.rectZone.pendingSide = side!;
-    }
-    if (now >= this.rectZone.nextSliceAt) {
-      // Perform slice
-      const side = this.rectZone.pendingSide || 'left';
-      const step = this.rectZone.sliceStep;
-      if (side === 'left') this.rectZone.left = Math.min(this.rectZone.right - this.rectZone.minWidth, this.rectZone.left + step);
-      if (side === 'right') this.rectZone.right = Math.max(this.rectZone.left + this.rectZone.minWidth, this.rectZone.right - step);
-      if (side === 'top') this.rectZone.top = Math.min(this.rectZone.bottom - this.rectZone.minHeight, this.rectZone.top + step);
-      if (side === 'bottom') this.rectZone.bottom = Math.max(this.rectZone.top + this.rectZone.minHeight, this.rectZone.bottom - step);
-      this.rectZone.lastSide = side;
-      this.rectZone.pendingSide = null;
-      this.rectZone.nextSliceAt = now + this.rectZone.sliceIntervalMs;
-    }
-    // Draw rectangular safe zone and telegraph
+    
+    // Smooth circular shrinking
+    this.zone.targetRadius = this.zone.startRadius - (this.zone.startRadius - this.zone.endRadius) * progress;
+    
+    // Smooth interpolation toward target radius
+    const lerpSpeed = 2.5; // How quickly current catches up to target
+    this.zone.currentRadius += (this.zone.targetRadius - this.zone.currentRadius) * lerpSpeed * deltaTime;
+    
+    // Draw circular zone
     this.zoneGraphics.clear();
-
-    const safeLeft = this.rectZone.left;
-    const safeTop = this.rectZone.top;
-    const safeWidth = this.rectZone.right - this.rectZone.left;
-    const safeHeight = this.rectZone.bottom - this.rectZone.top;
-
-    // 1) Safe zone fill + bold border so it's clearly distinct from map edge
+    
+    const cx = this.zone.centerX;
+    const cy = this.zone.centerY;
+    const safeRadius = this.zone.currentRadius;
+    
+    // Check player proximity for border color
+    let borderColor = this.theme.accent; // Default cyan
+    let borderAlpha = 0.9;
+    
+    if (this.player && !this.player.destroyed) {
+      const dx = this.player.x - cx;
+      const dy = this.player.y - cy;
+      const distFromCenter = Math.sqrt(dx * dx + dy * dy);
+      const distToEdge = safeRadius - distFromCenter;
+      
+      // Change border color based on proximity
+      if (distToEdge < 100) {
+        borderColor = 0xef4444; // Red - very close
+        borderAlpha = 1.0;
+      } else if (distToEdge < 250) {
+        borderColor = 0xf97316; // Orange - warning
+        borderAlpha = 0.95;
+      } else if (distToEdge < 400) {
+        borderColor = 0xfbbf24; // Yellow - caution
+        borderAlpha = 0.92;
+      }
+    }
+    
+    // 1) Safe zone circle with dynamic border
     this.zoneGraphics
-      .rect(safeLeft, safeTop, safeWidth, safeHeight)
-      .fill({ color: 0x020617, alpha: 0.55 })
-      .stroke({ width: 6, color: this.theme.accent, alpha: 0.9 });
-    // Inner crisp line for extra clarity
+      .circle(cx, cy, safeRadius)
+      .fill({ color: 0x020617, alpha: 0.4 })
+      .stroke({ width: 8, color: borderColor, alpha: borderAlpha });
+    
+    // Inner ring for clarity
     this.zoneGraphics
-      .rect(safeLeft + 4, safeTop + 4, Math.max(0, safeWidth - 8), Math.max(0, safeHeight - 8))
-      .stroke({ width: 2, color: 0xffffff, alpha: 0.6 });
-
-    // 2) Darken everything outside the safe zone with a strong danger tint
+      .circle(cx, cy, Math.max(0, safeRadius - 8))
+      .stroke({ width: 2, color: 0xffffff, alpha: 0.7 });
+    
+    // 2) Outer danger zone (toxic gas effect with irregular edges)
     const dangerPulse = 0.3 + 0.2 * Math.sin(now * 0.003);
     const outerAlpha = 0.16 + dangerPulse * 0.16;
-    const worldLeft = -this.arena.width / 2;
-    const worldTop = -this.arena.height / 2;
-    const worldRight = this.arena.width / 2;
-    const worldBottom = this.arena.height / 2;
-
-    // Top band
-    this.zoneGraphics
-      .rect(worldLeft, worldTop, this.arena.width, Math.max(0, safeTop - worldTop))
-      .fill({ color: 0x450a0a, alpha: outerAlpha });
-    // Bottom band
-    this.zoneGraphics
-      .rect(worldLeft, this.rectZone.bottom, this.arena.width, Math.max(0, worldBottom - this.rectZone.bottom))
-      .fill({ color: 0x450a0a, alpha: outerAlpha });
-    // Left band
-    this.zoneGraphics
-      .rect(worldLeft, safeTop, Math.max(0, safeLeft - worldLeft), safeHeight)
-      .fill({ color: 0x450a0a, alpha: outerAlpha });
-    // Right band
-    this.zoneGraphics
-      .rect(this.rectZone.right, safeTop, Math.max(0, worldRight - this.rectZone.right), safeHeight)
-      .fill({ color: 0x450a0a, alpha: outerAlpha });
+    const maxRadius = Math.sqrt(Math.pow(this.arena.width / 2, 2) + Math.pow(this.arena.height / 2, 2));
+    
+    // Create toxic gas effect with multiple irregular circles
+    for (let i = 0; i < 5; i++) {
+      const baseR = safeRadius + (maxRadius - safeRadius) * ((i + 1) / 5);
+      const alpha = outerAlpha * (1 - i / 5) * 0.7;
       
-    // 3) Telegraph arrow on pending side
-    if (this.rectZone.pendingSide) {
-      const remain = Math.max(0, this.rectZone.nextSliceAt - now);
-      const pulse = 0.5 + 0.5 * Math.sin(now * 0.01);
-      const alpha = 0.25 + 0.5 * (1 - remain / this.rectZone.telegraphMs);
-      const g = this.zoneGraphics;
-      const size = 80;
-      g.moveTo(0,0); // reset path start
-      if (this.rectZone.pendingSide === 'left') {
-        const x = this.rectZone.left; const cy = (this.rectZone.top + this.rectZone.bottom) / 2;
-        g.poly([x-10, cy, x-10-size, cy-size, x-10-size, cy+size]).fill({ color: this.theme.accent, alpha: 0.08 + 0.15*pulse }).stroke({ width: 2, color: this.theme.accent, alpha });
+      // Create irregular toxic gas cloud
+      const points: Array<{x: number, y: number}> = [];
+      const segments = 32; // More segments for smoother irregularity
+      
+      for (let j = 0; j < segments; j++) {
+        const angle = (j / segments) * Math.PI * 2;
+        
+        // Multi-layered noise for toxic gas effect
+        const noiseFreq1 = 3; // Large waves
+        const noiseFreq2 = 8; // Medium turbulence
+        const noiseFreq3 = 16; // Fine detail
+        
+        const noise1 = Math.sin(angle * noiseFreq1 + now * 0.0005 + i * 0.5) * 0.15;
+        const noise2 = Math.sin(angle * noiseFreq2 + now * 0.0008 + i * 0.3) * 0.08;
+        const noise3 = Math.sin(angle * noiseFreq3 + now * 0.001 + i * 0.2) * 0.04;
+        
+        const totalNoise = noise1 + noise2 + noise3;
+        const irregularR = baseR * (1 + totalNoise);
+        
+        const px = cx + Math.cos(angle) * irregularR;
+        const py = cy + Math.sin(angle) * irregularR;
+        points.push({ x: px, y: py });
       }
-      if (this.rectZone.pendingSide === 'right') {
-        const x = this.rectZone.right; const cy = (this.rectZone.top + this.rectZone.bottom) / 2;
-        g.poly([x+10, cy, x+10+size, cy-size, x+10+size, cy+size]).fill({ color: this.theme.accent, alpha: 0.08 + 0.15*pulse }).stroke({ width: 2, color: this.theme.accent, alpha });
-      }
-      if (this.rectZone.pendingSide === 'top') {
-        const y = this.rectZone.top; const cx = (this.rectZone.left + this.rectZone.right) / 2;
-        g.poly([cx, y-10, cx-size, y-10-size, cx+size, y-10-size]).fill({ color: this.theme.accent, alpha: 0.08 + 0.15*pulse }).stroke({ width: 2, color: this.theme.accent, alpha });
-      }
-      if (this.rectZone.pendingSide === 'bottom') {
-        const y = this.rectZone.bottom; const cx = (this.rectZone.left + this.rectZone.right) / 2;
-        g.poly([cx, y+10, cx-size, y+10+size, cx+size, y+10+size]).fill({ color: this.theme.accent, alpha: 0.08 + 0.15*pulse }).stroke({ width: 2, color: this.theme.accent, alpha });
-      }
+      
+      // Draw irregular polygon
+      this.zoneGraphics.poly(points.flatMap(p => [p.x, p.y]));
+      this.zoneGraphics.fill({ color: 0x450a0a, alpha });
     }
 
     // Update HUD timer
-    const remainMs = Math.max(0, this.zone.startAtMs + this.zone.durationMs - Date.now());
+    const remainMs = Math.max(0, this.zone.startAtMs + this.zone.durationMs - now);
+    const zoneNotStarted = this.zone.startAtMs ? now < this.zone.startAtMs : false;
+    const zoneDamageActive = !preStartActive && !zoneNotStarted;
     if (!this.finalSurgeBannerShown && remainMs <= 10000) {
       this.showFinalSurgeBanner();
       this.finalSurgeBannerShown = true;
@@ -4601,30 +4784,30 @@ class SpermRaceGame {
       this.hudManager.updateZoneTimer(secs);
     }
 
-    // Apply soft damage outside rectangular zone
+    // Apply soft damage outside circular zone
     const applyZone = (car?: Car | null) => {
       if (!car || car.destroyed) return;
-      const inside = car.x >= this.rectZone.left && car.x <= this.rectZone.right && car.y >= this.rectZone.top && car.y <= this.rectZone.bottom;
+      const dx = car.x - cx;
+      const dy = car.y - cy;
+      const distFromCenter = Math.sqrt(dx * dx + dy * dy);
+      const inside = distFromCenter <= safeRadius;
+      
       if (!inside) {
         // Show warning for player outside zone
         if (car === this.player) {
           this.showZoneWarning();
         }
         
-        // Compute shortest push vector toward rectangle
-        const clampedX = Math.max(this.rectZone.left, Math.min(this.rectZone.right, car.x));
-        const clampedY = Math.max(this.rectZone.top, Math.min(this.rectZone.bottom, car.y));
-        const dx = car.x - clampedX;
-        const dy = car.y - clampedY;
-        const dist = Math.sqrt(dx*dx + dy*dy) || 1;
-        const dirX = dx / dist;
-        const dirY = dy / dist;
-        const pushStrength = 14 + tension * 36;
-        car.vx -= dirX * pushStrength * deltaTime;
-        car.vy -= dirY * pushStrength * deltaTime;
+        // Push vector toward circle center (stronger push)
+        const dist = distFromCenter || 1;
+        const dirX = -dx / dist; // Toward center
+        const dirY = -dy / dist;
+        const pushStrength = 20 + tension * 50; // Increased from 14 + 36
+        car.vx += dirX * pushStrength * deltaTime;
+        car.vy += dirY * pushStrength * deltaTime;
         car.outZoneTime = (car.outZoneTime || 0) + deltaTime;
-        // If prolonged outside, eliminate
-        const grace = Math.max(2.4, 6 - tension * 3.5);
+        // If prolonged outside, eliminate (longer grace period)
+        const grace = Math.max(4, 8 - tension * 4); // Increased from 2.4-6s to 4-8s
         if (car.outZoneTime > grace) this.destroyCar(car);
       } else {
         car.outZoneTime = 0;
@@ -4634,12 +4817,24 @@ class SpermRaceGame {
         }
       }
     };
-    applyZone(this.player);
-    applyZone(this.bot);
-    for (const b of this.extraBots) applyZone(b);
-    
-    // Update danger overlay based on zone proximity and time
-    this.updateDangerOverlay(remainMs);
+    if (zoneDamageActive) {
+      applyZone(this.player);
+      applyZone(this.bot);
+      for (const b of this.extraBots) applyZone(b);
+
+      // Update danger overlay based on zone proximity and time
+      this.updateDangerOverlay(remainMs);
+    } else {
+      // During countdown or before the zone officially starts, never damage
+      // players for being outside the circle and keep danger overlay subtle.
+      if (this.player) {
+        (this.player as any).outZoneTime = 0;
+        this.hideZoneWarning();
+      }
+      if (this.bot) (this.bot as any).outZoneTime = 0;
+      for (const b of this.extraBots) (b as any).outZoneTime = 0;
+      this.updateDangerOverlay(0);
+    }
   }
 
   private showFinalSurgeBanner() {
@@ -4747,17 +4942,16 @@ class SpermRaceGame {
       dangerLevel = Math.max(dangerLevel, 1 - (remainMs / 5000)); // 0 to 1 as time runs out
     }
     
-    // 2. Zone proximity - when near zone edges
+    // 2. Zone proximity - when near zone edge
     if (this.player) {
-      const distToLeft = Math.abs(this.player.x - this.rectZone.left);
-      const distToRight = Math.abs(this.player.x - this.rectZone.right);
-      const distToTop = Math.abs(this.player.y - this.rectZone.top);
-      const distToBottom = Math.abs(this.player.y - this.rectZone.bottom);
-      const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
-      const dangerThreshold = 200; // Distance at which warning starts
+      const dx = this.player.x - this.zone.centerX;
+      const dy = this.player.y - this.zone.centerY;
+      const distFromCenter = Math.sqrt(dx * dx + dy * dy);
+      const distToEdge = this.zone.currentRadius - distFromCenter;
+      const dangerThreshold = 300; // Increased from 200 for earlier warning
       
-      if (minDist < dangerThreshold) {
-        const proximityDanger = 1 - (minDist / dangerThreshold);
+      if (distToEdge < dangerThreshold) {
+        const proximityDanger = 1 - (distToEdge / dangerThreshold);
         dangerLevel = Math.max(dangerLevel, proximityDanger * 0.6); // Max 0.6 from proximity
       }
     }
@@ -5143,16 +5337,11 @@ class SpermRaceGame {
     resetCar(this.bot);
     this.extraBots.forEach(b => resetCar(b));
     
-    // Reset zone for new round (faster closing for urgency)
-  this.zone.startAtMs = Date.now() + 3000; // Start zone after countdown
-  this.zone.durationMs = 26000; // Later rounds stay fast but allow finale
-    this.rectZone.left = -this.arena.width / 2;
-    this.rectZone.right = this.arena.width / 2;
-    this.rectZone.top = -this.arena.height / 2;
-    this.rectZone.bottom = this.arena.height / 2;
-    this.rectZone.nextSliceAt = this.zone.startAtMs + 5000; // First slice at 5s
-    this.rectZone.pendingSide = null;
-    this.sliceIndex = 0;
+    // Reset zone for new round
+    this.zone.startAtMs = Date.now() + 3000; // Start zone after countdown
+    this.zone.durationMs = 26000; // Faster for later rounds
+    this.zone.currentRadius = this.zone.startRadius;
+    this.zone.targetRadius = this.zone.startRadius;
     this.finalSurgeBannerShown = false;
     
     // Clear trails
@@ -5196,7 +5385,7 @@ class SpermRaceGame {
         try {
           cleanup();
         } catch (error) {
-          console.warn('Error in cleanup function:', error);
+          logger.warn('Error in cleanup function:', error);
         }
       });
       this.cleanupFunctions = [];
@@ -5207,7 +5396,7 @@ class SpermRaceGame {
           this.uiContainer.remove();
         }
       } catch (error) {
-        console.warn('Error removing UI container:', error);
+        logger.warn('Error removing UI container:', error);
       }
 
       // Also clean up any document.body elements (like game-over-overlay)
@@ -5217,7 +5406,7 @@ class SpermRaceGame {
           const el = document.getElementById(id);
           if (el) el.remove();
         } catch (error) {
-          console.warn(`Error removing body element ${id}:`, error);
+          logger.warn(`Error removing body element ${id}:`, error);
         }
       });
       
@@ -5225,7 +5414,7 @@ class SpermRaceGame {
       try {
         document.body.style.transform = 'translate(0px, 0px)';
       } catch (error) {
-        console.warn('Error resetting body transform:', error);
+        logger.warn('Error resetting body transform:', error);
       }
       
       // Radar is now cleaned up as part of uiContainer removal
@@ -5245,7 +5434,7 @@ class SpermRaceGame {
               canvasEl.parentElement.removeChild(canvasEl);
             }
           } catch (error) {
-            console.warn('Error detaching canvas:', error);
+            logger.warn('Error detaching canvas:', error);
           }
 
           // Destroy containers if present
@@ -5257,10 +5446,10 @@ class SpermRaceGame {
           this.app = null;
         }
       } catch (error) {
-        console.warn('Error destroying PIXI app:', error);
+        logger.warn('Error destroying PIXI app:', error);
       }
     } catch (error) {
-      console.error('Error in destroy method:', error);
+      logger.error('Error in destroy method:', error);
     }
   }
 }
@@ -5281,6 +5470,16 @@ function injectHudAnimationStylesOnce() {
     style.textContent = `
 @keyframes srFadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes srPulse { 0%{ transform: scale(1);} 50%{ transform: scale(1.035);} 100%{ transform: scale(1);} }
+@keyframes proximityPulse { 
+  0%, 100% { 
+    transform: translate(-50%, -50%) scale(1); 
+    opacity: 1;
+  } 
+  50% { 
+    transform: translate(-50%, -50%) scale(1.08); 
+    opacity: 0.7;
+  } 
+}
 .hud-fade-in { animation: srFadeIn 220ms ease-out; will-change: opacity, transform; }
 .hud-pulse { animation: srPulse 180ms ease-out; }
 `;
@@ -5305,9 +5504,9 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
     if (!mountRef.current) return;
     const game = new SpermRaceGame(mountRef.current, onReplay, onExit);
     gameRef.current = game;
-    game.init().catch(console.error);
+    game.init().catch(logger.error);
     return () => {
-      try { game.destroy(); } catch (error) { console.error('Error destroying game:', error); }
+      try { game.destroy(); } catch (error) { logger.error('Error destroying game:', error); }
     };
   }, []);
 

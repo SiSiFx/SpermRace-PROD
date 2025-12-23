@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentry Test - SpermRace.io</title>
+    <script src="https://browser.sentry-cdn.com/8.0.0/bundle.min.js" crossorigin="anonymous"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: linear-gradient(180deg, #0a0e1a 0%, #030508 100%);
+            color: #fff;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            text-align: center;
+            max-width: 600px;
+        }
+        h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #00f5ff, #00ff88);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        p {
+            color: #94a3b8;
+            margin-bottom: 30px;
+        }
+        button {
+            padding: 16px 32px;
+            font-size: 18px;
+            font-weight: 700;
+            border-radius: 12px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin: 10px;
+        }
+        .test-btn {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
+            box-shadow: 0 4px 20px rgba(239, 68, 68, 0.4);
+        }
+        .test-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 30px rgba(239, 68, 68, 0.6);
+        }
+        .success-btn {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            box-shadow: 0 4px 20px rgba(16, 185, 129, 0.4);
+        }
+        .success-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 30px rgba(16, 185, 129, 0.6);
+        }
+        .info-btn {
+            background: linear-gradient(135deg, #00f5ff, #00b4cc);
+            color: #000;
+            box-shadow: 0 4px 20px rgba(0, 245, 255, 0.4);
+        }
+        .info-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 30px rgba(0, 245, 255, 0.6);
+        }
+        .status {
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .status h3 {
+            margin: 0 0 10px 0;
+            color: #00f5ff;
+        }
+        .status p {
+            margin: 5px 0;
+            color: #fff;
+        }
+        .link {
+            color: #00f5ff;
+            text-decoration: none;
+        }
+        .link:hover {
+            text-decoration: underline;
+        }
+        .code {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+            color: #00ff88;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Sentry Error Tracking Test</h1>
+        <p>Click the buttons below to test different Sentry features</p>
+        
+        <div>
+            <button class="test-btn" onclick="testError()">
+                🚨 Test Error
+            </button>
+            
+            <button class="success-btn" onclick="testSuccess()">
+                ✅ Test Success Event
+            </button>
+            
+            <button class="info-btn" onclick="testBreadcrumbs()">
+                📝 Test Breadcrumbs
+            </button>
+        </div>
+
+        <div class="status">
+            <h3>Test Status</h3>
+            <p id="status">Ready to test...</p>
+            <p style="font-size: 14px; color: #94a3b8; margin-top: 15px;">
+                After clicking a button, check your 
+                <a href="https://sentry.io" target="_blank" class="link">Sentry Dashboard</a>
+            </p>
+            <p style="font-size: 14px; color: #94a3b8;">
+                Your Project: <span class="code">o4510460703473664</span>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Sentry
+        Sentry.init({
+            dsn: "https://7b26bd07a64c3a30c6857ede0f660faa@o4510460703473664.ingest.de.sentry.io/4510460715204688",
+            sendDefaultPii: true,
+            tracesSampleRate: 1.0,
+            environment: "test",
+            beforeSend(event, hint) {
+                // Add custom context
+                event.contexts = event.contexts || {};
+                event.contexts.test = {
+                    test_type: "manual",
+                    test_page: "test-sentry.html",
+                    timestamp: new Date().toISOString()
+                };
+                return event;
+            }
+        });
+
+        function updateStatus(message, isError = false) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.style.color = isError ? '#ef4444' : '#10b981';
+        }
+
+        function testError() {
+            updateStatus('Sending error to Sentry...', false);
+            
+            // Add breadcrumb
+            Sentry.addBreadcrumb({
+                message: 'User clicked Test Error button',
+                level: 'info',
+            });
+
+            // Throw error after a moment
+            setTimeout(() => {
+                try {
+                    throw new Error('🧪 Test Error from SpermRace.io - Sentry Integration Test');
+                } catch (error) {
+                    Sentry.captureException(error);
+                    updateStatus('✅ Error sent to Sentry! Check your dashboard in ~30 seconds.', false);
+                }
+            }, 500);
+        }
+
+        function testSuccess() {
+            updateStatus('Sending success message...', false);
+            
+            Sentry.addBreadcrumb({
+                message: 'User clicked Test Success button',
+                level: 'info',
+            });
+
+            Sentry.captureMessage('✅ Test Success Event - All systems working!', {
+                level: 'info',
+                tags: {
+                    test_type: 'success',
+                    feature: 'manual_test'
+                }
+            });
+
+            updateStatus('✅ Success message sent! Check Sentry dashboard.', false);
+        }
+
+        function testBreadcrumbs() {
+            updateStatus('Adding breadcrumbs and sending event...', false);
+            
+            // Add multiple breadcrumbs
+            Sentry.addBreadcrumb({
+                message: 'User started breadcrumb test',
+                level: 'info',
+                data: { step: 1 }
+            });
+
+            setTimeout(() => {
+                Sentry.addBreadcrumb({
+                    message: 'Simulating user action',
+                    level: 'info',
+                    data: { step: 2, action: 'click' }
+                });
+
+                setTimeout(() => {
+                    Sentry.addBreadcrumb({
+                        message: 'Simulating API call',
+                        level: 'info',
+                        data: { step: 3, endpoint: '/api/test' }
+                    });
+
+                    // Send final event with all breadcrumbs
+                    Sentry.captureMessage('📝 Breadcrumb Test Complete', {
+                        level: 'info',
+                        tags: { test_type: 'breadcrumbs' }
+                    });
+
+                    updateStatus('✅ Breadcrumbs sent! Check Sentry to see the trail.', false);
+                }, 300);
+            }, 300);
+        }
+
+        // Auto-add a breadcrumb on page load
+        Sentry.addBreadcrumb({
+            message: 'Test page loaded',
+            level: 'info',
+            data: {
+                url: window.location.href,
+                timestamp: new Date().toISOString()
+            }
+        });
+
+        console.log('✅ Sentry initialized. Ready to test!');
+        console.log('DSN:', 'https://7b26bd07a64c3a30c6857ede0f660faa@o4510460703473664.ingest.de.sentry.io/4510460715204688');
+    </script>
+</body>
+</html>

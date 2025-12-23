@@ -217,8 +217,8 @@ export function HowToPlayOverlay({ mode, onClose }: HowToPlayOverlayProps) {
           </div>
           <ul style={{ margin: 0, paddingLeft: 18 }}>
             <li>
-              Your glowing <strong>trail kills on contact</strong> – including you after a short spawn grace.
-              Don&apos;t cross your own tail once the round is underway.
+              Your glowing <strong>trail kills on contact</strong> – but you&apos;re safe from your own tail.
+              Don&apos;t drive through <em>other players&apos;</em> trails once the round is underway.
             </li>
             <li>
               Other players&apos; trails are deadly too – try to cut them off while staying safe yourself.

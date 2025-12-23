@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Trophy, Medal, Coins, GameController } from 'phosphor-react';
+import { LeaderboardSkeleton } from './components/LeaderboardSkeleton';
 
 interface LeaderboardEntry {
   wallet_address: string;
@@ -147,7 +148,7 @@ export function Leaderboard({ onClose, apiBase = '/api', myWallet, isMobile = fa
         {/* Content */}
         <div className="leaderboard-content">
           {loading && (
-            <div className="loading-state">Loading...</div>
+            <LeaderboardSkeleton />
           )}
 
           {error && (

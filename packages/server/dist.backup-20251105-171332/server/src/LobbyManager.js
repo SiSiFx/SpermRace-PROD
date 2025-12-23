@@ -1,0 +1,343 @@
+import { v4 as uuidv4 } from 'uuid';
+// =================================================================================================
+// Constants
+// =================================================================================================
+const LOBBY_MAX_PLAYERS = Math.max(2, parseInt(process.env.LOBBY_MAX_PLAYERS || '32', 10));
+const LOBBY_START_COUNTDOWN = Math.max(5, parseInt(process.env.LOBBY_COUNTDOWN || '15', 10)); // seconds
+const LOBBY_MIN_START = Math.max(2, parseInt(process.env.LOBBY_MIN_START || (process.env.SKIP_ENTRY_FEE === 'true' ? '1' : '4'), 10));
+const LOBBY_MAX_WAIT_SEC = Math.max(LOBBY_START_COUNTDOWN, parseInt(process.env.LOBBY_MAX_WAIT || '120', 10));
+function parseSurgeRules(input) {
+    const raw = (input || '').trim();
+    if (!raw)
+        return [];
+    return raw.split(',')
+        .map(part => part.trim())
+        .map(pair => {
+        const [secStr, minStr] = pair.split(':');
+        const s = Math.max(0, parseInt(secStr || '0', 10));
+        const m = Math.max(1, parseInt(minStr || '2', 10));
+        return { afterSec: s, minPlayers: m };
+    })
+        .filter(r => Number.isFinite(r.afterSec) && Number.isFinite(r.minPlayers))
+        .sort((a, b) => a.afterSec - b.afterSec);
+}
+// Example format: "60:3,120:2" → after 60s require 3 players, after 120s require 2 players
+const SURGE_RULES = parseSurgeRules(process.env.LOBBY_SURGE_RULES);
+export class LobbyManager {
+    lobbies = new Map();
+    playerLobbyMap = new Map();
+    smartContractService;
+    lobbyDeadlineMs = new Map();
+    lobbyCountdownStartMs = new Map();
+    lobbyCountdownTick = new Map();
+    lobbyStartTimeout = new Map();
+    onLobbyUpdate = null;
+    onGameStart = null;
+    onLobbyCountdown = null;
+    onLobbyRefund = null;
+    constructor(smartContractService) {
+        this.smartContractService = smartContractService;
+    }
+    getLobbyForPlayer(playerId) {
+        const lobbyId = this.playerLobbyMap.get(playerId);
+        if (!lobbyId)
+            return null;
+        return this.lobbies.get(lobbyId) || null;
+    }
+    async joinLobby(playerId, entryFee, mode = (process.env.SKIP_ENTRY_FEE === 'true' ? 'practice' : 'tournament')) {
+        console.log(`[LOBBY] joinLobby called: player=${playerId.slice(0, 6)}… entryFee=$${entryFee} mode=${mode}`);
+        if (this.playerLobbyMap.has(playerId))
+            return;
+        try {
+            if (mode === 'tournament' && process.env.SKIP_ENTRY_FEE !== 'true') {
+                await this.smartContractService.getEntryFeeInSol(entryFee);
+            }
+        }
+        catch (error) {
+            console.error(`❌ Could not process entry fee for ${playerId}:`, error);
+            return;
+        }
+        let lobby = this.findAvailableLobby(entryFee, mode);
+        if (!lobby) {
+            lobby = this.createLobby(entryFee, mode);
+            console.log(`[LOBBY] Created new lobby ${lobby.lobbyId} (mode=${mode}, fee=$${entryFee})`);
+        }
+        // Finalize: re-check status just before admitting player to avoid races
+        const current = this.lobbies.get(lobby.lobbyId);
+        if (!current || current.status !== 'waiting') {
+            // Find another waiting lobby or create a new one
+            const alt = this.findAvailableLobby(entryFee, mode);
+            lobby = alt ?? this.createLobby(entryFee, mode);
+        }
+        lobby.players.push(playerId);
+        this.playerLobbyMap.set(playerId, lobby.lobbyId);
+        console.log(`[LOBBY] Player added to ${lobby.lobbyId}; count=${lobby.players.length}/${lobby.maxPlayers}`);
+        this.onLobbyUpdate?.(lobby);
+        // Proactively inject bots on join except when dev exact-match mode is active
+        const isDevLike = (process.env.NODE_ENV || '').toLowerCase() !== 'production';
+        const skipFee = (process.env.SKIP_ENTRY_FEE || '').toLowerCase() === 'true';
+        const matchReal = (process.env.DEV_MATCH_REAL_PLAYERS || 'true').toLowerCase() === 'true';
+        if (!(isDevLike && skipFee && matchReal)) {
+            this.injectDevBots(lobby);
+        }
+        else {
+            console.log(`[LOBBY] Dev match-real-players active → not injecting bots on join`);
+        }
+        // For solo players: Silent wait, then countdown in last 20s
+        // Total: 50s (30s silent + 20s visible countdown)
+        if (lobby.players.length === 1) {
+            const silentWaitMs = 30000; // 30 seconds silent
+            console.log(`[LOBBY] Solo player - 30s silent wait, then 20s countdown`);
+            setTimeout(() => {
+                const currentLobby = this.lobbies.get(lobby.lobbyId);
+                // Only start countdown if still solo and waiting
+                if (currentLobby && currentLobby.players.length === 1 && currentLobby.status === 'waiting') {
+                    console.log(`[LOBBY] Starting 20s countdown for solo player`);
+                    this.startLobbyCountdown(currentLobby);
+                }
+            }, silentWaitMs);
+        }
+        else {
+            // Multiple players: start countdown immediately
+            this.startLobbyCountdown(lobby);
+        }
+    }
+    leaveLobby(playerId) {
+        const lobbyId = this.playerLobbyMap.get(playerId);
+        if (!lobbyId)
+            return;
+        const lobby = this.lobbies.get(lobbyId);
+        if (lobby) {
+            lobby.players = lobby.players.filter(p => p !== playerId);
+            this.playerLobbyMap.delete(playerId);
+            if (lobby.players.length === 0)
+                this.lobbies.delete(lobbyId);
+            else
+                this.onLobbyUpdate?.(lobby);
+        }
+    }
+    findAvailableLobby(entryFee, mode) {
+        for (const lobby of this.lobbies.values()) {
+            if (lobby.entryFee === entryFee && lobby.mode === mode && lobby.status === 'waiting' && lobby.players.length < LOBBY_MAX_PLAYERS) {
+                return lobby;
+            }
+        }
+        return undefined;
+    }
+    createLobby(entryFee, mode) {
+        const newLobby = {
+            lobbyId: uuidv4(),
+            players: [],
+            maxPlayers: LOBBY_MAX_PLAYERS,
+            entryFee,
+            mode,
+            status: 'waiting',
+        };
+        this.lobbies.set(newLobby.lobbyId, newLobby);
+        // Set a maximum wait deadline for this lobby
+        this.lobbyDeadlineMs.set(newLobby.lobbyId, Date.now() + (LOBBY_MAX_WAIT_SEC * 1000));
+        this.lobbyCountdownStartMs.delete(newLobby.lobbyId);
+        return newLobby;
+    }
+    startLobbyCountdown(lobby) {
+        if (lobby.status !== 'waiting')
+            return;
+        lobby.status = 'starting';
+        this.onLobbyUpdate?.(lobby);
+        // In dev/test mode, optionally inject bots to reach a target count quickly
+        console.log(`[LOBBY] Starting countdown for ${lobby.lobbyId}; bots=${process.env.ENABLE_DEV_BOTS} target=${process.env.DEV_BOTS_TARGET}`);
+        // Respect exact-match mode: when DEV_MATCH_REAL_PLAYERS=true and SKIP_ENTRY_FEE=true, do not inject
+        const isDevLike = (process.env.NODE_ENV || '').toLowerCase() !== 'production';
+        const skipFee = (process.env.SKIP_ENTRY_FEE || '').toLowerCase() === 'true';
+        const matchReal = (process.env.DEV_MATCH_REAL_PLAYERS || 'true').toLowerCase() === 'true';
+        if (!(isDevLike && skipFee && matchReal)) {
+            this.injectDevBots(lobby);
+        }
+        else {
+            console.log(`[LOBBY] Dev match-real-players active → skipping bot injection`);
+        }
+        // mark countdown start
+        if (!this.lobbyCountdownStartMs.get(lobby.lobbyId)) {
+            this.lobbyCountdownStartMs.set(lobby.lobbyId, Date.now());
+        }
+        const dynamicMinPlayers = () => {
+            const baseMin = process.env.SKIP_ENTRY_FEE === 'true' ? Math.max(1, LOBBY_MIN_START) : Math.max(2, LOBBY_MIN_START);
+            const startedAt = this.lobbyCountdownStartMs.get(lobby.lobbyId) || Date.now();
+            const elapsedSec = Math.floor((Date.now() - startedAt) / 1000);
+            let minReq = baseMin;
+            for (const rule of SURGE_RULES) {
+                if (elapsedSec >= rule.afterSec) {
+                    minReq = Math.min(minReq, rule.minPlayers);
+                }
+            }
+            if (process.env.SKIP_ENTRY_FEE === 'true')
+                return Math.max(1, minReq);
+            return Math.max(2, minReq);
+        };
+        const maybeStart = () => {
+            const deadline = this.lobbyDeadlineMs.get(lobby.lobbyId) || (Date.now() + LOBBY_MAX_WAIT_SEC * 1000);
+            const minPlayers = dynamicMinPlayers();
+            // If lobby is full, start immediately
+            if (lobby.players.length >= lobby.maxPlayers) {
+                this.clearLobbyTimers(lobby.lobbyId);
+                this.onGameStart?.(lobby);
+                this.lobbies.delete(lobby.lobbyId);
+                lobby.players.forEach(p => this.playerLobbyMap.delete(p));
+                return true;
+            }
+            // If we have enough players, start (require at least 2 real players in tournament)
+            if (lobby.players.length >= minPlayers) {
+                if (lobby.mode === 'tournament') {
+                    const realPlayers = lobby.players.filter(p => !String(p).startsWith('BOT_'));
+                    if (realPlayers.length < 2) {
+                        console.log(`[LOBBY] Not enough real players (${realPlayers.length}) to start tournament`);
+                        return false;
+                    }
+                }
+                this.clearLobbyTimers(lobby.lobbyId);
+                this.onGameStart?.(lobby);
+                this.lobbies.delete(lobby.lobbyId);
+                lobby.players.forEach(p => this.playerLobbyMap.delete(p));
+                return true;
+            }
+            // If deadline passed, start with whoever is here if at least 2 players
+            if (Date.now() >= deadline && lobby.players.length >= 2) {
+                if (lobby.mode === 'tournament') {
+                    const realPlayers = lobby.players.filter(p => !String(p).startsWith('BOT_'));
+                    if (realPlayers.length < 2) {
+                        console.log(`[LOBBY] Deadline reached but <2 real players; keeping lobby waiting`);
+                        return false;
+                    }
+                }
+                console.log(`[LOBBY] Max wait reached; starting with ${lobby.players.length} players (min=${minPlayers})`);
+                this.clearLobbyTimers(lobby.lobbyId);
+                this.onGameStart?.(lobby);
+                this.lobbies.delete(lobby.lobbyId);
+                lobby.players.forEach(p => this.playerLobbyMap.delete(p));
+                return true;
+            }
+            return false;
+        };
+        if (maybeStart())
+            return;
+        // For solo players, show countdown until refund deadline, not game start countdown
+        const deadline = this.lobbyDeadlineMs.get(lobby.lobbyId) || (Date.now() + LOBBY_MAX_WAIT_SEC * 1000);
+        const isSolo = lobby.players.length === 1;
+        const startAtMs = isSolo ? deadline : (Date.now() + LOBBY_START_COUNTDOWN * 1000);
+        // Calculate timeout duration to match countdown
+        const timeoutDuration = isSolo
+            ? Math.max(0, deadline - Date.now())
+            : (LOBBY_START_COUNTDOWN * 1000);
+        console.log(`[LOBBY] Countdown: solo=${isSolo}, duration=${Math.ceil(timeoutDuration / 1000)}s`);
+        // initial broadcast for determinism
+        this.onLobbyCountdown?.(lobby, Math.ceil((startAtMs - Date.now()) / 1000), startAtMs);
+        const tick = setInterval(() => {
+            const remaining = Math.ceil((startAtMs - Date.now()) / 1000);
+            if (remaining >= 0)
+                this.onLobbyCountdown?.(lobby, remaining, startAtMs);
+            if (remaining <= 0)
+                clearInterval(tick);
+        }, 1000);
+        try {
+            this.lobbyCountdownTick.set(lobby.lobbyId, tick);
+        }
+        catch { }
+        const startTimeout = setTimeout(() => {
+            // Lock lobby: no late joins here; start if minimal players else revert and requeue
+            const minPlayers = dynamicMinPlayers();
+            const deadline = this.lobbyDeadlineMs.get(lobby.lobbyId) || (Date.now() + LOBBY_MAX_WAIT_SEC * 1000);
+            if (lobby.players.length >= minPlayers || (Date.now() >= deadline && lobby.players.length >= 2)) {
+                this.clearLobbyTimers(lobby.lobbyId);
+                this.onGameStart?.(lobby);
+                this.lobbies.delete(lobby.lobbyId);
+                lobby.players.forEach(p => this.playerLobbyMap.delete(p));
+            }
+            else if (lobby.players.length === 1 && Date.now() >= deadline) {
+                // Solo player after deadline → issue refund
+                const soloPlayer = lobby.players[0];
+                console.log(`[LOBBY] Solo player ${soloPlayer} in lobby ${lobby.lobbyId} after deadline - issuing refund`);
+                // Trigger refund callback - pass 0, actual amount will be calculated by index.ts using expectedLamportsByPlayerId
+                this.onLobbyRefund?.(lobby, soloPlayer, 0);
+                // Clean up lobby
+                this.clearLobbyTimers(lobby.lobbyId);
+                this.lobbies.delete(lobby.lobbyId);
+                this.playerLobbyMap.delete(soloPlayer);
+                console.log(`[LOBBY] ✅ Solo player refund initiated for ${soloPlayer}`);
+            }
+            else {
+                // Revert to waiting if not enough players
+                lobby.status = 'waiting';
+                this.onLobbyUpdate?.(lobby);
+                // Retry countdown attempt in a few seconds until deadline reached
+                const now = Date.now();
+                const maxWaitMs = this.lobbyDeadlineMs.get(lobby.lobbyId) || (now + LOBBY_MAX_WAIT_SEC * 1000);
+                if (now < maxWaitMs) {
+                    this.clearLobbyTimers(lobby.lobbyId);
+                    setTimeout(() => this.startLobbyCountdown(lobby), 5000);
+                }
+            }
+        }, timeoutDuration);
+        try {
+            this.lobbyStartTimeout.set(lobby.lobbyId, startTimeout);
+        }
+        catch { }
+    }
+    clearLobbyTimers(lobbyId) {
+        try {
+            const t = this.lobbyCountdownTick.get(lobbyId);
+            if (t) {
+                clearInterval(t);
+                this.lobbyCountdownTick.delete(lobbyId);
+            }
+        }
+        catch { }
+        try {
+            const s = this.lobbyStartTimeout.get(lobbyId);
+            if (s) {
+                clearTimeout(s);
+                this.lobbyStartTimeout.delete(lobbyId);
+            }
+        }
+        catch { }
+    }
+    /**
+     * Injects development bots into the lobby to reach a target player count quickly.
+     * Enabled only when ENABLE_DEV_BOTS=true (never on production).
+     */
+    injectDevBots(lobby) {
+        console.log(`[BOT] injectDevBots called for lobby ${lobby.lobbyId}:`);
+        console.log(`[BOT] - ENABLE_DEV_BOTS=${process.env.ENABLE_DEV_BOTS}`);
+        console.log(`[BOT] - DEV_BOTS_TARGET=${process.env.DEV_BOTS_TARGET}`);
+        console.log(`[BOT] - Current players: ${lobby.players.length}`);
+        if (process.env.ENABLE_DEV_BOTS !== 'true') {
+            console.log(`[BOT] ❌ Bot injection disabled (ENABLE_DEV_BOTS != 'true')`);
+            return;
+        }
+        // In dev skip-fee mode, allow opting into exact-match lobbies (no bots)
+        const isDevLike = (process.env.NODE_ENV || '').toLowerCase() !== 'production';
+        const skipFee = (process.env.SKIP_ENTRY_FEE || '').toLowerCase() === 'true';
+        const matchReal = (process.env.DEV_MATCH_REAL_PLAYERS || 'true').toLowerCase() === 'true';
+        if (isDevLike && skipFee && matchReal) {
+            console.log(`[BOT] 🔧 Dev match-real-players mode → not injecting bots (players=${lobby.players.length})`);
+            return;
+        }
+        const target = Math.max(1, Math.min(lobby.maxPlayers, parseInt(process.env.DEV_BOTS_TARGET || '8', 10)));
+        console.log(`[BOT] - Calculated target: ${target}`);
+        if (lobby.players.length >= target) {
+            console.log(`[BOT] ❌ Already at target player count (${lobby.players.length}/${target})`);
+            return;
+        }
+        const before = lobby.players.length;
+        while (lobby.players.length < target) {
+            const botId = `BOT_${Math.random().toString(36).slice(2, 10)}`;
+            lobby.players.push(botId);
+            console.log(`[BOT] + Added bot: ${botId}`);
+            // Do not add bots to playerLobbyMap to avoid socket-related cleanup needs
+        }
+        const added = lobby.players.length - before;
+        if (added > 0) {
+            console.log(`🤖 Injected ${added} dev bots into lobby ${lobby.lobbyId} (target=${target})`);
+        }
+        this.onLobbyUpdate?.(lobby);
+    }
+}
