@@ -69,7 +69,7 @@ export interface GameState {
 }
 
 /** Represents the entry fee tiers in USD. */
-export type EntryFeeTier = 1 | 5 | 25 | 100;
+export type EntryFeeTier = 0 | 1 | 5 | 25 | 100;
 
 /** Game modes */
 export type GameMode = 'practice' | 'tournament';
@@ -98,6 +98,13 @@ export interface AuthenticateMessage {
     publicKey: string;
     signedMessage: string; // Assuming SIWS provides a signed message
     nonce: string;
+  };
+}
+
+export interface GuestLoginMessage {
+  type: 'guestLogin';
+  payload: {
+    guestName: string;
   };
 }
 
@@ -130,6 +137,7 @@ export interface EntryFeeSignatureMessage {
 
 export type ClientToServerMessage =
   | AuthenticateMessage
+  | GuestLoginMessage
   | JoinLobbyMessage
   | LeaveLobbyMessage
   | PlayerInputMessage

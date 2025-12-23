@@ -63,20 +63,23 @@
 .mobile-landing {
   position: absolute;
   inset: 0;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden !important;
+  overscroll-behavior: none;
+  touch-action: none;
 }
 
 .mobile-landing-container {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
+  /* Strict height to viewport */
   padding: 20px var(--mobile-padding);
   padding-top: calc(60px + env(safe-area-inset-top, 0px));
   padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .mobile-brand-section {
@@ -165,7 +168,7 @@
   color: #000;
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 
+  box-shadow:
     0 0 20px rgba(0, 245, 255, 0.5),
     0 0 40px rgba(0, 245, 255, 0.3),
     0 10px 30px rgba(0, 0, 0, 0.3);
@@ -173,8 +176,15 @@
 }
 
 @keyframes cta-glow {
-  0%, 100% { box-shadow: 0 0 20px rgba(0, 245, 255, 0.5), 0 0 40px rgba(0, 245, 255, 0.3), 0 10px 30px rgba(0, 0, 0, 0.3); }
-  50% { box-shadow: 0 0 30px rgba(0, 245, 255, 0.7), 0 0 60px rgba(0, 245, 255, 0.4), 0 10px 30px rgba(0, 0, 0, 0.3); }
+
+  0%,
+  100% {
+    box-shadow: 0 0 20px rgba(0, 245, 255, 0.5), 0 0 40px rgba(0, 245, 255, 0.3), 0 10px 30px rgba(0, 0, 0, 0.3);
+  }
+
+  50% {
+    box-shadow: 0 0 30px rgba(0, 245, 255, 0.7), 0 0 60px rgba(0, 245, 255, 0.4), 0 10px 30px rgba(0, 0, 0, 0.3);
+  }
 }
 
 .mobile-cta-primary:active {
@@ -407,6 +417,10 @@
   padding-bottom: 20px;
   max-height: calc(100vh - 200px);
   max-height: calc(100dvh - 200px);
+  touch-action: pan-y;
+  /* Allow internal vertical scroll */
+  overscroll-behavior: contain;
+  /* Prevent chaining to body */
 }
 
 .mobile-tier-card {
@@ -677,8 +691,15 @@
 }
 
 @keyframes mobile-hint-pulse {
-  0%, 100% { opacity: 0.7; }
-  50% { opacity: 1; }
+
+  0%,
+  100% {
+    opacity: 0.7;
+  }
+
+  50% {
+    opacity: 1;
+  }
 }
 
 /* Mobile Results */
@@ -858,7 +879,7 @@
   .mobile-wallet-badge {
     top: calc(12px + env(safe-area-inset-top));
   }
-  
+
   .mobile-landing-screen,
   .mobile-lobby-screen,
   .mobile-modes-screen,
@@ -874,24 +895,23 @@
   .mobile-brand-title {
     font-size: 2rem;
   }
-  
+
   .mobile-lobby-orbit {
     margin: 10px 0;
     min-height: 200px;
     max-height: 40vh;
   }
-  
+
   .mobile-countdown {
     font-size: 32px;
   }
-  
+
   .mobile-modes-header {
     margin-bottom: 16px;
   }
-  
+
   .mobile-tiers-list {
     max-height: calc(100vh - 150px);
     max-height: calc(100dvh - 150px);
   }
 }
-

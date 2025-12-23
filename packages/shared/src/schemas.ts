@@ -11,6 +11,7 @@ export const playerInputSchema = z.object({
 });
 
 export const entryFeeTierSchema = z.union([
+  z.literal(0),
   z.literal(1),
   z.literal(5),
   z.literal(25),
@@ -26,6 +27,13 @@ export const authenticateMessageSchema = z.object({
     publicKey: z.string(),
     signedMessage: z.string(),
     nonce: z.string(),
+  }),
+});
+
+export const guestLoginMessageSchema = z.object({
+  type: z.literal('guestLogin'),
+  payload: z.object({
+    guestName: z.string().min(1).max(20),
   }),
 });
 
@@ -58,6 +66,7 @@ export const entryFeeSignatureMessageSchema = z.object({
 
 export const clientToServerMessageSchema = z.union([
   authenticateMessageSchema,
+  guestLoginMessageSchema,
   joinLobbyMessageSchema,
   leaveLobbyMessageSchema,
   playerInputMessageSchema,

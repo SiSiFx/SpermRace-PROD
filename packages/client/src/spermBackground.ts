@@ -81,7 +81,7 @@ export function startSpermBackground(): void {
 
   canvas.addEventListener('mousemove', handleMouseMove);
   canvas.addEventListener('click', handleClick);
-  
+
   // Touch support for mobile
   const handleTouch = (e: TouchEvent) => {
     if (e.touches.length > 0) {
@@ -90,7 +90,7 @@ export function startSpermBackground(): void {
       mouseY = touch.clientY;
     }
   };
-  
+
   const handleTap = (e: TouchEvent) => {
     if (e.changedTouches.length > 0) {
       const touch = e.changedTouches[0];
@@ -106,19 +106,19 @@ export function startSpermBackground(): void {
       });
     }
   };
-  
+
   canvas.addEventListener('touchmove', handleTouch, { passive: true });
   canvas.addEventListener('touchend', handleTap, { passive: true });
 
   // Create sperms with staggered start positions
   const isMobile = window.innerWidth < 768;
-  const count = isMobile ? 10 : 18;
+  const count = isMobile ? 5 : 12; // Reduced count -> better perf
   for (let i = 0; i < count; i++) {
     const sperm = createSperm();
     // Mobile: smaller, slower sperm
     if (isMobile) {
-      sperm.size *= 0.7;
-      sperm.tailLength *= 0.6;
+      sperm.size *= 0.7; // Smaller
+      sperm.tailLength *= 0.7;
       sperm.vx *= 0.7;
     }
     // Stagger initial positions across screen
@@ -154,22 +154,22 @@ function resizeCanvas(): void {
 }
 
 function createSperm(): Sperm {
-  const size = Math.random() * 3 + 5; // 5-8px bigger for better visibility
-  const angle = (Math.random() - 0.5) * 0.8; // Start mostly horizontal but with variance
+  const size = Math.random() * 3 + 5;
+  const angle = (Math.random() - 0.5) * 0.8;
   const speed = Math.random() * 1.5 + 2.0;
   return {
-    x: -80, // Start from left edge
+    x: -80,
     y: Math.random() * window.innerHeight,
     vx: Math.cos(angle) * speed,
     vy: Math.sin(angle) * speed,
     size,
-    opacity: Math.random() * 0.2 + 0.7, // 0.7-0.9 (much more visible)
-    tailLength: size * 18, // Longer tail for realism
+    opacity: Math.random() * 0.3 + 0.5,
+    tailLength: size * 15,
     wiggleOffset: Math.random() * Math.PI * 2,
-    wiggleSpeed: Math.random() * 0.08 + 0.05, // Faster wiggle
+    wiggleSpeed: Math.random() * 0.08 + 0.05,
     angle,
-    turnSpeed: Math.random() * 0.03 + 0.01, // Random turning intensity
-    turnTimer: Math.random() * 3, // Random start for direction changes
+    turnSpeed: Math.random() * 0.03 + 0.01,
+    turnTimer: Math.random() * 3,
   };
 }
 
@@ -178,29 +178,33 @@ function drawSperm(sperm: Sperm, time: number): void {
 
   const { x, y, size, opacity, tailLength, wiggleOffset, wiggleSpeed } = sperm;
   const waveSpeed = 6 + wiggleSpeed * 10;
+  const isMobile = window.innerWidth < 768;
 
   ctx.save();
   ctx.globalAlpha = opacity;
 
-  const segments = 24;
-  const amplitude = size * 2.2;
+  const segments = isMobile ? 8 : 16; // Reduced segments -> factor of 2x speedup
+  const amplitude = size * 2.0;
   const headX = x;
   const headY = y;
 
-  // GLOW PASS 1: Large outer glow
-  ctx.shadowBlur = 40;
-  ctx.shadowColor = 'rgba(0, 245, 255, 0.8)';
-  
-  // Draw tail with multiple glow layers
-  for (let pass = 0; pass < 3; pass++) {
+  // NO SHADOWS - Shadows are the #1 cause of perf issues on mobile canvas
+  // We simulate glow with semi-transparent strokes in multiple passes instead if needed,
+  // but for raw speed we keep it simple.
+
+  // Draw tail 
+  // Mobile: 1 pass. Desktop: 2 passes (removed 3rd pass).
+  const passes = isMobile ? 1 : 2;
+
+  for (let pass = 0; pass < passes; pass++) {
     ctx.beginPath();
-    ctx.moveTo(headX - size * 1.2, headY);
+    ctx.moveTo(headX - size * 1.1, headY);
 
     for (let i = 1; i <= segments; i++) {
       const t = i / segments;
       const dist = tailLength * t;
-      const px = headX - size * 1.2 - dist;
-      const wave = Math.sin((t * Math.PI * 4) - (time * waveSpeed) + wiggleOffset) * amplitude * Math.pow(t, 0.8);
+      const px = headX - size * 1.1 - dist;
+      const wave = Math.sin((t * Math.PI * 4) - (time * waveSpeed) + wiggleOffset) * amplitude * (1 - t);
       const py = headY + wave;
 
       if (i === 1) {
@@ -208,88 +212,50 @@ function drawSperm(sperm: Sperm, time: number): void {
       } else {
         const prevT = (i - 1) / segments;
         const prevDist = tailLength * prevT;
-        const prevX = headX - size * 1.2 - prevDist;
-        const prevWave = Math.sin((prevT * Math.PI * 4) - (time * waveSpeed) + wiggleOffset) * amplitude * Math.pow(prevT, 0.8);
+        const prevX = headX - size * 1.1 - prevDist;
+        const prevWave = Math.sin((prevT * Math.PI * 4) - (time * waveSpeed) + wiggleOffset) * amplitude * (1 - prevT);
         const prevY = headY + prevWave;
         ctx.quadraticCurveTo(prevX, prevY, (prevX + px) / 2, (prevY + py) / 2);
       }
     }
 
-    if (pass === 0) {
-      // Outer glow
-      ctx.strokeStyle = 'rgba(0, 245, 255, 0.15)';
-      ctx.lineWidth = size * 2.5;
-      ctx.lineCap = 'round';
-      ctx.stroke();
-    } else if (pass === 1) {
-      // Mid glow
-      ctx.strokeStyle = 'rgba(0, 245, 255, 0.3)';
+    if (isMobile) {
+      // Single simple pass for mobile
+      ctx.strokeStyle = 'rgba(0, 245, 255, 0.5)';
       ctx.lineWidth = size * 1.2;
       ctx.lineCap = 'round';
       ctx.stroke();
     } else {
-      // Core gradient
-      const grad = ctx.createLinearGradient(headX, headY, headX - tailLength, headY);
-      grad.addColorStop(0, 'rgba(0, 255, 255, 1)');
-      grad.addColorStop(0.3, 'rgba(0, 245, 255, 0.9)');
-      grad.addColorStop(0.6, 'rgba(0, 200, 255, 0.5)');
-      grad.addColorStop(1, 'rgba(0, 150, 200, 0.05)');
-      ctx.strokeStyle = grad;
-      ctx.lineWidth = size * 0.5;
-      ctx.lineCap = 'round';
-      ctx.stroke();
+      if (pass === 0) {
+        // Outer glow simulation
+        ctx.strokeStyle = 'rgba(0, 245, 255, 0.15)';
+        ctx.lineWidth = size * 2.5;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+      } else {
+        // Core
+        ctx.strokeStyle = '#00f5ff';
+        ctx.lineWidth = size * 0.8;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+      }
     }
   }
 
-  // HEAD: Multiple glow layers for intense effect
-  // Outer glow halo
-  ctx.shadowBlur = 50;
-  ctx.shadowColor = 'rgba(0, 245, 255, 1)';
-  
-  ctx.fillStyle = 'rgba(0, 245, 255, 0.2)';
+  // HEAD
+  // Simple ellipse, no complex gradients
+  ctx.fillStyle = isMobile ? 'rgba(0, 245, 255, 0.9)' : 'rgba(200, 255, 255, 0.9)';
   ctx.beginPath();
-  ctx.ellipse(headX, headY, size * 3, size * 2.2, 0, 0, Math.PI * 2);
-  ctx.fill();
-  
-  // Mid glow
-  ctx.shadowBlur = 30;
-  ctx.fillStyle = 'rgba(0, 245, 255, 0.4)';
-  ctx.beginPath();
-  ctx.ellipse(headX, headY, size * 2.2, size * 1.6, 0, 0, Math.PI * 2);
+  ctx.ellipse(headX, headY, size * 1.8, size * 1.3, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Head gradient core
-  ctx.shadowBlur = 20;
-  ctx.shadowColor = 'rgba(0, 255, 255, 0.9)';
-  
-  const headGrad = ctx.createRadialGradient(
-    headX - size * 0.3, headY - size * 0.3, 0,
-    headX, headY, size * 1.8
-  );
-  headGrad.addColorStop(0, '#ffffff');
-  headGrad.addColorStop(0.2, '#aaffff');
-  headGrad.addColorStop(0.5, '#00f5ff');
-  headGrad.addColorStop(1, 'rgba(0, 180, 220, 0.9)');
-  
-  ctx.fillStyle = headGrad;
-  ctx.beginPath();
-  ctx.ellipse(headX, headY, size * 1.6, size * 1.1, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Bright highlight
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-  ctx.beginPath();
-  ctx.ellipse(headX - size * 0.4, headY - size * 0.3, size * 0.5, size * 0.35, -0.3, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Neck/midpiece with glow
-  ctx.shadowBlur = 10;
-  ctx.shadowColor = 'rgba(0, 245, 255, 0.6)';
-  ctx.fillStyle = 'rgba(0, 220, 240, 0.8)';
-  ctx.beginPath();
-  ctx.ellipse(headX - size * 1.4, headY, size * 0.55, size * 0.4, 0, 0, Math.PI * 2);
-  ctx.fill();
+  if (!isMobile) {
+    // Simple glow overlay on PC
+    ctx.fillStyle = 'rgba(0, 245, 255, 0.4)';
+    ctx.beginPath();
+    ctx.ellipse(headX, headY, size * 2.2, size * 1.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   ctx.restore();
 }
@@ -317,11 +283,11 @@ function animate(): void {
     // Keep moving right with slight vertical wave
     sperm.x += sperm.vx;
     sperm.y += sperm.vy;
-    
+
     // Gentle vertical swimming motion
     const bobSpeed = 1.5 + sperm.wiggleSpeed * 4;
     sperm.y += Math.sin(time * bobSpeed + sperm.wiggleOffset) * 0.6;
-    
+
     // Dampen vertical velocity back to center
     sperm.vy *= 0.98;
 

@@ -38,7 +38,7 @@ const log = {
   warn: (...args: any[]) => { if (shouldLog('warn')) console.warn(...args); },
   error: (...args: any[]) => { if (shouldLog('error')) console.error(...args); },
 };
-function maskPk(pk: string | null | undefined): string { return pk ? (pk.length > 10 ? `${pk.slice(0,6)}…${pk.slice(-4)}` : pk) : String(pk); }
+function maskPk(pk: string | null | undefined): string { return pk ? (pk.length > 10 ? `${pk.slice(0, 6)}…${pk.slice(-4)}` : pk) : String(pk); }
 // Rate limits (token bucket)
 const RATE_LIMITS = {
   auth: { capacity: 3, refillPerMs: 3 / 60000 }, // 3/min
@@ -150,7 +150,7 @@ app.use((req: any, res: any, next: any) => {
           ip: req.ip,
         };
         console.log(JSON.stringify(entry));
-      } catch {}
+      } catch { }
     });
   }
   next();
@@ -267,7 +267,7 @@ app.get('/api/readyz', async (_req, res) => {
     const prize = (process.env.PRIZE_POOL_WALLET || '').trim();
     let prizeBalance: number | null = null;
     if (prize) {
-      try { prizeBalance = await conn.getBalance(new PublicKey(prize), { commitment: 'processed' as any }); } catch {}
+      try { prizeBalance = await conn.getBalance(new PublicKey(prize), { commitment: 'processed' as any }); } catch { }
     }
     res.json({ ok: true, rpc: { ok: !!blockhash, endpoint: rpcEndpoint }, prizePool: { address: prize || null, balance: prizeBalance } });
   } catch (e: any) {
@@ -497,7 +497,7 @@ lobbyManager.onGameStart = (lobby: Lobby) => {
         expectedTierByPlayerId.delete(pid);
       }
     });
-  } catch {}
+  } catch { }
   gameWorld.startRound(lobby.players, lobby.entryFee);
   const rules = [
     'Contrôles: pointez la souris pour nager',
@@ -512,16 +512,16 @@ lobbyManager.onGameStart = (lobby: Lobby) => {
 lobbyManager.onLobbyCountdown = (lobby, remaining, startAtMs) => {
   const msg: ServerToClientMessage = { type: 'lobbyCountdown', payload: { lobbyId: lobby.lobbyId, remaining, startAtMs } } as any;
   broadcastToLobby(lobby, msg);
-  
+
   // If solo player, show discrete countdown
   // Timeline: 0-30s = silent waiting, 30-50s = show countdown every second
   if (lobby.players.length === 1) {
     // Show countdown for every second in the last 20 seconds
     const shouldWarn = remaining <= 20 && remaining > 0;
     if (shouldWarn) {
-      const refundWarning: ServerToClientMessage = { 
-        type: 'soloPlayerWarning', 
-        payload: { secondsUntilRefund: remaining } 
+      const refundWarning: ServerToClientMessage = {
+        type: 'soloPlayerWarning',
+        payload: { secondsUntilRefund: remaining }
       } as any;
       broadcastToLobby(lobby, refundWarning);
     }
@@ -531,57 +531,57 @@ lobbyManager.onLobbyCountdown = (lobby, remaining, startAtMs) => {
 lobbyManager.onLobbyRefund = async (lobby: Lobby, playerId: string, _calculatedLamports: number) => {
   // Use ACTUAL amount paid, not recalculated amount
   const actualLamportsPaid = expectedLamportsByPlayerId.get(playerId) || _calculatedLamports;
-  
+
   // Deduct network fee buffer (5000 lamports = ~$0.001)
   // The original payment had ~5000 lamports deducted for network fee
   // So prize pool has slightly less than what player sent
   const NETWORK_FEE_BUFFER = 5000; // Standard Solana transaction fee
   const refundAmount = Math.max(0, actualLamportsPaid - NETWORK_FEE_BUFFER);
-  
+
   console.log(`[REFUND] Processing refund for ${playerId}:`);
   console.log(`[REFUND]   - Expected payment: ${actualLamportsPaid} lamports`);
   console.log(`[REFUND]   - Network fee buffer: ${NETWORK_FEE_BUFFER} lamports`);
   console.log(`[REFUND]   - Refund amount: ${refundAmount} lamports`);
-  
+
   try {
     // Issue refund transaction with network fee deducted
     const txSignature = await smartContractService.refundPlayer(playerId, refundAmount);
-    
+
     // Clear payment tracking - player needs to pay again if they want to rejoin
     paidPlayers.delete(playerId);
     expectedLamportsByPlayerId.delete(playerId);
-    
+
     console.log(`[REFUND] Cleared payment cache for ${maskPk(playerId)}`);
-    
+
     // Notify player
     const socket = playerIdToSocket.get(playerId);
     if (socket) {
-      const msg: ServerToClientMessage = { 
-        type: 'lobbyRefund', 
-        payload: { 
+      const msg: ServerToClientMessage = {
+        type: 'lobbyRefund',
+        payload: {
           reason: 'Not enough players joined the tournament (network fee deducted)',
           lamports: refundAmount,
           txSignature
-        } 
+        }
       } as any;
       try { socket.send(JSON.stringify(msg)); } catch (e) { log.error('[REFUND] Failed to send message:', e); }
-      
+
       // Also send them back to mode selection
       setTimeout(() => {
         const backMsg: ServerToClientMessage = { type: 'lobbyError', payload: { message: 'Lobby cancelled - entry fee refunded' } } as any;
         try { socket.send(JSON.stringify(backMsg)); } catch (e) { log.error('[REFUND] Failed to send back message:', e); }
       }, 2000);
     }
-    
+
     console.log(`[REFUND] ✅ Refund completed for ${playerId}: ${txSignature}`);
   } catch (error) {
     console.error(`[REFUND] ❌ Failed to refund ${playerId}:`, error);
-    
+
     // ✅ FIX #2: Notify player of refund failure with details
     const socket = playerIdToSocket.get(playerId);
     if (socket) {
       let errorMessage = 'Refund failed - please contact support with your wallet address.';
-      
+
       // Parse common errors
       if (error instanceof Error) {
         if (error.message.includes('insufficient') || error.message.includes('Insufficient')) {
@@ -590,20 +590,20 @@ lobbyManager.onLobbyRefund = async (lobby: Lobby, playerId: string, _calculatedL
           errorMessage = 'Refund transaction expired. Please refresh and try again.';
         }
       }
-      
-      const msg: ServerToClientMessage = { 
-        type: 'refundFailed', 
-        payload: { 
+
+      const msg: ServerToClientMessage = {
+        type: 'refundFailed',
+        payload: {
           message: errorMessage,
           playerId: maskPk(playerId),
           timestamp: Date.now()
-        } 
+        }
       } as any;
-      try { 
-        socket.send(JSON.stringify(msg)); 
+      try {
+        socket.send(JSON.stringify(msg));
         console.log(`[REFUND] Sent error notification to ${maskPk(playerId)}`);
-      } catch (e) { 
-        log.error('[REFUND] Failed to send error message:', e); 
+      } catch (e) {
+        log.error('[REFUND] Failed to send error message:', e);
       }
     }
   }
@@ -623,7 +623,7 @@ gameWorld.onPlayerEliminated = (playerId) => {
       const dbg: any = { type: 'debugCollision', payload: { victimId, killerId, hit: debug.hit, segment: debug.segment, normal: debug.normal, relSpeed: debug.relSpeed, ts: Date.now() } };
       broadcastToAll(dbg);
     }
-  } catch {}
+  } catch { }
 };
 
 gameWorld.onRoundEnd = (winnerId, prizeAmount, txSignature) => {
@@ -636,7 +636,7 @@ gameWorld.onRoundEnd = (winnerId, prizeAmount, txSignature) => {
     if (lobby && prizeAmount > 0) {
       const prizeLamports = Math.floor(prizeAmount * 1_000_000_000);
       const playerWallets = lobby.players; // all player IDs (wallet addresses)
-      
+
       // Build kills map (kills tracking not implemented yet, default to 0)
       const killsMap: Record<string, number> = {};
       for (const wallet of playerWallets) {
@@ -664,7 +664,7 @@ wss.on('connection', (ws: WebSocket, req: any) => {
       ws.close(1008, 'Origin not allowed');
       return;
     }
-  } catch {}
+  } catch { }
 
   // Check for session token in URL query parameter (HTTP auth flow)
   let sessionToken: string | null = null;
@@ -721,10 +721,10 @@ wss.on('connection', (ws: WebSocket, req: any) => {
           if (pendingSockets.has(ws)) {
             ws.close(4001, 'Authentication timeout');
           }
-        } catch {}
+        } catch { }
       }, AUTH_GRACE_MS);
       socketToAuthTimeout.set(ws, t);
-    } catch {}
+    } catch { }
 
     const nonce = AuthService.createNonce();
     socketToNonce.set(ws, { nonce, issuedAt: Date.now(), consumed: false });
@@ -747,6 +747,26 @@ wss.on('connection', (ws: WebSocket, req: any) => {
         return;
       }
       const message: ClientToServerMessage = result.data as any;
+
+      // Handle guest login specifically
+      if (message.type === 'guestLogin') {
+        const { guestName } = message.payload;
+        // Basic validation for name
+        const cleanName = (guestName || 'Guest').trim().slice(0, 20).replace(/[^a-zA-Z0-9 ]/g, '');
+        const guestId = `guest-${uuidv4()}`; // Temporary ID
+
+        // Register as authenticated
+        playerIdToSocket.set(guestId, ws);
+        socketToPlayerId.set(ws, guestId);
+
+        // Send success
+        const authMessage: AuthenticatedMessage = { type: 'authenticated', payload: { playerId: guestId } };
+        ws.send(JSON.stringify(authMessage));
+
+        log.info(`🔌 Guest connected: ${cleanName} (${guestId})`);
+        return;
+      }
+
       handleClientMessage(message, ws);
     } catch (error) {
       log.error(`❌ Invalid message:`, error);
@@ -757,11 +777,11 @@ wss.on('connection', (ws: WebSocket, req: any) => {
     const reasonStr = reason?.toString() || 'no reason';
     console.log(`🔌 WebSocket closed: code=${code}, reason="${reasonStr}"`);
     pendingSockets.delete(ws);
-    try { wsHeartbeat.delete(ws); } catch {}
+    try { wsHeartbeat.delete(ws); } catch { }
     try {
       const t = socketToAuthTimeout.get(ws);
       if (t) { clearTimeout(t); socketToAuthTimeout.delete(ws); }
-    } catch {}
+    } catch { }
     const playerId = socketToPlayerId.get(ws);
     if (playerId) {
       playerIdToSocket.delete(playerId);
@@ -810,7 +830,7 @@ wss.on('connection', (ws: WebSocket, req: any) => {
       } else {
         const tier = expectedTierByPlayerId.get(playerId);
         if (tier) {
-          lobbyManager.joinLobby(playerId, tier).catch(() => {});
+          lobbyManager.joinLobby(playerId, tier).catch(() => { });
         }
       }
     }
@@ -830,13 +850,13 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
     if (!isAuth && !authed) {
       const v = (socketUnauthViolations.get(ws) || 0) + 1;
       socketUnauthViolations.set(ws, v);
-      try { ws.send(JSON.stringify({ type: 'error', payload: { message: 'Authenticate first' } })); } catch {}
+      try { ws.send(JSON.stringify({ type: 'error', payload: { message: 'Authenticate first' } })); } catch { }
       if (v >= UNAUTH_MAX) {
-        try { ws.close(4003, 'Too many unauthenticated messages'); } catch {}
+        try { ws.close(4003, 'Too many unauthenticated messages'); } catch { }
       }
       return;
     }
-  } catch {}
+  } catch { }
   function take(name: keyof typeof RATE_LIMITS): boolean {
     const rates = socketRate.get(ws);
     if (!rates) return true;
@@ -855,7 +875,7 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
     const strikes = (socketRateViolations.get(ws) || 0) + 1;
     socketRateViolations.set(ws, strikes);
     if (strikes >= RATE_VIOLATION_STRIKES_MAX) {
-      try { ws.close(4005, 'Rate limit exceeded'); } catch {}
+      try { ws.close(4005, 'Rate limit exceeded'); } catch { }
     }
     return false;
   }
@@ -883,7 +903,7 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
       try {
         const t = socketToAuthTimeout.get(ws);
         if (t) { clearTimeout(t); socketToAuthTimeout.delete(ws); }
-      } catch {}
+      } catch { }
       socketUnauthViolations.delete(ws);
       const authMessage: AuthenticatedMessage = { type: 'authenticated', payload: { playerId: publicKey } };
       ws.send(JSON.stringify(authMessage));
@@ -902,7 +922,7 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
             const { txBase64, recentBlockhash, prizePool } = await smartContractService.createEntryFeeTransactionBase64((new (await import('@solana/web3.js')).PublicKey(publicKey)), lamports);
             const entryFeeTxMessage: any = { type: 'entryFeeTx', payload: { txBase64, lamports, recentBlockhash, prizePool, entryFeeTier: tier, paymentId, sessionNonce: socketToNonce.get(ws)?.nonce } };
             ws.send(JSON.stringify(entryFeeTxMessage));
-          })().catch(() => {});
+          })().catch(() => { });
         }
       } else if (paidPlayers.has(publicKey)) {
         // If already paid and game in progress with this player, resume immediately
@@ -927,18 +947,35 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
       if (!take('join')) { ws.send(JSON.stringify({ type: 'error', payload: { message: 'Rate limited (join)' } })); return; }
       const playerId = socketToPlayerId.get(ws);
       if (!playerId) return;
+
+      const { entryFeeTier, mode } = (message as any).payload;
+
+      // SECURITY: Guests can only join EntryFeeTier 0
+      if (playerId.startsWith('guest-')) {
+        if (entryFeeTier !== 0) {
+          log.warn(`[SEC] Guest ${playerId} attempted to join paid tier ${entryFeeTier}`);
+          ws.send(JSON.stringify({ type: 'error', payload: { message: 'Guests can only play free mode' } }));
+          return;
+        }
+        // Valid guest join - route directly to lobby
+        await lobbyManager.joinLobby(playerId, entryFeeTier, mode);
+        break;
+      }
+
+      // Standard user logic (Payment processing)
       log.info(`[LOBBY] joinLobby request from ${maskPk(playerId)}`);
-      log.debug(`[LOBBY] - mode: ${(message as any).payload?.mode}`);
-      log.debug(`[LOBBY] - entryFeeTier: ${(message as any).payload?.entryFeeTier}`);
+      log.debug(`[LOBBY] - mode: ${mode}`);
+      log.debug(`[LOBBY] - entryFeeTier: ${entryFeeTier}`);
       log.debug(`[LOBBY] - SKIP_ENTRY_FEE: ${process.env.SKIP_ENTRY_FEE}`);
       log.debug(`[LOBBY] - player already paid: ${paidPlayers.has(playerId)}`);
+
       try {
-        const requestedMode = (message as any).payload?.mode as 'practice' | 'tournament' | undefined;
+        const requestedMode = mode as 'practice' | 'tournament' | undefined;
         // Always allow practice mode without fee
         if (requestedMode === 'practice') {
           pendingPaymentByPlayerId.delete(playerId);
           expectedLamportsByPlayerId.delete(playerId);
-          await lobbyManager.joinLobby(playerId, (message as any).payload.entryFeeTier, 'practice');
+          await lobbyManager.joinLobby(playerId, entryFeeTier, 'practice');
           break;
         }
         // If a round is already in progress and the player is part of it, ignore join and resume
@@ -958,18 +995,18 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
           pendingPaymentByPlayerId.delete(playerId);
           expectedLamportsByPlayerId.delete(playerId);
           paidPlayers.add(playerId);
-          await lobbyManager.joinLobby(playerId, (message as any).payload.entryFeeTier, (message as any).payload.mode ?? 'practice');
+          await lobbyManager.joinLobby(playerId, entryFeeTier, mode ?? 'tournament');
           break;
         }
         if (paidPlayers.has(playerId)) {
           log.info(`[LOBBY] Player ${maskPk(playerId)} already paid, joining lobby directly`);
-          await lobbyManager.joinLobby(playerId, (message as any).payload.entryFeeTier, (message as any).payload.mode ?? 'tournament');
+          await lobbyManager.joinLobby(playerId, entryFeeTier, mode ?? 'tournament');
         } else if (pendingPaymentByPlayerId.has(playerId)) {
           log.info(`[LOBBY] Player ${maskPk(playerId)} has pending payment verification, ignoring duplicate join request`);
           // Payment verification in progress, ignore this request - player will auto-join after verification
         } else {
           // Create entry-fee transaction and send to client
-          const tier = (message as any).payload.entryFeeTier as import('shared').EntryFeeTier;
+          const tier = entryFeeTier as import('shared').EntryFeeTier;
           const lamports = await smartContractService.getEntryFeeInLamports(tier);
           const solAmount = (lamports / 1_000_000_000).toFixed(6);
           log.info(`[PAYMENT] 💵 Entry fee for tier $${tier}: ${lamports} lamports (${solAmount} SOL)`);
@@ -982,7 +1019,8 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
           ws.send(JSON.stringify(entryFeeTxMessage));
         }
       } catch (e: any) {
-        ws.send(JSON.stringify({ type: 'error', payload: { message: `Entry fee init failed: ${e?.message || e}` } }));
+        log.error(`Join error: ${e?.message || e}`);
+        ws.send(JSON.stringify({ type: 'error', payload: { message: `Join failed: ${e?.message || e}` } }));
       }
       break;
     }
@@ -991,7 +1029,7 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
       const playerId = socketToPlayerId.get(ws);
       if (!playerId) return;
       log.info(`[PAYMENT] 📝 Received entryFeeSignature from ${maskPk(playerId)}`);
-      log.debug(`[PAYMENT] - signature: ${(message as any).payload.signature?.slice(0,20)}...`);
+      log.debug(`[PAYMENT] - signature: ${(message as any).payload.signature?.slice(0, 20)}...`);
       log.debug(`[PAYMENT] - paymentId: ${(message as any).payload.paymentId}`);
       log.debug(`[PAYMENT] - sessionNonce: ${(message as any).payload.sessionNonce}`);
       log.debug(`[PAYMENT] - player in paidPlayers: ${paidPlayers.has(playerId)}`);
@@ -1014,12 +1052,12 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
         ws.send(JSON.stringify({ type: 'error', payload: { message: 'Invalid payment context' } }));
         return;
       }
-      
+
       console.log(`[PAYMENT] 🔍 Starting verification for signature: ${signature}`);
       console.log(`[PAYMENT] Expected lamports: ${expectedLamports}`);
       console.log(`[PAYMENT] Player: ${maskPk(playerId)}`);
       console.log(`[PAYMENT] Solscan: https://solscan.io/tx/${signature}`);
-      
+
       // Retry verification to allow confirmation on-chain
       let attempts = 0;
       let verified = false;
@@ -1040,7 +1078,7 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
               errorReason = res.error;
               break; // Don't keep retrying if transaction failed
             }
-          } catch (e) { 
+          } catch (e) {
             lastErr = e;
             if (attempts % 10 === 0) {
               console.log(`[PAYMENT] Attempt ${attempts}: Not found yet...`);
@@ -1134,12 +1172,12 @@ function safeSend(ws: WebSocket, data: string, kind: 'game' | 'generic'): void {
       socketSlowStrikes.set(ws, strikes);
       if (kind === 'game') socketPendingState.set(ws, data); // coalesce latest game state
       if (strikes >= SLOW_CONSUMER_STRIKES_MAX) {
-        try { ws.close(4004, 'Slow consumer'); } catch {}
+        try { ws.close(4004, 'Slow consumer'); } catch { }
       }
       return;
     }
     ws.send(data);
-  } catch {}
+  } catch { }
 }
 
 function broadcastGameState(): void {
@@ -1187,13 +1225,13 @@ function broadcastToAll(message: ServerToClientMessage): void {
 process.on('unhandledRejection', (reason: any) => {
   try {
     log.error('UnhandledPromiseRejection', typeof reason === 'object' ? (reason?.stack || reason) : String(reason));
-  } catch {}
+  } catch { }
 });
 
 process.on('uncaughtException', (err: any) => {
   try {
     log.error('UncaughtException', err?.stack || err);
-  } catch {}
+  } catch { }
 });
 
 // =================================================================================================
@@ -1224,14 +1262,14 @@ const pingTimer = setInterval(() => {
       const hb = wsHeartbeat.get(ws);
       const now = Date.now();
       if (hb && (now - hb.lastPong) > CLIENT_GRACE_MS) {
-        try { ws.terminate(); } catch {}
+        try { ws.terminate(); } catch { }
         wsHeartbeat.delete(ws);
         return;
       }
       if (ws.readyState === WebSocket.OPEN) {
         if (hb) hb.lastPing = Date.now();
         (ws as any).isAlive = false;
-        try { ws.ping(); } catch {}
+        try { ws.ping(); } catch { }
         // Attempt to flush coalesced state if buffer has drained sufficiently
         try {
           const buffered = (ws as any).bufferedAmount || 0;
@@ -1244,10 +1282,10 @@ const pingTimer = setInterval(() => {
               if (s > 0) socketSlowStrikes.set(ws, s - 1);
             }
           }
-        } catch {}
+        } catch { }
       }
     });
-  } catch {}
+  } catch { }
 }, HEARTBEAT_INTERVAL_MS);
 
-wss.on('close', () => { try { clearInterval(pingTimer); } catch {} });
+wss.on('close', () => { try { clearInterval(pingTimer); } catch { } });

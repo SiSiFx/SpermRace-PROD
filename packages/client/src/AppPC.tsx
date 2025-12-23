@@ -6,7 +6,7 @@ const API_BASE: string = (() => {
   try {
     const host = (window?.location?.hostname || '').toLowerCase();
     if (host.endsWith('spermrace.io')) return '/api';
-  } catch {}
+  } catch { }
 
   const env = (import.meta as any).env?.VITE_API_BASE as string | undefined;
   if (env && typeof env === 'string' && env.trim()) return env.trim();
@@ -15,7 +15,7 @@ const API_BASE: string = (() => {
     const host = (window?.location?.hostname || '').toLowerCase();
     if (host.includes('dev.spermrace.io')) return 'https://dev.spermrace.io/api';
     if (host.includes('spermrace.io')) return 'https://spermrace.io/api';
-  } catch {}
+  } catch { }
   return '/api';
 })();
 // Solana cluster for links (e.g., Solscan): prefer env, else infer by hostname
@@ -25,7 +25,7 @@ const SOLANA_CLUSTER: 'devnet' | 'mainnet' = (() => {
   try {
     const host = (window?.location?.hostname || '').toLowerCase();
     return host.includes('dev.spermrace.io') ? 'devnet' : 'mainnet';
-  } catch {}
+  } catch { }
   return 'devnet';
 })();
 import { WalletProvider, useWallet } from './WalletProvider';
@@ -33,10 +33,11 @@ import { WsProvider, useWs } from './WsProvider';
 import NewGameView from './NewGameView';
 import HowToPlayOverlay from './HowToPlayOverlay';
 import PracticeFullTutorial from './PracticeFullTutorial';
+import { PracticeModeSelection } from './PracticeModeSelection';
 import { Leaderboard } from './Leaderboard';
 import { CrownSimple, Lightning, Diamond, Atom } from 'phosphor-react';
 
-type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
+type AppScreen = 'landing' | 'practice' | 'practice-solo' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
 
 export default function AppPC() {
   return (
@@ -61,11 +62,11 @@ function AppInner() {
   const [showHelp] = useState<boolean>(false);
   const [showHowTo, setShowHowTo] = useState<boolean>(false);
   const [showLeaderboard, setShowLeaderboard] = useState<boolean>(false);
-  
+
   // Loading progress for overlay (indefinite fill)
   const [loadProg, setLoadProg] = useState<number>(0);
   const overlayActive = (wsState.phase === 'connecting' || wsState.phase === 'authenticating' || wsState.entryFee.pending);
-  
+
   useEffect(() => {
     let id: any;
     if (overlayActive) {
@@ -116,7 +117,7 @@ function AppInner() {
         const r = await fetch(`${API_BASE}/sol-price`);
         const j = await r.json();
         setSolPrice(Number(j.usd) || null);
-      } catch {}
+      } catch { }
     };
     fetchSol();
     const id = setInterval(fetchSol, 30000);
@@ -141,6 +142,7 @@ function AppInner() {
       if (e.key === 'Escape') {
         if (screen === 'modes') setScreen('landing');
         else if (screen === 'practice') setScreen('landing');
+        else if (screen === 'practice-solo') setScreen('practice' as any);
         else if (screen === 'wallet') setScreen('modes');
       }
       // P for practice
@@ -158,18 +160,20 @@ function AppInner() {
 
   return (
     <div id="app-root" className="pc-optimized">
-      {/* PC top bar: brand + nav + wallet */}
-      <HeaderWallet
-        screen={screen}
-        status={statusText}
-        solPrice={solPrice}
-        onPractice={onPractice}
-        onTournament={onTournament}
-        onLeaderboard={openLeaderboard}
-        onShowHowTo={openHowTo}
-      />
+      {/* PC top bar: brand + nav + wallet - hide during gameplay */}
+      {screen !== 'game' && screen !== 'practice' && screen !== 'practice-solo' && (
+        <HeaderWallet
+          screen={screen}
+          status={statusText}
+          solPrice={solPrice}
+          onPractice={onPractice}
+          onTournament={onTournament}
+          onLeaderboard={openLeaderboard}
+          onShowHowTo={openHowTo}
+        />
+      )}
       <div id="bg-particles" />
-      
+
 
 
       {/* UNIFIED OVERLAY SYSTEM - Only ONE overlay shows at a time, priority: Error > Payment > Auth > Connecting */}
@@ -279,15 +283,15 @@ function AppInner() {
           <div className="loading-spinner"></div>
           <div className="loading-text">{
             wsState.entryFee.pending ? 'Verifying entry fee transaction on Solana…'
-            : wsState.phase === 'authenticating' ? 'Approve signature in your wallet to continue…'
-            : 'Opening WebSocket connection…'
+              : wsState.phase === 'authenticating' ? 'Approve signature in your wallet to continue…'
+                : 'Opening WebSocket connection…'
           }</div>
           <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.5)', marginTop: '8px', maxWidth: '340px', textAlign: 'center' }}>
             {wsState.entryFee.pending
               ? 'Waiting for transaction confirmation (finalized commitment)'
               : wsState.phase === 'authenticating'
-              ? 'Check your wallet extension for the signature request'
-              : 'Establishing secure connection to game server'
+                ? 'Check your wallet extension for the signature request'
+                : 'Establishing secure connection to game server'
             }
           </div>
           {/* Smooth loading bar */}
@@ -314,7 +318,14 @@ function AppInner() {
         />
       )}
       {screen === 'practice' && (
-        <Practice onFinish={() => setScreen('results')} onBack={() => setScreen('landing')} />
+        <PracticeModeSelection
+          onSelectSolo={() => setScreen('practice-solo' as any)}
+          onBack={() => setScreen('landing')}
+          onNotify={showToast}
+        />
+      )}
+      {screen === 'practice-solo' && (
+        <Practice onFinish={() => setScreen('results')} onBack={() => setScreen('practice' as any)} />
       )}
       {screen === 'modes' && (
         <TournamentModesScreen onSelect={() => setScreen('wallet')} onClose={() => setScreen('landing')} onNotify={showToast} solPrice={solPrice} />
@@ -348,7 +359,7 @@ function AppInner() {
             setShowHowTo(false);
             try {
               localStorage.setItem('sr_howto_seen_v2', '1');
-            } catch {}
+            } catch { }
           }}
         />
       )}
@@ -444,7 +455,7 @@ function HeaderWallet({
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         {isLanding && (
           <>
-            <button 
+            <button
               onClick={onTournament}
               style={{
                 padding: '6px 12px',
@@ -461,7 +472,7 @@ function HeaderWallet({
               PLAY
             </button>
             {onLeaderboard && (
-              <button 
+              <button
                 onClick={onLeaderboard}
                 style={{
                   padding: '6px 12px',
@@ -553,7 +564,7 @@ function Landing({
       if (stored) {
         return JSON.parse(stored) as { totalGames?: number; wins?: number; totalKills?: number };
       }
-    } catch {}
+    } catch { }
     return { totalGames: 0, wins: 0, totalKills: 0 };
   };
 
@@ -580,13 +591,13 @@ function Landing({
       >
         <header style={{ textAlign: 'center' }}>
           <div style={{ marginBottom: 20 }}>
-            <Atom 
-              size={72} 
-              weight="duotone" 
+            <Atom
+              size={72}
+              weight="duotone"
               color="#00f5ff"
-              style={{ 
+              style={{
                 filter: 'drop-shadow(0 0 16px rgba(0, 245, 255, 0.7))',
-              }} 
+              }}
             />
           </div>
           <div
@@ -645,15 +656,26 @@ function Landing({
             style={{
               display: 'flex',
               justifyContent: 'center',
-              alignItems: 'stretch',
-              gap: 20,
+              alignItems: 'center', // Changed from stretch to center
+              gap: 24, // Increased gap slightly for separation
               flexWrap: 'wrap',
+              width: '100%',
+              maxWidth: 800, // Constrain width so they don't spread too far
             }}
           >
             <button
               type="button"
               className="cta-primary"
-              style={{ minWidth: 280, position: 'relative', fontSize: 14, padding: '16px 36px' }}
+              style={{
+                minWidth: 280,
+                position: 'relative',
+                fontSize: 14,
+                padding: '16px 36px',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                textAlign: 'center'
+              }}
               onClick={() => onTournament?.()}
             >
               <span className="cta-text">Enter Tournament</span>
@@ -663,7 +685,16 @@ function Landing({
             <button
               type="button"
               className="cta-primary"
-              style={{ minWidth: 280, position: 'relative', fontSize: 14, padding: '16px 36px' }}
+              style={{
+                minWidth: 280,
+                position: 'relative',
+                fontSize: 14,
+                padding: '16px 36px',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                textAlign: 'center'
+              }}
               onClick={onPractice}
             >
               <span className="cta-text">Practice Mode (Free)</span>
@@ -731,22 +762,22 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
   useEffect(() => {
     if (step === 'lobby') {
       const base = [meId];
-      const bots = Array.from({ length: 7 }, (_, i) => `BOT_${i.toString(36)}${Math.random().toString(36).slice(2,4)}`);
+      const bots = Array.from({ length: 7 }, (_, i) => `BOT_${i.toString(36)}${Math.random().toString(36).slice(2, 4)}`);
       setPlayers([...base, ...bots]);
       setCountdown(countdownTotal);
       if (showPracticeIntro) return;
       let currentCountdown = countdownTotal;
-      
+
       const t = setInterval(() => {
         currentCountdown -= 1;
         setCountdown(currentCountdown);
-        
+
         if (currentCountdown <= 0) {
           clearInterval(t);
           setStep('game');
         }
       }, 1000);
-      
+
       return () => clearInterval(t);
     }
   }, [step, meId, showPracticeIntro]);
@@ -793,7 +824,7 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
             setShowPracticeIntro(false);
             try {
               localStorage.setItem('sr_practice_full_tuto_seen', '1');
-            } catch {}
+            } catch { }
             // After the first tutorial, jump straight into the game and skip lobby on PC
             setStep('game');
           }}
@@ -805,7 +836,7 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
   if (step === 'game') {
     return (
       <div className="screen active" style={{ padding: 0 }}>
-        <NewGameView 
+        <NewGameView
           meIdOverride={meId || 'YOU'}
           onReplay={() => setStep('lobby')}
           onExit={onBack}
@@ -824,7 +855,7 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify, solPric
   const [preflight, setPreflight] = useState<{ address: string | null; sol: number | null; configured: boolean } | null>(null);
   const [preflightError, setPreflightError] = useState<boolean>(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  
+
   useEffect(() => {
     (async () => {
       try {
@@ -844,10 +875,10 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify, solPric
   }, [wsState.phase]);
 
   const tiers = [
-    { name: 'MICRO', usd: 1, max: 16, prize: 10 },
-    { name: 'NANO', usd: 5, max: 32, prize: 50 },
-    { name: 'MEGA', usd: 25, max: 32, prize: 250 },
-    { name: 'ELITE', usd: 100, max: 16, prize: 1000 },
+    { name: 'MICRO', usd: 1, max: 16, prize: 10, popular: true, desc: 'Perfect for beginners' },
+    { name: 'NANO', usd: 5, max: 32, prize: 50, popular: false, desc: 'Most competitive' },
+    { name: 'MEGA', usd: 25, max: 32, prize: 250, popular: false, desc: 'High stakes action' },
+    { name: 'ELITE', usd: 100, max: 16, prize: 1000, popular: false, desc: 'Ultimate challenge' },
   ];
 
   const selected = tiers[selectedIndex];
@@ -870,39 +901,52 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify, solPric
       inset: 0,
       background: 'linear-gradient(180deg, #030712 0%, #0a1628 100%)',
       overflowY: 'auto',
-      padding: '30px 40px',
+      padding: '120px 40px 40px',
     }}>
-      <div style={{ maxWidth: 900, width: '100%', margin: '0 auto' }}>
-        {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <div style={{ 
-            fontSize: 14, 
-            letterSpacing: '0.3em', 
-            color: '#00f5ff',
-            marginBottom: 12,
-            textShadow: '0 0 10px rgba(0,245,255,0.5)'
+      <div style={{ maxWidth: 1000, width: '100%', margin: '0 auto' }}>
+        {/* Hero Header */}
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <div style={{
+            fontSize: 12,
+            letterSpacing: '0.3em',
+            color: 'rgba(255,255,255,0.5)',
+            marginBottom: 8,
+            textTransform: 'uppercase',
           }}>
-            SELECT YOUR ARENA
+            Choose Your Battle
           </div>
-          <h1 style={{ 
-            fontSize: 40, 
-            fontWeight: 800, 
+          <h1 style={{
+            fontSize: 48,
+            fontWeight: 900,
             color: '#fff',
-            margin: 0 
+            margin: 0,
+            marginBottom: 10,
+            textShadow: '0 0 40px rgba(0,245,255,0.3)',
           }}>
             TOURNAMENT
           </h1>
+          <p style={{
+            fontSize: 18,
+            color: 'rgba(0,245,255,0.9)',
+            margin: 0,
+            fontWeight: 700,
+            letterSpacing: '0.02em',
+          }}>
+            Win Real Cryptocurrency in Minutes ⚡
+          </p>
         </div>
 
         {/* Tier Cards Grid */}
-        <div style={{ 
+        <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: 14,
-          marginBottom: 24
+          gap: 16,
+          marginBottom: 20
         }}>
           {tiers.map((tier, i) => {
             const isActive = i === selectedIndex;
+            const roi = ((tier.prize / tier.usd - 1) * 100).toFixed(0);
+
             return (
               <button
                 key={tier.name}
@@ -912,100 +956,173 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify, solPric
                   flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  padding: '20px 14px',
+                  padding: '22px 16px',
                   borderRadius: 20,
                   border: isActive ? '2px solid #00f5ff' : '1px solid rgba(255,255,255,0.1)',
-                  background: isActive 
-                    ? 'linear-gradient(135deg, rgba(0,245,255,0.15) 0%, rgba(0,200,255,0.05) 100%)'
+                  background: isActive
+                    ? 'linear-gradient(135deg, rgba(0,245,255,0.2) 0%, rgba(0,200,255,0.08) 100%)'
                     : 'rgba(255,255,255,0.03)',
                   cursor: 'pointer',
                   transition: 'all 0.2s ease',
-                  boxShadow: isActive ? '0 0 40px rgba(0,245,255,0.3)' : 'none',
+                  boxShadow: isActive ? '0 0 50px rgba(0,245,255,0.4), inset 0 1px 0 rgba(255,255,255,0.15)' : 'none',
                   opacity: preflightError ? 0.5 : 1,
+                  position: 'relative',
                 }}
               >
-                {/* Entry Fee Badge */}
+                {/* Popular Badge */}
+                {tier.popular && (
+                  <div style={{
+                    position: 'absolute',
+                    top: -8,
+                    right: -8,
+                    background: 'linear-gradient(135deg, #ff6b00, #ff8c00)',
+                    color: '#fff',
+                    fontSize: 9,
+                    fontWeight: 900,
+                    padding: '4px 12px',
+                    borderRadius: 14,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.1em',
+                    boxShadow: '0 3px 12px rgba(255,107,0,0.5)',
+                  }}>
+                    🔥 HOT
+                  </div>
+                )}
+
+                {/* Entry Fee */}
                 <div style={{
-                  padding: '6px 16px',
+                  padding: '6px 18px',
                   borderRadius: 20,
-                  background: isActive 
+                  background: isActive
                     ? 'linear-gradient(135deg, #00f5ff, #00ff88)'
                     : 'rgba(255,255,255,0.1)',
-                  fontSize: 18,
-                  fontWeight: 800,
+                  fontSize: 20,
+                  fontWeight: 900,
                   color: isActive ? '#000' : '#fff',
-                  marginBottom: 10,
+                  marginBottom: 12,
                 }}>
                   ${tier.usd}
                 </div>
-                
+
                 {/* Tier Name */}
-                <div style={{ 
-                  fontSize: 16, 
-                  fontWeight: 600, 
+                <div style={{
+                  fontSize: 16,
+                  fontWeight: 700,
                   color: isActive ? '#00f5ff' : 'rgba(255,255,255,0.7)',
                   marginBottom: 12,
-                  letterSpacing: '0.1em'
+                  letterSpacing: '0.08em'
                 }}>
                   {tier.name}
                 </div>
 
-                {/* Prize - Big & Engaging */}
-                <div style={{ 
-                  fontSize: 36, 
-                  fontWeight: 900, 
+                {/* Prize - Huge */}
+                <div style={{
+                  fontSize: 40,
+                  fontWeight: 900,
                   color: isActive ? '#00ff88' : 'rgba(255,255,255,0.6)',
-                  textShadow: isActive ? '0 0 25px rgba(0,255,136,0.6)' : 'none',
+                  textShadow: isActive ? '0 0 35px rgba(0,255,136,0.7)' : 'none',
                   lineHeight: 1,
+                  marginBottom: 8,
                 }}>
                   ${tier.prize}
                 </div>
-                <div style={{ 
-                  fontSize: 10, 
-                  color: 'rgba(255,255,255,0.4)', 
-                  letterSpacing: '0.15em',
-                  marginTop: 6
+
+                {/* ROI Badge */}
+                <div style={{
+                  fontSize: 11,
+                  color: isActive ? '#00ff88' : 'rgba(255,255,255,0.4)',
+                  letterSpacing: '0.1em',
+                  fontWeight: 800,
+                  marginBottom: 10,
+                  textTransform: 'uppercase',
                 }}>
-                  WIN 10X
+                  {roi}% ROI
+                </div>
+
+                {/* Description */}
+                <div style={{
+                  fontSize: 12,
+                  color: 'rgba(255,255,255,0.5)',
+                  textAlign: 'center',
+                }}>
+                  {tier.desc}
                 </div>
               </button>
             );
           })}
         </div>
 
-        {/* Selected Info Panel - More Engaging */}
+        {/* Feature Highlights Row */}
         <div style={{
-          background: 'linear-gradient(135deg, rgba(0,245,255,0.1) 0%, rgba(0,255,136,0.08) 100%)',
-          borderRadius: 20,
-          padding: '20px 28px',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: 12,
           marginBottom: 20,
-          border: '1px solid rgba(0,245,255,0.25)',
-          textAlign: 'center',
         }}>
-          <div style={{ 
-            fontSize: 14, 
-            color: 'rgba(255,255,255,0.5)', 
-            letterSpacing: '0.25em',
-            marginBottom: 10
+          {[
+            { icon: '⚡', title: 'Instant Payouts', desc: 'Win SOL immediately' },
+            { icon: '🏆', title: 'Winner Takes All', desc: '85% to #1 place' },
+            { icon: '🔒', title: 'Provably Fair', desc: 'Blockchain verified' },
+            { icon: '⏱️', title: 'Fast Rounds', desc: '3-5 minute matches' },
+          ].map((feature, i) => (
+            <div key={i} style={{
+              background: 'rgba(255,255,255,0.03)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 14,
+              padding: '14px',
+              textAlign: 'center',
+            }}>
+              <div style={{ fontSize: 24, marginBottom: 8 }}>{feature.icon}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', marginBottom: 4 }}>{feature.title}</div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{feature.desc}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Selected Panel with Social Proof */}
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(0,245,255,0.15) 0%, rgba(0,255,136,0.12) 100%)',
+          borderRadius: 20,
+          padding: '24px',
+          marginBottom: 20,
+          border: '1px solid rgba(0,245,255,0.3)',
+          textAlign: 'center',
+          boxShadow: '0 8px 32px rgba(0,245,255,0.2)',
+        }}>
+          <div style={{
+            fontSize: 13,
+            color: 'rgba(255,255,255,0.6)',
+            letterSpacing: '0.2em',
+            marginBottom: 10,
+            textTransform: 'uppercase',
           }}>
-            PAY ${selected.usd} TO WIN
+            Turn ${selected.usd} into
           </div>
-          <div style={{ 
-            fontSize: 48, 
-            fontWeight: 900, 
+          <div style={{
+            fontSize: 64,
+            fontWeight: 900,
             color: '#00ff88',
-            textShadow: '0 0 40px rgba(0,255,136,0.5)',
+            textShadow: '0 0 50px rgba(0,255,136,0.7)',
             lineHeight: 1,
+            marginBottom: 12,
           }}>
             ${selected.prize}
           </div>
-          <div style={{ 
-            fontSize: 16, 
-            color: '#00f5ff', 
-            marginTop: 12,
-            fontWeight: 600
+          <div style={{
+            fontSize: 16,
+            color: '#00f5ff',
+            fontWeight: 700,
+            letterSpacing: '0.05em',
+            marginBottom: 16,
           }}>
-            10X YOUR ENTRY
+            Winner Takes 85% • Instant Crypto Payout
+          </div>
+          <div style={{
+            fontSize: 13,
+            color: 'rgba(255,255,255,0.6)',
+            fontWeight: 600,
+          }}>
+            🎯 Join {selected.max} players racing for the prize pool
           </div>
         </div>
 
@@ -1015,7 +1132,7 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify, solPric
             onClick={onClose}
             style={{
               flex: '0 0 140px',
-              padding: '18px 24px',
+              padding: '20px 24px',
               borderRadius: 14,
               border: '1px solid rgba(255,255,255,0.15)',
               background: 'transparent',
@@ -1023,65 +1140,52 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify, solPric
               fontSize: 16,
               fontWeight: 600,
               cursor: 'pointer',
+              transition: 'all 0.2s ease',
             }}
           >
-            BACK
+            ← BACK
           </button>
           <button
             onClick={handleJoin}
             disabled={isDisabled}
             style={{
               flex: 1,
-              padding: '18px',
+              padding: '20px',
               borderRadius: 14,
               border: 'none',
-              background: isDisabled 
-                ? 'rgba(255,255,255,0.1)' 
+              background: isDisabled
+                ? 'rgba(255,255,255,0.1)'
                 : 'linear-gradient(135deg, #00f5ff 0%, #00ff88 100%)',
               color: isDisabled ? 'rgba(255,255,255,0.4)' : '#000',
-              fontSize: 18,
-              fontWeight: 800,
-              letterSpacing: '0.1em',
+              fontSize: 20,
+              fontWeight: 900,
+              letterSpacing: '0.05em',
               cursor: isDisabled ? 'not-allowed' : 'pointer',
-              boxShadow: isDisabled ? 'none' : '0 0 40px rgba(0,245,255,0.4)',
+              boxShadow: isDisabled ? 'none' : '0 0 60px rgba(0,245,255,0.6), 0 6px 30px rgba(0,0,0,0.3)',
               transition: 'all 0.2s ease',
+              textTransform: 'uppercase',
             }}
           >
-            {isJoining ? 'JOINING...' : preflightError ? 'UNAVAILABLE' : 'ENTER RACE'}
+            {isJoining ? '⏳ JOINING TOURNAMENT...' : preflightError ? '❌ UNAVAILABLE' : '🚀 JOIN TOURNAMENT NOW'}
           </button>
         </div>
 
         {preflightError && (
-          <div style={{ 
-            textAlign: 'center', 
-            marginTop: 16, 
-            fontSize: 13, 
-            color: 'rgba(255,100,100,0.8)' 
+          <div style={{
+            textAlign: 'center',
+            marginTop: 16,
+            fontSize: 14,
+            color: 'rgba(255,100,100,0.9)',
+            fontWeight: 700,
           }}>
-            Tournaments temporarily unavailable
+            ⚠️ Tournaments temporarily unavailable
           </div>
         )}
 
       </div>
 
-      {/* SOL Price - Fixed square */}
-      <div style={{ 
-        position: 'fixed',
-        bottom: 20,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        zIndex: 9999,
-        background: 'rgba(0,0,0,0.8)',
-        padding: '12px 28px',
-        borderRadius: 4,
-        border: '2px solid #00f5ff',
-        boxShadow: '0 0 20px rgba(0,245,255,0.5)',
-      }}>
-        <span style={{ fontSize: 16, color: '#fff' }}>SOL </span>
-        <span style={{ fontSize: 22, fontWeight: 800, color: '#00f5ff' }}>
-          ${solPrice?.toFixed(2) ?? '--'}
-        </span>
-      </div>
+      {/* SOL Price - Fixed badge */}
+
     </div>
   );
 }
@@ -1091,7 +1195,7 @@ function Wallet({ onConnected, onClose }: { onConnected: () => void; onClose: ()
   const tryConnect = async () => {
     if (await connect()) onConnected();
   };
-  
+
   return (
     <div className="screen active pc-wallet" id="wallet-screen">
       <div className="pc-wallet-container">
@@ -1099,7 +1203,7 @@ function Wallet({ onConnected, onClose }: { onConnected: () => void; onClose: ()
           <h2 className="modal-title">Connect Wallet</h2>
           <p className="modal-subtitle">Sign in with Solana to continue</p>
         </div>
-        
+
         <div className="pc-wallet-options">
           <button className="pc-wallet-btn" onClick={tryConnect}>
             <div className="wallet-icon">
@@ -1112,11 +1216,11 @@ function Wallet({ onConnected, onClose }: { onConnected: () => void; onClose: ()
           </button>
           {publicKey && (
             <div className="pc-connected-badge">
-              Connected: {publicKey.slice(0,6)}…{publicKey.slice(-6)}
+              Connected: {publicKey.slice(0, 6)}…{publicKey.slice(-6)}
             </div>
           )}
         </div>
-        
+
         <button className="btn-secondary pc-btn" onClick={onClose}>← Back</button>
       </div>
     </div>
@@ -1128,7 +1232,7 @@ function Lobby({ onStart: _onStart, onBack }: { onStart: () => void; onBack: () 
   const players = state.lobby?.players || [];
   const realPlayers = players.filter(p => !String(p).startsWith('BOT_'));
   const estimatedPrizeUsd = state.lobby ? Math.max(0, Math.floor(realPlayers.length * (state.lobby.entryFee as number) * 0.85)) : 0;
-  
+
   return (
     <div className="screen active pc-lobby" id="lobby-screen">
       <div className="lobby-container pc-lobby-container">
@@ -1136,7 +1240,7 @@ function Lobby({ onStart: _onStart, onBack }: { onStart: () => void; onBack: () 
           <div className="lobby-title">Tournament Lobby</div>
           <div className="lobby-status">{players.length}/{state.lobby?.maxPlayers ?? 16}</div>
         </div>
-        
+
         {state.lobby && (
           <div className="pc-prize-info">
             <span className="label">Estimated Prize Pool:</span>
@@ -1144,13 +1248,13 @@ function Lobby({ onStart: _onStart, onBack }: { onStart: () => void; onBack: () 
             <span className="note">(85% to winner)</span>
           </div>
         )}
-        
+
         <div className="queue-bar pc-queue">
           <div className="queue-left"><span className="queue-dot" /><span>{players.length} Joined</span></div>
           <div className="queue-center"><span>Waiting for Players</span></div>
           <div className="queue-right"><span>Target: {state.lobby?.maxPlayers ?? 16}</span></div>
         </div>
-        
+
         <div className="lobby-orbit">
           <div className="orbit-center" />
           <div className="orbit-ring">
@@ -1165,7 +1269,7 @@ function Lobby({ onStart: _onStart, onBack }: { onStart: () => void; onBack: () 
             </div>
           )}
         </div>
-        
+
         <div className="lobby-footer">
           <button className="btn-secondary pc-btn" onClick={onBack}>← Leave Lobby</button>
         </div>
@@ -1183,7 +1287,7 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void }
   const cdMs = Math.max(0, cdMsRaw - Math.max(0, Date.now() - (srvTs || Date.now())));
   const cdMax = me?.status?.boostMaxCooldownMs ?? 2500;
   const [boostPct, setBoostPct] = useState<number>(cdMax > 0 ? 1 - cdMs / cdMax : 1);
-  const smoothRef = (function(){
+  const smoothRef = (function () {
     const r = (window as any).__SR_PC_BOOST_SMOOTH__ || { running: false, lastMs: cdMs, lastAt: performance.now(), raf: 0 };
     (window as any).__SR_PC_BOOST_SMOOTH__ = r;
     return r;
@@ -1210,7 +1314,7 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void }
         smoothRef.raf = requestAnimationFrame(tick);
       };
       smoothRef.raf = requestAnimationFrame(tick);
-      return () => { try { cancelAnimationFrame(smoothRef.raf); } catch {} smoothRef.running = false; };
+      return () => { try { cancelAnimationFrame(smoothRef.raf); } catch { } smoothRef.running = false; };
     }
   }, [cdMs, cdMax]);
   // Simple pre-start tips countdown for early players (first few games)
@@ -1242,12 +1346,12 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void }
   const [debugOn, setDebugOn] = useState<boolean>(() => {
     try { const v = localStorage.getItem('sr_debug'); return v === '1'; } catch { return false; }
   });
-  useEffect(() => { try { localStorage.setItem('sr_debug', debugOn ? '1' : '0'); } catch {} }, [debugOn]);
+  useEffect(() => { try { localStorage.setItem('sr_debug', debugOn ? '1' : '0'); } catch { } }, [debugOn]);
   const isProd = (import.meta as any).env?.PROD === true;
-  
+
   return (
     <div className="screen active" style={{ padding: 0 }}>
-      <NewGameView 
+      <NewGameView
         onReplay={onRestart}
         onExit={onEnd}
       />
@@ -1293,9 +1397,9 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void }
             Debug {debugOn ? 'ON' : 'OFF'}
           </button>
           {debugOn && (
-              <div className="pc-debug-info">
-                Collisions: {(state.debugCollisions || []).length}
-              </div>
+            <div className="pc-debug-info">
+              Collisions: {(state.debugCollisions || []).length}
+            </div>
           )}
         </div>
       )}
@@ -1312,7 +1416,7 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
   const solscan = tx ? `https://solscan.io/tx/${tx}${SOLANA_CLUSTER === 'devnet' ? '?cluster=devnet' : ''}` : null;
   const selfId = wsState.playerId || publicKey || '';
   const isWinner = !!winner && winner === selfId;
-  
+
   let rankText: string | null = null;
   try {
     const initial = wsState.initialPlayers || [];
@@ -1330,8 +1434,8 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
       const myRank = rankMap[selfId];
       if (myRank) rankText = `Your rank: #${myRank}`;
     }
-  } catch {}
-  
+  } catch { }
+
   return (
     <div className="screen active pc-results" id="round-end">
       <div className="modal-card pc-results-card">
@@ -1340,11 +1444,11 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
             {isWinner ? 'Victory! Fertilization!' : 'Eliminated'}
           </h2>
           <p className="round-description">
-            Winner: {winner ? `${winner.slice(0,6)}…${winner.slice(-6)}` : '—'}
+            Winner: {winner ? `${winner.slice(0, 6)}…${winner.slice(-6)}` : '—'}
             {typeof prize === 'number' ? ` • Prize: ${prize.toFixed(4)} SOL` : ''}
           </p>
         </div>
-        
+
         {solscan && (
           <div className="pc-solscan-link">
             <a href={solscan} target="_blank" rel="noreferrer">
@@ -1352,14 +1456,14 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
             </a>
           </div>
         )}
-        
+
         {rankText && (
           <div className="pc-stats-summary">
             <div className="stat">{rankText}</div>
             <div className="stat">Kills: {wsState.kills?.[selfId] || 0}</div>
           </div>
         )}
-        
+
         <div className="round-actions pc-actions">
           <button className="btn-primary pc-btn-large" onClick={onPlayAgain}>
             Play Again
