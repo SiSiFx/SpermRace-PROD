@@ -553,7 +553,7 @@ function Landing({
             justifyContent: 'center', // Center navigation buttons
             alignItems: 'center',
             marginTop: 40, // Bring closer to main content, avoid "too low" feeling
-            paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 0px))', // Safe area respect
+            paddingBottom: 'calc(40px + env(safe-area-inset-bottom, 0px))', // Safe area respect
             gap: 16,
             width: '100%',
             maxWidth: 400,
@@ -813,27 +813,10 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
       flexDirection: 'column',
       padding: '20px 16px',
       paddingTop: 'calc(20px + env(safe-area-inset-top, 0px))',
-      paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 0px))',
+      paddingBottom: 'calc(40px + env(safe-area-inset-bottom, 0px))',
       overflowY: 'auto',
+      WebkitOverflowScrolling: 'touch',
     }}>
-      {/* Live Stats Banner */}
-      <div style={{
-        background: 'linear-gradient(90deg, rgba(0,245,255,0.15), rgba(0,255,136,0.15))',
-        borderRadius: 12,
-        padding: '10px 14px',
-        marginBottom: 16,
-        border: '1px solid rgba(0,245,255,0.3)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 12,
-        fontSize: 11,
-        fontWeight: 600,
-      }}>
-        <span style={{ color: '#00ff88' }}>🔴 LIVE</span>
-        <span style={{ color: 'rgba(255,255,255,0.7)' }}>•</span>
-        <span style={{ color: '#00f5ff' }}>Instant Crypto Payouts</span>
-      </div>
 
       {/* Header */}
       <div style={{ textAlign: 'center', marginBottom: 20 }}>
