@@ -137,6 +137,7 @@ class SpermRaceGame {
   public player: Car | null = null;
   public bot: Car | null = null;
   public extraBots: Car[] = [];
+  public serverPlayers: Map<string, Car> = new Map();
   public trails: Trail[] = [];
   public particles: Particle[] = [];
   public pickups: Pickup[] = [];
@@ -1363,8 +1364,6 @@ class SpermRaceGame {
   }
 
   setupRadar() {
-    // Radar disabled - cleaner UI
-    return;
     // Check if mobile - if yes, use proximity radar instead
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     
@@ -1744,7 +1743,62 @@ class SpermRaceGame {
     this.spawnQueueIndex += 1 + 31;
   }
 
-  randomEdgeSpawn(): { x: number; y: number; angle: number } {
+  syncServerPlayers(playerData: any[]) {
+    if (!this.app || !this.worldContainer) return;
+    const currentIds = new Set(playerData.map(p => p.id));
+    const myId = this.wsHud?.playerId;
+    
+    // Remove players who left
+    for (const [id, car] of this.serverPlayers.entries()) {
+      if (!currentIds.has(id)) {
+        if (car.sprite.parent) car.sprite.parent.removeChild(car.sprite);
+        if (car.nameplate && car.nameplate.parentElement) car.nameplate.parentElement.removeChild(car.nameplate);
+        if (car.trailGraphics && car.trailGraphics.parent) car.trailGraphics.parent.removeChild(car.trailGraphics);
+        this.serverPlayers.delete(id);
+      }
+    }
+
+    // Update or create players
+    playerData.forEach(p => {
+      if (p.id === myId) return;
+
+      let car = this.serverPlayers.get(p.id);
+      if (!car) {
+        const color = parseInt((p.sperm.color || "#ff00ff").replace("#", ""), 16);
+        car = this.createCar(p.sperm.position.x, p.sperm.position.y, color, "enemy");
+        car.id = p.id;
+        car.name = this.wsHud?.idToName[p.id] || p.id.slice(0, 4) + "…";
+        if (car.nameplate) car.nameplate.textContent = car.name;
+        this.serverPlayers.set(p.id, car);
+        this.worldContainer.addChild(car.sprite);
+        (car.sprite as any).zIndex = 50;
+      }
+
+      car.x = p.sperm.position.x;
+      car.y = p.sperm.position.y;
+      car.vx = p.sperm.velocity.x;
+      car.vy = p.sperm.velocity.y;
+      car.angle = p.sperm.angle;
+      car.sprite.rotation = p.sperm.angle;
+      car.sprite.position.set(car.x, car.y);
+      car.destroyed = !p.isAlive;
+      car.sprite.visible = p.isAlive;
+      if (car.nameplate) {
+        car.nameplate.style.display = p.isAlive ? "block" : "none";
+      }
+      
+      if (p.trail && this.trailContainer) {
+        if (!car.trailGraphics) {
+          car.trailGraphics = new PIXI.Graphics();
+          (car.trailGraphics as any).zIndex = 20;
+          this.trailContainer.addChild(car.trailGraphics);
+        }
+        const trailObj = { carId: car.id, car: car, points: p.trail.map((pt: any) => ({ x: pt.x, y: pt.y, time: pt.expiresAt - 3000, isBoosting: false })), graphics: car.trailGraphics };
+        this.renderTrail(trailObj);
+      }
+    });
+  }
+\n  randomEdgeSpawn(): { x: number; y: number; angle: number } {
     const left = -this.arena.width / 2;
     const right = this.arena.width / 2;
     const top = -this.arena.height / 2;
@@ -4093,8 +4147,7 @@ class SpermRaceGame {
   }
 
   updateRadar() {
-    // Radar disabled
-    return;
+    this.updateProximityRadar(); return;
     if (!this.radarCtx || !this.player) return;
     
     // Check if mobile - use proximity radar
@@ -4321,9 +4374,9 @@ class SpermRaceGame {
     }
   }
 
-  updateProximityRadar() {
-    // Radar disabled
-    return;
+  
+updateProximityRadar() {
+    if (!this.radarCtx || !this.player || !this.app) return;
     if (!this.radarCtx || !this.player || !this.app) return;
     
     // Throttle radar updates on mobile for better performance
@@ -4340,8 +4393,8 @@ class SpermRaceGame {
     const W = this.radar.width;
     const H = this.radar.height;
     ctx.clearRect(0, 0, W, H);
-    const allCars = [this.bot, ...this.extraBots].filter((car): car is Car => car !== null && !car.destroyed);
-    const detectionRange = 800;
+    const allCars = [this.bot, ...this.extraBots, ...Array.from(this.serverPlayers.values())].filter((car): car is Car => car !== null && !car.destroyed);
+    const detectionRange = 2500;
     const viewWidth = W / this.camera.zoom;
     const viewHeight = H / this.camera.zoom;
     const viewLeft = this.player.x - viewWidth / 2;
@@ -5342,6 +5395,7 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
           aliveSet,
           eliminationOrder: wsState.eliminationOrder || []
         };
+        game.syncServerPlayers(wsState.game.players);
       } catch {
         game.wsHud = { active: false, kills: {}, killFeed: [], playerId: null, idToName: {}, aliveSet: new Set(), eliminationOrder: [] } as any;
       }

@@ -236,7 +236,7 @@ export class LobbyManager {
         return true;
       }
       // If deadline passed, start with whoever is here if at least 2 players
-      if (Date.now() >= deadline && lobby.players.length >= 2) {
+      if (Date.now() >= deadline && (lobby.players.length >= 2 || lobby.mode === 'practice')) {
         if (lobby.mode === 'tournament') {
           const realPlayers = lobby.players.filter(p => !String(p).startsWith('BOT_'));
           if (realPlayers.length < 2) {
@@ -282,7 +282,7 @@ export class LobbyManager {
       // Lock lobby: no late joins here; start if minimal players else revert and requeue
       const minPlayers = dynamicMinPlayers();
       const deadline = this.lobbyDeadlineMs.get(lobby.lobbyId) || (Date.now() + LOBBY_MAX_WAIT_SEC * 1000);
-      if (lobby.players.length >= minPlayers || (Date.now() >= deadline && lobby.players.length >= 2)) {
+      if (lobby.players.length >= minPlayers || (Date.now() >= deadline && (lobby.players.length >= 2 || lobby.mode === 'practice'))) {
         this.clearLobbyTimers(lobby.lobbyId);
         this.onGameStart?.(lobby);
         this.lobbies.delete(lobby.lobbyId);
