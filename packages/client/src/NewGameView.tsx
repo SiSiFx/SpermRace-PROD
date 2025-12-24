@@ -1798,7 +1798,8 @@ class SpermRaceGame {
       }
     });
   }
-\n  randomEdgeSpawn(): { x: number; y: number; angle: number } {
+
+  randomEdgeSpawn(): { x: number; y: number; angle: number } {
     const left = -this.arena.width / 2;
     const right = this.arena.width / 2;
     const top = -this.arena.height / 2;
@@ -2574,14 +2575,24 @@ class SpermRaceGame {
         if ((b.kills || 0) !== (a.kills || 0)) return (b.kills || 0) - (a.kills || 0);
         return (b.elimIdx || 0) - (a.elimIdx || 0); // later elim higher index first
       }).slice(0, 5);
-      const aliveHeaderSrv = `<div style=\"display:flex;justify-content:space-between;align-items:center;margin-bottom:6px\">\n        <div style=\"color:${this.theme.text};font-weight:600;letter-spacing:0.01em;\">LEADERBOARD</div>\n        <div style=\"color:${this.theme.text};opacity:0.9;\">ALIVE: ${this.wsHud!.aliveSet.size}</div>\n      </div>`;
+      const aliveHeaderSrv = `<div style=\"display:flex;justify-content:space-between;align-items:center;margin-bottom:6px\">
+        <div style=\"color:${this.theme.text};font-weight:600;letter-spacing:0.01em;\">LEADERBOARD</div>
+        <div style=\"color:${this.theme.text};opacity:0.9;\">ALIVE: ${this.wsHud!.aliveSet.size}</div>
+      </div>`;
       const rowsSrv = sortedSrv.map((p, idx) => {
         const dotColor = p.alive ? '#10b981' : '#7b8796';
         const opacity = p.alive ? 1 : 0.6;
         const rank = idx + 1;
         const youTag = (this.wsHud!.playerId && p.id === this.wsHud!.playerId) ? ' <span style=\\"color:#22d3ee;opacity:0.9\\">(YOU)</span>' : '';
         return `
-          <div style=\"display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.08);border-radius:6px;gap:8px;opacity:${opacity}\">\n            <div style=\"display:flex;align-items:center;gap:8px\">\n              <div style=\"width:8px;height:8px;border-radius:50%;background:${dotColor}\"></div>\n              <div style=\"color:#9aa7b5;width:18px;text-align:center\">#${rank}</div>\n              <div style=\"color:${this.theme.text}\">${p.name}${youTag}</div>\n            </div>\n            <div style=\"color:${this.theme.text}\">KOs ${p.kills}</div>\n          </div>`;
+          <div style=\"display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.08);border-radius:6px;gap:8px;opacity:${opacity}\">
+            <div style=\"display:flex;align-items:center;gap:8px\">
+              <div style=\"width:8px;height:8px;border-radius:50%;background:${dotColor}\"></div>
+              <div style=\"color:#9aa7b5;width:18px;text-align:center\">#${rank}</div>
+              <div style=\"color:${this.theme.text}\">${p.name}${youTag}</div>
+            </div>
+            <div style=\"color:${this.theme.text}\">KOs ${p.kills}</div>
+          </div>`;
       }).join('');
       // Only update if content actually changed (prevent unnecessary reflows)
       const newContent = `${aliveHeaderSrv}${rowsSrv}`;
@@ -2602,7 +2613,10 @@ class SpermRaceGame {
       if (aAlive !== bAlive) return aAlive ? -1 : 1;
       return (b.elimAtMs || 0) - (a.elimAtMs || 0);
     }).slice(0, 5);
-    const aliveHeader = `<div style=\"display:flex;justify-content:space-between;align-items:center;margin-bottom:6px\">\n      <div style=\"color:${this.theme.text};font-weight:600;letter-spacing:0.01em;\">LEADERBOARD</div>\n      <div style=\"color:${this.theme.text};opacity:0.9;\">ALIVE: ${this.alivePlayers}</div>\n    </div>`;
+    const aliveHeader = `<div style=\"display:flex;justify-content:space-between;align-items:center;margin-bottom:6px\">
+      <div style=\"color:${this.theme.text};font-weight:600;letter-spacing:0.01em;\">LEADERBOARD</div>
+      <div style=\"color:${this.theme.text};opacity:0.9;\">ALIVE: ${this.alivePlayers}</div>
+    </div>`;
     const rows = sorted.map((c, idx) => {
       const isAlive = !c.destroyed;
       const dotColor = isAlive ? '#10b981' : '#7b8796';
@@ -2611,7 +2625,14 @@ class SpermRaceGame {
       const rank = idx + 1;
       const youTag = c.type === 'player' ? ' <span style=\\"color:#22d3ee;opacity:0.9\\">(YOU)</span>' : '';
       return `
-        <div style=\"display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.08);border-radius:6px;gap:8px;opacity:${opacity}\">\n          <div style=\"display:flex;align-items:center;gap:8px\">\n            <div style=\"width:8px;height:8px;border-radius:50%;background:${dotColor}\"></div>\n            <div style=\"color:#9aa7b5;width:18px;text-align:center\">#${rank}</div>\n            <div style=\"color:${nameColor}\">${c.name}${youTag}</div>\n          </div>\n          <div style=\"color:${this.theme.text}\">KOs ${c.kills}</div>\n        </div>`;
+        <div style=\"display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.08);border-radius:6px;gap:8px;opacity:${opacity}\">
+          <div style=\"display:flex;align-items:center;gap:8px\">
+            <div style=\"width:8px;height:8px;border-radius:50%;background:${dotColor}\"></div>
+            <div style=\"color:#9aa7b5;width:18px;text-align:center\">#${rank}</div>
+            <div style=\"color:${nameColor}\">${c.name}${youTag}</div>
+          </div>
+          <div style=\"color:${this.theme.text}\">KOs ${c.kills}</div>
+        </div>`;
     }).join('');
     // Only update if content actually changed (prevent unnecessary reflows)
     const newContent = `${aliveHeader}${rows}`;
