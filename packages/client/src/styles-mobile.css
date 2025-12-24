@@ -33,7 +33,7 @@
   background: rgba(0, 0, 0, 0.7);
   padding: 8px 12px;
   border-radius: 20px;
-  display: flex;
+  display: flex; justify-content: center; align-items: center;
   align-items: center;
   gap: 8px;
   font-size: 12px;
@@ -52,7 +52,7 @@
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  display: flex;
+  display: flex; justify-content: center; align-items: center;
   align-items: center;
   justify-content: center;
   cursor: pointer;
@@ -69,7 +69,7 @@
 }
 
 .mobile-landing-container {
-  display: flex;
+  display: flex; justify-content: center; align-items: center;
   flex-direction: column;
   justify-content: center;
   height: 100vh;
@@ -84,7 +84,7 @@
 
 .mobile-brand-section {
   flex: 1;
-  display: flex;
+  display: flex; justify-content: center; align-items: center;
   flex-direction: column;
   justify-content: center;
   align-items: center;
@@ -106,7 +106,7 @@
 }
 
 .mobile-stats-row {
-  display: flex;
+  display: flex; justify-content: center; align-items: center;
   gap: 12px;
   justify-content: center;
   flex-wrap: wrap;
@@ -146,7 +146,7 @@
 
 /* Mobile CTA Section */
 .mobile-cta-section {
-  display: flex;
+  display: flex; justify-content: center; align-items: center;
   flex-direction: column;
   gap: 12px;
   padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px));
@@ -159,7 +159,7 @@
   background: linear-gradient(135deg, #00f5ff 0%, #00d4aa 50%, #00ff88 100%);
   border: 2px solid rgba(255, 255, 255, 0.4);
   border-radius: 16px;
-  display: flex;
+  display: flex; justify-content: center; align-items: center;
   align-items: center;
   justify-content: center;
   gap: 12px;
@@ -203,7 +203,7 @@
   background: rgba(0, 245, 255, 0.1);
   border: 1px solid rgba(0, 245, 255, 0.4);
   border-radius: 12px;
-  display: flex;
+  display: flex; justify-content: center; align-items: center;
   align-items: center;
   justify-content: center;
   gap: 10px;
@@ -222,7 +222,7 @@
 }
 
 .mobile-sol-price {
-  display: flex;
+  display: flex; justify-content: center; align-items: center;
   align-items: center;
   justify-content: center;
   gap: 10px;
@@ -257,7 +257,7 @@
 }
 
 .mobile-lobby-container {
-  display: flex;
+  display: flex; justify-content: center; align-items: center;
   flex-direction: column;
   height: 100vh;
   height: 100dvh;
@@ -268,7 +268,7 @@
 }
 
 .mobile-lobby-header {
-  display: flex;
+  display: flex; justify-content: center; align-items: center;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
@@ -286,7 +286,7 @@
 }
 
 .mobile-queue-status {
-  display: flex;
+  display: flex; justify-content: center; align-items: center;
   justify-content: space-between;
   align-items: center;
   padding: 14px 16px;
@@ -297,7 +297,7 @@
 }
 
 .mobile-queue-status .status-item {
-  display: flex;
+  display: flex; justify-content: center; align-items: center;
   align-items: center;
   gap: 8px;
   font-size: 14px;
@@ -315,7 +315,7 @@
 
 .mobile-lobby-orbit {
   flex: 1;
-  display: flex;
+  display: flex; justify-content: center; align-items: center;
   align-items: center;
   justify-content: center;
   position: relative;
@@ -369,7 +369,7 @@
 }
 
 .mobile-modes-container {
-  display: flex;
+  display: flex; justify-content: center; align-items: center;
   flex-direction: column;
   height: 100vh;
   height: 100dvh;
@@ -409,7 +409,7 @@
 .mobile-tiers-list {
   flex: 1;
   overflow-y: auto;
-  display: flex;
+  display: flex; justify-content: center; align-items: center;
   flex-direction: column;
   gap: 16px;
   margin-bottom: 16px;
@@ -437,7 +437,7 @@
 }
 
 .mobile-tier-card .tier-header {
-  display: flex;
+  display: flex; justify-content: center; align-items: center;
   align-items: center;
   gap: 12px;
   margin-bottom: 16px;
@@ -482,7 +482,7 @@
 }
 
 .mobile-tier-card .tier-info {
-  display: flex;
+  display: flex; justify-content: center; align-items: center;
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -548,7 +548,7 @@
 }
 
 .mobile-wallet-container {
-  display: flex;
+  display: flex; justify-content: center; align-items: center;
   flex-direction: column;
   height: 100vh;
   height: 100dvh;
@@ -580,7 +580,7 @@
   background: linear-gradient(135deg, #22d3ee, #14b8a6);
   border: none;
   border-radius: 16px;
-  display: flex;
+  display: flex; justify-content: center; align-items: center;
   align-items: center;
   gap: 20px;
   cursor: pointer;
@@ -597,7 +597,7 @@
   font-size: 36px;
   width: 50px;
   height: 50px;
-  display: flex;
+  display: flex; justify-content: center; align-items: center;
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.2);
@@ -635,7 +635,7 @@
 
 /* Mobile Prize Display */
 .mobile-prize-display {
-  display: flex;
+  display: flex; justify-content: center; align-items: center;
   align-items: center;
   justify-content: center;
   gap: 10px;
@@ -714,7 +714,7 @@
 }
 
 .mobile-results-container {
-  display: flex;
+  display: flex; justify-content: center; align-items: center;
   flex-direction: column;
   height: 100vh;
   height: 100dvh;
@@ -778,7 +778,7 @@
 }
 
 .mobile-result-stats {
-  display: flex;
+  display: flex; justify-content: center; align-items: center;
   gap: 16px;
   justify-content: center;
   margin-bottom: 32px;
@@ -793,7 +793,7 @@
 }
 
 .mobile-result-actions {
-  display: flex;
+  display: flex; justify-content: center; align-items: center;
   flex-direction: column;
   gap: 12px;
 }
@@ -850,7 +850,7 @@
 }
 
 .mobile-action-buttons {
-  display: flex;
+  display: flex; justify-content: center; align-items: center;
   gap: 12px;
   margin-top: 20px;
 }
@@ -928,7 +928,7 @@
   border: 1px solid rgba(0, 245, 255, 0.25);
   border-radius: 50%;
   color: #00f5ff;
-  display: flex;
+  display: flex; justify-content: center; align-items: center;
   align-items: center;
   justify-content: center;
   cursor: pointer;
