@@ -2257,7 +2257,7 @@ class SpermRaceGame {
         }
       }
       
-      const overviewEnd = this.preStart.durationMs * 0.65; const isOverview = remain > overviewEnd; let tacticalLbl = document.getElementById('tactical-overview-label'); if (isOverview && !tacticalLbl && this.uiContainer) { tacticalLbl = document.createElement('div'); tacticalLbl.id = 'tactical-overview-label'; Object.assign(tacticalLbl.style, { position: 'absolute', left: '50%', top: '20%', transform: 'translateX(-50%)', color: '#00f5ff', fontFamily: 'Orbitron, sans-serif', fontSize: '12px', fontWeight: '800', letterSpacing: '0.5em', textTransform: 'uppercase', opacity: '0.8', zIndex: '20', textShadow: '0 0 10px rgba(0, 245, 255, 0.5)' }); tacticalLbl.textContent = 'Tactical Overview'; this.uiContainer.appendChild(tacticalLbl); } else if (!isOverview && tacticalLbl) { tacticalLbl.remove(); }
+      const isOverview = remain > overviewEnd; let tacticalLbl = document.getElementById('tactical-overview-label'); if (isOverview && !tacticalLbl && this.uiContainer) { tacticalLbl = document.createElement('div'); tacticalLbl.id = 'tactical-overview-label'; Object.assign(tacticalLbl.style, { position: 'absolute', left: '50%', top: '20%', transform: 'translateX(-50%)', color: '#00f5ff', fontFamily: 'Orbitron, sans-serif', fontSize: '12px', fontWeight: '800', letterSpacing: '0.5em', textTransform: 'uppercase', opacity: '0.8', zIndex: '20', textShadow: '0 0 10px rgba(0, 245, 255, 0.5)' }); tacticalLbl.textContent = 'Tactical Overview'; this.uiContainer.appendChild(tacticalLbl); } else if (!isOverview && tacticalLbl) { tacticalLbl.remove(); }
       // Show countdown HUD with AAA-grade animations
       let cd = document.getElementById('prestart-countdown');
       if (!cd && this.uiContainer) {
