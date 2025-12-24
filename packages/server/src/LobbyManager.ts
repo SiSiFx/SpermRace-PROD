@@ -42,7 +42,8 @@ export class LobbyManager {
   private playerLobbyMap: Map<string, string> = new Map();
   private smartContractService: SmartContractService;
   private lobbyDeadlineMs: Map<string, number> = new Map();
-  private lobbyCountdownStartMs: Map<string, number> = new Map();\n  private lobbyStartAtMs: Map<string, number> = new Map();
+  private lobbyCountdownStartMs: Map<string, number> = new Map();
+  private lobbyStartAtMs: Map<string, number> = new Map();
   private lobbyCountdownTick: Map<string, NodeJS.Timeout> = new Map();
   private lobbyStartTimeout: Map<string, NodeJS.Timeout> = new Map();
   
