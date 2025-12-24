@@ -2,7 +2,7 @@ import { useEffect, useState, ReactNode } from 'react';
 import { GameController, Skull, WarningCircle } from 'phosphor-react';
 
 interface PracticeFullTutorialProps {
-  visible: boolean;
+
   onDone: () => void;
 }
 
@@ -64,7 +64,7 @@ export function PracticeFullTutorial({ onDone }: { onDone: () => void }) {
         window.clearTimeout(timeoutId);
       }
     };
-  }, [visible, onDone]);
+  }, [ onDone]);
 
   // Simple countdown overlay for the 7s tutorial window
   useEffect(() => {
@@ -80,7 +80,7 @@ export function PracticeFullTutorial({ onDone }: { onDone: () => void }) {
       }
     }, 1000);
     return () => window.clearInterval(id);
-  }, [visible]);
+  }, []);
 
   
 
