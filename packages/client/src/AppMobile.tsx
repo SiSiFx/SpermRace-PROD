@@ -648,6 +648,7 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
 
   const handleBoost = () => {
     console.log('[AppMobile] Boost button clicked, countdown:', gameCountdown);
+    if ('vibrate' in navigator) navigator.vibrate(15);
     const event = new CustomEvent('mobile-boost');
     window.dispatchEvent(event);
   };
@@ -1280,6 +1281,7 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void; 
 
   const handleBoost = () => {
     // console.log('[AppMobile] Boost button clicked, countdown:', gameCountdown);
+    if ('vibrate' in navigator) navigator.vibrate(15);
     const event = new CustomEvent('mobile-boost');
     window.dispatchEvent(event);
 

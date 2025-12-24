@@ -592,6 +592,11 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
             case 'playerEliminated': {
               const killer = msg.payload?.eliminatorId as string | undefined;
               const victim = msg.payload?.playerId as string;
+              
+              // Haptic feedback for kill
+              if (killer === state.playerId && 'vibrate' in navigator) {
+                navigator.vibrate(50);
+              }
               setState(s => {
                 const newKills = killer ? { ...s.kills, [killer]: (s.kills[killer] || 0) + 1 } : s.kills;
                 const newFeed = [{ killerId: killer, victimId: victim, ts: Date.now() }, ...s.killFeed].slice(0, 6);
