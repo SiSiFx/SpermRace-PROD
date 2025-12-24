@@ -515,7 +515,7 @@ function Landing({
           <section
             style={{
               marginTop: 10,
-              display: 'flex',
+              display: 'flex', alignItems: 'center',
               flexDirection: 'column',
               gap: 12,
               width: '100%',
