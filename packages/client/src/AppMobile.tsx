@@ -371,12 +371,12 @@ function Landing({
           margin: '0 auto',
           height: '100dvh',
           // Top padding clears wallet badge, bottom padding handled by footer
-          padding: '40px 24px 0',
+          padding: '20px 24px 0',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
           alignItems: 'center', // Center everything horizontally
-          gap: 24,
+          gap: 16,
           boxSizing: 'border-box',
         }}
       >
@@ -410,7 +410,7 @@ function Landing({
               justifyContent: 'center',
               alignItems: 'baseline',
               gap: 10,
-              fontSize: 44,
+              fontSize: 36,
               lineHeight: 1,
               textShadow: '0 0 30px rgba(0, 245, 255, 0.4), 0 0 60px rgba(0, 245, 255, 0.2)',
               margin: 0,
@@ -552,7 +552,7 @@ function Landing({
             display: 'flex',
             justifyContent: 'center', // Center navigation buttons
             alignItems: 'center',
-            marginTop: 40, // Bring closer to main content, avoid "too low" feeling
+            marginTop: 20, // Bring closer to main content, avoid "too low" feeling
             paddingBottom: 'calc(40px + env(safe-area-inset-bottom, 0px))', // Safe area respect
             gap: 16,
             width: '100%',
@@ -829,7 +829,7 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
           CHOOSE YOUR BATTLE
         </div>
         <h1 style={{
-          fontSize: 26,
+          fontSize: 22,
           fontWeight: 900,
           color: '#fff',
           margin: 0,
@@ -982,7 +982,7 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
           Turn ${selected.usd} into
         </div>
         <div style={{
-          fontSize: 42,
+          fontSize: 32,
           fontWeight: 900,
           color: '#00ff88',
           textShadow: '0 0 35px rgba(0,255,136,0.6)',
@@ -1001,34 +1001,6 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
         </div>
       </div>
 
-      {/* Feature Highlights */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(2, 1fr)',
-        gap: 8,
-        marginBottom: 14,
-      }}>
-        {[
-          { icon: '⚡', text: 'Instant Payouts' },
-          { icon: '🏆', text: 'Winner Takes All' },
-          { icon: '🔒', text: 'Blockchain Verified' },
-          { icon: '⏱️', text: '3-5 Min Rounds' },
-        ].map((feature, i) => (
-          <div key={i} style={{
-            background: 'rgba(255,255,255,0.03)',
-            border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: 10,
-            padding: '8px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            fontSize: 10,
-            color: 'rgba(255,255,255,0.7)',
-            fontWeight: 600,
-          }}>
-            <span style={{ fontSize: 14 }}>{feature.icon}</span>
-            <span>{feature.text}</span>
-          </div>
         ))}
       </div>
 
@@ -1039,7 +1011,7 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
           disabled={isDisabled}
           style={{
             width: '100%',
-            padding: '18px',
+            padding: '14px',
             borderRadius: 14,
             border: 'none',
             background: isDisabled
