@@ -29,14 +29,12 @@ export function PracticeModeSelection({ onSelectSolo, onBack, onNotify }: Practi
 
     const handleJoinOnlineClick = () => {
         if (isDisabled) return;
-
-        // If wallet connected, join directly as authenticated user
-        if (publicKey) {
-            joinLobby(false);
-        } else {
-            // Otherwise, show guest name input
-            setShowNameInput(true);
+        
+        // For practice, always use guest flow to avoid signature requests
+        if (publicKey && !guestName) {
+            setGuestName(publicKey.toBase58().slice(0, 4) + '…' + publicKey.toBase58().slice(-4));
         }
+        setShowNameInput(true);
     };
 
     const joinLobby = async (asGuest: boolean) => {

@@ -52,6 +52,7 @@ import {
   House,
   CheckCircle,
   Atom,
+  Question,
 } from 'phosphor-react';
 import './leaderboard.css';
 
@@ -167,34 +168,26 @@ function AppInner() {
       {/* Portrait-only orientation enforcement */}
       <OrientationWarning />
 
-      {/* Mobile: Compact header wallet - hide during gameplay */}
-      {screen !== 'game' && screen !== 'practice' && <HeaderWallet screen={screen} />}
-
-      <div id="bg-particles" />
-
-      {/* Status chip + Help toggle - hide during game to avoid HUD clutter */}
-      {screen !== 'game' && screen !== 'practice' && (
+      {/* Mobile: Header Utilities - hide during gameplay */}
+      {screen !== "game" && screen !== "practice" && (
         <>
-          <div style={{ position: 'fixed', top: 8, right: 8, zIndex: 60, padding: '6px 10px', borderRadius: 8, background: 'rgba(0,0,0,0.55)', color: '#c7d2de', border: '1px solid rgba(255,255,255,0.12)', fontSize: 11 }}>
-            {wsState.phase === 'authenticating' ? 'Authenticating…' : wsState.phase === 'lobby' ? 'Lobby' : wsState.phase === 'game' ? 'In Game' : wsState.phase === 'connecting' ? 'Connecting…' : (publicKey ? 'Connected' : 'Not Connected')}
-          </div>
-
+          <HeaderWallet screen={screen} wsState={wsState} publicKey={publicKey} />
           <button
+            className="mobile-help-btn"
             onClick={() => setShowHowTo(true)}
             title="How to play"
-            style={{ position: 'fixed', top: 8, left: 8, zIndex: 60, padding: '6px 8px', borderRadius: 8, background: 'rgba(0,0,0,0.55)', color: '#c7d2de', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12, cursor: 'pointer' }}
           >
-            ?
+            <Question size={20} weight="bold" />
           </button>
         </>
       )}
 
       {wsState.lastError && (
-        <div className="loading-overlay mobile-overlay" style={{ display: 'flex', background: 'rgba(0,0,0,0.85)' }}>
+        <div className="loading-overlay mobile-overlay" style={{ display: "flex", background: "rgba(0,0,0,0.85)" }}>
           <div className="modal-card mobile-modal">
             <div
               className="modal-title"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
             >
               <WarningCircle size={20} weight="fill" />
               <span>Error</span>
@@ -309,27 +302,54 @@ function AppInner() {
   );
 }
 
-function HeaderWallet({ screen }: { screen: string }) {
-  const { publicKey, disconnect } = useWallet() as any;
+function HeaderWallet({ screen, wsState, publicKey }: { screen: string; wsState: any; publicKey: any }) {
+  const { disconnect } = useWallet() as any;
 
-  if (publicKey) {
-    const short = `${publicKey.slice(0, 4)}…${publicKey.slice(-4)}`;
-    return (
-      <div className="mobile-wallet-badge">
-        <span className="wallet-address">{short}</span>
-        <button className="wallet-disconnect" onClick={() => disconnect?.()}>✕</button>
-      </div>
-    );
-  }
-  if (screen === 'game') {
-    return (
-      <div className="mobile-wallet-badge">
-        <GameController size={16} weight="fill" style={{ marginRight: 6 }} />
-        <span>Practice</span>
-      </div>
-    );
-  }
-  return null;
+  if (!publicKey) return null;
+
+  const short = `${publicKey.slice(0, 4)}…${publicKey.slice(-4)}`;
+
+  return (
+    <div 
+      className="mobile-wallet-badge" 
+      style={{ 
+        border: "1px solid rgba(0, 245, 255, 0.3)",
+        background: "linear-gradient(135deg, rgba(0, 245, 255, 0.1), rgba(0, 255, 136, 0.05))",
+        boxShadow: "0 0 15px rgba(0, 245, 255, 0.1)",
+        padding: "6px 12px",
+        borderRadius: "12px",
+        display: "flex",
+        alignItems: "center",
+        gap: "8px"
+      }}
+    >
+      <span style={{ 
+        fontSize: "10px", 
+        fontWeight: 800, 
+        letterSpacing: "0.05em",
+        color: "#00f5ff",
+        textTransform: "uppercase"
+      }}>
+        {short}
+      </span>
+      <button 
+        style={{ 
+          background: "rgba(255,255,255,0.1)", 
+          border: "none", 
+          color: "#fff", 
+          width: "18px", 
+          height: "18px", 
+          borderRadius: "50%", 
+          fontSize: "10px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "pointer"
+        }} 
+        onClick={() => disconnect?.()}
+      >✕</button>
+    </div>
+  );
 }
 
 interface LandingProps {
@@ -369,14 +389,14 @@ function Landing({
           width: '100%',
           maxWidth: 600,
           margin: '0 auto',
-          minHeight: '100dvh',
+          height: '100dvh',
           // Top padding clears wallet badge, bottom padding handled by footer
-          padding: '80px 24px 0',
+          padding: '20px 24px 0',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
           alignItems: 'center', // Center everything horizontally
-          gap: 24,
+          gap: 16,
           boxSizing: 'border-box',
         }}
       >
@@ -410,7 +430,7 @@ function Landing({
               justifyContent: 'center',
               alignItems: 'baseline',
               gap: 10,
-              fontSize: 44,
+              fontSize: 36,
               lineHeight: 1,
               textShadow: '0 0 30px rgba(0, 245, 255, 0.4), 0 0 60px rgba(0, 245, 255, 0.2)',
               margin: 0,
@@ -552,8 +572,8 @@ function Landing({
             display: 'flex',
             justifyContent: 'center', // Center navigation buttons
             alignItems: 'center',
-            marginTop: 40, // Bring closer to main content, avoid "too low" feeling
-            paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 0px))', // Safe area respect
+            marginTop: 20, // Bring closer to main content, avoid "too low" feeling
+            paddingBottom: 'calc(40px + env(safe-area-inset-bottom, 0px))', // Safe area respect
             gap: 16,
             width: '100%',
             maxWidth: 400,
@@ -616,13 +636,7 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
   const [step, setStep] = useState<'lobby' | 'game'>('lobby');
   const [meId] = useState<string>('PLAYER_' + Math.random().toString(36).slice(2, 8));
   const [players, setPlayers] = useState<string[]>([]);
-  const [showPracticeIntro, setShowPracticeIntro] = useState<boolean>(() => {
-    try {
-      return !localStorage.getItem('sr_practice_full_tuto_seen');
-    } catch {
-      return true;
-    }
-  });
+  const [showPracticeIntro, setShowPracticeIntro] = useState<boolean>(true); // Always show tutorial
 
   // Mobile control state (MUST be at top level, not inside conditionals!)
   const [gameCountdown, setGameCountdown] = useState<number>(6); // 6 seconds to account for game engine preStart
@@ -634,6 +648,7 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
 
   const handleBoost = () => {
     console.log('[AppMobile] Boost button clicked, countdown:', gameCountdown);
+    if ('vibrate' in navigator) navigator.vibrate(15);
     const event = new CustomEvent('mobile-boost');
     window.dispatchEvent(event);
   };
@@ -662,6 +677,7 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
     const progressPct = 0;
     return (
       <div className="screen active mobile-lobby-screen">
+      {showTutorial && <PracticeFullTutorial onDone={() => setShowTutorial(false)} />}
         <div className="mobile-lobby-container">
           <div className="mobile-lobby-header">
             <h2 className="mobile-lobby-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -700,12 +716,10 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
           </div>
         </div>
         <PracticeFullTutorial
-          visible={showPracticeIntro}
+          
           onDone={() => {
             setShowPracticeIntro(false);
-            try {
-              localStorage.setItem('sr_practice_full_tuto_seen', '1');
-            } catch { }
+
           }}
         />
       </div>
@@ -813,27 +827,10 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
       flexDirection: 'column',
       padding: '20px 16px',
       paddingTop: 'calc(20px + env(safe-area-inset-top, 0px))',
-      paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 0px))',
+      paddingBottom: 'calc(40px + env(safe-area-inset-bottom, 0px))',
       overflowY: 'auto',
+      WebkitOverflowScrolling: 'touch',
     }}>
-      {/* Live Stats Banner */}
-      <div style={{
-        background: 'linear-gradient(90deg, rgba(0,245,255,0.15), rgba(0,255,136,0.15))',
-        borderRadius: 12,
-        padding: '10px 14px',
-        marginBottom: 16,
-        border: '1px solid rgba(0,245,255,0.3)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 12,
-        fontSize: 11,
-        fontWeight: 600,
-      }}>
-        <span style={{ color: '#00ff88' }}>🔴 LIVE</span>
-        <span style={{ color: 'rgba(255,255,255,0.7)' }}>•</span>
-        <span style={{ color: '#00f5ff' }}>Instant Crypto Payouts</span>
-      </div>
 
       {/* Header */}
       <div style={{ textAlign: 'center', marginBottom: 20 }}>
@@ -846,7 +843,7 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
           CHOOSE YOUR BATTLE
         </div>
         <h1 style={{
-          fontSize: 26,
+          fontSize: 22,
           fontWeight: 900,
           color: '#fff',
           margin: 0,
@@ -999,7 +996,7 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
           Turn ${selected.usd} into
         </div>
         <div style={{
-          fontSize: 42,
+          fontSize: 32,
           fontWeight: 900,
           color: '#00ff88',
           textShadow: '0 0 35px rgba(0,255,136,0.6)',
@@ -1018,36 +1015,6 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
         </div>
       </div>
 
-      {/* Feature Highlights */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(2, 1fr)',
-        gap: 8,
-        marginBottom: 14,
-      }}>
-        {[
-          { icon: '⚡', text: 'Instant Payouts' },
-          { icon: '🏆', text: 'Winner Takes All' },
-          { icon: '🔒', text: 'Blockchain Verified' },
-          { icon: '⏱️', text: '3-5 Min Rounds' },
-        ].map((feature, i) => (
-          <div key={i} style={{
-            background: 'rgba(255,255,255,0.03)',
-            border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: 10,
-            padding: '8px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            fontSize: 10,
-            color: 'rgba(255,255,255,0.7)',
-            fontWeight: 600,
-          }}>
-            <span style={{ fontSize: 14 }}>{feature.icon}</span>
-            <span>{feature.text}</span>
-          </div>
-        ))}
-      </div>
 
       {/* Action Buttons */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1056,7 +1023,7 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
           disabled={isDisabled}
           style={{
             width: '100%',
-            padding: '18px',
+            padding: '14px',
             borderRadius: 14,
             border: 'none',
             background: isDisabled
@@ -1206,6 +1173,7 @@ function Lobby({ onStart: _onStart, onBack, onRefund }: { onStart: () => void; o
 
   return (
     <div className="screen active mobile-lobby-screen">
+      {showTutorial && <PracticeFullTutorial onDone={() => setShowTutorial(false)} />}
       <div className="mobile-lobby-container">
         <div className="mobile-lobby-header">
           <h2 className="mobile-lobby-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1232,38 +1200,75 @@ function Lobby({ onStart: _onStart, onBack, onRefund }: { onStart: () => void; o
           </div>
         </div>
 
-        <div className="mobile-lobby-orbit">
-          <div className="orbit-center">
-            <div className="mobile-lobby-spinner"></div>
-          </div>
-          <div className="orbit-ring">
-            {players.map((p: string, i: number) => (
-              <div key={p} className="orbit-sperm" style={{ '--i': i, '--n': players.length } as any} />
-            ))}
-          </div>
+        {/* Player List */}
+        <div style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "8px",
+          justifyContent: "center",
+          marginBottom: "16px",
+          maxHeight: "80px",
+          overflowY: "auto",
+          padding: "4px"
+        }}>
+          {players.map((pid: string) => {
+            const name = state.lobby?.playerNames?.[pid] || (pid.startsWith("guest-") ? "Guest" : pid.slice(0, 4) + "…" + pid.slice(-4));
+            const isMe = pid === state.playerId;
+            return (
+              <div key={pid} style={{
+                fontSize: "10px",
+                padding: "4px 8px",
+                borderRadius: "6px",
+                background: isMe ? "rgba(0, 245, 255, 0.15)" : "rgba(255, 255, 255, 0.05)",
+                border: isMe ? "1px solid rgba(0, 245, 255, 0.3)" : "1px solid rgba(255, 255, 255, 0.1)",
+                color: isMe ? "#00f5ff" : "rgba(255, 255, 255, 0.7)",
+                fontWeight: isMe ? 800 : 500,
+                textTransform: "uppercase",
+                letterSpacing: "0.05em"
+              }}>
+                {name}
+              </div>
+            );
+          })}
+        </div>
 
-          {/* Status Messages */}
-          <div className="mobile-lobby-status-text">
-            {isRefunding ? (
-              <>
-                <div className="refund-processing">
-                  <div className="spinner-small"></div>
-                  <span>Processing refund...</span>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "280px" }}>
+          {state.countdown ? (
+            <div className="modern-countdown-container" style={{ animation: state.countdown.remaining <= 5 ? "countdown-pulse 0.5s ease-in-out infinite" : "none" }}>
+              <svg className="modern-ring-svg" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="2" />
+                <circle 
+                  cx="50" cy="50" r="45" fill="none" 
+                  stroke={state.countdown.remaining <= 5 ? "#ff4d4d" : "#00f5ff"} 
+                  strokeWidth="4" 
+                  strokeDasharray="283" 
+                  strokeDashoffset={283 - (283 * (state.countdown.remaining / 15))}
+                  style={{ transition: "stroke-dashoffset 1s linear, stroke 0.3s ease", filter: "drop-shadow(0 0 8px " + (state.countdown.remaining <= 5 ? "#ff4d4d" : "#00f5ff") + ")" }}
+                />
+              </svg>
+              <div className="modern-timer-value" style={{ color: state.countdown.remaining <= 5 ? "#ff4d4d" : "#fff" }}>
+                {state.countdown.remaining}
+              </div>
+              <div style={{ position: "absolute", bottom: "-20px", fontSize: "10px", fontWeight: 800, color: "rgba(255,255,255,0.4)", letterSpacing: "0.2em" }}>READY TO RACE</div>
+            </div>
+          ) : (
+            <div className="mobile-lobby-orbit">
+              <div className="orbit-center"><div className="mobile-lobby-spinner"></div></div>
+              <div className="orbit-ring">
+                {players.map((p: string, i: number) => (
+                  <div key={p} className="orbit-sperm" style={{ "--i": i, "--n": players.length } as any} />
+                ))}
+              </div>
+              <div style={{ marginTop: "120px", textAlign: "center", zIndex: 10 }}>
+                <div style={{ fontSize: "12px", color: "#00f5ff", fontWeight: 800, letterSpacing: "0.1em" }}>
+                  {isRefunding ? "PROCESSING REFUND..." : isSolo ? "WAITING FOR PLAYERS..." : "PREPARING ARENA..."}
                 </div>
-              </>
-            ) : isSolo && refundCountdown && refundCountdown <= 20 ? (
-              <>
-                <div className="waiting-text">Waiting for players...</div>
-                <div className="refund-warning">Auto-refund in {refundCountdown}s</div>
-              </>
-            ) : isSolo ? (
-              <div className="waiting-text">Waiting for players...</div>
-            ) : state.countdown ? (
-              <div className="starting-text">Starting in {state.countdown.remaining}s</div>
-            ) : (
-              <div className="waiting-text">Waiting for more players...</div>
-            )}
-          </div>
+                {isSolo && refundCountdown && (
+                  <div style={{ fontSize: "10px", color: "#ff4d4d", marginTop: "4px", fontWeight: 600 }}>AUTO-REFUND IN {refundCountdown}S</div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="mobile-lobby-footer">
@@ -1313,6 +1318,7 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void; 
 
   const handleBoost = () => {
     // console.log('[AppMobile] Boost button clicked, countdown:', gameCountdown);
+    if ('vibrate' in navigator) navigator.vibrate(15);
     const event = new CustomEvent('mobile-boost');
     window.dispatchEvent(event);
 

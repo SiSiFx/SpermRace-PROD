@@ -31,7 +31,7 @@ export function startSpermBackground(): void {
   canvas.style.height = '100%';
   canvas.style.zIndex = '0';
   canvas.style.opacity = '0.9';
-  canvas.style.cursor = 'pointer';
+  canvas.style.pointerEvents = 'none';
 
   const container = document.getElementById('bg-particles');
   if (container) {

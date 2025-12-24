@@ -1255,17 +1255,70 @@ function Lobby({ onStart: _onStart, onBack }: { onStart: () => void; onBack: () 
           <div className="queue-right"><span>Target: {state.lobby?.maxPlayers ?? 16}</span></div>
         </div>
 
-        <div className="lobby-orbit">
-          <div className="orbit-center" />
-          <div className="orbit-ring">
-            {players.map((p: string, i: number) => (
-              <div key={p} className="orbit-sperm" style={{ '--i': i, '--n': players.length } as any} />
-            ))}
-          </div>
-          {state.countdown && (
-            <div className="countdown-halo">
-              <div className="halo-ring" />
-              <div className="halo-timer">{state.countdown.remaining}s</div>
+        {/* Player List */}
+        <div style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "12px",
+          justifyContent: "center",
+          margin: "24px 0",
+          maxHeight: "120px",
+          overflowY: "auto",
+          padding: "8px"
+        }}>
+          {players.map((pid: string) => {
+            const name = state.lobby?.playerNames?.[pid] || (pid.startsWith("guest-") ? "Guest" : pid.slice(0, 4) + "…" + pid.slice(-4));
+            const isMe = pid === state.playerId;
+            return (
+              <div key={pid} style={{
+                fontSize: "12px",
+                padding: "6px 12px",
+                borderRadius: "8px",
+                background: isMe ? "rgba(0, 245, 255, 0.15)" : "rgba(255, 255, 255, 0.05)",
+                border: isMe ? "1px solid rgba(0, 245, 255, 0.3)" : "1px solid rgba(255, 255, 255, 0.1)",
+                color: isMe ? "#00f5ff" : "rgba(255, 255, 255, 0.7)",
+                fontWeight: isMe ? 800 : 500,
+                textTransform: "uppercase",
+                letterSpacing: "0.05em"
+              }}>
+                {name}
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "350px", position: "relative" }}>
+          {state.countdown ? (
+            <div className="modern-countdown-container" style={{ width: "220px", height: "220px", animation: state.countdown.remaining <= 5 ? "countdown-pulse 0.5s ease-in-out infinite" : "none" }}>
+              <svg className="modern-ring-svg" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="2" />
+                <circle 
+                  cx="50" cy="50" r="45" fill="none" 
+                  stroke={state.countdown.remaining <= 5 ? "#ff4d4d" : "#00f5ff"} 
+                  strokeWidth="3" 
+                  strokeDasharray="283" 
+                  strokeDashoffset={283 - (283 * (state.countdown.remaining / 15))}
+                  style={{ transition: "stroke-dashoffset 1s linear, stroke 0.3s ease", filter: "drop-shadow(0 0 12px " + (state.countdown.remaining <= 5 ? "#ff4d4d" : "#00f5ff") + ")" }}
+                />
+              </svg>
+              <div className="modern-timer-value" style={{ fontSize: "64px", color: state.countdown.remaining <= 5 ? "#ff4d4d" : "#fff" }}>
+                {state.countdown.remaining}
+              </div>
+              <div style={{ position: "absolute", bottom: "-30px", fontSize: "12px", fontWeight: 800, color: "rgba(255,255,255,0.4)", letterSpacing: "0.3em", textTransform: "uppercase" }}>Synchronizing Pilot Systems</div>
+            </div>
+          ) : (
+            <div className="lobby-orbit">
+              <div className="orbit-center" />
+              <div className="orbit-ring">
+                {players.map((p: string, i: number) => (
+                  <div key={p} className="orbit-sperm" style={{ "--i": i, "--n": players.length } as any} />
+                ))}
+              </div>
+              <div style={{ marginTop: "160px", textAlign: "center" }}>
+                <div style={{ fontSize: "14px", color: "#00f5ff", fontWeight: 800, letterSpacing: "0.2em", textTransform: "uppercase" }}>
+                  {estimatedPrizeUsd > 0 ? "WAITING FOR COMPETITORS..." : "WAITING FOR PILOTS..."}
+                </div>
+              </div>
             </div>
           )}
         </div>
