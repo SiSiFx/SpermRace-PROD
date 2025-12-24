@@ -1234,37 +1234,81 @@ function Lobby({ onStart: _onStart, onBack }: { onStart: () => void; onBack: () 
   const estimatedPrizeUsd = state.lobby ? Math.max(0, Math.floor(realPlayers.length * (state.lobby.entryFee as number) * 0.85)) : 0;
 
   return (
-    <div className="screen active pc-lobby" id="lobby-screen">
-      <div className="lobby-container pc-lobby-container">
-        <div className="lobby-header">
-          <div className="lobby-title">Tournament Lobby</div>
-          <div className="lobby-status">{players.length}/{state.lobby?.maxPlayers ?? 16}</div>
-        </div>
+    <div className="screen active pc-lobby" id="lobby-screen" style={{ 
+      background: "linear-gradient(180deg, #030712 0%, #0a1628 100%)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center"
+    }}>
+      <div className="lobby-container pc-lobby-container" style={{
+        maxWidth: "800px",
+        width: "100%",
+        background: "rgba(10, 20, 35, 0.6)",
+        backdropFilter: "blur(20px)",
+        border: "1px solid rgba(0, 245, 255, 0.2)",
+        borderRadius: "24px",
+        padding: "48px",
+        boxShadow: "0 40px 100px rgba(0,0,0,0.6), inset 0 0 40px rgba(0, 245, 255, 0.05)"
+      }}>
+        <header style={{ textAlign: "center", marginBottom: "40px" }}>
+          <div style={{ marginBottom: 20, display: "flex", justifyContent: "center" }}>
+            <Atom size={48} weight="duotone" color="#00f5ff" style={{ filter: "drop-shadow(0 0 15px rgba(0, 245, 255, 0.6))" }} />
+          </div>
+          <div style={{ fontSize: 12, letterSpacing: "0.4em", color: "#00f5ff", textTransform: "uppercase", fontWeight: 800, marginBottom: 8 }}>
+            Arena Protocol
+          </div>
+          <h1 style={{ fontSize: 42, fontWeight: 900, color: "#fff", margin: 0, fontFamily: "Orbitron, sans-serif", letterSpacing: "0.05em" }}>
+            LOBBY
+          </h1>
+        </header>
 
-        {state.lobby && (
-          <div className="pc-prize-info">
-            <span className="label">Estimated Prize Pool:</span>
-            <span className="amount">${estimatedPrizeUsd}</span>
-            <span className="note">(85% to winner)</span>
+        {state.lobby && state.lobby.entryFee > 0 && (
+          <div style={{
+            background: "linear-gradient(135deg, rgba(0, 255, 136, 0.15), rgba(0, 255, 136, 0.05))",
+            border: "1px solid rgba(0, 255, 136, 0.3)",
+            borderRadius: "16px",
+            padding: "20px",
+            marginBottom: "32px",
+            textAlign: "center",
+            boxShadow: "0 0 30px rgba(0, 255, 136, 0.1)"
+          }}>
+            <div style={{ fontSize: 12, color: "rgba(0, 255, 136, 0.8)", fontWeight: 800, letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 8 }}>
+              Estimated Prize Pool
+            </div>
+            <div style={{ fontSize: 48, fontWeight: 900, color: "#00ff88", textShadow: "0 0 25px rgba(0, 255, 136, 0.6)" }}>
+              ${estimatedPrizeUsd}
+            </div>
           </div>
         )}
 
-        <div className="queue-bar pc-queue">
-          <div className="queue-left"><span className="queue-dot" /><span>{players.length} Joined</span></div>
-          <div className="queue-center"><span>Waiting for Players</span></div>
-          <div className="queue-right"><span>Target: {state.lobby?.maxPlayers ?? 16}</span></div>
+        <div style={{ 
+          display: "grid", 
+          gridTemplateColumns: "1fr 1fr", 
+          gap: "20px", 
+          marginBottom: "32px" 
+        }}>
+          <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "16px", padding: "16px", textAlign: "center" }}>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>Pilots Synchronized</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: "#00f5ff" }}>{players.length} / {state.lobby?.maxPlayers ?? 16}</div>
+          </div>
+          <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "16px", padding: "16px", textAlign: "center" }}>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>Entry Protocol</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: "#fff" }}>{state.lobby?.entryFee === 0 ? "FREE" : "$" + state.lobby?.entryFee}</div>
+          </div>
         </div>
 
-        {/* Player List */}
         <div style={{
           display: "flex",
           flexWrap: "wrap",
-          gap: "12px",
+          gap: "10px",
           justifyContent: "center",
-          margin: "24px 0",
-          maxHeight: "120px",
+          marginBottom: "40px",
+          maxHeight: "150px",
           overflowY: "auto",
-          padding: "8px"
+          padding: "12px",
+          background: "rgba(0,0,0,0.2)",
+          borderRadius: "16px",
+          border: "1px solid rgba(255,255,255,0.05)"
         }}>
           {players.map((pid: string) => {
             const name = state.lobby?.playerNames?.[pid] || (pid.startsWith("guest-") ? "Guest" : pid.slice(0, 4) + "…" + pid.slice(-4));
@@ -1272,7 +1316,7 @@ function Lobby({ onStart: _onStart, onBack }: { onStart: () => void; onBack: () 
             return (
               <div key={pid} style={{
                 fontSize: "12px",
-                padding: "6px 12px",
+                padding: "6px 14px",
                 borderRadius: "8px",
                 background: isMe ? "rgba(0, 245, 255, 0.15)" : "rgba(255, 255, 255, 0.05)",
                 border: isMe ? "1px solid rgba(0, 245, 255, 0.3)" : "1px solid rgba(255, 255, 255, 0.1)",
@@ -1287,9 +1331,9 @@ function Lobby({ onStart: _onStart, onBack }: { onStart: () => void; onBack: () 
           })}
         </div>
 
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "350px", position: "relative" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "220px", position: "relative" }}>
           {state.countdown ? (
-            <div className="modern-countdown-container" style={{ width: "220px", height: "220px", animation: state.countdown.remaining <= 5 ? "countdown-pulse 0.5s ease-in-out infinite" : "none" }}>
+            <div className="modern-countdown-container" style={{ width: "200px", height: "220px", animation: state.countdown.remaining <= 5 ? "countdown-pulse 0.5s ease-in-out infinite" : "none" }}>
               <svg className="modern-ring-svg" viewBox="0 0 100 100">
                 <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="2" />
                 <circle 
@@ -1298,34 +1342,42 @@ function Lobby({ onStart: _onStart, onBack }: { onStart: () => void; onBack: () 
                   strokeWidth="3" 
                   strokeDasharray="283" 
                   strokeDashoffset={283 - (283 * (state.countdown.remaining / 15))}
-                  style={{ transition: "stroke-dashoffset 1s linear, stroke 0.3s ease", filter: "drop-shadow(0 0 12px " + (state.countdown.remaining <= 5 ? "#ff4d4d" : "#00f5ff") + ")" }}
+                  style={{ transition: "stroke-dashoffset 1s linear, stroke 0.3s ease", filter: "drop-shadow(0 0 15px " + (state.countdown.remaining <= 5 ? "#ff4d4d" : "#00f5ff") + ")" }}
                 />
               </svg>
-              <div className="modern-timer-value" style={{ fontSize: "64px", color: state.countdown.remaining <= 5 ? "#ff4d4d" : "#fff" }}>
+              <div className="modern-timer-value" style={{ fontSize: "72px", color: state.countdown.remaining <= 5 ? "#ff4d4d" : "#fff" }}>
                 {state.countdown.remaining}
               </div>
-              <div style={{ position: "absolute", bottom: "-30px", fontSize: "12px", fontWeight: 800, color: "rgba(255,255,255,0.4)", letterSpacing: "0.3em", textTransform: "uppercase" }}>Synchronizing Pilot Systems</div>
+              <div style={{ position: "absolute", bottom: "-30px", fontSize: "12px", fontWeight: 800, color: "rgba(255,255,255,0.4)", letterSpacing: "0.4em", textTransform: "uppercase" }}>LAUNCH IMMINENT</div>
             </div>
           ) : (
-            <div className="lobby-orbit">
-              <div className="orbit-center" />
-              <div className="orbit-ring">
-                {players.map((p: string, i: number) => (
-                  <div key={p} className="orbit-sperm" style={{ "--i": i, "--n": players.length } as any} />
-                ))}
-              </div>
-              <div style={{ marginTop: "160px", textAlign: "center" }}>
-                <div style={{ fontSize: "14px", color: "#00f5ff", fontWeight: 800, letterSpacing: "0.2em", textTransform: "uppercase" }}>
-                  {estimatedPrizeUsd > 0 ? "WAITING FOR COMPETITORS..." : "WAITING FOR PILOTS..."}
-                </div>
+            <div style={{ textAlign: "center" }}>
+              <div className="mobile-lobby-spinner" style={{ width: "60px", height: "60px", borderTopColor: "#00f5ff", margin: "0 auto 24px" }}></div>
+              <div style={{ fontSize: "14px", color: "#00f5ff", fontWeight: 800, letterSpacing: "0.2em", textTransform: "uppercase" }}>
+                {realPlayers.length < 2 ? "Waiting for rivals..." : "Establishing neural link..."}
               </div>
             </div>
           )}
         </div>
 
-        <div className="lobby-footer">
-          <button className="btn-secondary pc-btn" onClick={onBack}>← Leave Lobby</button>
-        </div>
+        <footer style={{ marginTop: "48px", display: "flex", justifyContent: "center" }}>
+          <button 
+            className="btn-secondary pc-btn" 
+            onClick={onBack}
+            style={{
+              padding: "14px 40px",
+              borderRadius: "12px",
+              fontSize: "14px",
+              fontWeight: 700,
+              color: "rgba(255,255,255,0.5)",
+              letterSpacing: "0.1em",
+              background: "rgba(255,255,255,0.03)",
+              border: "1px solid rgba(255,255,255,0.1)"
+            }}
+          >
+            ← ABORT MISSION
+          </button>
+        </footer>
       </div>
     </div>
   );
