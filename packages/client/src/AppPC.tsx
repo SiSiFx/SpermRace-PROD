@@ -1238,61 +1238,60 @@ function Lobby({ onStart: _onStart, onBack }: { onStart: () => void; onBack: () 
 
   return (
     <div className="screen active pc-lobby" id="lobby-screen" style={{ 
-      background: "linear-gradient(180deg, #030712 0%, #0a1628 100%)",
+      background: "#030712",
       display: "flex",
       alignItems: "center",
-      justifyContent: "center"
+      justifyContent: "center",
+      minHeight: "100vh"
     }}>
       <div className="lobby-container pc-lobby-container" style={{
-        maxWidth: "800px",
+        maxWidth: "600px",
         width: "100%",
         background: "rgba(10, 20, 35, 0.6)",
         backdropFilter: "blur(20px)",
         border: "1px solid rgba(0, 245, 255, 0.2)",
         borderRadius: "24px",
-        padding: "48px",
-        boxShadow: "0 40px 100px rgba(0,0,0,0.6)",
+        padding: "40px",
         textAlign: "center"
       }}>
-        <div style={{ marginBottom: 24 }}>
-          <Atom size={48} weight="duotone" color="#00f5ff" style={{ filter: "drop-shadow(0 0 10px rgba(0, 245, 255, 0.5))" }} />
+        <div style={{ marginBottom: 20 }}>
+          <Atom size={48} weight="duotone" color="#00f5ff" />
         </div>
         <h1 style={{ fontSize: "32px", fontWeight: 900, color: "#fff", marginBottom: "32px", fontFamily: "Orbitron, sans-serif" }}>LOBBY</h1>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "32px" }}>
-          <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "16px", padding: "20px" }}>
-            <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", marginBottom: "8px" }}>Pilots</div>
-            <div style={{ fontSize: "28px", fontWeight: 900, color: "#00f5ff" }}>{players.length} / {state.lobby?.maxPlayers ?? 32}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "24px" }}>
+          <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "16px", padding: "16px" }}>
+            <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase" }}>Pilots</div>
+            <div style={{ fontSize: "24px", fontWeight: 900, color: "#00f5ff" }}>{players.length} / {state.lobby?.maxPlayers ?? 32}</div>
           </div>
-          <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "16px", padding: "20px" }}>
-            <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", marginBottom: "8px" }}>Est. Prize</div>
-            <div style={{ fontSize: "28px", fontWeight: 900, color: "#00ff88" }}></div>
+          <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "16px", padding: "16px" }}>
+            <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase" }}>Prize</div>
+            <div style={{ fontSize: "24px", fontWeight: 900, color: "#00ff88" }}></div>
           </div>
         </div>
 
         <div style={{
           display: "flex",
           flexWrap: "wrap",
-          gap: "10px",
+          gap: "8px",
           justifyContent: "center",
-          marginBottom: "40px",
-          padding: "16px",
+          marginBottom: "32px",
+          padding: "12px",
           background: "rgba(0,0,0,0.2)",
-          borderRadius: "16px"
+          borderRadius: "12px"
         }}>
           {players.map((pid: string) => {
             const name = state.lobby?.playerNames?.[pid] || (pid.startsWith("guest-") ? "Guest" : pid.slice(0, 4) + "…" + pid.slice(-4));
             const isMe = pid === state.playerId;
             return (
               <div key={pid} style={{
-                fontSize: "13px",
-                padding: "6px 16px",
-                borderRadius: "8px",
+                fontSize: "12px",
+                padding: "4px 12px",
+                borderRadius: "6px",
                 background: isMe ? "rgba(0, 245, 255, 0.15)" : "rgba(255, 255, 255, 0.05)",
                 border: isMe ? "1px solid rgba(0, 245, 255, 0.3)" : "1px solid rgba(255, 255, 255, 0.1)",
                 color: isMe ? "#00f5ff" : "rgba(255, 255, 255, 0.7)",
-                fontWeight: 800,
-                textTransform: "uppercase"
+                fontWeight: 800
               }}>
                 {name}
               </div>
@@ -1300,16 +1299,16 @@ function Lobby({ onStart: _onStart, onBack }: { onStart: () => void; onBack: () 
           })}
         </div>
 
-        <div style={{ minHeight: "150px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ minHeight: "120px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
           {state.countdown ? (
-            <div style={{ animation: state.countdown.remaining <= 5 ? "countdown-pulse 0.5s ease-in-out infinite" : "none" }}>
-              <div style={{ fontSize: "14px", fontWeight: 800, color: "#00f5ff", letterSpacing: "0.3em", marginBottom: "10px" }}>STARTING IN</div>
-              <div style={{ fontSize: "100px", fontWeight: 900, color: state.countdown.remaining <= 5 ? "#ff4d4d" : "#fff", lineHeight: 1 }}>
+            <div>
+              <div style={{ fontSize: "14px", fontWeight: 800, color: "#00f5ff", letterSpacing: "0.3em" }}>STARTING IN</div>
+              <div style={{ fontSize: "80px", fontWeight: 900, color: "#fff", lineHeight: 1 }}>
                 {state.countdown.remaining}
               </div>
             </div>
           ) : (
-            <div style={{ fontSize: "16px", color: "rgba(255,255,255,0.5)", fontWeight: 700, letterSpacing: "0.2em" }}>
+            <div style={{ fontSize: "16px", color: "rgba(255,255,255,0.5)", fontWeight: 700 }}>
               WAITING FOR RIVALS...
             </div>
           )}
@@ -1319,10 +1318,10 @@ function Lobby({ onStart: _onStart, onBack }: { onStart: () => void; onBack: () 
           className="btn-secondary pc-btn" 
           onClick={onBack}
           style={{
-            marginTop: "48px",
-            padding: "16px 48px",
-            borderRadius: "14px",
-            fontSize: "16px",
+            marginTop: "40px",
+            padding: "14px 40px",
+            borderRadius: "12px",
+            fontSize: "14px",
             fontWeight: 800,
             color: "rgba(255,255,255,0.4)",
             background: "rgba(255,255,255,0.03)",

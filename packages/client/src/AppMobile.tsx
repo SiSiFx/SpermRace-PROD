@@ -1146,10 +1146,14 @@ function Wallet({ onConnected, onClose }: { onConnected: () => void; onClose: ()
 
 function Lobby({ onStart: _onStart, onBack, onRefund }: { onStart: () => void; onBack: () => void; onRefund?: () => void }) {
   const { state } = useWs();
-  const [showTutorial, setShowTutorial] = useState(state.lobby?.entryFee === 0);
+  const [showTutorial, setShowTutorial] = useState(false);
   const players = state.lobby?.players || [];
   const realPlayers = players.filter(p => !String(p).startsWith('BOT_'));
   const estimatedPrizeUsd = state.lobby ? Math.max(0, Math.floor(realPlayers.length * (state.lobby.entryFee as number) * 0.85)) : 0;
+
+  useEffect(() => {
+    if (state.lobby?.entryFee === 0) setShowTutorial(true);
+  }, []);
 
   useEffect(() => {
     const refunded = (state as any).refundReceived;
@@ -1162,44 +1166,37 @@ function Lobby({ onStart: _onStart, onBack, onRefund }: { onStart: () => void; o
 
   return (
     <div className="screen active mobile-lobby-screen" style={{ 
-      background: "linear-gradient(180deg, #030712 0%, #0a1628 100%)",
+      background: "#030712",
       display: "flex",
       flexDirection: "column",
       padding: "20px 16px",
       paddingTop: "calc(20px + env(safe-area-inset-top, 0px))",
-      paddingBottom: "calc(20px + env(safe-area-inset-bottom, 0px))",
       height: "100dvh",
       boxSizing: "border-box",
       overflow: "hidden"
     }}>
       {showTutorial && <PracticeFullTutorial onDone={() => setShowTutorial(false)} />}
       
-      {/* BRANDING */}
-      <header style={{ textAlign: "center", marginBottom: "24px" }}>
+      <header style={{ textAlign: "center", marginBottom: "20px" }}>
         <div style={{ marginBottom: 12, display: "flex", justifyContent: "center" }}>
-          <Atom size={36} weight="duotone" color="#00f5ff" style={{ filter: "drop-shadow(0 0 10px rgba(0, 245, 255, 0.5))" }} />
-        </div>
-        <div style={{ fontSize: 9, letterSpacing: "0.3em", color: "#00f5ff", textTransform: "uppercase", fontWeight: 700, marginBottom: 4 }}>
-          Arena Protocol
+          <Atom size={32} weight="duotone" color="#00f5ff" />
         </div>
         <h1 style={{ fontSize: 24, fontWeight: 900, color: "#fff", margin: 0, fontFamily: "Orbitron, sans-serif" }}>
           LOBBY
         </h1>
       </header>
 
-      {/* STATS */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "16px" }}>
         <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "12px", textAlign: "center" }}>
-          <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", marginBottom: 4 }}>Pilots</div>
+          <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", textTransform: "uppercase" }}>Pilots</div>
           <div style={{ fontSize: 18, fontWeight: 800, color: "#00f5ff" }}>{players.length} / {state.lobby?.maxPlayers ?? 32}</div>
         </div>
         <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "12px", textAlign: "center" }}>
-          <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", marginBottom: 4 }}>Prize</div>
+          <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", textTransform: "uppercase" }}>Prize</div>
           <div style={{ fontSize: 18, fontWeight: 800, color: "#00ff88" }}></div>
         </div>
       </div>
 
-      {/* PLAYERS */}
       <div style={{
         display: "flex",
         flexWrap: "wrap",
@@ -1208,10 +1205,7 @@ function Lobby({ onStart: _onStart, onBack, onRefund }: { onStart: () => void; o
         marginBottom: "24px",
         maxHeight: "100px",
         overflowY: "auto",
-        padding: "8px",
-        background: "rgba(0,0,0,0.2)",
-        borderRadius: "12px",
-        border: "1px solid rgba(255,255,255,0.05)"
+        padding: "8px"
       }}>
         {players.map((pid: string) => {
           const name = state.lobby?.playerNames?.[pid] || (pid.startsWith("guest-") ? "Guest" : pid.slice(0, 4) + "…" + pid.slice(-4));
@@ -1221,11 +1215,10 @@ function Lobby({ onStart: _onStart, onBack, onRefund }: { onStart: () => void; o
               fontSize: "10px",
               padding: "4px 10px",
               borderRadius: "6px",
-              background: isMe ? "rgba(0, 245, 255, 0.12)" : "rgba(255, 255, 255, 0.04)",
-              border: isMe ? "1px solid rgba(0, 245, 255, 0.25)" : "1px solid rgba(255, 255, 255, 0.08)",
-              color: isMe ? "#00f5ff" : "rgba(255, 255, 255, 0.6)",
-              fontWeight: isMe ? 800 : 500,
-              textTransform: "uppercase"
+              background: isMe ? "rgba(0, 245, 255, 0.15)" : "rgba(255, 255, 255, 0.05)",
+              border: isMe ? "1px solid rgba(0, 245, 255, 0.3)" : "1px solid rgba(255, 255, 255, 0.1)",
+              color: isMe ? "#00f5ff" : "rgba(255, 255, 255, 0.7)",
+              fontWeight: 800
             }}>
               {name}
             </div>
@@ -1233,43 +1226,28 @@ function Lobby({ onStart: _onStart, onBack, onRefund }: { onStart: () => void; o
         })}
       </div>
 
-      {/* CENTER PIECE */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", position: "relative" }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
         {state.countdown ? (
-          <div style={{ textAlign: "center", animation: state.countdown.remaining <= 5 ? "countdown-pulse 0.5s ease-in-out infinite" : "none" }}>
-            <div style={{ fontSize: "12px", fontWeight: 800, color: "#00f5ff", letterSpacing: "0.2em", marginBottom: "10px" }}>STARTING IN</div>
-            <div style={{ fontSize: "84px", fontWeight: 900, color: state.countdown.remaining <= 5 ? "#ff4d4d" : "#fff", fontFamily: "Orbitron, sans-serif", lineHeight: 1 }}>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: "12px", fontWeight: 800, color: "#00f5ff", letterSpacing: "0.2em" }}>STARTING IN</div>
+            <div style={{ fontSize: "84px", fontWeight: 900, color: "#fff", fontFamily: "Orbitron, sans-serif" }}>
               {state.countdown.remaining}
             </div>
           </div>
         ) : (
           <div style={{ textAlign: "center" }}>
-            <div className="mobile-lobby-spinner" style={{ width: "48px", height: "48px", borderTopColor: "#00f5ff", margin: "0 auto 20px" }}></div>
-            <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.5)", fontWeight: 700, letterSpacing: "0.1em" }}>
-              {isRefunding ? "REFUNDING..." : isSolo ? "WAITING FOR RIVALS..." : "SYNCING PROTOCOLS..."}
+            <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.5)", fontWeight: 700 }}>
+              {isRefunding ? "REFUNDING..." : "WAITING FOR RIVALS..."}
             </div>
-            {isSolo && refundCountdown && (
-              <div style={{ fontSize: "10px", color: "#ff4d4d", marginTop: "8px", fontWeight: 800 }}>AUTO-REFUND: {refundCountdown}S</div>
-            )}
           </div>
         )}
       </div>
 
-      <footer style={{ marginTop: "auto", paddingTop: "20px" }}>
+      <footer style={{ marginTop: "auto", paddingBottom: "20px" }}>
         <button 
           className="mobile-btn-back" 
           onClick={onBack}
-          style={{
-            width: "100%",
-            background: "rgba(255,255,255,0.03)",
-            border: "1px solid rgba(255,255,255,0.1)",
-            borderRadius: "14px",
-            padding: "16px",
-            fontSize: "14px",
-            fontWeight: 800,
-            color: "rgba(255,255,255,0.4)",
-            letterSpacing: "0.1em"
-          }}
+          style={{ width: "100%", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "12px", padding: "14px" }}
         >
           ← ABORT MISSION
         </button>
