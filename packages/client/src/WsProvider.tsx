@@ -5,7 +5,7 @@ import React, { createContext, useContext, useMemo, useRef, useState } from 'rea
 const API_BASE: string = (() => {
   try {
     const host = (window?.location?.hostname || '').toLowerCase();
-    if (host.endsWith('spermrace.io')) return '/api';
+    if (host.endsWith("spermrace.io")) return "https://spermrace.io/api";
   } catch { }
 
   const env = (import.meta as any).env?.VITE_API_BASE as string | undefined;

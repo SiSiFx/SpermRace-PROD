@@ -46,7 +46,7 @@ export function PracticeModeSelection({ onSelectSolo, onBack, onNotify }: Practi
             // If guest, pass guestName
             await connectAndJoin({
                 entryFeeTier: 0 as any,
-                mode: 'tournament' as any, // Schema requires 'practice' or 'tournament'
+                mode: 'practice' as any, // Schema requires 'practice' or 'tournament'
                 guestName: asGuest ? (guestName.trim() || 'Guest') : undefined
             });
             // Note: App routing will switch screen to 'lobby' based on wsState.phase

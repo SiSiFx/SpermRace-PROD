@@ -972,7 +972,7 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
       try {
         const requestedMode = mode as 'practice' | 'tournament' | undefined;
         // Always allow practice mode without fee
-        if (requestedMode === 'practice') {
+        if (requestedMode === 'practice' || entryFeeTier === 0) {
           pendingPaymentByPlayerId.delete(playerId);
           expectedLamportsByPlayerId.delete(playerId);
           await lobbyManager.joinLobby(playerId, entryFeeTier, 'practice');
