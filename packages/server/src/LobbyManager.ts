@@ -205,7 +205,7 @@ export class LobbyManager {
           minReq = Math.min(minReq, rule.minPlayers);
         }
       }
-      if (process.env.SKIP_ENTRY_FEE === 'true') return Math.max(1, minReq);
+      if (process.env.SKIP_ENTRY_FEE === 'true' || lobby.mode === 'practice') return 1;
       return Math.max(2, minReq);
     };
 
