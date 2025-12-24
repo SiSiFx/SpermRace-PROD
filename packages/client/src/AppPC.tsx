@@ -334,7 +334,10 @@ function AppInner() {
         <Wallet onConnected={() => setScreen('lobby')} onClose={() => setScreen('modes')} />
       )}
       {screen === 'lobby' && (
-        <Lobby onStart={() => setScreen('game')} onBack={() => setScreen('modes')} />
+        <Lobby
+          onStart={() => setScreen('game')}
+          onBack={() => setScreen(wsState.lobby?.entryFee === 0 ? 'landing' : 'modes')}
+        />
       )}
       {screen === 'game' && (
         <Game onEnd={() => setScreen('results')} onRestart={() => setScreen('game')} />

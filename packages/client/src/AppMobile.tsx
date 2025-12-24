@@ -260,8 +260,8 @@ function AppInner() {
       {screen === 'lobby' && (
         <Lobby
           onStart={() => setScreen('game')}
-          onBack={() => setScreen('modes')}
-          onRefund={() => setScreen('modes')}
+          onBack={() => setScreen(wsState.lobby?.entryFee === 0 ? 'landing' : 'modes')}
+          onRefund={() => setScreen(wsState.lobby?.entryFee === 0 ? 'landing' : 'modes')}
         />
       )}
       {screen === 'game' && (
