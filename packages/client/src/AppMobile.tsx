@@ -1193,7 +1193,7 @@ function Lobby({ onStart: _onStart, onBack, onRefund }: { onStart: () => void; o
         </div>
         <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "12px", textAlign: "center" }}>
           <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", textTransform: "uppercase" }}>Prize</div>
-          <div style={{ fontSize: 18, fontWeight: 800, color: "#00ff88" }}></div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: "#00ff88" }}>${estimatedPrizeUsd}</div>
         </div>
       </div>
 
