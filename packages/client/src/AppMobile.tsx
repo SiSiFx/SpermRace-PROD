@@ -1200,6 +1200,38 @@ function Lobby({ onStart: _onStart, onBack, onRefund }: { onStart: () => void; o
           </div>
         </div>
 
+        {/* Player List */}
+        <div style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "8px",
+          justifyContent: "center",
+          marginBottom: "16px",
+          maxHeight: "80px",
+          overflowY: "auto",
+          padding: "4px"
+        }}>
+          {players.map((pid: string) => {
+            const name = state.lobby?.playerNames?.[pid] || (pid.startsWith("guest-") ? "Guest" : pid.slice(0, 4) + "…" + pid.slice(-4));
+            const isMe = pid === state.playerId;
+            return (
+              <div key={pid} style={{
+                fontSize: "10px",
+                padding: "4px 8px",
+                borderRadius: "6px",
+                background: isMe ? "rgba(0, 245, 255, 0.15)" : "rgba(255, 255, 255, 0.05)",
+                border: isMe ? "1px solid rgba(0, 245, 255, 0.3)" : "1px solid rgba(255, 255, 255, 0.1)",
+                color: isMe ? "#00f5ff" : "rgba(255, 255, 255, 0.7)",
+                fontWeight: isMe ? 800 : 500,
+                textTransform: "uppercase",
+                letterSpacing: "0.05em"
+              }}>
+                {name}
+              </div>
+            );
+          })}
+        </div>
+
         <div className="mobile-lobby-orbit">
           <div className="orbit-center">
             <div className="mobile-lobby-spinner"></div>

@@ -23,7 +23,7 @@ import { v4 as uuidv4 } from 'uuid';
 const PORT = parseInt(process.env.PORT || '8080', 10);
 const BROADCAST_INTERVAL = 1000 / 20; // 20 FPS to reduce bandwidth
 const NONCE_TTL_MS = parseInt(process.env.SIWS_NONCE_TTL_MS || '60000', 10);
-const AUTH_GRACE_MS = parseInt(process.env.AUTH_GRACE_MS || '30000', 10);
+const AUTH_GRACE_MS = parseInt(process.env.AUTH_GRACE_MS || '60000', 10);
 const UNAUTH_MAX = parseInt(process.env.WS_UNAUTH_MAX || '3', 10);
 const IS_PRODUCTION = (process.env.NODE_ENV || '').toLowerCase() === 'production';
 const LOG_LEVEL = (process.env.LOG_LEVEL || 'info').toLowerCase() as 'silent' | 'error' | 'warn' | 'info' | 'debug';
@@ -83,6 +83,7 @@ log.info(`[DB] Using database: ${DB_PATH}`);
 const pendingSockets = new Set<WebSocket>();
 const playerIdToSocket = new Map<string, WebSocket>();
 const socketToPlayerId = new Map<WebSocket, string>();
+const playerIdToName = new Map<string, string>();
 const socketToNonce = new Map<WebSocket, { nonce: string; issuedAt: number; consumed: boolean }>();
 const socketToSessionId = new Map<WebSocket, string>();
 const socketToAuthTimeout = new Map<WebSocket, NodeJS.Timeout>();
@@ -483,7 +484,11 @@ server.listen(PORT, () => {
 // =================================================================================================
 
 lobbyManager.onLobbyUpdate = (lobby: Lobby) => {
-  const message: LobbyStateMessage = { type: 'lobbyState', payload: lobby };
+  const playerNamesMap: Record<string, string> = {};
+  lobby.players.forEach(pid => {
+    playerNamesMap[pid] = playerIdToName.get(pid) || (pid.startsWith("guest-") ? "Guest" : pid.slice(0, 4) + "…" + pid.slice(-4));
+  });
+  const message: LobbyStateMessage = { type: 'lobbyState', payload: { ...lobby, playerNames: playerNamesMap } as any };
   broadcastToLobby(lobby, message);
 };
 
@@ -758,6 +763,7 @@ wss.on('connection', (ws: WebSocket, req: any) => {
         // Register as authenticated
         playerIdToSocket.set(guestId, ws);
         socketToPlayerId.set(ws, guestId);
+        playerIdToName.set(guestId, cleanName);
 
         // Send success
         const authMessage: AuthenticatedMessage = { type: 'authenticated', payload: { playerId: guestId } };
@@ -899,6 +905,7 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
       pendingSockets.delete(ws);
       playerIdToSocket.set(publicKey, ws);
       socketToPlayerId.set(ws, publicKey);
+      playerIdToName.set(publicKey, publicKey.slice(0, 4) + "…" + publicKey.slice(-4));
       // Clear auth timeout and reset violation count
       try {
         const t = socketToAuthTimeout.get(ws);

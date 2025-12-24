@@ -42,7 +42,7 @@ export class LobbyManager {
   private playerLobbyMap: Map<string, string> = new Map();
   private smartContractService: SmartContractService;
   private lobbyDeadlineMs: Map<string, number> = new Map();
-  private lobbyCountdownStartMs: Map<string, number> = new Map();
+  private lobbyCountdownStartMs: Map<string, number> = new Map();\n  private lobbyStartAtMs: Map<string, number> = new Map();
   private lobbyCountdownTick: Map<string, NodeJS.Timeout> = new Map();
   private lobbyStartTimeout: Map<string, NodeJS.Timeout> = new Map();
   
@@ -93,6 +93,15 @@ export class LobbyManager {
     console.log(`[LOBBY] Player added to ${lobby.lobbyId}; count=${lobby.players.length}/${lobby.maxPlayers}`);
     this.onLobbyUpdate?.(lobby);
 
+    // If lobby is already starting, immediately sync the countdown for this new player
+    if (lobby.status === "starting") {
+      const startAtMs = this.lobbyStartAtMs.get(lobby.lobbyId);
+      if (startAtMs) {
+        const remaining = Math.ceil((startAtMs - Date.now()) / 1000);
+        this.onLobbyCountdown?.(lobby, remaining, startAtMs);
+      }
+    }
+
     // Proactively inject bots on join except when dev exact-match mode is active
     const isDevLike = (process.env.NODE_ENV || '').toLowerCase() !== 'production';
     const skipFee = (process.env.SKIP_ENTRY_FEE || '').toLowerCase() === 'true';
@@ -139,7 +148,7 @@ export class LobbyManager {
 
   private findAvailableLobby(entryFee: EntryFeeTier, mode: GameMode): Lobby | undefined {
     for (const lobby of this.lobbies.values()) {
-      if (lobby.entryFee === entryFee && lobby.mode === mode && lobby.status === 'waiting' && lobby.players.length < LOBBY_MAX_PLAYERS) {
+      if (lobby.entryFee === entryFee && lobby.mode === mode &&  (lobby.status === 'waiting' || lobby.status === 'starting') && lobby.players.length < LOBBY_MAX_PLAYERS) {
         return lobby;
       }
     }
@@ -250,6 +259,7 @@ export class LobbyManager {
     const deadline = this.lobbyDeadlineMs.get(lobby.lobbyId) || (Date.now() + LOBBY_MAX_WAIT_SEC * 1000);
     const isSolo = lobby.players.length === 1;
     const startAtMs = isSolo ? deadline : (Date.now() + LOBBY_START_COUNTDOWN * 1000);
+    this.lobbyStartAtMs.set(lobby.lobbyId, startAtMs);
     
     // Calculate timeout duration to match countdown
     const timeoutDuration = isSolo 
@@ -315,6 +325,7 @@ export class LobbyManager {
       const s = this.lobbyStartTimeout.get(lobbyId);
       if (s) { clearTimeout(s); this.lobbyStartTimeout.delete(lobbyId); }
     } catch {}
+    this.lobbyStartAtMs.delete(lobbyId);
   }
 
   /**

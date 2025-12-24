@@ -1255,6 +1255,38 @@ function Lobby({ onStart: _onStart, onBack }: { onStart: () => void; onBack: () 
           <div className="queue-right"><span>Target: {state.lobby?.maxPlayers ?? 16}</span></div>
         </div>
 
+        {/* Player List */}
+        <div style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "12px",
+          justifyContent: "center",
+          margin: "24px 0",
+          maxHeight: "120px",
+          overflowY: "auto",
+          padding: "8px"
+        }}>
+          {players.map((pid: string) => {
+            const name = state.lobby?.playerNames?.[pid] || (pid.startsWith("guest-") ? "Guest" : pid.slice(0, 4) + "…" + pid.slice(-4));
+            const isMe = pid === state.playerId;
+            return (
+              <div key={pid} style={{
+                fontSize: "12px",
+                padding: "6px 12px",
+                borderRadius: "8px",
+                background: isMe ? "rgba(0, 245, 255, 0.15)" : "rgba(255, 255, 255, 0.05)",
+                border: isMe ? "1px solid rgba(0, 245, 255, 0.3)" : "1px solid rgba(255, 255, 255, 0.1)",
+                color: isMe ? "#00f5ff" : "rgba(255, 255, 255, 0.7)",
+                fontWeight: isMe ? 800 : 500,
+                textTransform: "uppercase",
+                letterSpacing: "0.05em"
+              }}>
+                {name}
+              </div>
+            );
+          })}
+        </div>
+
         <div className="lobby-orbit">
           <div className="orbit-center" />
           <div className="orbit-ring">
