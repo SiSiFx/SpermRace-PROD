@@ -369,9 +369,9 @@ function Landing({
           width: '100%',
           maxWidth: 600,
           margin: '0 auto',
-          minHeight: '100dvh',
+          height: '100dvh',
           // Top padding clears wallet badge, bottom padding handled by footer
-          padding: '80px 24px 0',
+          padding: '40px 24px 0',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',

@@ -19,7 +19,7 @@
   position: fixed;
   width: 100%;
   height: 100%;
-  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  overflow: hidden;
 }
 
 /* Mobile Device Indicator removed */
@@ -72,14 +72,14 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
   /* Strict height to viewport */
   padding: 20px var(--mobile-padding);
   padding-top: calc(60px + env(safe-area-inset-top, 0px));
   padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px));
   box-sizing: border-box;
-  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  overflow: hidden;
 }
 
 .mobile-brand-section {
@@ -249,9 +249,9 @@
 .mobile-lobby-screen {
   padding: var(--mobile-padding);
   width: 100vw;
-  min-height: 100vh;
-  min-height: 100dvh;
-  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   position: fixed;
   inset: 0;
 }
@@ -259,8 +259,8 @@
 .mobile-lobby-container {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
   padding: 20px var(--mobile-padding);
   padding-top: calc(20px + env(safe-area-inset-top, 0px));
   padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px));
@@ -361,9 +361,9 @@
 .mobile-modes-screen {
   padding: var(--mobile-padding);
   width: 100vw;
-  min-height: 100vh;
-  min-height: 100dvh;
-  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   position: fixed;
   inset: 0;
 }
@@ -371,8 +371,8 @@
 .mobile-modes-container {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
   padding: 20px var(--mobile-padding);
   padding-top: calc(20px + env(safe-area-inset-top, 0px));
   padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px));
@@ -540,9 +540,9 @@
 .mobile-wallet-screen {
   padding: var(--mobile-padding);
   width: 100vw;
-  min-height: 100vh;
-  min-height: 100dvh;
-  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   position: fixed;
   inset: 0;
 }
@@ -550,8 +550,8 @@
 .mobile-wallet-container {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
   padding: 40px var(--mobile-padding);
   padding-top: calc(40px + env(safe-area-inset-top, 0px));
   padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px));
@@ -664,7 +664,7 @@
   height: 8px;
   background: rgba(255, 255, 255, 0.1);
   border-radius: 6px;
-  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.15);
   margin: 16px 0;
 }
@@ -706,9 +706,9 @@
 .mobile-results-screen {
   padding: var(--mobile-padding);
   width: 100vw;
-  min-height: 100vh;
-  min-height: 100dvh;
-  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   position: fixed;
   inset: 0;
 }
@@ -716,8 +716,8 @@
 .mobile-results-container {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
   padding: 40px var(--mobile-padding);
   padding-top: calc(40px + env(safe-area-inset-top, 0px));
   padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px));
