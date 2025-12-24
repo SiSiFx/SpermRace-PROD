@@ -637,12 +637,6 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
   const [meId] = useState<string>('PLAYER_' + Math.random().toString(36).slice(2, 8));
   const [players, setPlayers] = useState<string[]>([]);
   const [showPracticeIntro, setShowPracticeIntro] = useState<boolean>(true); // Always show tutorial
-    try {
-      return !localStorage.getItem('sr_practice_full_tuto_seen');
-    } catch {
-      return true;
-    }
-  });
 
   // Mobile control state (MUST be at top level, not inside conditionals!)
   const [gameCountdown, setGameCountdown] = useState<number>(6); // 6 seconds to account for game engine preStart
