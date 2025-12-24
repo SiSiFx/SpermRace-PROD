@@ -305,24 +305,19 @@ function AppInner() {
 function HeaderWallet({ screen, wsState, publicKey }: { screen: string; wsState: any; publicKey: any }) {
   const { disconnect } = useWallet() as any;
 
-  // Use Tournament-style colors
-  const short = publicKey ? `${publicKey.slice(0, 4)}…${publicKey.slice(-4)}` : null;
-  const statusText = wsState.phase === "authenticating" ? "Authenticating" :
-                     wsState.phase === "lobby" ? "Lobby" :
-                     wsState.phase === "connecting" ? "Connecting" :
-                     "Not Connected";
+  if (!publicKey) return null;
+
+  const short = `${publicKey.slice(0, 4)}…${publicKey.slice(-4)}`;
 
   return (
     <div 
       className="mobile-wallet-badge" 
       style={{ 
-        border: publicKey ? "1px solid rgba(0, 245, 255, 0.3)" : "1px solid rgba(255, 255, 255, 0.1)",
-        background: publicKey 
-          ? "linear-gradient(135deg, rgba(0, 245, 255, 0.1), rgba(0, 255, 136, 0.05))" 
-          : "rgba(255, 255, 255, 0.03)",
-        boxShadow: publicKey ? "0 0 15px rgba(0, 245, 255, 0.1)" : "none",
+        border: "1px solid rgba(0, 245, 255, 0.3)",
+        background: "linear-gradient(135deg, rgba(0, 245, 255, 0.1), rgba(0, 255, 136, 0.05))",
+        boxShadow: "0 0 15px rgba(0, 245, 255, 0.1)",
         padding: "6px 12px",
-        borderRadius: "12px", // Slightly more squared like tournament cards
+        borderRadius: "12px",
         display: "flex",
         alignItems: "center",
         gap: "8px"
@@ -332,29 +327,27 @@ function HeaderWallet({ screen, wsState, publicKey }: { screen: string; wsState:
         fontSize: "10px", 
         fontWeight: 800, 
         letterSpacing: "0.05em",
-        color: publicKey ? "#00f5ff" : "rgba(255,255,255,0.5)",
+        color: "#00f5ff",
         textTransform: "uppercase"
       }}>
-        {publicKey ? short : statusText}
+        {short}
       </span>
-      {publicKey && (
-        <button 
-          style={{ 
-            background: "rgba(255,255,255,0.1)", 
-            border: "none", 
-            color: "#fff", 
-            width: "18px", 
-            height: "18px", 
-            borderRadius: "50%", 
-            fontSize: "10px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer"
-          }} 
-          onClick={() => disconnect?.()}
-        >✕</button>
-      )}
+      <button 
+        style={{ 
+          background: "rgba(255,255,255,0.1)", 
+          border: "none", 
+          color: "#fff", 
+          width: "18px", 
+          height: "18px", 
+          borderRadius: "50%", 
+          fontSize: "10px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "pointer"
+        }} 
+        onClick={() => disconnect?.()}
+      >✕</button>
     </div>
   );
 }
