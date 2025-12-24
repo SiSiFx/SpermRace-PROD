@@ -1146,25 +1146,14 @@ function Wallet({ onConnected, onClose }: { onConnected: () => void; onClose: ()
 
 function Lobby({ onStart: _onStart, onBack, onRefund }: { onStart: () => void; onBack: () => void; onRefund?: () => void }) {
   const { state } = useWs();
+  const [showTutorial, setShowTutorial] = useState(state.lobby?.entryFee === 0);
   const players = state.lobby?.players || [];
   const realPlayers = players.filter(p => !String(p).startsWith('BOT_'));
   const estimatedPrizeUsd = state.lobby ? Math.max(0, Math.floor(realPlayers.length * (state.lobby.entryFee as number) * 0.85)) : 0;
 
-  // Auto-return to menu on refund
   useEffect(() => {
-    // Check for refund flag
     const refunded = (state as any).refundReceived;
-    console.log('[Lobby] State check:', {
-      hasLobby: !!state.lobby,
-      hasError: !!state.lastError,
-      refunded,
-      phase: state.phase
-    });
-
-    if (refunded && !state.lobby && onRefund) {
-      console.log('[Lobby] Refund detected, auto-returning to menu immediately');
-      onRefund();
-    }
+    if (refunded && !state.lobby && onRefund) onRefund();
   }, [(state as any).refundReceived, state.lobby, onRefund]);
 
   const refundCountdown = (state.lobby as any)?.refundCountdown;
@@ -1172,109 +1161,172 @@ function Lobby({ onStart: _onStart, onBack, onRefund }: { onStart: () => void; o
   const isRefunding = refundCountdown !== undefined && refundCountdown <= 1;
 
   return (
-    <div className="screen active mobile-lobby-screen">
+    <div className="screen active mobile-lobby-screen" style={{ 
+      background: "linear-gradient(180deg, #030712 0%, #0a1628 100%)",
+      display: "flex",
+      flexDirection: "column",
+      padding: "20px 16px",
+      paddingTop: "calc(20px + env(safe-area-inset-top, 0px))",
+      paddingBottom: "calc(20px + env(safe-area-inset-bottom, 0px))",
+      height: "100dvh",
+      boxSizing: "border-box",
+      overflow: "hidden"
+    }}>
       {showTutorial && <PracticeFullTutorial onDone={() => setShowTutorial(false)} />}
-      <div className="mobile-lobby-container">
-        <div className="mobile-lobby-header">
-          <h2 className="mobile-lobby-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Trophy size={18} weight="fill" />
-            <span>Lobby</span>
-          </h2>
-          <div className="mobile-lobby-count">{players.length}/{state.lobby?.maxPlayers ?? 16}</div>
+      
+      <header style={{ textAlign: "center", marginBottom: "20px" }}>
+        <div style={{ marginBottom: 12, display: "flex", justifyContent: "center" }}>
+          <Atom size={32} weight="duotone" color="#00f5ff" style={{ filter: "drop-shadow(0 0 10px rgba(0, 245, 255, 0.5))" }} />
         </div>
-
-        {state.lobby && (
-          <div className="mobile-prize-display">
-            <span className="label">Prize Pool:</span>
-            <span className="amount">${estimatedPrizeUsd}</span>
-          </div>
-        )}
-
-        <div className="mobile-queue-status">
-          <div className="status-item">
-            <span className="dot"></span>
-            <span>{players.length} Joined</span>
-          </div>
-          <div className="status-item">
-            <span>Target: {state.lobby?.maxPlayers ?? 16}</span>
-          </div>
+        <div style={{ fontSize: 9, letterSpacing: "0.3em", color: "#00f5ff", textTransform: "uppercase", fontWeight: 700, marginBottom: 4 }}>
+          Arena Protocol
         </div>
+        <h1 style={{ fontSize: 24, fontWeight: 900, color: "#fff", margin: 0, fontFamily: "Orbitron, sans-serif" }}>
+          LOBBY
+        </h1>
+      </header>
 
-        {/* Player List */}
+      {state.lobby && state.lobby.entryFee > 0 ? (
         <div style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "8px",
-          justifyContent: "center",
+          background: "linear-gradient(135deg, rgba(0, 255, 136, 0.12), rgba(0, 255, 136, 0.05))",
+          border: "1px solid rgba(0, 255, 136, 0.3)",
+          borderRadius: "14px",
+          padding: "12px",
           marginBottom: "16px",
-          maxHeight: "80px",
-          overflowY: "auto",
-          padding: "4px"
+          textAlign: "center",
+          boxShadow: "0 0 20px rgba(0, 255, 136, 0.1)"
         }}>
-          {players.map((pid: string) => {
-            const name = state.lobby?.playerNames?.[pid] || (pid.startsWith("guest-") ? "Guest" : pid.slice(0, 4) + "…" + pid.slice(-4));
-            const isMe = pid === state.playerId;
-            return (
-              <div key={pid} style={{
-                fontSize: "10px",
-                padding: "4px 8px",
-                borderRadius: "6px",
-                background: isMe ? "rgba(0, 245, 255, 0.15)" : "rgba(255, 255, 255, 0.05)",
-                border: isMe ? "1px solid rgba(0, 245, 255, 0.3)" : "1px solid rgba(255, 255, 255, 0.1)",
-                color: isMe ? "#00f5ff" : "rgba(255, 255, 255, 0.7)",
-                fontWeight: isMe ? 800 : 500,
-                textTransform: "uppercase",
-                letterSpacing: "0.05em"
-              }}>
-                {name}
-              </div>
-            );
-          })}
+          <div style={{ fontSize: 10, color: "rgba(0, 255, 136, 0.8)", fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 4 }}>
+            Est. Prize Pool
+          </div>
+          <div style={{ fontSize: 28, fontWeight: 900, color: "#00ff88", textShadow: "0 0 15px rgba(0, 255, 136, 0.5)" }}>
+            ${estimatedPrizeUsd}
+          </div>
         </div>
-
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "280px" }}>
-          {state.countdown ? (
-            <div className="modern-countdown-container" style={{ animation: state.countdown.remaining <= 5 ? "countdown-pulse 0.5s ease-in-out infinite" : "none" }}>
-              <svg className="modern-ring-svg" viewBox="0 0 100 100">
-                <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="2" />
-                <circle 
-                  cx="50" cy="50" r="45" fill="none" 
-                  stroke={state.countdown.remaining <= 5 ? "#ff4d4d" : "#00f5ff"} 
-                  strokeWidth="4" 
-                  strokeDasharray="283" 
-                  strokeDashoffset={283 - (283 * (state.countdown.remaining / 15))}
-                  style={{ transition: "stroke-dashoffset 1s linear, stroke 0.3s ease", filter: "drop-shadow(0 0 8px " + (state.countdown.remaining <= 5 ? "#ff4d4d" : "#00f5ff") + ")" }}
-                />
-              </svg>
-              <div className="modern-timer-value" style={{ color: state.countdown.remaining <= 5 ? "#ff4d4d" : "#fff" }}>
-                {state.countdown.remaining}
-              </div>
-              <div style={{ position: "absolute", bottom: "-20px", fontSize: "10px", fontWeight: 800, color: "rgba(255,255,255,0.4)", letterSpacing: "0.2em" }}>READY TO RACE</div>
-            </div>
-          ) : (
-            <div className="mobile-lobby-orbit">
-              <div className="orbit-center"><div className="mobile-lobby-spinner"></div></div>
-              <div className="orbit-ring">
-                {players.map((p: string, i: number) => (
-                  <div key={p} className="orbit-sperm" style={{ "--i": i, "--n": players.length } as any} />
-                ))}
-              </div>
-              <div style={{ marginTop: "120px", textAlign: "center", zIndex: 10 }}>
-                <div style={{ fontSize: "12px", color: "#00f5ff", fontWeight: 800, letterSpacing: "0.1em" }}>
-                  {isRefunding ? "PROCESSING REFUND..." : isSolo ? "WAITING FOR PLAYERS..." : "PREPARING ARENA..."}
-                </div>
-                {isSolo && refundCountdown && (
-                  <div style={{ fontSize: "10px", color: "#ff4d4d", marginTop: "4px", fontWeight: 600 }}>AUTO-REFUND IN {refundCountdown}S</div>
-                )}
-              </div>
-            </div>
-          )}
+      ) : (
+        <div style={{
+          background: "rgba(255, 255, 255, 0.03)",
+          border: "1px solid rgba(255, 255, 255, 0.1)",
+          borderRadius: "14px",
+          padding: "12px",
+          marginBottom: "16px",
+          textAlign: "center"
+        }}>
+          <div style={{ fontSize: 10, color: "rgba(255, 255, 255, 0.4)", fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2 }}>
+            Mode
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: "#fff" }}>PRACTICE GROUNDS</div>
         </div>
+      )}
 
-        <div className="mobile-lobby-footer">
-          <button className="mobile-btn-back" onClick={onBack}>← Leave</button>
+      <div style={{ 
+        display: "grid", 
+        gridTemplateColumns: "1fr 1fr", 
+        gap: "10px", 
+        marginBottom: "16px" 
+      }}>
+        <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "10px", textAlign: "center" }}>
+          <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", marginBottom: 4 }}>Pilots</div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: "#00f5ff" }}>{players.length} / {state.lobby?.maxPlayers ?? 16}</div>
+        </div>
+        <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "10px", textAlign: "center" }}>
+          <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", marginBottom: 4 }}>Entry</div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: "#fff" }}>{state.lobby?.entryFee === 0 ? "FREE" : "$" + state.lobby?.entryFee}</div>
         </div>
       </div>
+
+      <div style={{
+        display: "flex",
+        flexWrap: "wrap",
+        gap: "6px",
+        justifyContent: "center",
+        marginBottom: "16px",
+        maxHeight: "60px",
+        overflowY: "auto",
+        padding: "4px",
+        borderBottom: "1px solid rgba(255,255,255,0.05)"
+      }}>
+        {players.map((pid: string) => {
+          const name = state.lobby?.playerNames?.[pid] || (pid.startsWith("guest-") ? "Guest" : pid.slice(0, 4) + "…" + pid.slice(-4));
+          const isMe = pid === state.playerId;
+          return (
+            <div key={pid} style={{
+              fontSize: "9px",
+              padding: "3px 8px",
+              borderRadius: "6px",
+              background: isMe ? "rgba(0, 245, 255, 0.15)" : "rgba(255, 255, 255, 0.05)",
+              border: isMe ? "1px solid rgba(0, 245, 255, 0.3)" : "1px solid rgba(255, 255, 255, 0.1)",
+              color: isMe ? "#00f5ff" : "rgba(255, 255, 255, 0.6)",
+              fontWeight: 800,
+              textTransform: "uppercase"
+            }}>
+              {name}
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", position: "relative", minHeight: 0 }}>
+        {state.countdown ? (
+          <div className="modern-countdown-container" style={{ animation: state.countdown.remaining <= 5 ? "countdown-pulse 0.5s ease-in-out infinite" : "none" }}>
+            <svg className="modern-ring-svg" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="2" />
+              <circle 
+                cx="50" cy="50" r="45" fill="none" 
+                stroke={state.countdown.remaining <= 5 ? "#ff4d4d" : "#00f5ff"} 
+                strokeWidth="4" 
+                strokeDasharray="283" 
+                strokeDashoffset={283 - (283 * (state.countdown.remaining / 15))}
+                style={{ transition: "stroke-dashoffset 1s linear, stroke 0.3s ease", filter: "drop-shadow(0 0 8px " + (state.countdown.remaining <= 5 ? "#ff4d4d" : "#00f5ff") + ")" }}
+              />
+            </svg>
+            <div className="modern-timer-value" style={{ color: state.countdown.remaining <= 5 ? "#ff4d4d" : "#fff" }}>
+              {state.countdown.remaining}
+            </div>
+            <div style={{ position: "absolute", bottom: "-20px", fontSize: "10px", fontWeight: 800, color: "rgba(255,255,255,0.4)", letterSpacing: "0.2em" }}>SYNCHRONIZING</div>
+          </div>
+        ) : (
+          <div className="mobile-lobby-orbit" style={{ transform: "scale(0.8)" }}>
+            <div className="orbit-center"><div className="mobile-lobby-spinner"></div></div>
+            <div className="orbit-ring">
+              {players.map((p: string, i: number) => (
+                <div key={p} className="orbit-sperm" style={{ "--i": i, "--n": players.length } as any} />
+              ))}
+            </div>
+            <div style={{ marginTop: "140px", textAlign: "center", width: "200px" }}>
+              <div style={{ fontSize: "11px", color: "#00f5ff", fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                {isRefunding ? "RECURRING REFUND..." : isSolo ? "WAITING FOR RIVALS" : "READYING SYSTEMS"}
+              </div>
+              {isSolo && refundCountdown && (
+                <div style={{ fontSize: "9px", color: "#ff4d4d", marginTop: "6px", fontWeight: 700, letterSpacing: "0.05em" }}>
+                  REFUND IN {refundCountdown}S
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <footer style={{ marginTop: "auto", paddingTop: "10px" }}>
+        <button 
+          className="mobile-btn-back" 
+          onClick={onBack}
+          style={{
+            width: "100%",
+            background: "rgba(255,255,255,0.03)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: "14px",
+            padding: "14px",
+            fontSize: "13px",
+            fontWeight: 700,
+            color: "rgba(255,255,255,0.5)",
+            letterSpacing: "0.1em",
+            textTransform: "uppercase"
+          }}
+        >
+          ← ABORT MISSION
+        </button>
+      </footer>
     </div>
   );
 }
