@@ -1232,38 +1232,43 @@ function Lobby({ onStart: _onStart, onBack, onRefund }: { onStart: () => void; o
           })}
         </div>
 
-        <div className="mobile-lobby-orbit">
-          <div className="orbit-center">
-            <div className="mobile-lobby-spinner"></div>
-          </div>
-          <div className="orbit-ring">
-            {players.map((p: string, i: number) => (
-              <div key={p} className="orbit-sperm" style={{ '--i': i, '--n': players.length } as any} />
-            ))}
-          </div>
-
-          {/* Status Messages */}
-          <div className="mobile-lobby-status-text">
-            {isRefunding ? (
-              <>
-                <div className="refund-processing">
-                  <div className="spinner-small"></div>
-                  <span>Processing refund...</span>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "280px" }}>
+          {state.countdown ? (
+            <div className="modern-countdown-container" style={{ animation: state.countdown.remaining <= 5 ? "countdown-pulse 0.5s ease-in-out infinite" : "none" }}>
+              <svg className="modern-ring-svg" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="2" />
+                <circle 
+                  cx="50" cy="50" r="45" fill="none" 
+                  stroke={state.countdown.remaining <= 5 ? "#ff4d4d" : "#00f5ff"} 
+                  strokeWidth="4" 
+                  strokeDasharray="283" 
+                  strokeDashoffset={283 - (283 * (state.countdown.remaining / 15))}
+                  style={{ transition: "stroke-dashoffset 1s linear, stroke 0.3s ease", filter: "drop-shadow(0 0 8px " + (state.countdown.remaining <= 5 ? "#ff4d4d" : "#00f5ff") + ")" }}
+                />
+              </svg>
+              <div className="modern-timer-value" style={{ color: state.countdown.remaining <= 5 ? "#ff4d4d" : "#fff" }}>
+                {state.countdown.remaining}
+              </div>
+              <div style={{ position: "absolute", bottom: "-20px", fontSize: "10px", fontWeight: 800, color: "rgba(255,255,255,0.4)", letterSpacing: "0.2em" }}>READY TO RACE</div>
+            </div>
+          ) : (
+            <div className="mobile-lobby-orbit">
+              <div className="orbit-center"><div className="mobile-lobby-spinner"></div></div>
+              <div className="orbit-ring">
+                {players.map((p: string, i: number) => (
+                  <div key={p} className="orbit-sperm" style={{ "--i": i, "--n": players.length } as any} />
+                ))}
+              </div>
+              <div style={{ marginTop: "120px", textAlign: "center", zIndex: 10 }}>
+                <div style={{ fontSize: "12px", color: "#00f5ff", fontWeight: 800, letterSpacing: "0.1em" }}>
+                  {isRefunding ? "PROCESSING REFUND..." : isSolo ? "WAITING FOR PLAYERS..." : "PREPARING ARENA..."}
                 </div>
-              </>
-            ) : isSolo && refundCountdown && refundCountdown <= 20 ? (
-              <>
-                <div className="waiting-text">Waiting for players...</div>
-                <div className="refund-warning">Auto-refund in {refundCountdown}s</div>
-              </>
-            ) : isSolo ? (
-              <div className="waiting-text">Waiting for players...</div>
-            ) : state.countdown ? (
-              <div className="starting-text">Starting in {state.countdown.remaining}s</div>
-            ) : (
-              <div className="waiting-text">Waiting for more players...</div>
-            )}
-          </div>
+                {isSolo && refundCountdown && (
+                  <div style={{ fontSize: "10px", color: "#ff4d4d", marginTop: "4px", fontWeight: 600 }}>AUTO-REFUND IN {refundCountdown}S</div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="mobile-lobby-footer">
