@@ -915,3 +915,37 @@
     max-height: calc(100dvh - 150px);
   }
 }
+/* Premium Header Elements */
+.mobile-help-btn {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 60;
+  width: 36px;
+  height: 36px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(0, 245, 255, 0.25);
+  border-radius: 50%;
+  color: #00f5ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 0 15px rgba(0, 245, 255, 0.1);
+  transition: all 0.2s ease;
+}
+
+.mobile-help-btn:active {
+  transform: scale(0.9);
+  background: rgba(0, 245, 255, 0.1);
+}
+
+.mobile-status-badge {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  opacity: 0.8;
+}

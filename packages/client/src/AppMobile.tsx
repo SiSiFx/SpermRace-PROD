@@ -52,6 +52,7 @@ import {
   House,
   CheckCircle,
   Atom,
+  Question,
 } from 'phosphor-react';
 import './leaderboard.css';
 
@@ -167,32 +168,22 @@ function AppInner() {
       {/* Portrait-only orientation enforcement */}
       <OrientationWarning />
 
-      {/* Mobile: Compact header wallet - hide during gameplay */}
-      {screen !== 'game' && screen !== 'practice' && <HeaderWallet screen={screen} />}
-
-      <div id="bg-particles" />
-
-      {/* Status chip + Help toggle - hide during game to avoid HUD clutter */}
-      {screen !== 'game' && screen !== 'practice' && (
+      {/* Mobile: Header Utilities - hide during gameplay */}
+      {screen !== "game" && screen !== "practice" && (
         <>
-          <div style={{ position: 'fixed', top: 8, right: 8, zIndex: 60, padding: '6px 10px', borderRadius: 8, background: 'rgba(0,0,0,0.55)', color: '#c7d2de', border: '1px solid rgba(255,255,255,0.12)', fontSize: 11 }}>
-            {wsState.phase === 'authenticating' ? 'Authenticating…' : wsState.phase === 'lobby' ? 'Lobby' : wsState.phase === 'game' ? 'In Game' : wsState.phase === 'connecting' ? 'Connecting…' : (publicKey ? 'Connected' : 'Not Connected')}
-          </div>
-
+          <HeaderWallet screen={screen} wsState={wsState} publicKey={publicKey} />
           <button
+            className="mobile-help-btn"
             onClick={() => setShowHowTo(true)}
             title="How to play"
-            style={{ position: 'fixed', top: 8, left: 8, zIndex: 60, padding: '6px 8px', borderRadius: 8, background: 'rgba(0,0,0,0.55)', color: '#c7d2de', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12, cursor: 'pointer' }}
           >
-            ?
+            <Question size={20} weight="bold" />
           </button>
         </>
       )}
 
       {wsState.lastError && (
-        <div className="loading-overlay mobile-overlay" style={{ display: 'flex', background: 'rgba(0,0,0,0.85)' }}>
-          <div className="modal-card mobile-modal">
-            <div
+        <div className="loading-overlay mobile-overlay" style={{ display: "flex", background: "rgba(0,0,0,0.85)" }}>
               className="modal-title"
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
             >
@@ -309,27 +300,61 @@ function AppInner() {
   );
 }
 
-function HeaderWallet({ screen }: { screen: string }) {
-  const { publicKey, disconnect } = useWallet() as any;
+function HeaderWallet({ screen, wsState, publicKey }: { screen: string; wsState: any; publicKey: any }) {
+  const { disconnect } = useWallet() as any;
 
-  if (publicKey) {
-    const short = `${publicKey.slice(0, 4)}…${publicKey.slice(-4)}`;
-    return (
-      <div className="mobile-wallet-badge">
-        <span className="wallet-address">{short}</span>
-        <button className="wallet-disconnect" onClick={() => disconnect?.()}>✕</button>
-      </div>
-    );
-  }
-  if (screen === 'game') {
-    return (
-      <div className="mobile-wallet-badge">
-        <GameController size={16} weight="fill" style={{ marginRight: 6 }} />
-        <span>Practice</span>
-      </div>
-    );
-  }
-  return null;
+  // Use Tournament-style colors
+  const short = publicKey ? `${publicKey.slice(0, 4)}…${publicKey.slice(-4)}` : null;
+  const statusText = wsState.phase === "authenticating" ? "Authenticating" :
+                     wsState.phase === "lobby" ? "Lobby" :
+                     wsState.phase === "connecting" ? "Connecting" :
+                     "Not Connected";
+
+  return (
+    <div 
+      className="mobile-wallet-badge" 
+      style={{ 
+        border: publicKey ? "1px solid rgba(0, 245, 255, 0.3)" : "1px solid rgba(255, 255, 255, 0.1)",
+        background: publicKey 
+          ? "linear-gradient(135deg, rgba(0, 245, 255, 0.1), rgba(0, 255, 136, 0.05))" 
+          : "rgba(255, 255, 255, 0.03)",
+        boxShadow: publicKey ? "0 0 15px rgba(0, 245, 255, 0.1)" : "none",
+        padding: "6px 12px",
+        borderRadius: "12px", // Slightly more squared like tournament cards
+        display: "flex",
+        alignItems: "center",
+        gap: "8px"
+      }}
+    >
+      <span style={{ 
+        fontSize: "10px", 
+        fontWeight: 800, 
+        letterSpacing: "0.05em",
+        color: publicKey ? "#00f5ff" : "rgba(255,255,255,0.5)",
+        textTransform: "uppercase"
+      }}>
+        {publicKey ? short : statusText}
+      </span>
+      {publicKey && (
+        <button 
+          style={{ 
+            background: "rgba(255,255,255,0.1)", 
+            border: "none", 
+            color: "#fff", 
+            width: "18px", 
+            height: "18px", 
+            borderRadius: "50%", 
+            fontSize: "10px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer"
+          }} 
+          onClick={() => disconnect?.()}
+        >✕</button>
+      )}
+    </div>
+  );
 }
 
 interface LandingProps {
