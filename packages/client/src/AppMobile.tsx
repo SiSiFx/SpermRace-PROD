@@ -184,8 +184,10 @@ function AppInner() {
 
       {wsState.lastError && (
         <div className="loading-overlay mobile-overlay" style={{ display: "flex", background: "rgba(0,0,0,0.85)" }}>
+          <div className="modal-card mobile-modal">
+            <div
               className="modal-title"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
             >
               <WarningCircle size={20} weight="fill" />
               <span>Error</span>
