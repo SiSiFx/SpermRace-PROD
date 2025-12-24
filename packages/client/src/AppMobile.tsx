@@ -636,7 +636,7 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
   const [step, setStep] = useState<'lobby' | 'game'>('lobby');
   const [meId] = useState<string>('PLAYER_' + Math.random().toString(36).slice(2, 8));
   const [players, setPlayers] = useState<string[]>([]);
-  const [showPracticeIntro, setShowPracticeIntro] = useState<boolean>(() => {
+  const [showPracticeIntro, setShowPracticeIntro] = useState<boolean>(true); // Always show tutorial
     try {
       return !localStorage.getItem('sr_practice_full_tuto_seen');
     } catch {
@@ -682,6 +682,7 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
     const progressPct = 0;
     return (
       <div className="screen active mobile-lobby-screen">
+      {showTutorial && <PracticeFullTutorial onDone={() => setShowTutorial(false)} />}
         <div className="mobile-lobby-container">
           <div className="mobile-lobby-header">
             <h2 className="mobile-lobby-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -720,12 +721,10 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
           </div>
         </div>
         <PracticeFullTutorial
-          visible={showPracticeIntro}
+          
           onDone={() => {
             setShowPracticeIntro(false);
-            try {
-              localStorage.setItem('sr_practice_full_tuto_seen', '1');
-            } catch { }
+
           }}
         />
       </div>
@@ -1179,6 +1178,7 @@ function Lobby({ onStart: _onStart, onBack, onRefund }: { onStart: () => void; o
 
   return (
     <div className="screen active mobile-lobby-screen">
+      {showTutorial && <PracticeFullTutorial onDone={() => setShowTutorial(false)} />}
       <div className="mobile-lobby-container">
         <div className="mobile-lobby-header">
           <h2 className="mobile-lobby-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
