@@ -1001,8 +1001,6 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onS
         </div>
       </div>
 
-        ))}
-      </div>
 
       {/* Action Buttons */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
