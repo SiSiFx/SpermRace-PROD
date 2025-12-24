@@ -2124,15 +2124,18 @@ class SpermRaceGame {
       this.camera.zoom += (this.camera.targetZoom - this.camera.zoom) * zoomSpeed;
     }
     
-    // Center camera on player (no lead), or on full arena during early countdown
+    // Center camera on player, or on average player position during overview
     let desiredCenterX = this.player.x;
     let desiredCenterY = this.player.y;
     if (this.preStart) {
-      const remain = Math.max(0, this.preStart.durationMs - (Date.now() - this.preStart.startAt));
-      if (remain > 2500) {
-        // During overview, center on arena center (0, 0)
-        desiredCenterX = 0;
-        desiredCenterY = 0;
+      const totalDuration = this.preStart.durationMs;
+      const overviewEnd = totalDuration * 0.65;
+      const remain = Math.max(0, totalDuration - (Date.now() - this.preStart.startAt));
+      
+      if (remain > overviewEnd) {
+        // Center on the tactical target calculated in gameLoop (avg real players)
+        desiredCenterX = this.mouse.x;
+        desiredCenterY = this.mouse.y;
       }
     }
     // Compute unclamped camera target from desired center
@@ -2219,20 +2222,41 @@ class SpermRaceGame {
       const remain = Math.max(0, this.preStart.durationMs - (Date.now() - this.preStart.startAt));
       const sec = Math.ceil(remain / 1000);
       
-      // COUNTDOWN CAMERA: Show full arena overview, then zoom to player
-      if (remain > 2500) {
-        // First 2.5 seconds: Calculate zoom to fit entire arena
-        const fitW = this.app.screen.width / (this.arena.width + 400);
-        const fitH = this.app.screen.height / (this.arena.height + 400);
-        this.camera.targetZoom = Math.max(0.15, Math.min(fitW, fitH));
+      // CINEMATIC COUNTDOWN: Show tactical overview of all rivals, then dive into action
+      const totalDuration = this.preStart.durationMs;
+      const overviewEnd = totalDuration * 0.65; // Spend 65% of time in overview
+      
+      if (remain > overviewEnd) {
+        // PHASE 1: Tactical Overview
+        const fitW = this.app.screen.width / (this.arena.width * 0.85);
+        const fitH = this.app.screen.height / (this.arena.height * 0.85);
+        this.camera.targetZoom = Math.max(0.12, Math.min(fitW, fitH));
+        
+        // Target center of all real players if possible
+        let avgX = 0, avgY = 0, count = 0;
+        if (this.player) { avgX += this.player.x; avgY += this.player.y; count++; }
+        for(const p of this.serverPlayers.values()) { avgX += p.x; avgY += p.y; count++; }
+        
+        if (count > 0) {
+          this.mouse.x = avgX / count;
+          this.mouse.y = avgY / count;
+        }
       } else {
-        // Last 2.5 seconds: Gradually zoom into player
-        const t = 1 - (remain / 2500);
-        const startZoom = this.camera.zoom;
-        const endZoom = 0.6;
-        this.camera.targetZoom = startZoom + (endZoom - startZoom) * t;
+        // PHASE 2: Tactical Dive
+        const t = 1 - (remain / overviewEnd);
+        const easedT = t * t * (3 - 2 * t); // Smooth step
+        const startZoom = 0.12;
+        const endZoom = isMobile ? 0.55 : 0.75;
+        this.camera.targetZoom = startZoom + (endZoom - startZoom) * easedT;
+        
+        // Pull focus back to local player
+        if (this.player) {
+          this.mouse.x = this.mouse.x * (1-easedT) + this.player.x * easedT;
+          this.mouse.y = this.mouse.y * (1-easedT) + this.player.y * easedT;
+        }
       }
       
+      const overviewEnd = this.preStart.durationMs * 0.65; const isOverview = remain > overviewEnd; let tacticalLbl = document.getElementById('tactical-overview-label'); if (isOverview && !tacticalLbl && this.uiContainer) { tacticalLbl = document.createElement('div'); tacticalLbl.id = 'tactical-overview-label'; Object.assign(tacticalLbl.style, { position: 'absolute', left: '50%', top: '20%', transform: 'translateX(-50%)', color: '#00f5ff', fontFamily: 'Orbitron, sans-serif', fontSize: '12px', fontWeight: '800', letterSpacing: '0.5em', textTransform: 'uppercase', opacity: '0.8', zIndex: '20', textShadow: '0 0 10px rgba(0, 245, 255, 0.5)' }); tacticalLbl.textContent = 'Tactical Overview'; this.uiContainer.appendChild(tacticalLbl); } else if (!isOverview && tacticalLbl) { tacticalLbl.remove(); }
       // Show countdown HUD with AAA-grade animations
       let cd = document.getElementById('prestart-countdown');
       if (!cd && this.uiContainer) {
@@ -2379,6 +2403,7 @@ class SpermRaceGame {
       if (remain <= 0) {
         // Remove HUD and unfreeze
         this.preStart = null;
+        const tl = document.getElementById('tactical-overview-label'); if (tl) tl.remove();
         if (cd) cd.remove();
         // Clear overview markers
         if (this.overviewCtx && this.overviewCanvas) this.overviewCtx.clearRect(0, 0, this.overviewCanvas.width, this.overviewCanvas.height);
