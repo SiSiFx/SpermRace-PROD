@@ -211,7 +211,6 @@ export class LobbyManager {
 
     const maybeStart = () => {
       const deadline = this.lobbyDeadlineMs.get(lobby.lobbyId) || (Date.now() + LOBBY_MAX_WAIT_SEC * 1000);
-      const minPlayers = dynamicMinPlayers();
       // If lobby is full, start immediately
       if (lobby.players.length >= lobby.maxPlayers) {
         this.clearLobbyTimers(lobby.lobbyId);
@@ -220,22 +219,8 @@ export class LobbyManager {
         lobby.players.forEach(p => this.playerLobbyMap.delete(p));
         return true;
       }
-      // If we have enough players, start (require at least 2 real players in tournament)
-      if (lobby.players.length >= minPlayers) {
-        if (lobby.mode === 'tournament') {
-          const realPlayers = lobby.players.filter(p => !String(p).startsWith('BOT_'));
-          if (realPlayers.length < 2) {
-            console.log(`[LOBBY] Not enough real players (${realPlayers.length}) to start tournament`);
-            return false;
-          }
-        }
-        this.clearLobbyTimers(lobby.lobbyId);
-        this.onGameStart?.(lobby);
-        this.lobbies.delete(lobby.lobbyId);
-        lobby.players.forEach(p => this.playerLobbyMap.delete(p));
-        return true;
-      }
       // If deadline passed, start with whoever is here if at least 2 players
+      const minPlayers = dynamicMinPlayers();
       if (Date.now() >= deadline && (lobby.players.length >= 2 || lobby.mode === 'practice')) {
         if (lobby.mode === 'tournament') {
           const realPlayers = lobby.players.filter(p => !String(p).startsWith('BOT_'));
