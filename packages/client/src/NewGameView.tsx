@@ -198,7 +198,7 @@ class SpermRaceGame {
   } as any;
 
   // Visual toggles
-  public smallTailEnabled: boolean = true; // disable near-head tail; keep only big gameplay trail
+  public smallTailEnabled: boolean = false; // disable near-head wiggly tail; keep only the gameplay trail
 
   // Battle Royale & Sonar system
   public radarPings: RadarPing[] = [];
@@ -1794,7 +1794,13 @@ class SpermRaceGame {
           (car.trailGraphics as any).zIndex = 20;
           this.trailContainer.addChild(car.trailGraphics);
         }
-        const trailObj = { carId: car.id, car: car, points: p.trail.map((pt: any) => ({ x: pt.x, y: pt.y, time: pt.expiresAt - 3000, isBoosting: false })), graphics: car.trailGraphics };
+        const trailObj = {
+          carId: car.id,
+          car: car,
+          // Use createdAt when available so the trail ages correctly and doesn't stick to the head.
+          points: p.trail.map((pt: any) => ({ x: pt.x, y: pt.y, time: (typeof pt.createdAt === 'number' ? pt.createdAt : (pt.expiresAt - 8000)), isBoosting: false })),
+          graphics: car.trailGraphics
+        };
         this.renderTrail(trailObj);
       }
     });
@@ -2889,7 +2895,10 @@ class SpermRaceGame {
     const buffActive = !!(car.hotspotBuffExpiresAt && car.hotspotBuffExpiresAt > now);
     const sizeMul = this.getSizeMultiplierForCar(car);
 
-    if (this.smallTailEnabled && car.tailGraphics) {
+    if (!this.smallTailEnabled && car.tailGraphics) {
+      car.tailGraphics.clear();
+      car.tailGraphics.visible = false;
+    } else if (this.smallTailEnabled && car.tailGraphics) {
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       const isTournament = !!(this.wsHud && this.wsHud.active);
       const isMobilePracticePlayer = isMobile && !isTournament && car.type === "player";
@@ -2902,6 +2911,7 @@ class SpermRaceGame {
       const amp = 5 * sizeMul * (car.isBoosting ? 1.5 : 1.0);
       
       const g = car.tailGraphics;
+      g.visible = true;
       g.clear();
       const dirX = Math.cos(car.angle);
       const dirY = Math.sin(car.angle);
@@ -3238,65 +3248,44 @@ class SpermRaceGame {
     const baseWidth = (car.type === 'player') ? 2 : 1.6; // thinner overall
     const alphaStart = 1.0;
 
+    // Ensure the rendered trail visually reaches the head, especially during boost (trail points emit at a lower rate).
+    // We add a temporary final point at the current car position for rendering only.
+    const drawPts = pts.slice();
     if (isPlayerTrail) {
-      const first = pts[0];
+      const last = drawPts[drawPts.length - 1];
+      const dx = car.x - last.x;
+      const dy = car.y - last.y;
+      if ((dx * dx + dy * dy) > 0.5) {
+        drawPts.push({ x: car.x, y: car.y, time: now, isBoosting: car.isBoosting });
+      }
+    }
+    if (drawPts.length < 2) return;
+
+    if (isPlayerTrail) {
+      const first = drawPts[0];
       trail.graphics.moveTo(first.x, first.y);
-      for (let i = 1; i < pts.length; i++) {
-        const p = pts[i];
+      for (let i = 1; i < drawPts.length; i++) {
+        const p = drawPts[i];
         trail.graphics.lineTo(p.x, p.y);
       }
-      trail.graphics.stroke({ width: baseWidth, color: trailColor, alpha: alphaStart, cap: 'round', join: 'round' });
+      // Use butt cap so it doesn't look like a blob glued onto the head.
+      trail.graphics.stroke({ width: baseWidth, color: trailColor, alpha: alphaStart, cap: 'butt', join: 'round' });
     } else {
-      // GHOST TAIL: Procedurally wiggle the trail visually (hitbox remains at server positions)
-      const headX = car.x;
-      const headY = car.y;
-      const ghost: Array<{ x: number; y: number }> = [];
-      ghost.push({ x: headX, y: headY });
-
-      const time = now * 0.004; // global time factor
-      const amplitudeBase = isBot ? 4 : 6;
-      const speedMag = Math.hypot(car.vx, car.vy);
-      const speedFactor = 1.0 + Math.min(1.5, speedMag / 260); // faster wiggle when moving
-
-      for (let idx = pts.length - 1; idx >= 0; idx--) {
-        const p = pts[idx];
-        const prev = idx === pts.length - 1 ? { x: headX, y: headY } : pts[idx + 1];
-        const dirX = p.x - prev.x;
-        const dirY = p.y - prev.y;
-        const len = Math.hypot(dirX, dirY) || 1;
-        const nx = -dirY / len;
-        const ny = dirX / len;
-        const t = (pts.length - 1 - idx) / Math.max(1, pts.length - 1); // 0 at head → 1 at tail
-        const envelope = Math.pow(t, 1.6); // more motion toward tail
-        const phase = time * speedFactor + t * 4.0;
-        const offset = Math.sin(phase) * amplitudeBase * envelope;
-        ghost.push({ x: p.x + nx * offset, y: p.y + ny * offset });
+      // Disable the "ghost wiggle trail" (it can look like a tiny tail glued to the head).
+      const first = drawPts[0];
+      trail.graphics.moveTo(first.x, first.y);
+      for (let i = 1; i < drawPts.length; i++) {
+        const p = drawPts[i];
+        trail.graphics.lineTo(p.x, p.y);
       }
-
-      if (ghost.length < 2) return;
-
-      // Draw smooth quadratic Bezier through ghost points
-      const g0 = ghost[0];
-      const g1 = ghost[1];
-      const m0x = (g0.x + g1.x) * 0.5;
-      const m0y = (g0.y + g1.y) * 0.5;
-      trail.graphics.moveTo(m0x, m0y);
-      for (let i = 1; i < ghost.length - 1; i++) {
-        const c = ghost[i];
-        const n = ghost[i + 1];
-        const mx = (c.x + n.x) * 0.5;
-        const my = (c.y + n.y) * 0.5;
-        trail.graphics.quadraticCurveTo(c.x, c.y, mx, my);
-      }
-
       trail.graphics.stroke({ width: baseWidth, color: trailColor, alpha: alphaStart, cap: 'round', join: 'round' });
     }
 
     // Proximity glow (subtle, thinner) using segment checks
-    if (this.player && trail.car !== this.player && pts.length >= 2) {
-      for (let i = 1; i < pts.length; i++) {
-        const a = pts[i - 1];
-        const b = pts[i];
+    if (this.player && trail.car !== this.player && drawPts.length >= 2) {
+      for (let i = 1; i < drawPts.length; i++) {
+        const a = drawPts[i - 1];
+        const b = drawPts[i];
         const dist = this.pointToLineDistance(this.player.x, this.player.y, a.x, a.y, b.x, b.y);
         if (dist < 60) {
           const glowAlpha = Math.max(0, 0.25 * (1 - dist / 60));

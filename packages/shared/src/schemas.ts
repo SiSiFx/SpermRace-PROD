@@ -64,6 +64,15 @@ export const entryFeeSignatureMessageSchema = z.object({
   }),
 });
 
+export const clientHelloMessageSchema = z.object({
+  type: z.literal('clientHello'),
+  payload: z
+    .object({
+      trailDelta: z.boolean().optional(),
+    })
+    .optional(),
+});
+
 export const clientToServerMessageSchema = z.union([
   authenticateMessageSchema,
   guestLoginMessageSchema,
@@ -71,6 +80,7 @@ export const clientToServerMessageSchema = z.union([
   leaveLobbyMessageSchema,
   playerInputMessageSchema,
   entryFeeSignatureMessageSchema,
+  clientHelloMessageSchema,
 ]);
 
 export type ClientToServerMessage = z.infer<typeof clientToServerMessageSchema>;
