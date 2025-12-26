@@ -3259,49 +3259,13 @@ class SpermRaceGame {
       }
       trail.graphics.stroke({ width: baseWidth, color: trailColor, alpha: alphaStart, cap: 'round', join: 'round' });
     } else {
-      // GHOST TAIL: Procedurally wiggle the trail visually (hitbox remains at server positions)
-      const ghost: Array<{ x: number; y: number }> = [];
-      // Don't anchor the visual trail directly to the head; it creates a tiny "glued" tail segment.
-      // Start from the newest server point instead.
-      const newest = drawPts[drawPts.length - 1];
-      ghost.push({ x: newest.x, y: newest.y });
-
-      const time = now * 0.004; // global time factor
-      const amplitudeBase = isBot ? 4 : 6;
-      const speedMag = Math.hypot(car.vx, car.vy);
-      const speedFactor = 1.0 + Math.min(1.5, speedMag / 260); // faster wiggle when moving
-
-      for (let idx = drawPts.length - 2; idx >= 0; idx--) {
-        const p = drawPts[idx];
-        const prev = idx === drawPts.length - 2 ? newest : drawPts[idx + 1];
-        const dirX = p.x - prev.x;
-        const dirY = p.y - prev.y;
-        const len = Math.hypot(dirX, dirY) || 1;
-        const nx = -dirY / len;
-        const ny = dirX / len;
-        const t = (drawPts.length - 2 - idx) / Math.max(1, drawPts.length - 2); // 0 near head → 1 at tail
-        const envelope = Math.pow(t, 1.6); // more motion toward tail
-        const phase = time * speedFactor + t * 4.0;
-        const offset = Math.sin(phase) * amplitudeBase * envelope;
-        ghost.push({ x: p.x + nx * offset, y: p.y + ny * offset });
+      // Disable the "ghost wiggle trail" (it can look like a tiny tail glued to the head).
+      const first = drawPts[0];
+      trail.graphics.moveTo(first.x, first.y);
+      for (let i = 1; i < drawPts.length; i++) {
+        const p = drawPts[i];
+        trail.graphics.lineTo(p.x, p.y);
       }
-
-      if (ghost.length < 2) return;
-
-      // Draw smooth quadratic Bezier through ghost points
-      const g0 = ghost[0];
-      const g1 = ghost[1];
-      const m0x = (g0.x + g1.x) * 0.5;
-      const m0y = (g0.y + g1.y) * 0.5;
-      trail.graphics.moveTo(m0x, m0y);
-      for (let i = 1; i < ghost.length - 1; i++) {
-        const c = ghost[i];
-        const n = ghost[i + 1];
-        const mx = (c.x + n.x) * 0.5;
-        const my = (c.y + n.y) * 0.5;
-        trail.graphics.quadraticCurveTo(c.x, c.y, mx, my);
-      }
-
       trail.graphics.stroke({ width: baseWidth, color: trailColor, alpha: alphaStart, cap: 'round', join: 'round' });
     }
 
