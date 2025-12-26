@@ -198,7 +198,7 @@ class SpermRaceGame {
   } as any;
 
   // Visual toggles
-  public smallTailEnabled: boolean = true; // disable near-head tail; keep only big gameplay trail
+  public smallTailEnabled: boolean = false; // disable near-head wiggly tail; keep only the gameplay trail
 
   // Battle Royale & Sonar system
   public radarPings: RadarPing[] = [];
@@ -2895,7 +2895,10 @@ class SpermRaceGame {
     const buffActive = !!(car.hotspotBuffExpiresAt && car.hotspotBuffExpiresAt > now);
     const sizeMul = this.getSizeMultiplierForCar(car);
 
-    if (this.smallTailEnabled && car.tailGraphics) {
+    if (!this.smallTailEnabled && car.tailGraphics) {
+      car.tailGraphics.clear();
+      car.tailGraphics.visible = false;
+    } else if (this.smallTailEnabled && car.tailGraphics) {
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       const isTournament = !!(this.wsHud && this.wsHud.active);
       const isMobilePracticePlayer = isMobile && !isTournament && car.type === "player";
@@ -2908,6 +2911,7 @@ class SpermRaceGame {
       const amp = 5 * sizeMul * (car.isBoosting ? 1.5 : 1.0);
       
       const g = car.tailGraphics;
+      g.visible = true;
       g.clear();
       const dirX = Math.cos(car.angle);
       const dirY = Math.sin(car.angle);
