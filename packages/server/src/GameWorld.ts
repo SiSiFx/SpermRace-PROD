@@ -419,6 +419,7 @@ export class GameWorld {
         trail: player.trail,
         isAlive: player.isAlive,
         input: player.input,
+        status: player.status,
       };
     });
     this.gameState.players = newPlayersState;

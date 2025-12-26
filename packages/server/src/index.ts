@@ -105,7 +105,7 @@ const SESSION_TOKEN_TTL_MS = 300000; // 5 minutes
 
 gameWorld.start();
 
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:5174')
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://spermrace.io,https://www.spermrace.io,https://sperm-race-io.vercel.app,http://localhost:5174')
   .split(',')
   .map(s => s.trim())
   .filter(Boolean);
@@ -534,6 +534,7 @@ lobbyManager.onLobbyCountdown = (lobby, remaining, startAtMs) => {
 };
 
 lobbyManager.onLobbyRefund = async (lobby: Lobby, playerId: string, _calculatedLamports: number) => {
+  if (playerId.startsWith('Guest_') || playerId.startsWith('PLAYER_')) { console.log(`[REFUND] Skipping refund for guest/local player ${playerId}`); return; }
   // Use ACTUAL amount paid, not recalculated amount
   const actualLamportsPaid = expectedLamportsByPlayerId.get(playerId) || _calculatedLamports;
 
