@@ -101,6 +101,8 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
   const [isGuest, setIsGuest] = useState(false);
   const isGuestRef = useRef(false);
   const trailsRef = useRef<Record<string, TrailPoint[]>>({});
+  const trailLastCreatedAtRef = useRef<Record<string, number>>({});
+  const serverTimeOffsetMsRef = useRef<number>(0);
   const wsRef = useRef<WebSocket | null>(null);
   const pendingJoinRef = useRef<JoinOpts | null>(null);
   const joinBusyRef = useRef<boolean>(false);
@@ -123,6 +125,8 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
     setIsGuest(!!opts.guestName);
     isGuestRef.current = !!opts.guestName;
     trailsRef.current = {};
+    trailLastCreatedAtRef.current = {};
+    serverTimeOffsetMsRef.current = 0;
 
     // If GUEST, skip wallet checks entirely
     if (opts.guestName) {
@@ -577,6 +581,7 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
               joinBusyRef.current = false;
               console.log('[GAME] starting');
               trailsRef.current = {};
+              trailLastCreatedAtRef.current = {};
               setState(s => ({ ...s, phase: 'game', joining: false, initialPlayers: Array.isArray(s.lobby?.players) ? [...(s.lobby!.players as any)] : [], eliminationOrder: [], kills: {}, killFeed: [], hasFirstGameState: false }));
               try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'game_start', payload: { players: (state.lobby?.players || []).length, tier: state.lobby?.entryFee } }) }); } catch { }
               break;
@@ -584,7 +589,7 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
             case 'trailDelta': {
               const deltas = (msg.payload?.deltas || []) as Array<{ playerId: string; points: TrailPoint[] }>;
               if (!Array.isArray(deltas) || deltas.length === 0) break;
-              const now = Date.now();
+              const now = Date.now() + (serverTimeOffsetMsRef.current || 0);
               for (const d of deltas) {
                 const pid = d?.playerId;
                 if (!pid) continue;
@@ -593,19 +598,31 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
                 const existing = trailsRef.current[pid] || [];
                 // prune expired points and append new points
                 const pruned = existing.filter(p => (p?.expiresAt || 0) > now);
+                let lastCreatedAt = trailLastCreatedAtRef.current[pid] || 0;
                 for (const pt of points) {
                   if (!pt) continue;
                   if (typeof (pt as any).x !== 'number' || typeof (pt as any).y !== 'number' || typeof (pt as any).expiresAt !== 'number') continue;
-                  pruned.push({ x: (pt as any).x, y: (pt as any).y, expiresAt: (pt as any).expiresAt, createdAt: (pt as any).createdAt });
+                  const createdAt = typeof (pt as any).createdAt === 'number' ? (pt as any).createdAt : undefined;
+                  // Deduplicate/resync safety: only accept points newer than what we've already seen.
+                  if (createdAt !== undefined) {
+                    if (createdAt <= lastCreatedAt) continue;
+                    lastCreatedAt = createdAt;
+                  }
+                  pruned.push({ x: (pt as any).x, y: (pt as any).y, expiresAt: (pt as any).expiresAt, ...(createdAt !== undefined ? { createdAt } : {}) });
                 }
                 trailsRef.current[pid] = pruned;
+                if (lastCreatedAt > 0) trailLastCreatedAtRef.current[pid] = lastCreatedAt;
               }
               break;
             }
             case 'gameStateUpdate': {
               const p = msg.payload;
+              // Align pruning/expiration to server time to avoid clock-skew artifacts.
+              if (typeof p?.timestamp === 'number') {
+                serverTimeOffsetMsRef.current = p.timestamp - Date.now();
+              }
               const serverPlayers = Array.isArray(p?.players) ? p.players : [];
-              const now = Date.now();
+              const now = Date.now() + (serverTimeOffsetMsRef.current || 0);
               const ids = new Set<string>();
               const mergedPlayers = serverPlayers.map((pl: any) => {
                 const id = String(pl?.id || '');
@@ -614,11 +631,23 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
                 // prune on read to keep memory bounded even if trailDelta pauses
                 const prunedTrail = Array.isArray(existingTrail) ? existingTrail.filter(t => (t?.expiresAt || 0) > now) : [];
                 trailsRef.current[id] = prunedTrail as any;
+                // If server sent a full trail (legacy mode), sync the dedupe cursor.
+                if (Array.isArray(pl?.trail)) {
+                  let maxCreatedAt = 0;
+                  for (const pt of prunedTrail as any[]) {
+                    const ca = typeof pt?.createdAt === 'number' ? pt.createdAt : 0;
+                    if (ca > maxCreatedAt) maxCreatedAt = ca;
+                  }
+                  if (maxCreatedAt > 0) trailLastCreatedAtRef.current[id] = maxCreatedAt;
+                }
                 return { ...pl, trail: prunedTrail };
               });
               // Drop trails for players no longer present in the match
               for (const k of Object.keys(trailsRef.current)) {
                 if (!ids.has(k)) delete trailsRef.current[k];
+              }
+              for (const k of Object.keys(trailLastCreatedAtRef.current)) {
+                if (!ids.has(k)) delete trailLastCreatedAtRef.current[k];
               }
 
               setState(s => ({ ...s, game: { timestamp: p.timestamp, players: mergedPlayers, world: p.world, aliveCount: p.aliveCount }, hasFirstGameState: s.hasFirstGameState || true }));
@@ -629,6 +658,8 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
               console.log('[GAME] round end received');
               // Keep phase ended so UI can navigate to results (App handles screen switch)
               trailsRef.current = {};
+              trailLastCreatedAtRef.current = {};
+              serverTimeOffsetMsRef.current = 0;
               setState(s => ({ ...s, phase: 'ended', joining: false, lastRound: { winnerId: msg.payload?.winnerId, prizeAmount: msg.payload?.prizeAmount, txSignature: msg.payload?.txSignature } }));
               try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'round_end', payload: { winner: msg.payload?.winnerId, prize: msg.payload?.prizeAmount, tx: msg.payload?.txSignature } }) }); } catch { }
               break;
@@ -767,6 +798,8 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
     try { expectedCloseRef.current = true; wsRef.current?.close(); } catch { }
     wsRef.current = null;
     trailsRef.current = {};
+    trailLastCreatedAtRef.current = {};
+    serverTimeOffsetMsRef.current = 0;
     if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
     reconnectAttemptsRef.current = 0;
     pendingJoinRef.current = null;
