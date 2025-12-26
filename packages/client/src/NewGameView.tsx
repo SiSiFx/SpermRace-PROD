@@ -1794,7 +1794,13 @@ class SpermRaceGame {
           (car.trailGraphics as any).zIndex = 20;
           this.trailContainer.addChild(car.trailGraphics);
         }
-        const trailObj = { carId: car.id, car: car, points: p.trail.map((pt: any) => ({ x: pt.x, y: pt.y, time: pt.expiresAt - 3000, isBoosting: false })), graphics: car.trailGraphics };
+        const trailObj = {
+          carId: car.id,
+          car: car,
+          // Use createdAt when available so the trail ages correctly and doesn't stick to the head.
+          points: p.trail.map((pt: any) => ({ x: pt.x, y: pt.y, time: (typeof pt.createdAt === 'number' ? pt.createdAt : (pt.expiresAt - 8000)), isBoosting: false })),
+          graphics: car.trailGraphics
+        };
         this.renderTrail(trailObj);
       }
     });
@@ -3248,25 +3254,26 @@ class SpermRaceGame {
       trail.graphics.stroke({ width: baseWidth, color: trailColor, alpha: alphaStart, cap: 'round', join: 'round' });
     } else {
       // GHOST TAIL: Procedurally wiggle the trail visually (hitbox remains at server positions)
-      const headX = car.x;
-      const headY = car.y;
       const ghost: Array<{ x: number; y: number }> = [];
-      ghost.push({ x: headX, y: headY });
+      // Don't anchor the visual trail directly to the head; it creates a tiny "glued" tail segment.
+      // Start from the newest server point instead.
+      const newest = pts[pts.length - 1];
+      ghost.push({ x: newest.x, y: newest.y });
 
       const time = now * 0.004; // global time factor
       const amplitudeBase = isBot ? 4 : 6;
       const speedMag = Math.hypot(car.vx, car.vy);
       const speedFactor = 1.0 + Math.min(1.5, speedMag / 260); // faster wiggle when moving
 
-      for (let idx = pts.length - 1; idx >= 0; idx--) {
+      for (let idx = pts.length - 2; idx >= 0; idx--) {
         const p = pts[idx];
-        const prev = idx === pts.length - 1 ? { x: headX, y: headY } : pts[idx + 1];
+        const prev = idx === pts.length - 2 ? newest : pts[idx + 1];
         const dirX = p.x - prev.x;
         const dirY = p.y - prev.y;
         const len = Math.hypot(dirX, dirY) || 1;
         const nx = -dirY / len;
         const ny = dirX / len;
-        const t = (pts.length - 1 - idx) / Math.max(1, pts.length - 1); // 0 at head → 1 at tail
+        const t = (pts.length - 2 - idx) / Math.max(1, pts.length - 2); // 0 near head → 1 at tail
         const envelope = Math.pow(t, 1.6); // more motion toward tail
         const phase = time * speedFactor + t * 4.0;
         const offset = Math.sin(phase) * amplitudeBase * envelope;
