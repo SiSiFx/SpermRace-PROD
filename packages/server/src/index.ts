@@ -1276,7 +1276,7 @@ function broadcastTrailDelta(): void {
   }
   if (!anyWants) return;
 
-  const deltas: Array<{ playerId: string; points: Array<{ x: number; y: number; expiresAt: number }> }> = [];
+  const deltas: Array<{ playerId: string; points: Array<{ x: number; y: number; expiresAt: number; createdAt?: number }> }> = [];
 
   for (const p of Object.values(gameState.players) as any[]) {
     const playerId = String(p?.id || '');
@@ -1302,7 +1302,7 @@ function broadcastTrailDelta(): void {
 
     if (startIdx >= trail.length) continue;
 
-    const newPoints = trail.slice(startIdx).map((pt: any) => ({ x: pt.x, y: pt.y, expiresAt: pt.expiresAt }));
+    const newPoints = trail.slice(startIdx).map((pt: any) => ({ x: pt.x, y: pt.y, expiresAt: pt.expiresAt, createdAt: pt.createdAt }));
     if (newPoints.length === 0) continue;
 
     const last = trail[trail.length - 1];
