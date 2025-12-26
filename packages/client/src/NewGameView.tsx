@@ -3238,6 +3238,12 @@ class SpermRaceGame {
     }
     if (pts.length < 2) return;
 
+    // Prevent a tiny "glued to the head" segment:
+    // The newest trail point is often at/near the head and with round caps can look like a tail stuck to the sprite.
+    // Clip the newest point so the rendered trail ends slightly behind the head.
+    const drawPts = pts.length >= 3 ? pts.slice(0, -1) : pts;
+    if (drawPts.length < 2) return;
+
     // Calm player trail: avoid ghost wiggle on the local player's own trail to prevent jittery visuals
     const isPlayerTrail = !!(this.player && trail.car === this.player);
 
@@ -3245,10 +3251,10 @@ class SpermRaceGame {
     const alphaStart = 1.0;
 
     if (isPlayerTrail) {
-      const first = pts[0];
+      const first = drawPts[0];
       trail.graphics.moveTo(first.x, first.y);
-      for (let i = 1; i < pts.length; i++) {
-        const p = pts[i];
+      for (let i = 1; i < drawPts.length; i++) {
+        const p = drawPts[i];
         trail.graphics.lineTo(p.x, p.y);
       }
       trail.graphics.stroke({ width: baseWidth, color: trailColor, alpha: alphaStart, cap: 'round', join: 'round' });
@@ -3257,7 +3263,7 @@ class SpermRaceGame {
       const ghost: Array<{ x: number; y: number }> = [];
       // Don't anchor the visual trail directly to the head; it creates a tiny "glued" tail segment.
       // Start from the newest server point instead.
-      const newest = pts[pts.length - 1];
+      const newest = drawPts[drawPts.length - 1];
       ghost.push({ x: newest.x, y: newest.y });
 
       const time = now * 0.004; // global time factor
@@ -3265,15 +3271,15 @@ class SpermRaceGame {
       const speedMag = Math.hypot(car.vx, car.vy);
       const speedFactor = 1.0 + Math.min(1.5, speedMag / 260); // faster wiggle when moving
 
-      for (let idx = pts.length - 2; idx >= 0; idx--) {
-        const p = pts[idx];
-        const prev = idx === pts.length - 2 ? newest : pts[idx + 1];
+      for (let idx = drawPts.length - 2; idx >= 0; idx--) {
+        const p = drawPts[idx];
+        const prev = idx === drawPts.length - 2 ? newest : drawPts[idx + 1];
         const dirX = p.x - prev.x;
         const dirY = p.y - prev.y;
         const len = Math.hypot(dirX, dirY) || 1;
         const nx = -dirY / len;
         const ny = dirX / len;
-        const t = (pts.length - 2 - idx) / Math.max(1, pts.length - 2); // 0 near head → 1 at tail
+        const t = (drawPts.length - 2 - idx) / Math.max(1, drawPts.length - 2); // 0 near head → 1 at tail
         const envelope = Math.pow(t, 1.6); // more motion toward tail
         const phase = time * speedFactor + t * 4.0;
         const offset = Math.sin(phase) * amplitudeBase * envelope;
@@ -3300,10 +3306,10 @@ class SpermRaceGame {
     }
 
     // Proximity glow (subtle, thinner) using segment checks
-    if (this.player && trail.car !== this.player && pts.length >= 2) {
-      for (let i = 1; i < pts.length; i++) {
-        const a = pts[i - 1];
-        const b = pts[i];
+    if (this.player && trail.car !== this.player && drawPts.length >= 2) {
+      for (let i = 1; i < drawPts.length; i++) {
+        const a = drawPts[i - 1];
+        const b = drawPts[i];
         const dist = this.pointToLineDistance(this.player.x, this.player.y, a.x, a.y, b.x, b.y);
         if (dist < 60) {
           const glowAlpha = Math.max(0, 0.25 * (1 - dist / 60));
