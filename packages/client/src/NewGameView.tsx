@@ -3242,17 +3242,24 @@ class SpermRaceGame {
     }
     if (pts.length < 2) return;
 
-    // Prevent a tiny "glued to the head" segment:
-    // The newest trail point is often at/near the head and with round caps can look like a tail stuck to the sprite.
-    // Clip the newest point so the rendered trail ends slightly behind the head.
-    const drawPts = pts.length >= 3 ? pts.slice(0, -1) : pts;
-    if (drawPts.length < 2) return;
-
     // Calm player trail: avoid ghost wiggle on the local player's own trail to prevent jittery visuals
     const isPlayerTrail = !!(this.player && trail.car === this.player);
 
     const baseWidth = (car.type === 'player') ? 2 : 1.6; // thinner overall
     const alphaStart = 1.0;
+
+    // Ensure the rendered trail visually reaches the head, especially during boost (trail points emit at a lower rate).
+    // We add a temporary final point at the current car position for rendering only.
+    const drawPts = pts.slice();
+    if (isPlayerTrail) {
+      const last = drawPts[drawPts.length - 1];
+      const dx = car.x - last.x;
+      const dy = car.y - last.y;
+      if ((dx * dx + dy * dy) > 0.5) {
+        drawPts.push({ x: car.x, y: car.y, time: now, isBoosting: car.isBoosting });
+      }
+    }
+    if (drawPts.length < 2) return;
 
     if (isPlayerTrail) {
       const first = drawPts[0];
@@ -3261,7 +3268,8 @@ class SpermRaceGame {
         const p = drawPts[i];
         trail.graphics.lineTo(p.x, p.y);
       }
-      trail.graphics.stroke({ width: baseWidth, color: trailColor, alpha: alphaStart, cap: 'round', join: 'round' });
+      // Use butt cap so it doesn't look like a blob glued onto the head.
+      trail.graphics.stroke({ width: baseWidth, color: trailColor, alpha: alphaStart, cap: 'butt', join: 'round' });
     } else {
       // Disable the "ghost wiggle trail" (it can look like a tiny tail glued to the head).
       const first = drawPts[0];
