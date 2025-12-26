@@ -198,7 +198,7 @@ class SpermRaceGame {
   } as any;
 
   // Visual toggles
-  public smallTailEnabled: boolean = false; // disable near-head tail; keep only big gameplay trail
+  public smallTailEnabled: boolean = true; // disable near-head tail; keep only big gameplay trail
 
   // Battle Royale & Sonar system
   public radarPings: RadarPing[] = [];
@@ -1776,9 +1776,10 @@ class SpermRaceGame {
 
       car.x = p.sperm.position.x;
       car.y = p.sperm.position.y;
-      car.vx = p.sperm.velocity.x;
-      car.vy = p.sperm.velocity.y;
+      car.vx = p.sperm.velocity?.x || 0;
+      car.vy = p.sperm.velocity?.y || 0;
       car.angle = p.sperm.angle;
+      car.isBoosting = p.status?.boosting || false;
       car.sprite.rotation = p.sperm.angle;
       car.sprite.position.set(car.x, car.y);
       car.destroyed = !p.isAlive;
@@ -2451,6 +2452,29 @@ class SpermRaceGame {
           this.checkArenaCollision(extraBot);
         }
       }
+
+      // Update server-synced players
+      for (const car of this.serverPlayers.values()) {
+        if (!car.destroyed) {
+          this.updateCarVisuals(car, deltaTime);
+          // Keep nameplate pinned above player
+          try {
+            const np = (car as any).nameplate as HTMLDivElement | undefined;
+            if (np) {
+              const sx = car.x * this.camera.zoom + this.camera.x;
+              const sy = car.y * this.camera.zoom + this.camera.y;
+              np.style.left = `${sx}px`;
+              np.style.top = `${sy}px`;
+              np.style.display = 'block';
+            }
+          } catch {}
+        } else {
+          try {
+            const np = (car as any).nameplate as HTMLDivElement | undefined;
+            if (np) np.style.display = 'none';
+          } catch {}
+        }
+      }
       
       // Update trails
       this.updateTrails(deltaTime);
@@ -2837,16 +2861,16 @@ class SpermRaceGame {
 
   spawnEmote(car: Car | null, emoji: string) {
     if (!car || !this.uiContainer || !this.app) return;
-    const el = document.createElement('div');
+    const el = document.createElement("div");
     el.textContent = emoji;
     Object.assign(el.style, {
-      position: 'absolute',
-      transform: 'translate(-50%, -50%)',
-      fontSize: '18px',
-      filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.7))',
-      zIndex: '15',
-      transition: 'opacity 200ms ease, transform 200ms ease',
-      opacity: '1'
+      position: "absolute",
+      transform: "translate(-50%, -50%)",
+      fontSize: "18px",
+      filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.7))",
+      zIndex: "15",
+      transition: "opacity 200ms ease, transform 200ms ease",
+      opacity: "1"
     } as any);
     this.uiContainer.appendChild(el);
     const sx = car.x * this.camera.zoom + this.camera.x + this.app.screen.width * 0.5 - this.app.screen.width * 0.5;
@@ -2855,8 +2879,63 @@ class SpermRaceGame {
     el.style.top = `${sy}px`;
     const expiresAt = Date.now() + 900;
     this.emotes.push({ el, car, expiresAt });
-    setTimeout(() => { try { el.style.opacity = '0'; el.style.transform = 'translate(-50%, -60%)'; } catch {} }, 700);
+    setTimeout(() => { try { el.style.opacity = "0"; el.style.transform = "translate(-50%, -60%)"; } catch {} }, 700);
     setTimeout(() => { try { el.remove(); } catch {} }, 900);
+  }
+
+  updateCarVisuals(car: Car, deltaTime: number) {
+    if (car.destroyed) return;
+    const now = Date.now();
+    const buffActive = !!(car.hotspotBuffExpiresAt && car.hotspotBuffExpiresAt > now);
+    const sizeMul = this.getSizeMultiplierForCar(car);
+
+    if (this.smallTailEnabled && car.tailGraphics) {
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const isTournament = !!(this.wsHud && this.wsHud.active);
+      const isMobilePracticePlayer = isMobile && !isTournament && car.type === "player";
+
+      const waveSpeed = isMobilePracticePlayer ? (car.isBoosting ? 6 : 3) : (car.isBoosting ? 18 : 10);
+      car.tailWaveT = (car.tailWaveT || 0) + deltaTime * waveSpeed;
+
+      const segs = isMobilePracticePlayer ? 6 : 10;
+      const len = 34 * sizeMul;
+      const amp = 5 * sizeMul * (car.isBoosting ? 1.5 : 1.0);
+      
+      const g = car.tailGraphics;
+      g.clear();
+      const dirX = Math.cos(car.angle);
+      const dirY = Math.sin(car.angle);
+      const latX = Math.cos(car.angle + Math.PI / 2);
+      const latY = Math.sin(car.angle + Math.PI / 2);
+      
+      const points = [];
+      const step = len / segs;
+      for (let i = 0; i <= segs; i++) {
+        const t = i / segs;
+        const envelope = Math.pow(t, 1.5);
+        const wave = Math.sin(t * 10 + car.tailWaveT) * envelope * amp;
+        points.push({
+          x: -dirX * i * step + latX * wave,
+          y: -dirY * i * step + latY * wave
+        });
+      }
+      const poly = [];
+      for(const p of points) { poly.push(p.x, p.y); }
+      g.poly(poly).stroke({ width: 2 * sizeMul, color: car.color, alpha: 0.8 });
+    }
+
+    if (car.headGraphics) {
+      const rx = 9 * sizeMul;
+      const ry = 6 * sizeMul;
+      car.headGraphics.clear();
+      car.headGraphics.ellipse(0, 0, rx, ry).fill({ color: car.color, alpha: 1.0 });
+      if (car.isBoosting) {
+        car.headGraphics.ellipse(0, 0, rx + 3, ry + 2).fill({ color: car.color, alpha: 0.2 });
+      }
+      if (buffActive) {
+        car.headGraphics.ellipse(0, 0, rx + 5, ry + 4).stroke({ width: 2, color: 0xfacc15, alpha: 0.9 });
+      }
+    }
   }
 
   updateCar(car: Car, deltaTime: number) {
@@ -2866,231 +2945,66 @@ class SpermRaceGame {
     if (car.spotlightUntil && car.spotlightUntil <= now) car.spotlightUntil = undefined;
     const buffActive = !!(car.hotspotBuffExpiresAt && car.hotspotBuffExpiresAt > now);
     
-    // Update boost energy system
     const wasBoosting = car.isBoosting;
     if (car.isBoosting) {
       car.boostEnergy -= car.boostConsumptionRate * deltaTime;
       car.targetSpeed = car.boostSpeed;
       if (buffActive) car.targetSpeed *= 1.08;
       car.driftFactor = Math.min(car.maxDriftFactor, car.driftFactor + deltaTime * 2.0);
-      
-      // Stop boosting if energy depleted
       if (car.boostEnergy <= 0) {
-        car.boostEnergy = 0;
-        car.isBoosting = false;
-        car.targetSpeed = car.baseSpeed;
+        car.boostEnergy = 0; car.isBoosting = false; car.targetSpeed = car.baseSpeed;
       }
     } else {
-      // Regenerate boost energy when not boosting
-      // Progressive regen: faster in early game, slower in final seconds
       let regenMultiplier = 1.0;
-      
       if (this.zone && this.zone.startAtMs) {
         const elapsed = Date.now() - this.zone.startAtMs;
         const remainMs = Math.max(0, this.zone.durationMs - elapsed);
-        
-        // First 10 seconds: 50% faster regen (1.5x)
-        if (elapsed < 10000) {
-          regenMultiplier = 1.5;
-        }
-        // Final 5 seconds: 30% slower regen (0.7x) for tension
-        else if (remainMs < 5000) {
-          regenMultiplier = 0.7;
-        }
+        if (elapsed < 10000) regenMultiplier = 1.5;
+        else if (remainMs < 5000) regenMultiplier = 0.7;
       }
-      
       car.boostEnergy += car.boostRegenRate * deltaTime * regenMultiplier;
-      if (car.boostEnergy > car.maxBoostEnergy) {
-        car.boostEnergy = car.maxBoostEnergy;
-      }
-      // Kill boost takes priority over normal speed
-      if (car.killBoostUntil && now < car.killBoostUntil) {
-        car.targetSpeed = car.boostSpeed * 0.8;
-      } else {
-        car.targetSpeed = car.baseSpeed;
-        if (buffActive) car.targetSpeed *= 1.05;
-      }
+      if (car.boostEnergy > car.maxBoostEnergy) car.boostEnergy = car.maxBoostEnergy;
+      if (car.killBoostUntil && now < car.killBoostUntil) car.targetSpeed = car.boostSpeed * 0.8;
+      else { car.targetSpeed = car.baseSpeed; if (buffActive) car.targetSpeed *= 1.05; }
       car.driftFactor = Math.max(0, car.driftFactor - deltaTime * 1.5);
     }
-    // Emit boost echo on start
-    if (!wasBoosting && car.isBoosting) {
-      this.emitBoostEcho(car.x, car.y);
-    }
+    if (!wasBoosting && car.isBoosting) this.emitBoostEcho(car.x, car.y);
     
-    // Boost pads trigger (simple distance check)
-  for (const pad of this.boostPads) {
+    for (const pad of this.boostPads) {
       const dx = car.x - pad.x, dy = car.y - pad.y;
-      const within = (dx * dx + dy * dy) <= (pad.radius * pad.radius);
-      if (within && (now - pad.lastTriggeredAt) >= pad.cooldownMs) {
+      if ((dx * dx + dy * dy) <= (pad.radius * pad.radius) && (now - pad.lastTriggeredAt) >= pad.cooldownMs) {
         pad.lastTriggeredAt = now;
-        // Top up a bit of energy and force a short boost burst
         car.boostEnergy = Math.min(car.maxBoostEnergy, car.boostEnergy + 20);
-        car.isBoosting = true;
-        car.targetSpeed = car.boostSpeed * 1.05;
-        // brief visual pulse
-        try { pad.graphics.alpha = 0.5; setTimeout(() => { try { pad.graphics.alpha = 1.0; } catch {} }, 180); } catch {}
-        // auto-stop after 0.7s to avoid sustained advantage
-        setTimeout(() => {
-          try {
-            if (!this.player || car.destroyed) return;
-            if (car.isBoosting) {
-              car.isBoosting = false;
-              car.targetSpeed = car.baseSpeed;
-            }
-          } catch {}
-        }, 700);
-        // echo ring
+        car.isBoosting = true; car.targetSpeed = car.boostSpeed * 1.05;
         this.emitBoostEcho(pad.x, pad.y);
       }
     }
     
-    // Smooth speed transitions
     const speedDiff = car.targetSpeed - car.speed;
-    const accel = car.accelerationScalar ?? car.speedTransitionRate;
-    const speedChange = speedDiff * accel * deltaTime;
-    car.speed += speedChange;
+    car.speed += speedDiff * (car.accelerationScalar ?? car.speedTransitionRate) * deltaTime;
     
-    // Smooth angle interpolation for drift effect
     const angleDiff = normalizeAngle((car as any).targetAngle - car.angle);
-    const baseTurn = (car as any).turnResponsiveness ?? 7.0;
-    const handlingAssist = car.handlingAssist ?? 0;
-    const speedRatio = Math.min(1, Math.abs(car.speed) / Math.max(1, car.boostSpeed));
-    const assistMultiplier = 1 + handlingAssist * (1 - speedRatio);
-    const boostPenalty = car.isBoosting ? 0.92 : 1;
-    const turnRate = baseTurn * assistMultiplier * boostPenalty;
+    const turnRate = (car as any).turnResponsiveness ?? 7.0;
     car.angle += angleDiff * Math.min(1.0, turnRate * deltaTime);
-    car.sprite.rotation = car.angle;
     
-    // Calculate forward direction
-    const forwardX = Math.cos(car.angle);
-    const forwardY = Math.sin(car.angle);
-    
-    // Add drift effect - car slides sideways while turning
+    const forwardX = Math.cos(car.angle), forwardY = Math.sin(car.angle);
     const driftAngle = car.angle + (Math.PI / 2);
-    const driftX = Math.cos(driftAngle);
-    const driftY = Math.sin(driftAngle);
+    const driftIntensity = car.driftFactor * car.speed * 0.4 * Math.abs(angleDiff);
+    car.vx = forwardX * car.speed + Math.cos(driftAngle) * driftIntensity;
+    car.vy = forwardY * car.speed + Math.sin(driftAngle) * driftIntensity;
     
-    // Combine forward movement with drift
-    let effectiveSpeed = car.speed;
-    const driftIntensity = car.driftFactor * effectiveSpeed * 0.4 * Math.abs(angleDiff);
-    const lateralDrag = ((car as any).lateralDragScalar ?? 1.0) * 0.008;
-    car.vx = forwardX * effectiveSpeed + driftX * driftIntensity;
-    car.vy = forwardY * effectiveSpeed + driftY * driftIntensity;
-    
-    // Apply velocity update with slight lateral drag for sharper control at speed
-    car.vx += Math.cos(car.angle) * effectiveSpeed * deltaTime;
-    car.vy += Math.sin(car.angle) * effectiveSpeed * deltaTime;
-    // lateral drag opposing perpendicular component
-    const perpX = -Math.sin(car.angle);
-    const perpY =  Math.cos(car.angle);
-    const lateralVel = car.vx * perpX + car.vy * perpY;
-    car.vx -= lateralVel * perpX * lateralDrag;
-    car.vy -= lateralVel * perpY * lateralDrag;
-    
-    // Update position
     car.x += car.vx * deltaTime;
     car.y += car.vy * deltaTime;
-    
-    // Update sprite
-    car.sprite.x = car.x;
-    car.sprite.y = car.y;
-    car.sprite.rotation = car.angle;
+    car.sprite.x = car.x; car.sprite.y = car.y; car.sprite.rotation = car.angle;
 
-    // Animate sperm tail (tapered ribbon) and head (static oval) with kill-based growth
-    try {
-      const sizeMul = this.getSizeMultiplierForCar(car);
-      if (this.smallTailEnabled && car.tailGraphics) {
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        const isTournament = !!(this.wsHud && this.wsHud.active);
-        const isMobilePracticePlayer = isMobile && !isTournament && car.type === 'player';
-
-        const waveSpeed = isMobilePracticePlayer
-          ? (car.isBoosting ? 6 : 3)
-          : (car.isBoosting ? 18 : 10); // Default faster wave animation
-        car.tailWaveT = (car.tailWaveT || 0) + deltaTime * waveSpeed;
-
-        const segsBase = car.tailSegments || 16;
-        const segs = isMobilePracticePlayer ? Math.max(6, segsBase) : Math.max(8, segsBase);
-        const len = (car.tailLength || 48) * sizeMul;
-        const speedMag = Math.hypot(car.vx, car.vy);
-        const speedScale = 0.5 + Math.min(1, speedMag / 350);
-        let ampBase = (car.tailAmplitude || 6) * (car.isBoosting ? 1.5 : 1.0) * sizeMul; // More dramatic boost wave
-        if (isMobilePracticePlayer) {
-          ampBase *= 0.4; // Much calmer tail motion in mobile practice
-        }
-        const amp = ampBase;
-        const baseWidth = 3 * (0.75 + 0.25 * speedScale) * sizeMul;
-        const step = len / segs;
-        const g = car.tailGraphics;
-        g.clear();
-        // Tail anchor slightly behind head center
-        const headR = 8 * sizeMul;
-        const dirX = Math.cos(car.angle);
-        const dirY = Math.sin(car.angle);
-        const latX = Math.cos(car.angle + Math.PI / 2);
-        const latY = Math.sin(car.angle + Math.PI / 2);
-        const ax = -dirX * headR * 0.8;
-        const ay = -dirY * headR * 0.8;
-        const spine: Array<{ x: number; y: number; w: number }> = [];
-        for (let i = 0; i <= segs; i++) {
-          const t = i / segs;
-          // Zero motion at head, increases toward mid/back
-          const envelope = Math.pow(t, 2.2);
-          const freq = isMobilePracticePlayer ? 6 : 11;
-          const wave = Math.sin((t * freq) + (car.tailWaveT || 0)) * envelope * amp;
-          const sx = ax - dirX * (i * step) + latX * wave;
-          const sy = ay - dirY * (i * step) + latY * wave;
-          const w = baseWidth * Math.pow(1 - t, 3.2); // stronger taper → thinner back and base
-          spine.push({ x: sx, y: sy, w });
-        }
-        const poly: number[] = [];
-        // left side
-        for (let i = 0; i < spine.length; i++) {
-          const s = spine[i];
-          poly.push(s.x - latX * s.w, s.y - latY * s.w);
-        }
-        // right side (reverse)
-        for (let i = spine.length - 1; i >= 0; i--) {
-          const s = spine[i];
-          poly.push(s.x + latX * s.w, s.y + latY * s.w);
-        }
-        g.poly(poly).fill({ color: car.color, alpha: car.isBoosting ? 0.95 : 0.8 }); // Brighter when boosting
-      }
-      if (car.headGraphics) {
-        // Dynamic head with boost pulsation + growth per kill
-        const baseRx = car.isBoosting ? 10 : 9; // Larger when boosting
-        const baseRy = car.isBoosting ? 7 : 6;
-        const rx = baseRx * sizeMul;
-        const ry = baseRy * sizeMul;
-        car.headGraphics.clear();
-        car.headGraphics.ellipse(0, 0, rx, ry).fill({ color: car.color, alpha: 1.0 }).stroke({ width: car.isBoosting ? 3 : 2, color: car.color, alpha: car.isBoosting ? 0.7 : 0.3 });
-        
-        // Add boost glow effect
-        if (car.isBoosting) {
-          car.headGraphics.ellipse(0, 0, rx + 3, ry + 2).fill({ color: car.color, alpha: 0.2 });
-        }
-        if (buffActive) {
-          car.headGraphics.ellipse(0, 0, rx + 5, ry + 4).stroke({ width: 2, color: 0xfacc15, alpha: 0.9 });
-        }
-      }
-    } catch {}
-    
-    // Update glow intensity when boosting (apply to head only)
-    if (car.isBoosting && car.headGraphics) {
-      (car.headGraphics as any).alpha = 0.9;
-    } else if (car.headGraphics) {
-      (car.headGraphics as any).alpha = 1.0;
-    }
+    this.updateCarVisuals(car, deltaTime);
 
     if (car === this.player) {
-      if (buffActive) {
-        this.updateOverdriveBanner(true, (car.hotspotBuffExpiresAt || now) - now);
-      } else {
-        this.updateOverdriveBanner(false, 0);
-      }
+      if (buffActive) this.updateOverdriveBanner(true, (car.hotspotBuffExpiresAt || now) - now);
+      else this.updateOverdriveBanner(false, 0);
       if ((buffActive || (car.spotlightUntil && car.spotlightUntil > now)) && now - this.lastSpotlightPingAt > 320) {
         this.lastSpotlightPingAt = now;
-        this.radarPings.push({ x: car.x, y: car.y, timestamp: now, playerId: 'overdrive', kind: 'bounty', ttlMs: 900 });
+        this.radarPings.push({ x: car.x, y: car.y, timestamp: now, playerId: "overdrive", kind: "bounty", ttlMs: 900 });
       }
     }
   }
@@ -3181,6 +3095,12 @@ class SpermRaceGame {
     if (this.bot && !this.bot.destroyed) {
       this.addTrailPoint(this.bot);
     }
+    // Add trail points for server-synced players
+    for (const car of this.serverPlayers.values()) {
+      if (!car.destroyed) {
+        this.addTrailPoint(car);
+      }
+    }
     // Add trail points for extra bots (LOD: only near camera)
     const camX = - (this.camera.x - (this.app!.screen.width / 2)) / this.camera.zoom;
     const camY = - (this.camera.y - (this.app!.screen.height / 2)) / this.camera.zoom;
@@ -3257,10 +3177,10 @@ class SpermRaceGame {
         if (!this.trailContainer) return;
       }
       // Get or create trail for this car
-      let trail = this.trails.find(t => t.carId === car.type);
+      let trail = this.trails.find(t => t.carId === car.id);
       if (!trail) {
         trail = {
-          carId: car.type,
+          carId: car.id,
           car: car,
           points: [],
           graphics: new PIXI.Graphics()

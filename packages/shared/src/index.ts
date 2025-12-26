@@ -48,6 +48,7 @@ export interface Player {
   sperm: SpermState;
   trail: TrailPoint[];
   isAlive: boolean;
+  status?: { boosting: boolean; boostCooldownMs: number; boostMaxCooldownMs: number };
   input: PlayerInput;
 }
 
@@ -211,9 +212,18 @@ export interface GameStateUpdateMessage {
   type: 'gameStateUpdate';
   payload: {
     timestamp: number;
-    players: Array<Pick<Player, 'id' | 'sperm' | 'isAlive'> & { trail: TrailPoint[] }>;
+    // Trails are intentionally optional here; newer servers send trails via `trailDelta`.
+    players: Array<Pick<Player, 'id' | 'sperm' | 'isAlive' | 'status'> & { trail?: TrailPoint[] }>;
     world: { width: number; height: number };
     aliveCount: number;
+  };
+}
+
+export interface TrailDeltaMessage {
+  type: 'trailDelta';
+  payload: {
+    timestamp: number;
+    deltas: Array<{ playerId: string; points: TrailPoint[] }>;
   };
 }
 
@@ -246,6 +256,7 @@ export type ServerToClientMessage =
   | LobbyStateMessage
   | GameStartingMessage
   | GameStateUpdateMessage
+  | TrailDeltaMessage
   | PlayerEliminatedMessage
   | RoundEndMessage
   | ErrorMessage

@@ -92,7 +92,8 @@ type BucketState = { tokens: number; lastRefill: number };
 const socketRate: Map<WebSocket, Record<keyof typeof RATE_LIMITS, BucketState>> = new Map();
 const socketRateViolations = new Map<WebSocket, number>();
 const socketSlowStrikes = new Map<WebSocket, number>();
-const socketPendingState = new Map<WebSocket, string>(); // coalesced latest game state
+const socketPendingState = new Map<WebSocket, { state?: string; trail?: string }>(); // coalesced latest game payloads
+const socketCaps = new Map<WebSocket, { trailDelta?: boolean }>();
 const paidPlayers = new Set<string>();
 const expectedLamportsByPlayerId = new Map<string, number>();
 const expectedTierByPlayerId = new Map<string, import('shared').EntryFeeTier>();
@@ -105,7 +106,7 @@ const SESSION_TOKEN_TTL_MS = 300000; // 5 minutes
 
 gameWorld.start();
 
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:5174')
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://spermrace.io,https://www.spermrace.io,https://sperm-race-io.vercel.app,http://localhost:5174')
   .split(',')
   .map(s => s.trim())
   .filter(Boolean);
@@ -375,7 +376,7 @@ app.get('/api/metrics', (_req, res) => {
   lines.push('# TYPE lobby_active gauge');
   lines.push(`lobby_active ${lobbyManager ? (lobbyManager as any).lobbies?.size || 0 : 0}`);
   res.setHeader('Content-Type', 'text/plain');
-  res.send(lines.join('\n'));
+  res.send(lines.join("\n"));
 });
 
 // ================================================================================================
@@ -534,6 +535,7 @@ lobbyManager.onLobbyCountdown = (lobby, remaining, startAtMs) => {
 };
 
 lobbyManager.onLobbyRefund = async (lobby: Lobby, playerId: string, _calculatedLamports: number) => {
+  if (playerId.startsWith('Guest_') || playerId.startsWith('PLAYER_')) { console.log(`[REFUND] Skipping refund for guest/local player ${playerId}`); return; }
   // Use ACTUAL amount paid, not recalculated amount
   const actualLamportsPaid = expectedLamportsByPlayerId.get(playerId) || _calculatedLamports;
 
@@ -707,6 +709,7 @@ wss.on('connection', (ws: WebSocket, req: any) => {
     tx: { tokens: RATE_LIMITS.tx.capacity, lastRefill: Date.now() },
     input: { tokens: RATE_LIMITS.input.capacity, lastRefill: Date.now() },
   });
+  socketCaps.set(ws, { trailDelta: false });
 
   // If authenticated via HTTP token, skip SIWS challenge
   if (authenticatedPlayerId) {
@@ -718,12 +721,12 @@ wss.on('connection', (ws: WebSocket, req: any) => {
     log.info(`🔌 Client connected & authenticated via token (${pendingSockets.size + playerIdToSocket.size} total)`);
   } else {
     // Traditional WebSocket SIWS flow
-    pendingSockets.add(ws);
+    pendingSockets.add(ws); (ws as any).authenticated = false;
     // Enforce authenticate-within timeout
     try {
       const t = setTimeout(() => {
         try {
-          if (pendingSockets.has(ws)) {
+          if (pendingSockets.has(ws) && !(ws as any).authenticated) {
             ws.close(4001, 'Authentication timeout');
           }
         } catch { }
@@ -735,7 +738,6 @@ wss.on('connection', (ws: WebSocket, req: any) => {
     socketToNonce.set(ws, { nonce, issuedAt: Date.now(), consumed: false });
     const challenge = { type: 'siwsChallenge', payload: { message: AuthService.getMessageToSign(nonce), nonce } } as any;
     ws.send(JSON.stringify(challenge));
-    log.info(`🔌 Client connected (${pendingSockets.size + playerIdToSocket.size} total)`);
   }
 
   ws.on('message', (data) => {
@@ -761,6 +763,14 @@ wss.on('connection', (ws: WebSocket, req: any) => {
         const guestId = `guest-${uuidv4()}`; // Temporary ID
 
         // Register as authenticated
+        // Clear auth timeout and pending status
+        if (socketToAuthTimeout.has(ws)) {
+          const t = socketToAuthTimeout.get(ws);
+          clearTimeout(t);
+          socketToAuthTimeout.delete(ws);
+        }
+        pendingSockets.delete(ws);
+        (ws as any).authenticated = true;
         playerIdToSocket.set(guestId, ws);
         socketToPlayerId.set(ws, guestId);
         playerIdToName.set(guestId, cleanName);
@@ -800,6 +810,7 @@ wss.on('connection', (ws: WebSocket, req: any) => {
     socketToSessionId.delete(ws);
     socketRate.delete(ws);
     socketUnauthViolations.delete(ws);
+    socketCaps.delete(ws);
 
     // Clean up pending payment state on disconnect
     const disconnectedPlayerId = socketToPlayerId.get(ws) || playerId;
@@ -887,6 +898,16 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
   }
 
   switch ((message as any).type) {
+    case 'clientHello': {
+      // Capability negotiation (backward compatible with older clients)
+      try {
+        const payload = (message as any).payload || {};
+        const caps = socketCaps.get(ws) || {};
+        caps.trailDelta = !!payload.trailDelta;
+        socketCaps.set(ws, caps);
+      } catch { }
+      break;
+    }
     case 'authenticate': {
       if (!take('auth')) { ws.send(JSON.stringify({ type: 'error', payload: { message: 'Rate limited (auth)' } })); return; }
       const { publicKey, signedMessage, nonce } = (message as any).payload as any;
@@ -903,7 +924,7 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
       if (nonceRec) nonceRec.consumed = true;
       // Promote socket to authenticated mapping
       pendingSockets.delete(ws);
-      playerIdToSocket.set(publicKey, ws);
+      (ws as any).authenticated = true; pendingSockets.delete(ws); playerIdToSocket.set(publicKey, ws);
       socketToPlayerId.set(ws, publicKey);
       playerIdToName.set(publicKey, publicKey.slice(0, 4) + "…" + publicKey.slice(-4));
       // Clear auth timeout and reset violation count
@@ -1171,13 +1192,18 @@ function broadcastToLobby(lobby: Lobby, message: ServerToClientMessage): void {
   });
 }
 
-function safeSend(ws: WebSocket, data: string, kind: 'game' | 'generic'): void {
+function safeSend(ws: WebSocket, data: string, kind: 'game' | 'generic', topic?: 'state' | 'trail'): void {
   try {
     const buffered = (ws as any).bufferedAmount || 0;
     if (buffered > BACKPRESSURE_MAX_BUFFERED) {
       const strikes = (socketSlowStrikes.get(ws) || 0) + 1;
       socketSlowStrikes.set(ws, strikes);
-      if (kind === 'game') socketPendingState.set(ws, data); // coalesce latest game state
+      if (kind === 'game') {
+        const prev = socketPendingState.get(ws) || {};
+        if (topic === 'trail') prev.trail = data;
+        else prev.state = data; // default to state
+        socketPendingState.set(ws, prev);
+      }
       if (strikes >= SLOW_CONSUMER_STRIKES_MAX) {
         try { ws.close(4004, 'Slow consumer'); } catch { }
       }
@@ -1190,10 +1216,25 @@ function safeSend(ws: WebSocket, data: string, kind: 'game' | 'generic'): void {
 function broadcastGameState(): void {
   const gameState = gameWorld.gameState;
 
-  const message: GameStateUpdateMessage = {
+  const messageSlim: GameStateUpdateMessage = {
     type: 'gameStateUpdate',
     payload: {
       timestamp: Date.now(),
+      players: Object.values(gameState.players).map((p: any) => ({
+        id: p.id,
+        sperm: p.sperm,
+        isAlive: p.isAlive,
+        status: p.status,
+      })),
+      world: gameState.world,
+      aliveCount: Object.values(gameState.players).filter((p: any) => p.isAlive).length,
+    },
+  };
+
+  const messageFull: GameStateUpdateMessage = {
+    type: 'gameStateUpdate',
+    payload: {
+      timestamp: messageSlim.payload.timestamp,
       players: Object.values(gameState.players).map((p: any) => ({
         id: p.id,
         sperm: p.sperm,
@@ -1202,22 +1243,88 @@ function broadcastGameState(): void {
         status: p.status,
       })),
       world: gameState.world,
-      aliveCount: Object.values(gameState.players).filter((p: any) => p.isAlive).length,
+      aliveCount: messageSlim.payload.aliveCount,
     },
   };
 
-  const messageString = JSON.stringify(message);
+  const slimStr = JSON.stringify(messageSlim);
+  const fullStr = JSON.stringify(messageFull);
 
   // Broadcast only to players who are actually in the game round (with backpressure)
   Object.keys(gameState.players).forEach((playerId: string) => {
     const ws = playerIdToSocket.get(playerId);
     if (ws && ws.readyState === WebSocket.OPEN) {
-      safeSend(ws, messageString, 'game');
+      const caps = socketCaps.get(ws);
+      safeSend(ws, (caps && caps.trailDelta) ? slimStr : fullStr, 'game', 'state');
     }
   });
 }
 
 setInterval(broadcastGameState, BROADCAST_INTERVAL);
+
+// Trail delta broadcasting (send only new trail points, not full trails every tick)
+const lastTrailCreatedAtByPlayerId = new Map<string, number>();
+function broadcastTrailDelta(): void {
+  const gameState = gameWorld.gameState;
+  if (gameState.status !== 'in_progress') return;
+
+  // Only bother if at least one connected client opted into trail deltas.
+  let anyWants = false;
+  for (const playerId of Object.keys(gameState.players)) {
+    const ws = playerIdToSocket.get(playerId);
+    if (ws && ws.readyState === WebSocket.OPEN && socketCaps.get(ws)?.trailDelta) { anyWants = true; break; }
+  }
+  if (!anyWants) return;
+
+  const deltas: Array<{ playerId: string; points: Array<{ x: number; y: number; expiresAt: number }> }> = [];
+
+  for (const p of Object.values(gameState.players) as any[]) {
+    const playerId = String(p?.id || '');
+    if (!playerId) continue;
+    const trail = Array.isArray(p?.trail) ? p.trail : [];
+    if (trail.length === 0) continue;
+
+    const lastCreatedAt = lastTrailCreatedAtByPlayerId.get(playerId);
+    let startIdx = 0;
+
+    if (typeof lastCreatedAt === 'number') {
+      let found = false;
+      for (let i = trail.length - 1; i >= 0; i--) {
+        if (trail[i]?.createdAt === lastCreatedAt) {
+          startIdx = i + 1;
+          found = true;
+          break;
+        }
+      }
+      // If we can't find the last sent point (due to expiry/cleanup), resync with current trail.
+      if (!found) startIdx = 0;
+    }
+
+    if (startIdx >= trail.length) continue;
+
+    const newPoints = trail.slice(startIdx).map((pt: any) => ({ x: pt.x, y: pt.y, expiresAt: pt.expiresAt }));
+    if (newPoints.length === 0) continue;
+
+    const last = trail[trail.length - 1];
+    if (last && typeof last.createdAt === 'number') lastTrailCreatedAtByPlayerId.set(playerId, last.createdAt);
+
+    deltas.push({ playerId, points: newPoints });
+  }
+
+  if (deltas.length === 0) return;
+
+  const msg = { type: 'trailDelta', payload: { timestamp: Date.now(), deltas } } as any;
+  const str = JSON.stringify(msg);
+
+  Object.keys(gameState.players).forEach((playerId: string) => {
+    const ws = playerIdToSocket.get(playerId);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      if (socketCaps.get(ws)?.trailDelta) safeSend(ws, str, 'game', 'trail');
+    }
+  });
+}
+
+setInterval(broadcastTrailDelta, BROADCAST_INTERVAL);
 
 function broadcastToAll(message: ServerToClientMessage): void {
   const str = JSON.stringify(message);
@@ -1282,8 +1389,9 @@ const pingTimer = setInterval(() => {
           const buffered = (ws as any).bufferedAmount || 0;
           if (buffered < BACKPRESSURE_MAX_BUFFERED / 2) {
             const pending = socketPendingState.get(ws);
-            if (pending) {
-              ws.send(pending);
+            if (pending && (pending.state || pending.trail)) {
+              if (pending.state) ws.send(pending.state);
+              if (pending.trail) ws.send(pending.trail);
               socketPendingState.delete(ws);
               const s = (socketSlowStrikes.get(ws) || 0);
               if (s > 0) socketSlowStrikes.set(ws, s - 1);

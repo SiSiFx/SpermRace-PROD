@@ -133,7 +133,7 @@ export class GameWorld {
         // Payout 85% to winner, 15% routed to platform within service
         // Only payout if winnerId appears to be a real wallet (not a bot)
         let txSig: string | undefined = undefined;
-        const isBotWinner = typeof winnerId === 'string' && winnerId.startsWith('BOT_');
+        const isBotWinner = typeof winnerId === 'string' && (winnerId.startsWith('BOT_') || winnerId.startsWith('Guest_') || winnerId.startsWith('PLAYER_'));
         if (isBotWinner) {
           console.log('[PAYOUT] Skipping payout: winner is a dev bot');
         } else {
@@ -419,6 +419,7 @@ export class GameWorld {
         trail: player.trail,
         isAlive: player.isAlive,
         input: player.input,
+        status: player.status,
       };
     });
     this.gameState.players = newPlayersState;

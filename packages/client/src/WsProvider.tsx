@@ -18,7 +18,7 @@ const API_BASE: string = (() => {
   } catch { }
   return '/api';
 })();
-import type { EntryFeeTier, GameMode, Lobby } from 'shared';
+import type { EntryFeeTier, GameMode, Lobby, TrailPoint } from 'shared';
 import { useWallet } from './WalletProvider';
 import { handleSIWS } from './siws';
 import { sendEntryFeeTransaction } from './walletUtils';
@@ -100,6 +100,7 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<WsState>({ connected: false, phase: 'idle', playerId: null, lobby: null, countdown: null, entryFee: { pending: false, verified: false }, lastError: null, joining: false, game: null, kills: {}, killFeed: [], lastRound: null, initialPlayers: [], eliminationOrder: [], debugCollisions: [], hasFirstGameState: false });
   const [isGuest, setIsGuest] = useState(false);
   const isGuestRef = useRef(false);
+  const trailsRef = useRef<Record<string, TrailPoint[]>>({});
   const wsRef = useRef<WebSocket | null>(null);
   const pendingJoinRef = useRef<JoinOpts | null>(null);
   const joinBusyRef = useRef<boolean>(false);
@@ -121,6 +122,7 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
     // Reset/Set guest state
     setIsGuest(!!opts.guestName);
     isGuestRef.current = !!opts.guestName;
+    trailsRef.current = {};
 
     // If GUEST, skip wallet checks entirely
     if (opts.guestName) {
@@ -429,6 +431,8 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
             case 'authenticated': {
               setState(s => ({ ...s, playerId: msg.payload.playerId }));
               console.log(`[AUTH] authenticated as ${String(msg.payload.playerId).slice(0, 6)}…`);
+              // Capability negotiation: tell server we support trail deltas (server will then omit full trails in gameStateUpdate).
+              try { sock.send(JSON.stringify({ type: 'clientHello', payload: { trailDelta: true } })); } catch { }
               // Clear pending auth since we successfully authenticated
               pendingAuthRef.current = null;
               const join = pendingJoinRef.current;
@@ -572,19 +576,59 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
             case 'gameStarting': {
               joinBusyRef.current = false;
               console.log('[GAME] starting');
+              trailsRef.current = {};
               setState(s => ({ ...s, phase: 'game', joining: false, initialPlayers: Array.isArray(s.lobby?.players) ? [...(s.lobby!.players as any)] : [], eliminationOrder: [], kills: {}, killFeed: [], hasFirstGameState: false }));
               try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'game_start', payload: { players: (state.lobby?.players || []).length, tier: state.lobby?.entryFee } }) }); } catch { }
               break;
             }
+            case 'trailDelta': {
+              const deltas = (msg.payload?.deltas || []) as Array<{ playerId: string; points: TrailPoint[] }>;
+              if (!Array.isArray(deltas) || deltas.length === 0) break;
+              const now = Date.now();
+              for (const d of deltas) {
+                const pid = d?.playerId;
+                if (!pid) continue;
+                const points = Array.isArray(d?.points) ? d.points : [];
+                if (points.length === 0) continue;
+                const existing = trailsRef.current[pid] || [];
+                // prune expired points and append new points
+                const pruned = existing.filter(p => (p?.expiresAt || 0) > now);
+                for (const pt of points) {
+                  if (!pt) continue;
+                  if (typeof (pt as any).x !== 'number' || typeof (pt as any).y !== 'number' || typeof (pt as any).expiresAt !== 'number') continue;
+                  pruned.push({ x: (pt as any).x, y: (pt as any).y, expiresAt: (pt as any).expiresAt, createdAt: (pt as any).createdAt });
+                }
+                trailsRef.current[pid] = pruned;
+              }
+              break;
+            }
             case 'gameStateUpdate': {
               const p = msg.payload;
-              setState(s => ({ ...s, game: { timestamp: p.timestamp, players: p.players, world: p.world, aliveCount: p.aliveCount }, hasFirstGameState: s.hasFirstGameState || true }));
+              const serverPlayers = Array.isArray(p?.players) ? p.players : [];
+              const now = Date.now();
+              const ids = new Set<string>();
+              const mergedPlayers = serverPlayers.map((pl: any) => {
+                const id = String(pl?.id || '');
+                if (id) ids.add(id);
+                const existingTrail = Array.isArray(pl?.trail) ? (pl.trail as TrailPoint[]) : (trailsRef.current[id] || []);
+                // prune on read to keep memory bounded even if trailDelta pauses
+                const prunedTrail = Array.isArray(existingTrail) ? existingTrail.filter(t => (t?.expiresAt || 0) > now) : [];
+                trailsRef.current[id] = prunedTrail as any;
+                return { ...pl, trail: prunedTrail };
+              });
+              // Drop trails for players no longer present in the match
+              for (const k of Object.keys(trailsRef.current)) {
+                if (!ids.has(k)) delete trailsRef.current[k];
+              }
+
+              setState(s => ({ ...s, game: { timestamp: p.timestamp, players: mergedPlayers, world: p.world, aliveCount: p.aliveCount }, hasFirstGameState: s.hasFirstGameState || true }));
               try { (window as any).__SR_HAS_FIRST_GAME_STATE__ = true; } catch { }
               break;
             }
             case 'roundEnd': {
               console.log('[GAME] round end received');
               // Keep phase ended so UI can navigate to results (App handles screen switch)
+              trailsRef.current = {};
               setState(s => ({ ...s, phase: 'ended', joining: false, lastRound: { winnerId: msg.payload?.winnerId, prizeAmount: msg.payload?.prizeAmount, txSignature: msg.payload?.txSignature } }));
               try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'round_end', payload: { winner: msg.payload?.winnerId, prize: msg.payload?.prizeAmount, tx: msg.payload?.txSignature } }) }); } catch { }
               break;
@@ -722,6 +766,7 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
   const leave = () => {
     try { expectedCloseRef.current = true; wsRef.current?.close(); } catch { }
     wsRef.current = null;
+    trailsRef.current = {};
     if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
     reconnectAttemptsRef.current = 0;
     pendingJoinRef.current = null;
@@ -773,4 +818,3 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function useWs() { return useContext(Ctx); }
-
