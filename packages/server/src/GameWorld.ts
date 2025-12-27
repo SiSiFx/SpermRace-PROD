@@ -28,6 +28,15 @@ function pickRoundWorldSize(playerCount: number): { width: number; height: numbe
   return { width: WORLD_WIDTH, height: WORLD_HEIGHT };
 }
 
+function pickEggOpenDelayMs(playerCount: number): number {
+  if (!Number.isFinite(playerCount) || playerCount <= 0) return 18000;
+  if (playerCount <= 4) return 9000;
+  if (playerCount <= 8) return 12000;
+  if (playerCount <= 12) return 15000;
+  if (playerCount <= 20) return 18000;
+  return 22000;
+}
+
 // Apex Predator DNA fragment settings
 const MAX_DNA_ON_MAP = 20;
 const DNA_RESPAWN_RATE_MS = 2000;
@@ -120,6 +129,22 @@ export class GameWorld {
     this.collisionSystem.setWorldBounds(this.baseWorldWidth, this.baseWorldHeight);
     this.gameState.world.width = this.baseWorldWidth;
     this.gameState.world.height = this.baseWorldHeight;
+
+    // Objective: Keys → Egg extraction (forces convergence)
+    const nowMs = Date.now();
+    const keysRequired = players.length <= 12 ? 3 : 4;
+    this.gameState.objective = {
+      kind: 'extraction',
+      keysRequired,
+      egg: {
+        x: this.gameState.world.width / 2,
+        y: this.gameState.world.height / 2,
+        radius: Math.max(120, Math.min(240, Math.floor(Math.min(this.gameState.world.width, this.gameState.world.height) * 0.10))),
+        openAtMs: nowMs + pickEggOpenDelayMs(players.length),
+        holdMs: 2600,
+      },
+      keysByPlayerId: {},
+    } as any;
 
     players.forEach(playerId => this.spawnPlayer(playerId));
     // Spawn an initial batch of DNA fragments to seed the map
@@ -262,6 +287,8 @@ export class GameWorld {
         if ((process.env.NODE_ENV || '').toLowerCase() !== 'production') {
           try { console.debug(`[DEV][ELIM] victim=${victimId.startsWith('BOT_')?victimId:`${victimId.slice(0,6)}…${victimId.slice(-4)}`} killer=${killerId? (killerId.startsWith('BOT_')?killerId:`${killerId.slice(0,6)}…${killerId.slice(-4)}`) : 'arena/self/trail'}`); } catch {}
         }
+        // If the victim carried keys, drop a couple on death to create a chase point.
+        try { this.dropExtractionKeysOnElim(victimId); } catch {}
         this.players.get(victimId)!.eliminate();
         try {
           // Broadcast through handler that can include eliminatorId
@@ -273,6 +300,13 @@ export class GameWorld {
         }
       }
     });
+
+    // 2.5 Objective update (may end the round)
+    try {
+      const nowMs = Date.now();
+      this.updateExtractionObjective(nowMs);
+      if (this.gameState.status !== 'in_progress') return;
+    } catch { }
 
     // 3. Check for a winner
     const alivePlayers = Array.from(this.players.values()).filter(p => p.isAlive);
@@ -312,6 +346,17 @@ export class GameWorld {
         this.gameState.world.height = newH;
       }
     }
+
+    // Keep egg centered within current world bounds (so it stays meaningful as the arena shrinks).
+    try {
+      const obj: any = (this.gameState as any).objective;
+      if (obj && obj.kind === 'extraction' && obj.egg) {
+        obj.egg.x = (this.gameState.world.width || this.baseWorldWidth || WORLD_WIDTH) / 2;
+        obj.egg.y = (this.gameState.world.height || this.baseWorldHeight || WORLD_HEIGHT) / 2;
+        const minDim = Math.min(this.gameState.world.width || this.baseWorldWidth || WORLD_WIDTH, this.gameState.world.height || this.baseWorldHeight || WORLD_HEIGHT);
+        obj.egg.radius = Math.max(120, Math.min(240, Math.floor(minDim * 0.10)));
+      }
+    } catch { }
     
     // 5. Apex Predator DNA spawning (server-authoritative)
     const nowMs = Date.now();
@@ -332,6 +377,7 @@ export class GameWorld {
           const dy = py - item.y;
           if ((dx * dx + dy * dy) <= pickupRadiusSq) {
             player.absorbDNA();
+            try { this.awardExtractionKey(player.id); } catch {}
             this.items.delete(id);
             break;
           }
@@ -393,8 +439,16 @@ export class GameWorld {
     const width = this.gameState.world.width || WORLD_WIDTH;
     const height = this.gameState.world.height || WORLD_HEIGHT;
     const margin = DNA_WALL_MARGIN;
-    const x = margin + Math.random() * Math.max(0, width - margin * 2);
-    const y = margin + Math.random() * Math.max(0, height - margin * 2);
+    // Bias spawns toward the middle to create natural meeting points.
+    const cx = width / 2;
+    const cy = height / 2;
+    const maxR = Math.max(0, Math.min(width, height) * 0.42);
+    const theta = Math.random() * Math.PI * 2;
+    const r = maxR * Math.pow(Math.random(), 0.65); // more density near center
+    const rawX = cx + Math.cos(theta) * r;
+    const rawY = cy + Math.sin(theta) * r;
+    const x = Math.max(margin, Math.min(width - margin, rawX));
+    const y = Math.max(margin, Math.min(height - margin, rawY));
     const id = uuidv4();
 
     const item: GameItem = {
@@ -405,6 +459,96 @@ export class GameWorld {
     };
 
     this.items.set(id, item);
+  }
+
+  private awardExtractionKey(playerId: string): void {
+    const obj: any = (this.gameState as any).objective;
+    if (!obj || obj.kind !== 'extraction') return;
+    const keysRequired = Number(obj.keysRequired) || 3;
+    const prev = Number(obj.keysByPlayerId?.[playerId] || 0) || 0;
+    const cap = Math.max(keysRequired + 2, keysRequired);
+    const next = Math.min(cap, prev + 1);
+    if (!obj.keysByPlayerId) obj.keysByPlayerId = {};
+    obj.keysByPlayerId[playerId] = next;
+  }
+
+  private dropExtractionKeysOnElim(victimId: string): void {
+    const obj: any = (this.gameState as any).objective;
+    if (!obj || obj.kind !== 'extraction') return;
+    const prev = Number(obj.keysByPlayerId?.[victimId] || 0) || 0;
+    if (prev <= 0) return;
+    const dropCount = Math.min(2, prev);
+    obj.keysByPlayerId[victimId] = Math.max(0, prev - dropCount);
+
+    const victim = this.players.get(victimId);
+    if (!victim) return;
+
+    const width = this.gameState.world.width || this.baseWorldWidth || WORLD_WIDTH;
+    const height = this.gameState.world.height || this.baseWorldHeight || WORLD_HEIGHT;
+    const margin = DNA_WALL_MARGIN;
+    const baseX = victim.sperm.position.x;
+    const baseY = victim.sperm.position.y;
+    for (let i = 0; i < dropCount && this.items.size < MAX_DNA_ON_MAP; i++) {
+      const jitter = 55;
+      const rawX = baseX + (Math.random() - 0.5) * jitter;
+      const rawY = baseY + (Math.random() - 0.5) * jitter;
+      const x = Math.max(margin, Math.min(width - margin, rawX));
+      const y = Math.max(margin, Math.min(height - margin, rawY));
+      const id = uuidv4();
+      const item: GameItem = { id, type: 'dna', x, y };
+      this.items.set(id, item);
+    }
+  }
+
+  private updateExtractionObjective(nowMs: number): void {
+    const obj: any = (this.gameState as any).objective;
+    if (!obj || obj.kind !== 'extraction') return;
+    const keysRequired = Number(obj.keysRequired) || 3;
+    const egg = obj.egg;
+    if (!egg) return;
+
+    // If egg isn't open yet, nobody can hold it.
+    const open = nowMs >= Number(egg.openAtMs || 0);
+    if (!open) {
+      obj.holding = undefined;
+      return;
+    }
+
+    const holdMs = Math.max(900, Number(egg.holdMs || 0) || 2600);
+    const radius = Math.max(60, Number(egg.radius || 0) || 160);
+    const radiusSq = radius * radius;
+    const cx = Number(egg.x) || 0;
+    const cy = Number(egg.y) || 0;
+
+    const qualifies = (playerId: string): boolean => {
+      const p = this.players.get(playerId);
+      if (!p || !p.isAlive) return false;
+      const keys = Number(obj.keysByPlayerId?.[playerId] || 0) || 0;
+      if (keys < keysRequired) return false;
+      const dx = p.sperm.position.x - cx;
+      const dy = p.sperm.position.y - cy;
+      return (dx * dx + dy * dy) <= radiusSq;
+    };
+
+    // Keep existing holder if still valid.
+    const currentHolder = obj.holding?.playerId as string | undefined;
+    if (currentHolder && qualifies(currentHolder)) {
+      const sinceMs = Number(obj.holding?.sinceMs || nowMs) || nowMs;
+      obj.holding.sinceMs = sinceMs;
+      if ((nowMs - sinceMs) >= holdMs) {
+        void this.endRound(currentHolder);
+      }
+      return;
+    }
+
+    // Otherwise pick a new holder (first valid player).
+    obj.holding = undefined;
+    for (const p of this.players.values()) {
+      if (!p.isAlive) continue;
+      if (!qualifies(p.id)) continue;
+      obj.holding = { playerId: p.id, sinceMs: nowMs };
+      break;
+    }
   }
 
   private spawnPlayer(playerId: string): void {

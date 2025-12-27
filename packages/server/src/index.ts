@@ -1228,6 +1228,7 @@ function broadcastGameState(): void {
       })),
       world: gameState.world,
       aliveCount: Object.values(gameState.players).filter((p: any) => p.isAlive).length,
+      objective: (gameState as any).objective,
     },
   };
 
@@ -1244,6 +1245,7 @@ function broadcastGameState(): void {
       })),
       world: gameState.world,
       aliveCount: messageSlim.payload.aliveCount,
+      objective: (gameState as any).objective,
     },
   };
 

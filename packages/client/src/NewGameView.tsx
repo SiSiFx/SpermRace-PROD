@@ -326,6 +326,9 @@ class SpermRaceGame {
   private appliedServerWorld: { width: number; height: number } | null = null;
   private enemyCompassEl: HTMLDivElement | null = null;
   private lastEnemyCompassUpdateAt: number = 0;
+  private objectiveStatusEl: HTMLDivElement | null = null;
+  public objective: any = null;
+  public lastServerTimeMs: number = 0;
 
   constructor(container: HTMLElement, onReplay?: () => void, onExit?: () => void) {
     this.container = container;
@@ -1520,8 +1523,33 @@ class SpermRaceGame {
       gap: '10px',
       whiteSpace: 'nowrap'
     } as Partial<CSSStyleDeclaration>);
-    this.enemyCompassEl.innerHTML = `<span style="opacity:0.9">HUNT</span><span id="enemy-compass-dist" style="opacity:0.85">—</span><span id="enemy-compass-arrow" style="display:inline-block;transform:rotate(0deg);font-size:14px;line-height:1">▲</span>`;
+    this.enemyCompassEl.innerHTML = `<span id="enemy-compass-label" style="opacity:0.9">HUNT</span><span id="enemy-compass-dist" style="opacity:0.85">—</span><span id="enemy-compass-arrow" style="display:inline-block;transform:rotate(0deg);font-size:14px;line-height:1">▲</span>`;
     this.uiContainer.appendChild(this.enemyCompassEl);
+
+    // Objective status (Keys → Egg)
+    this.objectiveStatusEl = document.createElement('div');
+    this.objectiveStatusEl.id = 'objective-status';
+    Object.assign(this.objectiveStatusEl.style, {
+      position: 'absolute',
+      top: '54px',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      zIndex: '12',
+      pointerEvents: 'none',
+      fontFamily: 'Orbitron, system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
+      fontSize: '12px',
+      fontWeight: '800',
+      letterSpacing: '0.08em',
+      textTransform: 'uppercase',
+      color: '#e5e7eb',
+      background: 'rgba(0,0,0,0.45)',
+      border: '1px solid rgba(255,255,255,0.14)',
+      borderRadius: '999px',
+      padding: '6px 12px',
+      display: 'none',
+      whiteSpace: 'nowrap'
+    } as Partial<CSSStyleDeclaration>);
+    this.uiContainer.appendChild(this.objectiveStatusEl);
 
     // Settings UI toggle removed
     // Zone timer now integrated into top HUD bar (created above)
@@ -1549,6 +1577,7 @@ class SpermRaceGame {
       this.lastEnemyCompassUpdateAt = now;
 
       const isTournament = !!(this.wsHud && this.wsHud.active);
+      const myId = this.wsHud?.playerId || null;
       const candidates: Car[] = [];
       if (isTournament) {
         for (const c of this.serverPlayers.values()) {
@@ -1560,39 +1589,115 @@ class SpermRaceGame {
         for (const b of this.extraBots) if (b && !b.destroyed) candidates.push(b);
       }
 
-      if (candidates.length === 0) {
-        this.enemyCompassEl.style.display = 'none';
-        return;
-      }
-
-      let best: { car: Car; dist: number; dx: number; dy: number } | null = null;
-      for (const c of candidates) {
-        const dx = c.x - this.player.x;
-        const dy = c.y - this.player.y;
-        const dist = Math.hypot(dx, dy);
-        if (!Number.isFinite(dist)) continue;
-        if (!best || dist < best.dist) best = { car: c, dist, dx, dy };
-      }
-
-      if (!best) {
-        this.enemyCompassEl.style.display = 'none';
-        return;
-      }
-
+      const labelEl = this.enemyCompassEl.querySelector('#enemy-compass-label') as HTMLSpanElement | null;
       const distText = this.enemyCompassEl.querySelector('#enemy-compass-dist') as HTMLSpanElement | null;
       const arrow = this.enemyCompassEl.querySelector('#enemy-compass-arrow') as HTMLSpanElement | null;
-      const dist = Math.round(best.dist);
-      if (distText) distText.textContent = `${dist}m`;
 
-      const ang = Math.atan2(best.dy, best.dx);
+      // Objective-aware targeting (tournament only): STOP holder → EXTRACT egg → otherwise HUNT nearest enemy.
+      let target: { dx: number; dy: number; dist: number; kind: 'stop'|'extract'|'hunt' } | null = null;
+      if (isTournament && myId && this.objective && this.objective.kind === 'extraction') {
+        const obj = this.objective;
+        const keys = Number(obj?.keysByPlayerId?.[myId] || 0) || 0;
+        const req = Number(obj?.keysRequired || 0) || 3;
+        const egg = obj?.egg;
+        const openAt = Number(egg?.openAtMs || 0) || 0;
+        const open = openAt > 0 ? (Date.now() >= openAt) : true;
+        const offsetX = -this.arena.width / 2;
+        const offsetY = -this.arena.height / 2;
+        const eggX = Number(egg?.x || 0) + offsetX;
+        const eggY = Number(egg?.y || 0) + offsetY;
+
+        const holderId = obj?.holding?.playerId as string | undefined;
+        if (holderId && holderId !== myId) {
+          const holderCar = this.serverPlayers.get(holderId);
+          if (holderCar && !holderCar.destroyed) {
+            const dx = holderCar.x - this.player.x;
+            const dy = holderCar.y - this.player.y;
+            const dist = Math.hypot(dx, dy);
+            if (Number.isFinite(dist)) target = { dx, dy, dist, kind: 'stop' };
+          }
+        } else if (keys >= req && open) {
+          const dx = eggX - this.player.x;
+          const dy = eggY - this.player.y;
+          const dist = Math.hypot(dx, dy);
+          if (Number.isFinite(dist)) target = { dx, dy, dist, kind: 'extract' };
+        }
+      }
+
+      if (!target) {
+        if (candidates.length === 0) {
+          this.enemyCompassEl.style.display = 'none';
+          return;
+        }
+
+        let best: { dist: number; dx: number; dy: number } | null = null;
+        for (const c of candidates) {
+          const dx = c.x - this.player.x;
+          const dy = c.y - this.player.y;
+          const dist = Math.hypot(dx, dy);
+          if (!Number.isFinite(dist)) continue;
+          if (!best || dist < best.dist) best = { dist, dx, dy };
+        }
+        if (!best) {
+          this.enemyCompassEl.style.display = 'none';
+          return;
+        }
+        target = { ...best, kind: 'hunt' };
+      }
+
+      const dist = Math.round(target.dist);
+      if (distText) distText.textContent = `${dist}m`;
+      const ang = Math.atan2(target.dy, target.dx);
       const deg = (ang * 180) / Math.PI + 90; // ▲ points up, so +90 aligns 0deg to up
       if (arrow) arrow.style.transform = `rotate(${deg.toFixed(1)}deg)`;
+      if (labelEl) labelEl.textContent = target.kind === 'stop' ? 'STOP' : target.kind === 'extract' ? 'EXTRACT' : 'HUNT';
 
-      // Highlight when close (encourages chase + feels responsive)
       const close = dist < 600;
-      this.enemyCompassEl.style.borderColor = close ? 'rgba(239,68,68,0.55)' : 'rgba(34,211,238,0.35)';
-      this.enemyCompassEl.style.boxShadow = close ? '0 0 26px rgba(239,68,68,0.18)' : '0 0 24px rgba(34,211,238,0.12)';
+      const urgent = target.kind !== 'hunt';
+      this.enemyCompassEl.style.borderColor = urgent ? 'rgba(250,204,21,0.55)' : close ? 'rgba(239,68,68,0.55)' : 'rgba(34,211,238,0.35)';
+      this.enemyCompassEl.style.boxShadow = urgent ? '0 0 26px rgba(250,204,21,0.16)' : close ? '0 0 26px rgba(239,68,68,0.18)' : '0 0 24px rgba(34,211,238,0.12)';
       this.enemyCompassEl.style.display = 'flex';
+    } catch {}
+  }
+
+  private updateObjectiveStatus() {
+    try {
+      if (!this.objectiveStatusEl) return;
+      const isTournament = !!(this.wsHud && this.wsHud.active);
+      const myId = this.wsHud?.playerId || null;
+      const obj = isTournament ? this.objective : null;
+      if (!isTournament || !obj || obj.kind !== 'extraction' || !myId) {
+        this.objectiveStatusEl.style.display = 'none';
+        return;
+      }
+
+      const keys = Number(obj?.keysByPlayerId?.[myId] || 0) || 0;
+      const req = Number(obj?.keysRequired || 0) || 3;
+      const egg = obj?.egg;
+      const openAt = Number(egg?.openAtMs || 0) || 0;
+      const holdMs = Number(egg?.holdMs || 0) || 2600;
+      const now = this.lastServerTimeMs > 0 ? this.lastServerTimeMs : Date.now();
+      const openIn = openAt > 0 ? Math.max(0, openAt - now) : 0;
+      const open = openAt > 0 ? openIn === 0 : true;
+
+      const holderId = obj?.holding?.playerId as string | undefined;
+      const holdingSince = Number(obj?.holding?.sinceMs || 0) || 0;
+      const holdingFor = holdingSince > 0 ? Math.max(0, now - holdingSince) : 0;
+      const holdLeft = holderId ? Math.max(0, holdMs - holdingFor) : 0;
+
+      let text = `KEYS ${keys}/${req} • `;
+      if (!open) {
+        text += `EGG IN ${Math.ceil(openIn / 1000)}s`;
+      } else if (holderId) {
+        const short = holderId === myId ? 'YOU' : `${String(holderId).slice(0, 4)}…${String(holderId).slice(-4)}`;
+        text += `HOLD ${short} ${Math.ceil(holdLeft / 100) / 10}s`;
+      } else {
+        text += (keys >= req) ? 'EGG OPEN • EXTRACT' : 'EGG OPEN';
+      }
+
+      this.objectiveStatusEl.textContent = text;
+      this.objectiveStatusEl.style.display = 'block';
+      this.objectiveStatusEl.style.borderColor = holderId ? 'rgba(250,204,21,0.55)' : 'rgba(255,255,255,0.14)';
     } catch {}
   }
 
@@ -2653,6 +2758,7 @@ class SpermRaceGame {
     this.radarAngle = (this.radarAngle + deltaTime * 2) % (Math.PI * 2);
     this.updateRadar();
     this.updateEnemyCompass();
+    this.updateObjectiveStatus();
     
     // Update alive count (legacy HUD removed; kept for practice header only)
     this.updateAliveCount();
@@ -5478,6 +5584,8 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
     if (wsState?.phase === 'game' && wsState.game) {
       try {
         try { game.applyServerWorld(wsState.game.world as any); } catch {}
+        try { (game as any).objective = (wsState.game as any).objective || null; } catch {}
+        try { (game as any).lastServerTimeMs = Number((wsState.game as any).timestamp || 0) || 0; } catch {}
         const players = wsState.game.players || [];
         const aliveSet = new Set<string>(players.filter(p => p.isAlive).map(p => p.id));
         const idToName: Record<string, string> = {};
