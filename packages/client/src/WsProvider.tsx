@@ -113,6 +113,8 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
   const lastInputSentRef = useRef<number>(0);
   const lastSentPayloadRef = useRef<{ target: { x: number; y: number }; accelerate: boolean; boost?: boolean } | null>(null);
   const lastBoostTsRef = useRef<number>(0);
+  const disableClientHelloRef = useRef<boolean>(false);
+  const lastClientHelloSentAtRef = useRef<number>(0);
   const expectedCloseRef = useRef<boolean>(false);
   const reconnectAttemptsRef = useRef<number>(0);
   const reconnectTimerRef = useRef<number | null>(null);
@@ -436,7 +438,12 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
               setState(s => ({ ...s, playerId: msg.payload.playerId }));
               console.log(`[AUTH] authenticated as ${String(msg.payload.playerId).slice(0, 6)}…`);
               // Capability negotiation: tell server we support trail deltas (server will then omit full trails in gameStateUpdate).
-              try { sock.send(JSON.stringify({ type: 'clientHello', payload: { trailDelta: true } })); } catch { }
+              if (!disableClientHelloRef.current) {
+                try {
+                  lastClientHelloSentAtRef.current = Date.now();
+                  sock.send(JSON.stringify({ type: 'clientHello', payload: { trailDelta: true } }));
+                } catch { }
+              }
               // Clear pending auth since we successfully authenticated
               pendingAuthRef.current = null;
               const join = pendingJoinRef.current;
@@ -760,8 +767,20 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
             case 'error': {
               joinBusyRef.current = false;
               if (joinRetryTimerRef.current) { clearTimeout(joinRetryTimerRef.current); joinRetryTimerRef.current = null; }
-              console.error('[WS] server error', msg.payload?.message);
-              setState(s => ({ ...s, lastError: msg.payload?.message || 'Server error', joining: false }));
+              const message = msg.payload?.message || 'Server error';
+              // Backward-compatible: older servers might reject optional capability messages like `clientHello`.
+              // Don't block the user for that; just disable the feature and continue.
+              if (
+                /invalid message schema/i.test(message) &&
+                lastClientHelloSentAtRef.current > 0 &&
+                (Date.now() - lastClientHelloSentAtRef.current) < 5000
+              ) {
+                disableClientHelloRef.current = true;
+                console.warn('[WS] server rejected clientHello; disabling capability negotiation');
+                break;
+              }
+              console.error('[WS] server error', message);
+              setState(s => ({ ...s, lastError: message, joining: false }));
               break;
             }
             default: break;

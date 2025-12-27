@@ -2,7 +2,7 @@ import { useEffect, useState, ReactNode } from 'react';
 import { GameController, Skull, WarningCircle } from 'phosphor-react';
 
 interface PracticeFullTutorialProps {
-
+  visible?: boolean;
   onDone: () => void;
 }
 
@@ -34,12 +34,12 @@ const SLIDES: Slide[] = [
 const SLIDE_DURATIONS_MS: number[] = [2000, 2000, 3000];
 const TUTORIAL_SECONDS = 7;
 
-export function PracticeFullTutorial({ onDone }: { onDone: () => void }) {
+export function PracticeFullTutorial({ visible = true, onDone }: PracticeFullTutorialProps) {
   const [index, setIndex] = useState(0);
   const [secondsLeft, setSecondsLeft] = useState<number>(TUTORIAL_SECONDS);
 
   useEffect(() => {
-    
+    if (!visible) return;
     setIndex(0);
     let currentIndex = 0;
     let timeoutId: number | undefined;
@@ -64,11 +64,11 @@ export function PracticeFullTutorial({ onDone }: { onDone: () => void }) {
         window.clearTimeout(timeoutId);
       }
     };
-  }, [ onDone]);
+  }, [visible, onDone]);
 
   // Simple countdown overlay for the 7s tutorial window
   useEffect(() => {
-    
+    if (!visible) return;
     setSecondsLeft(TUTORIAL_SECONDS);
     const startAt = Date.now();
     const id = window.setInterval(() => {
@@ -80,11 +80,13 @@ export function PracticeFullTutorial({ onDone }: { onDone: () => void }) {
       }
     }, 1000);
     return () => window.clearInterval(id);
-  }, []);
+  }, [visible]);
 
   
 
   const slide = SLIDES[index] ?? SLIDES[0];
+
+  if (!visible) return null;
 
   return (
     <div
