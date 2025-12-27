@@ -68,6 +68,8 @@ export class GameWorld {
   private lastItemSpawnTime: number = 0;
   public onPlayerEliminated: ((playerId: string) => void) | null = null;
   public onRoundEnd: ((winnerId: string, prizeAmountSol: number, payoutSignature?: string) => void) | null = null;
+  public onAuditEvent: ((type: string, payload?: any) => void) | null = null;
+  private lastWinReason: 'last_alive' | 'extraction' | 'draw' | null = null;
 
   constructor(smartContractService: SmartContractService) {
     this.collisionSystem = new CollisionSystem(WORLD_WIDTH, WORLD_HEIGHT);
@@ -154,6 +156,16 @@ export class GameWorld {
     this.lastItemSpawnTime = Date.now();
     this.gameState.status = 'in_progress';
     this.syncGameState();
+    this.lastWinReason = null;
+    try {
+      this.onAuditEvent?.('round_start', {
+        roundId: this.gameState.roundId,
+        entryFee,
+        players,
+        world: { ...this.gameState.world },
+        objective: (this.gameState as any).objective,
+      });
+    } catch { }
     console.log(`🏁 Fertilization race started with ${players.length} spermatozoa. Entry fee: ${entryFee} USD.`);
     if ((process.env.NODE_ENV || '').toLowerCase() !== 'production') {
       try {
@@ -168,6 +180,14 @@ export class GameWorld {
     this.gameState.status = 'finished';
     this.gameState.winnerId = winnerId;
     console.log(`Round ended. Winner: ${winnerId}`);
+    try {
+      this.onAuditEvent?.('round_end', {
+        roundId: this.gameState.roundId,
+        winnerId,
+        reason: this.lastWinReason,
+        objective: (this.gameState as any).objective,
+      });
+    } catch { }
     
     // --- Payout Logic ---
     if (this.currentLobby && winnerId !== 'draw') {
@@ -177,24 +197,39 @@ export class GameWorld {
         const totalLamports = lamportsPerPlayer * players.length;
         const winnerPrizeLamports = Math.floor(totalLamports * 0.85);
         const winnerPrizeSol = winnerPrizeLamports / 1_000_000_000;
+        try {
+          this.onAuditEvent?.('payout_planned', {
+            roundId: this.gameState.roundId,
+            winnerId,
+            entryFee,
+            players,
+            lamportsPerPlayer,
+            totalLamports,
+            winnerPrizeLamports,
+          });
+        } catch { }
         // Payout 85% to winner, 15% routed to platform within service
         // Only payout if winnerId appears to be a real wallet (not a bot)
         let txSig: string | undefined = undefined;
         const isBotWinner = typeof winnerId === 'string' && (winnerId.startsWith('BOT_') || winnerId.startsWith('Guest_') || winnerId.startsWith('PLAYER_'));
         if (isBotWinner) {
           console.log('[PAYOUT] Skipping payout: winner is a dev bot');
+          try { this.onAuditEvent?.('payout_skipped', { roundId: this.gameState.roundId, winnerId, reason: 'bot_winner' }); } catch { }
         } else {
           try {
             const { PublicKey } = await import('@solana/web3.js');
             const winnerPk = new PublicKey(winnerId); // will throw if invalid base58
             txSig = await this.smartContractService.payoutPrizeLamports(winnerPk, winnerPrizeLamports, 1500);
+            try { this.onAuditEvent?.('payout_sent', { roundId: this.gameState.roundId, winnerId, winnerPrizeLamports, txSig }); } catch { }
           } catch (e) {
             console.warn('[PAYOUT] Skipping payout (invalid winner pubkey or configuration error):', e);
+            try { this.onAuditEvent?.('payout_failed', { roundId: this.gameState.roundId, winnerId, error: String((e as any)?.message || e) }); } catch { }
           }
         }
         this.onRoundEnd?.(winnerId, winnerPrizeSol, txSig);
       } catch (error) {
         console.error('❌ Payout failed:', error);
+        try { this.onAuditEvent?.('payout_failed', { roundId: this.gameState.roundId, winnerId, error: String((error as any)?.message || error) }); } catch { }
       }
     }
     
@@ -324,12 +359,14 @@ export class GameWorld {
           console.debug(`[DEV][WIN] single survivor → ${id.startsWith('BOT_')?id:`${id.slice(0,6)}…${id.slice(-4)}`}`);
         } catch {}
       }
+      this.lastWinReason = 'last_alive';
       this.endRound(alivePlayers[0].id);
     } else if (this.players.size > 0 && alivePlayers.length === 0) {
       // Handle case where all players are eliminated simultaneously (draw)
       if ((process.env.NODE_ENV || '').toLowerCase() !== 'production') {
         try { console.debug('[DEV][WIN] draw → all eliminated'); } catch {}
       }
+      this.lastWinReason = 'draw';
       this.endRound('draw');
     }
 
@@ -470,6 +507,7 @@ export class GameWorld {
     const next = Math.min(cap, prev + 1);
     if (!obj.keysByPlayerId) obj.keysByPlayerId = {};
     obj.keysByPlayerId[playerId] = next;
+    try { this.onAuditEvent?.('objective_key_awarded', { roundId: this.gameState.roundId, playerId, keys: next }); } catch { }
   }
 
   private dropExtractionKeysOnElim(victimId: string): void {
@@ -479,6 +517,9 @@ export class GameWorld {
     if (prev <= 0) return;
     const dropCount = Math.min(2, prev);
     obj.keysByPlayerId[victimId] = Math.max(0, prev - dropCount);
+    try {
+      this.onAuditEvent?.('objective_keys_dropped', { roundId: this.gameState.roundId, victimId, dropCount, remaining: obj.keysByPlayerId[victimId] });
+    } catch { }
 
     const victim = this.players.get(victimId);
     if (!victim) return;
@@ -536,17 +577,31 @@ export class GameWorld {
       const sinceMs = Number(obj.holding?.sinceMs || nowMs) || nowMs;
       obj.holding.sinceMs = sinceMs;
       if ((nowMs - sinceMs) >= holdMs) {
+        try {
+          this.onAuditEvent?.('objective_extraction_complete', {
+            roundId: this.gameState.roundId,
+            winnerId: currentHolder,
+            sinceMs,
+            holdMs,
+            keys: Number(obj.keysByPlayerId?.[currentHolder] || 0) || 0,
+          });
+        } catch { }
+        this.lastWinReason = 'extraction';
         void this.endRound(currentHolder);
       }
       return;
     }
 
     // Otherwise pick a new holder (first valid player).
+    if (currentHolder && !qualifies(currentHolder)) {
+      try { this.onAuditEvent?.('objective_hold_lost', { roundId: this.gameState.roundId, playerId: currentHolder }); } catch { }
+    }
     obj.holding = undefined;
     for (const p of this.players.values()) {
       if (!p.isAlive) continue;
       if (!qualifies(p.id)) continue;
       obj.holding = { playerId: p.id, sinceMs: nowMs };
+      try { this.onAuditEvent?.('objective_hold_start', { roundId: this.gameState.roundId, playerId: p.id, sinceMs: nowMs }); } catch { }
       break;
     }
   }

@@ -12,6 +12,7 @@ import { LobbyManager } from './LobbyManager.js';
 import { AuthService } from './AuthService.js';
 import { SmartContractService } from './SmartContractService.js';
 import { DatabaseService } from './DatabaseService.js';
+import { AuditLogger } from './AuditLogger.js';
 import { ClientToServerMessage, ServerToClientMessage, GameStateUpdateMessage, LobbyStateMessage, Lobby, AuthenticatedMessage } from 'shared';
 import { clientToServerMessageSchema } from 'shared/dist/schemas.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -80,6 +81,9 @@ const lobbyManager = new LobbyManager(smartContractService);
 const DB_PATH = process.env.DB_PATH || './packages/server/data/spermrace.db';
 const db = new DatabaseService(DB_PATH);
 log.info(`[DB] Using database: ${DB_PATH}`);
+const BUILD_SHA = (process.env.GIT_SHA || process.env.COMMIT_SHA || process.env.VERCEL_GIT_COMMIT_SHA || process.env.RENDER_GIT_COMMIT || '').toString() || undefined;
+const AUDIT_DIR = process.env.AUDIT_DIR || './packages/server/data/audit';
+const audit = new AuditLogger({ dir: AUDIT_DIR, build: BUILD_SHA });
 const pendingSockets = new Set<WebSocket>();
 const playerIdToSocket = new Map<string, WebSocket>();
 const socketToPlayerId = new Map<WebSocket, string>();
@@ -105,6 +109,9 @@ const sessionTokens = new Map<string, { playerId: string; createdAt: number }>()
 const SESSION_TOKEN_TTL_MS = 300000; // 5 minutes
 
 gameWorld.start();
+gameWorld.onAuditEvent = (type: string, payload?: any) => {
+  try { audit.log(type, payload); } catch { }
+};
 
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://spermrace.io,https://www.spermrace.io,https://sperm-race-io.vercel.app,http://localhost:5174')
   .split(',')
@@ -491,10 +498,12 @@ lobbyManager.onLobbyUpdate = (lobby: Lobby) => {
   });
   const message: LobbyStateMessage = { type: 'lobbyState', payload: { ...lobby, playerNames: playerNamesMap } as any };
   broadcastToLobby(lobby, message);
+  try { audit.log('lobby_update', { lobbyId: lobby.lobbyId, mode: lobby.mode, entryFee: lobby.entryFee, status: lobby.status, players: lobby.players }); } catch { }
 };
 
 lobbyManager.onGameStart = (lobby: Lobby) => {
   log.info(`📢 Fertilization race starting for lobby ${lobby.lobbyId}`);
+  try { audit.log('match_start', { lobbyId: lobby.lobbyId, mode: lobby.mode, entryFee: lobby.entryFee, players: lobby.players }); } catch { }
   // Consume paid tickets for players admitted to this game round
   try {
     lobby.players.forEach(pid => {
@@ -518,6 +527,11 @@ lobbyManager.onGameStart = (lobby: Lobby) => {
 lobbyManager.onLobbyCountdown = (lobby, remaining, startAtMs) => {
   const msg: ServerToClientMessage = { type: 'lobbyCountdown', payload: { lobbyId: lobby.lobbyId, remaining, startAtMs } } as any;
   broadcastToLobby(lobby, msg);
+  try {
+    if (remaining === Math.ceil((startAtMs - Date.now()) / 1000) || remaining % 5 === 0 || remaining <= 5) {
+      audit.log('lobby_countdown', { lobbyId: lobby.lobbyId, remaining, startAtMs, players: lobby.players.length });
+    }
+  } catch { }
 
   // If solo player, show discrete countdown
   // Timeline: 0-30s = silent waiting, 30-50s = show countdown every second
@@ -553,6 +567,7 @@ lobbyManager.onLobbyRefund = async (lobby: Lobby, playerId: string, _calculatedL
   try {
     // Issue refund transaction with network fee deducted
     const txSignature = await smartContractService.refundPlayer(playerId, refundAmount);
+    try { audit.log('refund_sent', { lobbyId: lobby.lobbyId, playerId, lamports: refundAmount, txSignature }); } catch { }
 
     // Clear payment tracking - player needs to pay again if they want to rejoin
     paidPlayers.delete(playerId);
@@ -583,6 +598,7 @@ lobbyManager.onLobbyRefund = async (lobby: Lobby, playerId: string, _calculatedL
     console.log(`[REFUND] ✅ Refund completed for ${playerId}: ${txSignature}`);
   } catch (error) {
     console.error(`[REFUND] ❌ Failed to refund ${playerId}:`, error);
+    try { audit.log('refund_failed', { lobbyId: lobby.lobbyId, playerId, lamports: refundAmount, error: String((error as any)?.message || error) }); } catch { }
 
     // ✅ FIX #2: Notify player of refund failure with details
     const socket = playerIdToSocket.get(playerId);
@@ -948,6 +964,7 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
           (async () => {
             const { lamports, tier, paymentId } = pending;
             const { txBase64, recentBlockhash, prizePool } = await smartContractService.createEntryFeeTransactionBase64((new (await import('@solana/web3.js')).PublicKey(publicKey)), lamports);
+            try { audit.log('payment_tx_resend', { playerId: publicKey, tier, lamports, paymentId }); } catch { }
             const entryFeeTxMessage: any = { type: 'entryFeeTx', payload: { txBase64, lamports, recentBlockhash, prizePool, entryFeeTier: tier, paymentId, sessionNonce: socketToNonce.get(ws)?.nonce } };
             ws.send(JSON.stringify(entryFeeTxMessage));
           })().catch(() => { });
@@ -1043,6 +1060,7 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
           const { txBase64, recentBlockhash, prizePool } = await smartContractService.createEntryFeeTransactionBase64((new (await import('@solana/web3.js')).PublicKey(playerId)), lamports);
           const paymentId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
           pendingPaymentByPlayerId.set(playerId, { paymentId, createdAt: Date.now(), lamports, tier });
+          try { audit.log('payment_tx_created', { playerId, tier, lamports, paymentId }); } catch { }
           const entryFeeTxMessage: any = { type: 'entryFeeTx', payload: { txBase64, lamports, recentBlockhash, prizePool, entryFeeTier: tier, paymentId, sessionNonce: socketToNonce.get(ws)?.nonce } };
           ws.send(JSON.stringify(entryFeeTxMessage));
         }
@@ -1121,6 +1139,7 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
       const reason = errorReason || (timedOut ? 'Timeout waiting for confirmation' : 'Payment not found');
       const resp: any = { type: 'entryFeeVerified', payload: { ok: verified, reason: verified ? undefined : reason } };
       ws.send(JSON.stringify(resp));
+      try { audit.log('payment_verified', { playerId, ok: verified, reason: verified ? undefined : reason, signature }); } catch { }
       if (verified) {
         log.info(`[PAYMENT] ✅ Adding player ${maskPk(playerId)} to paidPlayers set`);
         paidPlayers.add(playerId);
