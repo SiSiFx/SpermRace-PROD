@@ -323,6 +323,7 @@ class SpermRaceGame {
   public onReplay?: () => void;
   public onExit?: () => void;
   public notifiedServerEnd: boolean = false;
+  private appliedServerWorld: { width: number; height: number } | null = null;
 
   constructor(container: HTMLElement, onReplay?: () => void, onExit?: () => void) {
     this.container = container;
@@ -1743,10 +1744,61 @@ class SpermRaceGame {
     this.spawnQueueIndex += 1 + 31;
   }
 
+  applyServerWorld(world: { width: number; height: number } | null | undefined) {
+    try {
+      const w0 = Number(world?.width);
+      const h0 = Number(world?.height);
+      if (!Number.isFinite(w0) || !Number.isFinite(h0)) return;
+      // Only resize the rendered arena during the pre-start countdown to avoid mid-match jitter.
+      if (this.appliedServerWorld && !this.preStart) return;
+      const width = Math.max(800, Math.min(12000, Math.floor(w0)));
+      const height = Math.max(600, Math.min(12000, Math.floor(h0)));
+      if (this.appliedServerWorld && this.appliedServerWorld.width === width && this.appliedServerWorld.height === height) return;
+
+      this.appliedServerWorld = { width, height };
+      this.arena = { width, height };
+
+      // Update derived bounds used throughout the renderer.
+      this.spawnBounds = { left: -width / 2, right: width / 2, top: -height / 2, bottom: height / 2 };
+      this.rectZone.left = -width / 2;
+      this.rectZone.right = width / 2;
+      this.rectZone.top = -height / 2;
+      this.rectZone.bottom = height / 2;
+      this.zone.startRadius = Math.min(width, height) * 0.48;
+
+      // Rebuild grid/border for the new arena size.
+      try { this.drawArenaBorder(); } catch {}
+      try { this.drawBorderOverlay(); } catch {}
+      try {
+        if (this.gridGraphics && this.worldContainer) this.worldContainer.removeChild(this.gridGraphics);
+      } catch {}
+      try { this.createGrid(); } catch {}
+
+      // Keep the local player inside the new bounds (NewGameView uses centered coordinates).
+      const clampCar = (car: Car | null) => {
+        if (!car) return;
+        const halfW = width / 2;
+        const halfH = height / 2;
+        car.x = Math.max(-halfW, Math.min(halfW, car.x));
+        car.y = Math.max(-halfH, Math.min(halfH, car.y));
+        car.sprite?.position?.set?.(car.x, car.y);
+      };
+      clampCar(this.player);
+      clampCar(this.bot);
+      for (const b of this.extraBots) clampCar(b);
+
+      try { this.updateCamera(); } catch {}
+    } catch {}
+  }
+
   syncServerPlayers(playerData: any[]) {
     if (!this.app || !this.worldContainer) return;
     const currentIds = new Set(playerData.map(p => p.id));
     const myId = this.wsHud?.playerId;
+    const isTournament = !!(this.wsHud && this.wsHud.active);
+    // Server coordinates are 0..worldWidth/Height; this renderer uses -W/2..+W/2.
+    const offsetX = isTournament ? -this.arena.width / 2 : 0;
+    const offsetY = isTournament ? -this.arena.height / 2 : 0;
     
     // Remove players who left
     for (const [id, car] of this.serverPlayers.entries()) {
@@ -1765,7 +1817,7 @@ class SpermRaceGame {
       let car = this.serverPlayers.get(p.id);
       if (!car) {
         const color = parseInt((p.sperm.color || "#ff00ff").replace("#", ""), 16);
-        car = this.createCar(p.sperm.position.x, p.sperm.position.y, color, "enemy");
+        car = this.createCar((p.sperm.position.x || 0) + offsetX, (p.sperm.position.y || 0) + offsetY, color, "enemy");
         car.id = p.id;
         car.name = this.wsHud?.idToName[p.id] || p.id.slice(0, 4) + "…";
         if (car.nameplate) car.nameplate.textContent = car.name;
@@ -1774,8 +1826,8 @@ class SpermRaceGame {
         (car.sprite as any).zIndex = 50;
       }
 
-      car.x = p.sperm.position.x;
-      car.y = p.sperm.position.y;
+      car.x = (p.sperm.position.x || 0) + offsetX;
+      car.y = (p.sperm.position.y || 0) + offsetY;
       car.vx = p.sperm.velocity?.x || 0;
       car.vy = p.sperm.velocity?.y || 0;
       car.angle = p.sperm.angle;
@@ -1798,7 +1850,7 @@ class SpermRaceGame {
           carId: car.id,
           car: car,
           // Use createdAt when available so the trail ages correctly and doesn't stick to the head.
-          points: p.trail.map((pt: any) => ({ x: pt.x, y: pt.y, time: (typeof pt.createdAt === 'number' ? pt.createdAt : (pt.expiresAt - 8000)), isBoosting: false })),
+          points: p.trail.map((pt: any) => ({ x: (pt.x || 0) + offsetX, y: (pt.y || 0) + offsetY, time: (typeof pt.createdAt === 'number' ? pt.createdAt : (pt.expiresAt - 8000)), isBoosting: false })),
           graphics: car.trailGraphics
         };
         this.renderTrail(trailObj);
@@ -5334,6 +5386,7 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
     if (!game) return;
     if (wsState?.phase === 'game' && wsState.game) {
       try {
+        try { game.applyServerWorld(wsState.game.world as any); } catch {}
         const players = wsState.game.players || [];
         const aliveSet = new Set<string>(players.filter(p => p.isAlive).map(p => p.id));
         const idToName: Record<string, string> = {};

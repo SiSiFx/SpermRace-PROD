@@ -18,6 +18,15 @@ const ARENA_SHRINK_START_S = S_WORLD.ARENA_SHRINK_START_S; // start shrink near 
 const ARENA_SHRINK_DURATION_S = S_WORLD.ARENA_SHRINK_DURATION_S; // shrink over 90s to 50%
 const PHYSICS_CONSTANTS = { ...S_PHYSICS } as const;
 
+function pickRoundWorldSize(playerCount: number): { width: number; height: number } {
+  if (!Number.isFinite(playerCount) || playerCount <= 0) return { width: WORLD_WIDTH, height: WORLD_HEIGHT };
+  // Smaller matches need faster encounters; large lobbies keep the classic arena.
+  if (playerCount <= 8) return { width: 2000, height: 1400 };
+  if (playerCount <= 12) return { width: 2400, height: 1700 };
+  if (playerCount <= 20) return { width: 3000, height: 2100 };
+  return { width: WORLD_WIDTH, height: WORLD_HEIGHT };
+}
+
 // Apex Predator DNA fragment settings
 const MAX_DNA_ON_MAP = 20;
 const DNA_RESPAWN_RATE_MS = 2000;
@@ -42,6 +51,8 @@ export class GameWorld {
   private bots: Map<string, BotController> = new Map();
   private roundStartedAtMs: number | null = null;
   private shrinkFactor: number = 1; // 1..0.5
+  private baseWorldWidth: number = WORLD_WIDTH;
+  private baseWorldHeight: number = WORLD_HEIGHT;
   private lastDevAliveLogMs: number = 0;
   private items: Map<string, GameItem> = new Map();
   private lastItemSpawnTime: number = 0;
@@ -99,6 +110,16 @@ export class GameWorld {
     this.items.clear();
     this.lastItemSpawnTime = 0;
     this.currentLobby = { players, entryFee };
+
+    // Reset arena sizing for this round based on expected player count.
+    const roundSize = pickRoundWorldSize(players.length);
+    this.baseWorldWidth = roundSize.width;
+    this.baseWorldHeight = roundSize.height;
+    this.shrinkFactor = 1;
+    this.collisionSystem.setWorldBounds(this.baseWorldWidth, this.baseWorldHeight);
+    this.gameState.world.width = this.baseWorldWidth;
+    this.gameState.world.height = this.baseWorldHeight;
+
     players.forEach(playerId => this.spawnPlayer(playerId));
     // Spawn an initial batch of DNA fragments to seed the map
     for (let i = 0; i < 10 && this.items.size < MAX_DNA_ON_MAP; i++) {
@@ -283,8 +304,8 @@ export class GameWorld {
       if (elapsedS > ARENA_SHRINK_START_S) {
         const t = Math.min(1, (elapsedS - ARENA_SHRINK_START_S) / ARENA_SHRINK_DURATION_S);
         this.shrinkFactor = 1 - 0.5 * t; // shrink to 50%
-        const newW = Math.max(800, Math.floor(WORLD_WIDTH * this.shrinkFactor));
-        const newH = Math.max(600, Math.floor(WORLD_HEIGHT * this.shrinkFactor));
+        const newW = Math.max(800, Math.floor(this.baseWorldWidth * this.shrinkFactor));
+        const newH = Math.max(600, Math.floor(this.baseWorldHeight * this.shrinkFactor));
         this.collisionSystem.setWorldBounds(newW, newH);
         this.gameState.world.width = newW;
         this.gameState.world.height = newH;
@@ -386,12 +407,46 @@ export class GameWorld {
   }
 
   private spawnPlayer(playerId: string): void {
-    // Spawn farther apart by sampling until a minimum distance from existing spawns
-    const MIN_SPAWN_DIST = 1100; // increased for ultrafast speeds
-    const WALL_MARGIN = 240; // keep away from walls to avoid instant bounces
+    const width = this.gameState.world.width || this.baseWorldWidth || WORLD_WIDTH;
+    const height = this.gameState.world.height || this.baseWorldHeight || WORLD_HEIGHT;
+
+    // Smaller matches should start closer for faster encounters.
+    const spawnPopulation = this.currentLobby?.players.length ?? (this.players.size + 1);
+    const spawnMode: 'cluster' | 'mid' | 'spread' =
+      spawnPopulation <= 12 ? 'cluster' : spawnPopulation <= 24 ? 'mid' : 'spread';
+
+    const minDim = Math.min(width, height);
+    const WALL_MARGIN = Math.min(240, Math.max(120, Math.floor(minDim * 0.08))); // keep away from walls
+    const requestedMinSpawnDist = spawnMode === 'cluster' ? 420 : spawnMode === 'mid' ? 750 : 1100;
+    const maxInside = Math.max(200, Math.floor(minDim - 2 * WALL_MARGIN));
+    const MIN_SPAWN_DIST = Math.min(requestedMinSpawnDist, Math.floor(maxInside * 0.75));
+
+    const center = { x: width / 2, y: height / 2 };
+    const clusterRadius =
+      spawnMode === 'cluster'
+        ? Math.max(320, Math.floor(minDim * 0.20))
+        : Math.max(520, Math.floor(minDim * 0.38));
+
+    const sampleCandidate = (): { x: number; y: number } => {
+      if (spawnMode === 'spread') {
+        return {
+          x: WALL_MARGIN + Math.random() * (width - 2 * WALL_MARGIN),
+          y: WALL_MARGIN + Math.random() * (height - 2 * WALL_MARGIN),
+        };
+      }
+      const theta = Math.random() * Math.PI * 2;
+      const r = clusterRadius * Math.sqrt(Math.random());
+      const x = center.x + Math.cos(theta) * r;
+      const y = center.y + Math.sin(theta) * r;
+      return {
+        x: Math.max(WALL_MARGIN, Math.min(width - WALL_MARGIN, x)),
+        y: Math.max(WALL_MARGIN, Math.min(height - WALL_MARGIN, y)),
+      };
+    };
+
     let spawnPosition: { x: number; y: number } = { x: 0, y: 0 };
-    for (let tries = 0; tries < 40; tries++) {
-      const cand = { x: WALL_MARGIN + Math.random() * (WORLD_WIDTH - 2 * WALL_MARGIN), y: WALL_MARGIN + Math.random() * (WORLD_HEIGHT - 2 * WALL_MARGIN) };
+    for (let tries = 0; tries < 60; tries++) {
+      const cand = sampleCandidate();
       let ok = true;
       for (const p of this.players.values()) {
         const dx = cand.x - p.sperm.position.x;
