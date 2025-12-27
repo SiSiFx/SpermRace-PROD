@@ -21,6 +21,7 @@ const PHYSICS_CONSTANTS = { ...S_PHYSICS } as const;
 function pickRoundWorldSize(playerCount: number): { width: number; height: number } {
   if (!Number.isFinite(playerCount) || playerCount <= 0) return { width: WORLD_WIDTH, height: WORLD_HEIGHT };
   // Smaller matches need faster encounters; large lobbies keep the classic arena.
+  if (playerCount <= 4) return { width: 1600, height: 1100 };
   if (playerCount <= 8) return { width: 2000, height: 1400 };
   if (playerCount <= 12) return { width: 2400, height: 1700 };
   if (playerCount <= 20) return { width: 3000, height: 2100 };

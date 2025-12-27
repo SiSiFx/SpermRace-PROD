@@ -324,6 +324,8 @@ class SpermRaceGame {
   public onExit?: () => void;
   public notifiedServerEnd: boolean = false;
   private appliedServerWorld: { width: number; height: number } | null = null;
+  private enemyCompassEl: HTMLDivElement | null = null;
+  private lastEnemyCompassUpdateAt: number = 0;
 
   constructor(container: HTMLElement, onReplay?: () => void, onExit?: () => void) {
     this.container = container;
@@ -1492,6 +1494,35 @@ class SpermRaceGame {
     });
     this.uiContainer.appendChild(this.killFeedContainer);
 
+    // Enemy compass (helps players find action quickly)
+    this.enemyCompassEl = document.createElement('div');
+    this.enemyCompassEl.id = 'enemy-compass';
+    Object.assign(this.enemyCompassEl.style, {
+      position: 'absolute',
+      top: '18px',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      zIndex: '12',
+      pointerEvents: 'none',
+      fontFamily: 'Orbitron, system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
+      fontSize: '12px',
+      fontWeight: '800',
+      letterSpacing: '0.12em',
+      textTransform: 'uppercase',
+      color: '#e5e7eb',
+      background: 'rgba(0,0,0,0.55)',
+      border: '1px solid rgba(34,211,238,0.35)',
+      boxShadow: '0 0 24px rgba(34,211,238,0.12)',
+      borderRadius: '999px',
+      padding: '8px 12px',
+      display: 'none',
+      alignItems: 'center',
+      gap: '10px',
+      whiteSpace: 'nowrap'
+    } as Partial<CSSStyleDeclaration>);
+    this.enemyCompassEl.innerHTML = `<span style="opacity:0.9">HUNT</span><span id="enemy-compass-dist" style="opacity:0.85">—</span><span id="enemy-compass-arrow" style="display:inline-block;transform:rotate(0deg);font-size:14px;line-height:1">▲</span>`;
+    this.uiContainer.appendChild(this.enemyCompassEl);
+
     // Settings UI toggle removed
     // Zone timer now integrated into top HUD bar (created above)
     // (bounty HUD removed)
@@ -1504,6 +1535,65 @@ class SpermRaceGame {
 
     // Create emote buttons (mobile-friendly)
     this.createEmoteButtons();
+  }
+
+  private updateEnemyCompass() {
+    try {
+      if (!this.enemyCompassEl) return;
+      if (!this.player || this.player.destroyed || !!this.preStart) {
+        this.enemyCompassEl.style.display = 'none';
+        return;
+      }
+      const now = Date.now();
+      if (now - this.lastEnemyCompassUpdateAt < 140) return; // ~7Hz is enough
+      this.lastEnemyCompassUpdateAt = now;
+
+      const isTournament = !!(this.wsHud && this.wsHud.active);
+      const candidates: Car[] = [];
+      if (isTournament) {
+        for (const c of this.serverPlayers.values()) {
+          if (!c || c.destroyed || !c.sprite?.visible) continue;
+          candidates.push(c);
+        }
+      } else {
+        if (this.bot && !this.bot.destroyed) candidates.push(this.bot);
+        for (const b of this.extraBots) if (b && !b.destroyed) candidates.push(b);
+      }
+
+      if (candidates.length === 0) {
+        this.enemyCompassEl.style.display = 'none';
+        return;
+      }
+
+      let best: { car: Car; dist: number; dx: number; dy: number } | null = null;
+      for (const c of candidates) {
+        const dx = c.x - this.player.x;
+        const dy = c.y - this.player.y;
+        const dist = Math.hypot(dx, dy);
+        if (!Number.isFinite(dist)) continue;
+        if (!best || dist < best.dist) best = { car: c, dist, dx, dy };
+      }
+
+      if (!best) {
+        this.enemyCompassEl.style.display = 'none';
+        return;
+      }
+
+      const distText = this.enemyCompassEl.querySelector('#enemy-compass-dist') as HTMLSpanElement | null;
+      const arrow = this.enemyCompassEl.querySelector('#enemy-compass-arrow') as HTMLSpanElement | null;
+      const dist = Math.round(best.dist);
+      if (distText) distText.textContent = `${dist}m`;
+
+      const ang = Math.atan2(best.dy, best.dx);
+      const deg = (ang * 180) / Math.PI + 90; // ▲ points up, so +90 aligns 0deg to up
+      if (arrow) arrow.style.transform = `rotate(${deg.toFixed(1)}deg)`;
+
+      // Highlight when close (encourages chase + feels responsive)
+      const close = dist < 600;
+      this.enemyCompassEl.style.borderColor = close ? 'rgba(239,68,68,0.55)' : 'rgba(34,211,238,0.35)';
+      this.enemyCompassEl.style.boxShadow = close ? '0 0 26px rgba(239,68,68,0.18)' : '0 0 24px rgba(34,211,238,0.12)';
+      this.enemyCompassEl.style.display = 'flex';
+    } catch {}
   }
 
   createEmoteButtons() {
@@ -2562,6 +2652,7 @@ class SpermRaceGame {
     // Update sonar radar
     this.radarAngle = (this.radarAngle + deltaTime * 2) % (Math.PI * 2);
     this.updateRadar();
+    this.updateEnemyCompass();
     
     // Update alive count (legacy HUD removed; kept for practice header only)
     this.updateAliveCount();
