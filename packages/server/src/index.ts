@@ -115,6 +115,7 @@ const SESSION_TOKEN_TTL_MS = 300000; // 5 minutes
 
 const ABUSE_TELEMETRY = (process.env.ABUSE_TELEMETRY || '1').toLowerCase() !== '0';
 const ABUSE_SALT = (process.env.ABUSE_SALT || '').toString();
+const ABUSE_LOG_FULL_IP_HASH = (process.env.ABUSE_LOG_FULL_IP_HASH || '0').toLowerCase() === '1';
 if (ABUSE_TELEMETRY && IS_PRODUCTION && !ABUSE_SALT) {
   log.warn('[ABUSE] ABUSE_SALT is not set; hashes are unsalted (set ABUSE_SALT for stronger anti-collusion signals).');
 }
@@ -873,13 +874,13 @@ wss.on('connection', (ws: WebSocket, req: any) => {
       const ua = getUserAgent(req);
       const meta: ConnMeta = {};
       if (ip) {
-        meta.ipHash = hashWithSalt(ip);
+        if (ABUSE_LOG_FULL_IP_HASH) meta.ipHash = hashWithSalt(ip);
         const pref = ipPrefix(ip);
         if (pref) meta.ipPrefixHash = hashWithSalt(pref);
       }
       if (ua) meta.uaHash = hashWithSalt(ua);
       socketToConnMeta.set(ws, meta);
-      audit.log('ws_connect', { sessionId, ipPrefixHash: meta.ipPrefixHash, ipHash: meta.ipHash, uaHash: meta.uaHash });
+      audit.log('ws_connect', { sessionId, ipPrefixHash: meta.ipPrefixHash, ...(ABUSE_LOG_FULL_IP_HASH ? { ipHash: meta.ipHash } : {}), uaHash: meta.uaHash });
     }
   } catch { }
   socketRate.set(ws, {
