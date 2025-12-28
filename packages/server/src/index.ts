@@ -67,10 +67,12 @@ if (IS_PRODUCTION) {
 // Single HTTP server hosting both API and WebSocket (path /ws)
 const app = express();
 const server = http.createServer(app);
+const WS_PERMESSAGE_DEFLATE = (process.env.WS_PERMESSAGE_DEFLATE || (IS_PRODUCTION ? '0' : '1')).toLowerCase();
+const enableWsDeflate = WS_PERMESSAGE_DEFLATE === '1' || WS_PERMESSAGE_DEFLATE === 'true' || WS_PERMESSAGE_DEFLATE === 'yes';
 const wss = new WebSocketServer({
   server,
   path: '/ws',
-  perMessageDeflate: { threshold: 1024 }
+  perMessageDeflate: enableWsDeflate ? { threshold: 1024 } : false
 });
 
 const smartContractService = new SmartContractService();
@@ -822,20 +824,21 @@ wss.on('connection', (ws: WebSocket, req: any) => {
     ws.send(JSON.stringify(challenge));
   }
 
-  ws.on('message', (data) => {
-    try {
-      const raw = data.toString();
-      console.log(`[WS=>] Message received: ${raw.length} bytes at ${Date.now()}`);
-      if (raw.length > 64_000) { ws.send(JSON.stringify({ type: 'error', payload: { message: 'Payload too large' } })); return; }
-      const parsed = JSON.parse(raw);
-      console.log(`[WS=>] Parsed message type: ${parsed?.type || 'unknown'}`);
-      const result = clientToServerMessageSchema.safeParse(parsed);
-      if (!result.success) {
-        console.warn(`[WS=>] Invalid schema for type ${parsed?.type}:`, result.error.errors);
-        ws.send(JSON.stringify({ type: 'error', payload: { message: 'Invalid message schema' } }));
-        return;
-      }
-      const message: ClientToServerMessage = result.data as any;
+	  ws.on('message', (data) => {
+	    try {
+	      const raw = data.toString();
+	      log.debug(`[WS=>] Message received: ${raw.length} bytes at ${Date.now()}`);
+	      if (raw.length > 64_000) { ws.send(JSON.stringify({ type: 'error', payload: { message: 'Payload too large' } })); return; }
+	      const parsed = JSON.parse(raw);
+	      log.debug(`[WS=>] Parsed message type: ${parsed?.type || 'unknown'}`);
+	      const result = clientToServerMessageSchema.safeParse(parsed);
+	      if (!result.success) {
+	        log.warn(`[WS=>] Invalid message schema for type ${parsed?.type || 'unknown'}`);
+	        log.debug(`[WS=>] Schema errors:`, result.error.errors);
+	        ws.send(JSON.stringify({ type: 'error', payload: { message: 'Invalid message schema' } }));
+	        return;
+	      }
+	      const message: ClientToServerMessage = result.data as any;
 
       // Handle guest login specifically
       if (message.type === 'guestLogin') {
@@ -1313,48 +1316,63 @@ function broadcastGameState(): void {
     const gameState = match.gameWorld.gameState;
     if (gameState.status !== 'in_progress') continue;
 
-    const messageSlim: GameStateUpdateMessage = {
-      type: 'gameStateUpdate',
-      payload: {
-        timestamp: Date.now(),
-        players: Object.values(gameState.players).map((p: any) => ({
-          id: p.id,
-          sperm: p.sperm,
-          isAlive: p.isAlive,
-          status: p.status,
-        })),
-        world: gameState.world,
-        aliveCount: Object.values(gameState.players).filter((p: any) => p.isAlive).length,
-        objective: (gameState as any).objective,
-      },
-    };
+    const timestamp = Date.now();
+    const playersArray = Object.values(gameState.players) as any[];
+    let aliveCount = 0;
+    for (const p of playersArray) if (p?.isAlive) aliveCount++;
+    const world = gameState.world;
+    const objective = (gameState as any).objective;
 
-    const messageFull: GameStateUpdateMessage = {
-      type: 'gameStateUpdate',
-      payload: {
-        timestamp: messageSlim.payload.timestamp,
-        players: Object.values(gameState.players).map((p: any) => ({
-          id: p.id,
-          sperm: p.sperm,
-          isAlive: p.isAlive,
-          trail: p.trail,
-          status: p.status,
-        })),
-        world: gameState.world,
-        aliveCount: messageSlim.payload.aliveCount,
-        objective: (gameState as any).objective,
-      },
+    let slimStr: string | null = null;
+    let fullStr: string | null = null;
+    const getSlimStr = (): string => {
+      if (slimStr) return slimStr;
+      const messageSlim: GameStateUpdateMessage = {
+        type: 'gameStateUpdate',
+        payload: {
+          timestamp,
+          players: playersArray.map((p: any) => ({
+            id: p.id,
+            sperm: p.sperm,
+            isAlive: p.isAlive,
+            status: p.status,
+          })),
+          world,
+          aliveCount,
+          objective,
+        },
+      };
+      slimStr = JSON.stringify(messageSlim);
+      return slimStr;
     };
-
-    const slimStr = JSON.stringify(messageSlim);
-    const fullStr = JSON.stringify(messageFull);
+    const getFullStr = (): string => {
+      if (fullStr) return fullStr;
+      const messageFull: GameStateUpdateMessage = {
+        type: 'gameStateUpdate',
+        payload: {
+          timestamp,
+          players: playersArray.map((p: any) => ({
+            id: p.id,
+            sperm: p.sperm,
+            isAlive: p.isAlive,
+            trail: p.trail,
+            status: p.status,
+          })),
+          world,
+          aliveCount,
+          objective,
+        },
+      };
+      fullStr = JSON.stringify(messageFull);
+      return fullStr;
+    };
 
     // Broadcast only to players who are actually in this match round (with backpressure)
     Object.keys(gameState.players).forEach((playerId: string) => {
       const ws = playerIdToSocket.get(playerId);
       if (ws && ws.readyState === WebSocket.OPEN) {
         const caps = socketCaps.get(ws);
-        safeSend(ws, (caps && caps.trailDelta) ? slimStr : fullStr, 'game', 'state');
+        safeSend(ws, (caps && caps.trailDelta) ? getSlimStr() : getFullStr(), 'game', 'state');
       }
     });
   }
