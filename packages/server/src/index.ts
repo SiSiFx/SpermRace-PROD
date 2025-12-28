@@ -172,7 +172,7 @@ function createAndStartMatch(lobby: Lobby): Match {
   for (const pid of entrants) playerToMatchId.set(pid, matchId);
 
   gameWorld.onAuditEvent = (type: string, payload?: any) => {
-    try { audit.log(type, { matchId, lobbyId: lobby.lobbyId, ...(payload || {}) }); } catch { }
+    try { audit.log(type, { matchId, lobbyId: lobby.lobbyId, mode: lobby.mode, ...(payload || {}) }); } catch { }
   };
 
   // Per-match eliminations and debug events
@@ -213,7 +213,7 @@ function createAndStartMatch(lobby: Lobby): Match {
     } catch { }
   };
 
-  gameWorld.startRound(entrants, lobby.entryFee);
+  gameWorld.startRound(entrants, lobby.entryFee, lobby.mode as any);
   gameWorld.start();
   try { audit.log('match_world_started', { matchId, lobbyId: lobby.lobbyId, entrants, entryFee: lobby.entryFee, mode: lobby.mode }); } catch { }
   return match;

@@ -1,4 +1,4 @@
-import { GameState, PlayerInput, EntryFeeTier, Player, GameItem } from 'shared';
+import { GameState, PlayerInput, EntryFeeTier, Player, GameItem, GameMode } from 'shared';
 import { PlayerEntity } from './Player.js';
 import { BotController } from './BotController.js';
 import { CollisionSystem } from './CollisionSystem.js';
@@ -18,8 +18,17 @@ const ARENA_SHRINK_START_S = S_WORLD.ARENA_SHRINK_START_S; // start shrink near 
 const ARENA_SHRINK_DURATION_S = S_WORLD.ARENA_SHRINK_DURATION_S; // shrink over 90s to 50%
 const PHYSICS_CONSTANTS = { ...S_PHYSICS } as const;
 
-function pickRoundWorldSize(playerCount: number): { width: number; height: number } {
+function pickRoundWorldSize(playerCount: number, mode?: GameMode): { width: number; height: number } {
   if (!Number.isFinite(playerCount) || playerCount <= 0) return { width: WORLD_WIDTH, height: WORLD_HEIGHT };
+  // Practice is about fast encounters; keep the arena tighter even for 32 players.
+  if (mode === 'practice') {
+    if (playerCount <= 4) return { width: 1500, height: 1000 };
+    if (playerCount <= 8) return { width: 1900, height: 1300 };
+    if (playerCount <= 12) return { width: 2300, height: 1600 };
+    if (playerCount <= 20) return { width: 2600, height: 1800 };
+    if (playerCount <= 32) return { width: 2800, height: 2000 };
+    return { width: 3200, height: 2300 };
+  }
   // Smaller matches need faster encounters; large lobbies keep the classic arena.
   if (playerCount <= 4) return { width: 1600, height: 1100 };
   if (playerCount <= 8) return { width: 2000, height: 1400 };
@@ -56,7 +65,7 @@ export class GameWorld {
   private gameLoop: NodeJS.Timeout | null = null;
   private accumulatorMs: number = 0;
   private lastUpdateAtMs: number = 0;
-  private currentLobby: { entryFee: EntryFeeTier, players: string[] } | null = null;
+  private currentLobby: { entryFee: EntryFeeTier, players: string[]; mode: GameMode } | null = null;
   private players: Map<string, PlayerEntity> = new Map();
   private bots: Map<string, BotController> = new Map();
   private roundStartedAtMs: number | null = null;
@@ -116,15 +125,15 @@ export class GameWorld {
     }
   }
 
-  startRound(players: string[], entryFee: EntryFeeTier): void {
+  startRound(players: string[], entryFee: EntryFeeTier, mode: GameMode = 'practice'): void {
     this.players.clear();
     this.bots.clear();
     this.items.clear();
     this.lastItemSpawnTime = 0;
-    this.currentLobby = { players, entryFee };
+    this.currentLobby = { players, entryFee, mode };
 
     // Reset arena sizing for this round based on expected player count.
-    const roundSize = pickRoundWorldSize(players.length);
+    const roundSize = pickRoundWorldSize(players.length, mode);
     this.baseWorldWidth = roundSize.width;
     this.baseWorldHeight = roundSize.height;
     this.shrinkFactor = 1;
@@ -161,6 +170,7 @@ export class GameWorld {
       this.onAuditEvent?.('round_start', {
         roundId: this.gameState.roundId,
         entryFee,
+        mode,
         players,
         world: { ...this.gameState.world },
         objective: (this.gameState as any).objective,
@@ -612,8 +622,11 @@ export class GameWorld {
 
     // Smaller matches should start closer for faster encounters.
     const spawnPopulation = this.currentLobby?.players.length ?? (this.players.size + 1);
+    const lobbyMode: GameMode = this.currentLobby?.mode || 'practice';
     const spawnMode: 'cluster' | 'mid' | 'spread' =
-      spawnPopulation <= 12 ? 'cluster' : spawnPopulation <= 24 ? 'mid' : 'spread';
+      lobbyMode === 'practice'
+        ? (spawnPopulation <= 24 ? 'cluster' : 'mid')
+        : (spawnPopulation <= 12 ? 'cluster' : spawnPopulation <= 24 ? 'mid' : 'spread');
 
     const minDim = Math.min(width, height);
     const WALL_MARGIN = Math.min(240, Math.max(120, Math.floor(minDim * 0.08))); // keep away from walls
