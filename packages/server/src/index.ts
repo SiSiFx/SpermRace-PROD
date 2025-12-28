@@ -1,7 +1,7 @@
 import 'dotenv/config.js';
 import { WebSocketServer, WebSocket } from 'ws';
 import http from 'http';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHash } from 'crypto';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -109,6 +109,65 @@ const usedPaymentIds = new Set<string>();
 const sessionTokens = new Map<string, { playerId: string; createdAt: number }>();
 const SESSION_TOKEN_TTL_MS = 300000; // 5 minutes
 
+// =================================================================================================
+// Anti-abuse telemetry (hashed; no raw IP stored)
+// =================================================================================================
+
+const ABUSE_TELEMETRY = (process.env.ABUSE_TELEMETRY || '1').toLowerCase() !== '0';
+const ABUSE_SALT = (process.env.ABUSE_SALT || '').toString();
+if (ABUSE_TELEMETRY && IS_PRODUCTION && !ABUSE_SALT) {
+  log.warn('[ABUSE] ABUSE_SALT is not set; hashes are unsalted (set ABUSE_SALT for stronger anti-collusion signals).');
+}
+
+type ConnMeta = { ipHash?: string; ipPrefixHash?: string; uaHash?: string };
+const socketToConnMeta = new Map<WebSocket, ConnMeta>();
+const playerIdToConnMeta = new Map<string, ConnMeta>();
+
+function sha256Hex(input: string): string {
+  return createHash('sha256').update(input).digest('hex');
+}
+function hashWithSalt(value: string): string {
+  const base = ABUSE_SALT ? `${ABUSE_SALT}|${value}` : value;
+  return sha256Hex(base);
+}
+function normalizeIp(ip: string | null | undefined): string | null {
+  if (!ip) return null;
+  const s = String(ip).trim();
+  if (!s) return null;
+  if (s.startsWith('::ffff:')) return s.slice('::ffff:'.length);
+  return s;
+}
+function ipPrefix(ip: string | null): string | null {
+  if (!ip) return null;
+  if (ip.includes('.')) {
+    const parts = ip.split('.');
+    if (parts.length === 4) return `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
+  }
+  if (ip.includes(':')) {
+    const parts = ip.split(':').filter(Boolean);
+    return parts.slice(0, 4).join(':') + '::/64';
+  }
+  return ip;
+}
+function getClientIp(req: any): string | null {
+  try {
+    const xff = req?.headers?.['x-forwarded-for'];
+    const first = Array.isArray(xff) ? xff[0] : (typeof xff === 'string' ? xff.split(',')[0] : null);
+    return normalizeIp(first || req?.socket?.remoteAddress || null);
+  } catch {
+    return null;
+  }
+}
+function getUserAgent(req: any): string | null {
+  try {
+    const ua = req?.headers?.['user-agent'];
+    if (!ua) return null;
+    return String(ua).slice(0, 256);
+  } catch {
+    return null;
+  }
+}
+
 type Match = {
   matchId: string;
   lobbyId: string;
@@ -157,7 +216,7 @@ function createAndStartMatch(lobby: Lobby): Match {
   if (existing) return existing;
 
   const entrants = [...lobby.players];
-  const gameWorld = new GameWorld(smartContractService);
+  const gameWorld = new GameWorld(smartContractService, db);
   const match: Match = {
     matchId,
     lobbyId: lobby.lobbyId,
@@ -170,6 +229,27 @@ function createAndStartMatch(lobby: Lobby): Match {
   };
   matchesById.set(matchId, match);
   for (const pid of entrants) playerToMatchId.set(pid, matchId);
+
+  // Anti-abuse match telemetry (hashed): detect clustering by IP prefix.
+  try {
+    if (ABUSE_TELEMETRY) {
+      const counts = new Map<string, number>();
+      for (const pid of entrants) {
+        const meta = playerIdToConnMeta.get(pid);
+        if (meta?.ipPrefixHash) counts.set(meta.ipPrefixHash, (counts.get(meta.ipPrefixHash) || 0) + 1);
+      }
+      let maxSamePrefix = 0;
+      for (const c of counts.values()) if (c > maxSamePrefix) maxSamePrefix = c;
+      audit.log('match_conn_fingerprint', {
+        matchId,
+        lobbyId: lobby.lobbyId,
+        mode: lobby.mode,
+        entrants: entrants.length,
+        uniqueIpPrefixHashes: counts.size,
+        maxSameIpPrefix: maxSamePrefix,
+      });
+    }
+  } catch { }
 
   gameWorld.onAuditEvent = (type: string, payload?: any) => {
     try { audit.log(type, { matchId, lobbyId: lobby.lobbyId, mode: lobby.mode, ...(payload || {}) }); } catch { }
@@ -787,6 +867,21 @@ wss.on('connection', (ws: WebSocket, req: any) => {
 
   const sessionId = uuidv4();
   socketToSessionId.set(ws, sessionId);
+  try {
+    if (ABUSE_TELEMETRY) {
+      const ip = getClientIp(req);
+      const ua = getUserAgent(req);
+      const meta: ConnMeta = {};
+      if (ip) {
+        meta.ipHash = hashWithSalt(ip);
+        const pref = ipPrefix(ip);
+        if (pref) meta.ipPrefixHash = hashWithSalt(pref);
+      }
+      if (ua) meta.uaHash = hashWithSalt(ua);
+      socketToConnMeta.set(ws, meta);
+      audit.log('ws_connect', { sessionId, ipPrefixHash: meta.ipPrefixHash, ipHash: meta.ipHash, uaHash: meta.uaHash });
+    }
+  } catch { }
   socketRate.set(ws, {
     auth: { tokens: RATE_LIMITS.auth.capacity, lastRefill: Date.now() },
     join: { tokens: RATE_LIMITS.join.capacity, lastRefill: Date.now() },
@@ -800,6 +895,13 @@ wss.on('connection', (ws: WebSocket, req: any) => {
     // Move directly to authenticated state
     playerIdToSocket.set(authenticatedPlayerId, ws);
     socketToPlayerId.set(ws, authenticatedPlayerId);
+    try {
+      if (ABUSE_TELEMETRY) {
+        const meta = socketToConnMeta.get(ws);
+        if (meta) playerIdToConnMeta.set(authenticatedPlayerId, meta);
+        audit.log('ws_authenticated', { sessionId, playerId: authenticatedPlayerId, ipPrefixHash: meta?.ipPrefixHash, uaHash: meta?.uaHash });
+      }
+    } catch { }
     const authMessage: AuthenticatedMessage = { type: 'authenticated', payload: { playerId: authenticatedPlayerId } };
     ws.send(JSON.stringify(authMessage));
     log.info(`🔌 Client connected & authenticated via token (${pendingSockets.size + playerIdToSocket.size} total)`);
@@ -858,6 +960,13 @@ wss.on('connection', (ws: WebSocket, req: any) => {
         (ws as any).authenticated = true;
         playerIdToSocket.set(guestId, ws);
         socketToPlayerId.set(ws, guestId);
+        try {
+          if (ABUSE_TELEMETRY) {
+            const meta = socketToConnMeta.get(ws);
+            if (meta) playerIdToConnMeta.set(guestId, meta);
+            audit.log('ws_authenticated', { sessionId: socketToSessionId.get(ws), playerId: guestId, ipPrefixHash: meta?.ipPrefixHash, uaHash: meta?.uaHash });
+          }
+        } catch { }
         playerIdToName.set(guestId, cleanName);
 
         // Send success
@@ -883,21 +992,30 @@ wss.on('connection', (ws: WebSocket, req: any) => {
       const t = socketToAuthTimeout.get(ws);
       if (t) { clearTimeout(t); socketToAuthTimeout.delete(ws); }
     } catch { }
-    const playerId = socketToPlayerId.get(ws);
-    if (playerId) {
-      playerIdToSocket.delete(playerId);
-      socketToPlayerId.delete(ws);
+	    const playerId = socketToPlayerId.get(ws);
+	    if (playerId) {
+	      playerIdToSocket.delete(playerId);
+	      socketToPlayerId.delete(ws);
       // Grace period: keep the player in the lobby for quick reconnects
       // GameWorld will remove from active round on disconnect as needed
       const match = getMatchForPlayer(playerId);
       if (match) {
         try { match.gameWorld.removePlayer(playerId); } catch { }
         try { if (playerToMatchId.get(playerId) === match.matchId) playerToMatchId.delete(playerId); } catch { }
-      }
-    }
-    socketToNonce.delete(ws);
-    socketToSessionId.delete(ws);
-    socketRate.delete(ws);
+	      }
+	    }
+	    try {
+	      if (ABUSE_TELEMETRY) {
+	        const sessionId = socketToSessionId.get(ws);
+	        const meta = socketToConnMeta.get(ws);
+	        audit.log('ws_disconnect', { sessionId, playerId: playerId || undefined, code, ipPrefixHash: meta?.ipPrefixHash, uaHash: meta?.uaHash });
+	      }
+	    } catch { }
+	    try { socketToConnMeta.delete(ws); } catch { }
+	    try { if (playerId) playerIdToConnMeta.delete(playerId); } catch { }
+	    socketToNonce.delete(ws);
+	    socketToSessionId.delete(ws);
+	    socketRate.delete(ws);
     socketUnauthViolations.delete(ws);
     socketCaps.delete(ws);
 
@@ -1012,10 +1130,17 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
       }
       if (nonceRec) nonceRec.consumed = true;
       // Promote socket to authenticated mapping
-      pendingSockets.delete(ws);
-      (ws as any).authenticated = true; pendingSockets.delete(ws); playerIdToSocket.set(publicKey, ws);
-      socketToPlayerId.set(ws, publicKey);
-      playerIdToName.set(publicKey, publicKey.slice(0, 4) + "…" + publicKey.slice(-4));
+	      pendingSockets.delete(ws);
+	      (ws as any).authenticated = true; pendingSockets.delete(ws); playerIdToSocket.set(publicKey, ws);
+	      socketToPlayerId.set(ws, publicKey);
+	      try {
+	        if (ABUSE_TELEMETRY) {
+	          const meta = socketToConnMeta.get(ws);
+	          if (meta) playerIdToConnMeta.set(publicKey, meta);
+	          audit.log('ws_authenticated', { sessionId: socketToSessionId.get(ws), playerId: publicKey, ipPrefixHash: meta?.ipPrefixHash, uaHash: meta?.uaHash });
+	        }
+	      } catch { }
+	      playerIdToName.set(publicKey, publicKey.slice(0, 4) + "…" + publicKey.slice(-4));
       // Clear auth timeout and reset violation count
       try {
         const t = socketToAuthTimeout.get(ws);

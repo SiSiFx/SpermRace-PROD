@@ -3,6 +3,7 @@ import { PlayerEntity } from './Player.js';
 import { BotController } from './BotController.js';
 import { CollisionSystem } from './CollisionSystem.js';
 import { SmartContractService } from './SmartContractService.js';
+import type { DatabaseService } from './DatabaseService.js';
 import { WORLD as S_WORLD, TICK as S_TICK, COLLISION as S_COLLISION, PHYSICS as S_PHYSICS } from 'shared/dist/constants.js';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -75,6 +76,7 @@ export class GameWorld {
   public gameState: GameState;
   private collisionSystem: CollisionSystem;
   private smartContractService: SmartContractService;
+  private db: DatabaseService | null = null;
   private gameLoop: NodeJS.Timeout | null = null;
   private accumulatorMs: number = 0;
   private lastUpdateAtMs: number = 0;
@@ -95,9 +97,10 @@ export class GameWorld {
   public onAuditEvent: ((type: string, payload?: any) => void) | null = null;
   private lastWinReason: 'last_alive' | 'extraction' | 'draw' | null = null;
 
-  constructor(smartContractService: SmartContractService) {
+  constructor(smartContractService: SmartContractService, db?: DatabaseService) {
     this.collisionSystem = new CollisionSystem(WORLD_WIDTH, WORLD_HEIGHT);
     this.smartContractService = smartContractService;
+    this.db = db || null;
     this.gameState = this.createInitialGameState();
   }
 
@@ -225,20 +228,57 @@ export class GameWorld {
     // --- Payout Logic ---
     if (this.currentLobby && winnerId !== 'draw') {
       try {
-        const { players, entryFee } = this.currentLobby;
+        const roundId = this.gameState.roundId;
+        const { players, entryFee, mode } = this.currentLobby;
+        const isMoneyMatch = mode === 'tournament' && Number(entryFee) > 0;
+        const platformFeeBps = 1500;
+
+        // Only attempt on-chain payouts for real money matches.
+        if (!isMoneyMatch) {
+          this.onRoundEnd?.(winnerId, 0, undefined);
+          return;
+        }
+
         const lamportsPerPlayer = await this.smartContractService.getEntryFeeInLamports(entryFee);
-        const totalLamports = lamportsPerPlayer * players.length;
-        const winnerPrizeLamports = Math.floor(totalLamports * 0.85);
+        const totalLamports = Math.max(0, lamportsPerPlayer * players.length);
+        const winnerPrizeLamports = Math.max(0, Math.floor(totalLamports * 0.85));
         const winnerPrizeSol = winnerPrizeLamports / 1_000_000_000;
+        if (winnerPrizeLamports <= 0) {
+          try { this.onAuditEvent?.('payout_skipped', { roundId, winnerId, reason: 'no_prize' }); } catch { }
+          this.onRoundEnd?.(winnerId, 0, undefined);
+          return;
+        }
+
+        // Idempotency: if we already paid this round, never pay again.
+        try {
+          const existing = this.db?.getPayoutByRoundId(roundId) || null;
+          if (existing && existing.status === 'sent' && existing.tx_signature) {
+            try { this.onAuditEvent?.('payout_skipped', { roundId, winnerId, reason: 'already_sent', txSig: existing.tx_signature }); } catch { }
+            this.onRoundEnd?.(winnerId, winnerPrizeSol, existing.tx_signature);
+            return;
+          }
+        } catch { }
+
         try {
           this.onAuditEvent?.('payout_planned', {
-            roundId: this.gameState.roundId,
+            roundId,
             winnerId,
             entryFee,
+            mode,
             players,
             lamportsPerPlayer,
             totalLamports,
             winnerPrizeLamports,
+            platformFeeBps,
+          });
+        } catch { }
+
+        try {
+          this.db?.recordPayoutPlanned({
+            roundId,
+            winnerWallet: winnerId,
+            prizeLamports: winnerPrizeLamports,
+            platformFeeBps,
           });
         } catch { }
         // Payout 85% to winner, 15% routed to platform within service
@@ -247,22 +287,28 @@ export class GameWorld {
         const isBotWinner = typeof winnerId === 'string' && (winnerId.startsWith('BOT_') || winnerId.startsWith('Guest_') || winnerId.startsWith('PLAYER_'));
         if (isBotWinner) {
           console.log('[PAYOUT] Skipping payout: winner is a dev bot');
-          try { this.onAuditEvent?.('payout_skipped', { roundId: this.gameState.roundId, winnerId, reason: 'bot_winner' }); } catch { }
+          try { this.onAuditEvent?.('payout_skipped', { roundId, winnerId, reason: 'bot_winner' }); } catch { }
+          try { this.db?.recordPayoutSkipped(roundId, 'bot_winner'); } catch { }
         } else {
           try {
             const { PublicKey } = await import('@solana/web3.js');
             const winnerPk = new PublicKey(winnerId); // will throw if invalid base58
-            txSig = await this.smartContractService.payoutPrizeLamports(winnerPk, winnerPrizeLamports, 1500);
-            try { this.onAuditEvent?.('payout_sent', { roundId: this.gameState.roundId, winnerId, winnerPrizeLamports, txSig }); } catch { }
+            txSig = await this.smartContractService.payoutPrizeLamports(winnerPk, winnerPrizeLamports, platformFeeBps);
+            try { this.onAuditEvent?.('payout_sent', { roundId, winnerId, winnerPrizeLamports, txSig }); } catch { }
+            try { if (txSig) this.db?.recordPayoutSent(roundId, txSig); } catch { }
           } catch (e) {
             console.warn('[PAYOUT] Skipping payout (invalid winner pubkey or configuration error):', e);
-            try { this.onAuditEvent?.('payout_failed', { roundId: this.gameState.roundId, winnerId, error: String((e as any)?.message || e) }); } catch { }
+            const err = String((e as any)?.message || e);
+            try { this.onAuditEvent?.('payout_failed', { roundId, winnerId, error: err }); } catch { }
+            try { this.db?.recordPayoutFailed(roundId, err); } catch { }
           }
         }
         this.onRoundEnd?.(winnerId, winnerPrizeSol, txSig);
       } catch (error) {
         console.error('❌ Payout failed:', error);
-        try { this.onAuditEvent?.('payout_failed', { roundId: this.gameState.roundId, winnerId, error: String((error as any)?.message || error) }); } catch { }
+        const err = String((error as any)?.message || error);
+        try { this.onAuditEvent?.('payout_failed', { roundId: this.gameState.roundId, winnerId, error: err }); } catch { }
+        try { this.db?.recordPayoutFailed(this.gameState.roundId, err); } catch { }
       }
     }
     
