@@ -1580,7 +1580,8 @@ class SpermRaceGame {
       const myId = this.wsHud?.playerId || null;
       const candidates: Car[] = [];
       if (isTournament) {
-        for (const c of this.serverPlayers.values()) {
+        for (const [id, c] of this.serverPlayers.entries()) {
+          if (myId && id === myId) continue;
           if (!c || c.destroyed || !c.sprite?.visible) continue;
           candidates.push(c);
         }
@@ -4620,7 +4621,11 @@ updateProximityRadar() {
     const H = this.radar.height;
     ctx.clearRect(0, 0, W, H);
     const allCars = [this.bot, ...this.extraBots, ...Array.from(this.serverPlayers.values())].filter((car): car is Car => car !== null && !car.destroyed);
-    const detectionRange = 2500;
+    const isOnline = !!(this.wsHud && this.wsHud.active);
+    const mode = (this.wsHud as any)?.mode;
+    const entryFee = Number((this.wsHud as any)?.entryFee ?? NaN);
+    const isPracticeOnline = isOnline && (mode === 'practice' || entryFee === 0);
+    const detectionRange = isPracticeOnline ? 12000 : 2500;
     const viewWidth = W / this.camera.zoom;
     const viewHeight = H / this.camera.zoom;
     const viewLeft = this.player.x - viewWidth / 2;
@@ -5611,9 +5616,13 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
         const players = wsState.game.players || [];
         const aliveSet = new Set<string>(players.filter(p => p.isAlive).map(p => p.id));
         const idToName: Record<string, string> = {};
+        const lobbyAny: any = wsState.lobby || null;
+        const playerNames: Record<string, string> = (lobbyAny && typeof lobbyAny === 'object' && lobbyAny.playerNames) ? lobbyAny.playerNames : {};
+        const mode = lobbyAny?.mode ?? ((Number(lobbyAny?.entryFee || 0) === 0) ? 'practice' : 'tournament');
+        const entryFee = lobbyAny?.entryFee ?? null;
         for (const p of players) {
           const short = `${p.id.slice(0,4)}…${p.id.slice(-4)}`;
-          idToName[p.id] = short;
+          idToName[p.id] = (typeof playerNames?.[p.id] === 'string' && playerNames[p.id]) ? playerNames[p.id] : short;
         }
         game.wsHud = {
           active: true,
@@ -5622,8 +5631,21 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
           playerId: wsState.playerId,
           idToName,
           aliveSet,
-          eliminationOrder: wsState.eliminationOrder || []
+          eliminationOrder: wsState.eliminationOrder || [],
+          mode,
+          entryFee
         };
+        try {
+          if (!(game as any).srOnlineHintShown && mode === 'practice') {
+            (game as any).srOnlineHintShown = true;
+            const el = document.getElementById('game-toast');
+            if (el) {
+              el.textContent = 'Follow HUNT + edge arrows to find rivals fast';
+              el.style.opacity = '1';
+              setTimeout(() => { try { el.style.opacity = '0'; } catch {} }, 1600);
+            }
+          }
+        } catch {}
         game.syncServerPlayers(wsState.game.players);
       } catch {
         game.wsHud = { active: false, kills: {}, killFeed: [], playerId: null, idToName: {}, aliveSet: new Set(), eliminationOrder: [] } as any;

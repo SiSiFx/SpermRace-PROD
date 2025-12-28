@@ -17,6 +17,13 @@ export function PracticeModeSelection({ onSelectSolo, onBack, onNotify }: Practi
     const [guestName, setGuestName] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
 
+    useEffect(() => {
+        try {
+            const stored = localStorage.getItem('sr_guest_name');
+            if (stored && stored.trim()) setGuestName(stored.trim());
+        } catch { }
+    }, []);
+
     // Focus input when modal opens
     useEffect(() => {
         if (showNameInput) {
@@ -27,26 +34,21 @@ export function PracticeModeSelection({ onSelectSolo, onBack, onNotify }: Practi
     // Prevent multiple join attempts
     const isDisabled = isJoining || wsState.phase === 'connecting' || wsState.phase === 'authenticating';
 
-    const handleJoinOnlineClick = () => {
-        if (isDisabled) return;
-        
-        // For practice, always use guest flow to avoid signature requests
-        if (publicKey && !guestName) {
-            setGuestName(publicKey.toBase58().slice(0, 4) + '…' + publicKey.toBase58().slice(-4));
-        }
-        setShowNameInput(true);
-    };
-
-    const joinLobby = async (asGuest: boolean) => {
+    const joinLobby = async (asGuest: boolean, nameOverride?: string) => {
         setIsJoining(true);
         try {
+            const resolvedName = asGuest ? ((nameOverride ?? guestName).trim() || 'Guest') : undefined;
             // Join online lobby with tier: 0 (Free)
             // If guest, pass guestName
             await connectAndJoin({
                 entryFeeTier: 0 as any,
                 mode: 'practice' as any, // Schema requires 'practice' or 'tournament'
-                guestName: asGuest ? (guestName.trim() || 'Guest') : undefined
+                guestName: resolvedName
             });
+            try {
+                const nameToStore = (resolvedName || '').trim();
+                if (nameToStore) localStorage.setItem('sr_guest_name', nameToStore);
+            } catch { }
             // Note: App routing will switch screen to 'lobby' based on wsState.phase
         } catch (e) {
             console.error('Failed to join free lobby', e);
@@ -56,10 +58,26 @@ export function PracticeModeSelection({ onSelectSolo, onBack, onNotify }: Practi
         }
     };
 
+    const handleJoinOnlineClick = () => {
+        if (isDisabled) return;
+
+        // For practice, always use guest flow to avoid signature requests
+        const walletDerivedName = publicKey ? (publicKey.toBase58().slice(0, 4) + '…' + publicKey.toBase58().slice(-4)) : '';
+        const defaultName = (guestName && guestName.trim()) ? guestName.trim() : walletDerivedName;
+        if (!guestName && walletDerivedName) setGuestName(walletDerivedName);
+
+        // If we already have a name (from localStorage or wallet), let "Multiplayer" be one-tap join.
+        if (!defaultName) {
+            setShowNameInput(true);
+            return;
+        }
+        joinLobby(true, defaultName);
+    };
+
     const handleGuestSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!guestName.trim()) return;
-        joinLobby(true);
+        joinLobby(true, guestName.trim());
     };
 
     // Responsive check
