@@ -14,8 +14,8 @@ const TICK_RATE = S_TICK.RATE;
 const TICK_INTERVAL = S_TICK.INTERVAL_MS;
 const WORLD_WIDTH = S_WORLD.WIDTH; // SYNCED WITH CLIENT gameConstants.ts
 const WORLD_HEIGHT = S_WORLD.HEIGHT; // SYNCED WITH CLIENT gameConstants.ts
-const ARENA_SHRINK_START_S = S_WORLD.ARENA_SHRINK_START_S; // start shrink near mid-game per plan pacing
-const ARENA_SHRINK_DURATION_S = S_WORLD.ARENA_SHRINK_DURATION_S; // shrink over 90s to 50%
+const ARENA_SHRINK_START_S = S_WORLD.ARENA_SHRINK_START_S;
+const ARENA_SHRINK_DURATION_S = S_WORLD.ARENA_SHRINK_DURATION_S;
 const PHYSICS_CONSTANTS = { ...S_PHYSICS } as const;
 
 function pickRoundWorldSize(playerCount: number, mode?: GameMode): { width: number; height: number } {
@@ -37,13 +37,26 @@ function pickRoundWorldSize(playerCount: number, mode?: GameMode): { width: numb
   return { width: WORLD_WIDTH, height: WORLD_HEIGHT };
 }
 
-function pickEggOpenDelayMs(playerCount: number): number {
+function pickEggOpenDelayMs(playerCount: number, mode?: GameMode): number {
   if (!Number.isFinite(playerCount) || playerCount <= 0) return 18000;
+  if (mode === 'tournament') {
+    if (playerCount <= 8) return 13000;
+    if (playerCount <= 16) return 16000;
+    if (playerCount <= 32) return 18000;
+    return 20000;
+  }
   if (playerCount <= 4) return 9000;
   if (playerCount <= 8) return 12000;
   if (playerCount <= 12) return 15000;
   if (playerCount <= 20) return 18000;
   return 22000;
+}
+
+function parseNumberEnv(name: string): number | null {
+  const raw = process.env[name];
+  if (!raw || !String(raw).trim()) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
 }
 
 // Apex Predator DNA fragment settings
@@ -75,6 +88,8 @@ export class GameWorld {
   private lastDevAliveLogMs: number = 0;
   private items: Map<string, GameItem> = new Map();
   private lastItemSpawnTime: number = 0;
+  private arenaShrinkStartS: number = ARENA_SHRINK_START_S;
+  private arenaShrinkDurationS: number = ARENA_SHRINK_DURATION_S;
   public onPlayerEliminated: ((playerId: string) => void) | null = null;
   public onRoundEnd: ((winnerId: string, prizeAmountSol: number, payoutSignature?: string) => void) | null = null;
   public onAuditEvent: ((type: string, payload?: any) => void) | null = null;
@@ -137,6 +152,14 @@ export class GameWorld {
     this.baseWorldWidth = roundSize.width;
     this.baseWorldHeight = roundSize.height;
     this.shrinkFactor = 1;
+    // Mode-aware shrink pacing (can be overridden via env vars)
+    if (mode === 'tournament') {
+      this.arenaShrinkStartS = Math.max(0, parseNumberEnv('ARENA_SHRINK_START_S_TOURNAMENT') ?? parseNumberEnv('ARENA_SHRINK_START_S') ?? 12);
+      this.arenaShrinkDurationS = Math.max(5, parseNumberEnv('ARENA_SHRINK_DURATION_S_TOURNAMENT') ?? parseNumberEnv('ARENA_SHRINK_DURATION_S') ?? 45);
+    } else {
+      this.arenaShrinkStartS = Math.max(0, parseNumberEnv('ARENA_SHRINK_START_S_PRACTICE') ?? parseNumberEnv('ARENA_SHRINK_START_S') ?? 8);
+      this.arenaShrinkDurationS = Math.max(5, parseNumberEnv('ARENA_SHRINK_DURATION_S_PRACTICE') ?? parseNumberEnv('ARENA_SHRINK_DURATION_S') ?? 30);
+    }
     this.collisionSystem.setWorldBounds(this.baseWorldWidth, this.baseWorldHeight);
     this.gameState.world.width = this.baseWorldWidth;
     this.gameState.world.height = this.baseWorldHeight;
@@ -151,7 +174,7 @@ export class GameWorld {
         x: this.gameState.world.width / 2,
         y: this.gameState.world.height / 2,
         radius: Math.max(120, Math.min(240, Math.floor(Math.min(this.gameState.world.width, this.gameState.world.height) * 0.10))),
-        openAtMs: nowMs + pickEggOpenDelayMs(players.length),
+        openAtMs: nowMs + pickEggOpenDelayMs(players.length, mode),
         holdMs: 2600,
       },
       keysByPlayerId: {},
@@ -383,8 +406,8 @@ export class GameWorld {
     // 4. Shrinking arena logic
     if (this.roundStartedAtMs) {
       const elapsedS = (Date.now() - this.roundStartedAtMs) / 1000;
-      if (elapsedS > ARENA_SHRINK_START_S) {
-        const t = Math.min(1, (elapsedS - ARENA_SHRINK_START_S) / ARENA_SHRINK_DURATION_S);
+      if (elapsedS > this.arenaShrinkStartS) {
+        const t = Math.min(1, (elapsedS - this.arenaShrinkStartS) / this.arenaShrinkDurationS);
         this.shrinkFactor = 1 - 0.5 * t; // shrink to 50%
         const newW = Math.max(800, Math.floor(this.baseWorldWidth * this.shrinkFactor));
         const newH = Math.max(600, Math.floor(this.baseWorldHeight * this.shrinkFactor));
@@ -626,7 +649,7 @@ export class GameWorld {
     const spawnMode: 'cluster' | 'mid' | 'spread' =
       lobbyMode === 'practice'
         ? (spawnPopulation <= 32 ? 'cluster' : 'mid')
-        : (spawnPopulation <= 12 ? 'cluster' : spawnPopulation <= 24 ? 'mid' : 'spread');
+        : (spawnPopulation <= 8 ? 'cluster' : spawnPopulation <= 16 ? 'mid' : 'spread');
 
     const minDim = Math.min(width, height);
     const WALL_MARGIN = Math.min(240, Math.max(120, Math.floor(minDim * 0.08))); // keep away from walls

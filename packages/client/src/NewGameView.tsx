@@ -1663,10 +1663,10 @@ class SpermRaceGame {
   private updateObjectiveStatus() {
     try {
       if (!this.objectiveStatusEl) return;
-      const isTournament = !!(this.wsHud && this.wsHud.active);
+      const isOnlineMatch = !!(this.wsHud && this.wsHud.active);
       const myId = this.wsHud?.playerId || null;
-      const obj = isTournament ? this.objective : null;
-      if (!isTournament || !obj || obj.kind !== 'extraction' || !myId) {
+      const obj = isOnlineMatch ? this.objective : null;
+      if (!isOnlineMatch || !obj || obj.kind !== 'extraction' || !myId) {
         this.objectiveStatusEl.style.display = 'none';
         return;
       }
@@ -1685,6 +1685,21 @@ class SpermRaceGame {
       const holdingFor = holdingSince > 0 ? Math.max(0, now - holdingSince) : 0;
       const holdLeft = holderId ? Math.max(0, holdMs - holdingFor) : 0;
 
+      // Distance to egg (helps players converge quickly)
+      let eggDistText = '';
+      try {
+        if (egg && this.player && !this.player.destroyed && this.arena) {
+          const offsetX = -this.arena.width / 2;
+          const offsetY = -this.arena.height / 2;
+          const eggX = Number(egg?.x || 0) + offsetX;
+          const eggY = Number(egg?.y || 0) + offsetY;
+          const dx = eggX - this.player.x;
+          const dy = eggY - this.player.y;
+          const dist = Math.hypot(dx, dy);
+          if (Number.isFinite(dist)) eggDistText = `${Math.round(dist)}m`;
+        }
+      } catch {}
+
       let text = `KEYS ${keys}/${req} • `;
       if (!open) {
         text += `EGG IN ${Math.ceil(openIn / 1000)}s`;
@@ -1692,8 +1707,9 @@ class SpermRaceGame {
         const short = holderId === myId ? 'YOU' : `${String(holderId).slice(0, 4)}…${String(holderId).slice(-4)}`;
         text += `HOLD ${short} ${Math.ceil(holdLeft / 100) / 10}s`;
       } else {
-        text += (keys >= req) ? 'EGG OPEN • EXTRACT' : 'EGG OPEN';
+        text += (keys >= req) ? 'EGG OPEN • EXTRACT' : 'EGG OPEN • FARM DNA';
       }
+      if (eggDistText) text += ` • ${eggDistText}`;
 
       this.objectiveStatusEl.textContent = text;
       this.objectiveStatusEl.style.display = 'block';
