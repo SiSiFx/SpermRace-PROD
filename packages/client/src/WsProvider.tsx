@@ -122,6 +122,11 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
   const connectAndJoin = async (opts: JoinOpts) => {
     console.log(`[JOIN] Requested → mode=${opts.mode ?? 'tournament'} tier=$${opts.entryFeeTier} guest=${opts.guestName || 'no'}`);
     try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'join_requested', payload: { mode: opts.mode ?? 'tournament', tier: opts.entryFeeTier, isGuest: !!opts.guestName } }) }); } catch { }
+    try {
+      const last = { entryFeeTier: opts.entryFeeTier, mode: (opts.mode ?? 'tournament'), guestName: opts.guestName || undefined };
+      localStorage.setItem('sr_last_join', JSON.stringify(last));
+      if (opts.guestName) localStorage.setItem('sr_guest_name', opts.guestName);
+    } catch { }
 
     // Reset/Set guest state
     setIsGuest(!!opts.guestName);
@@ -133,6 +138,16 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
     // If GUEST, skip wallet checks entirely
     if (opts.guestName) {
       pendingJoinRef.current = opts;
+
+      // If we already have an open authenticated guest socket, just re-join without reconnecting.
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && state.playerId && state.playerId.startsWith('guest-')) {
+        try {
+          wsRef.current.send(JSON.stringify({ type: 'joinLobby', payload: { entryFeeTier: opts.entryFeeTier, mode: opts.mode } }));
+          joinBusyRef.current = false;
+          setState(s => ({ ...s, phase: 'connecting', joining: true, lastError: null }));
+          return;
+        } catch { }
+      }
 
       // Close existing if open
       if (wsRef.current) {

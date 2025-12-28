@@ -440,12 +440,34 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void; 
 }
 
 function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onChangeTier: () => void; }) {
-  const { state: wsState } = useWs();
+  const { state: wsState, connectAndJoin } = useWs();
   const { publicKey } = useWallet();
   const tx = wsState.lastRound?.txSignature;
   const winner = wsState.lastRound?.winnerId;
   const prize = wsState.lastRound?.prizeAmount;
   const isWinner = !!winner && (winner === wsState.playerId || winner === publicKey);
+  const [playAgainBusy, setPlayAgainBusy] = useState(false);
+  const handlePlayAgain = async () => {
+    if (playAgainBusy) return;
+    if (wsState.phase !== 'ended') { onPlayAgain(); return; }
+    setPlayAgainBusy(true);
+    try {
+      let last: any = null;
+      try { last = JSON.parse(localStorage.getItem('sr_last_join') || 'null'); } catch { }
+      const lobby: any = wsState.lobby || null;
+      const entryFeeTier = (lobby?.entryFee ?? last?.entryFeeTier ?? 0) as any;
+      const mode = (lobby?.mode ?? last?.mode ?? (entryFeeTier === 0 ? 'practice' : 'tournament')) as any;
+      const guestName =
+        mode === 'practice'
+          ? (last?.guestName || localStorage.getItem('sr_guest_name') || lobby?.playerNames?.[wsState.playerId || ''] || 'Guest')
+          : undefined;
+      await connectAndJoin({ entryFeeTier, mode, ...(guestName ? { guestName } : {}) });
+    } catch {
+      onPlayAgain();
+    } finally {
+      setPlayAgainBusy(false);
+    }
+  };
   return (
     <div className="screen active mobile-results-screen">
       <div className="mobile-results-container">
@@ -453,7 +475,7 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
         <p className="mobile-result-subtitle">Winner: {winner ? winner.slice(0, 4) + "…" : "—"}</p>
         {typeof prize === 'number' && <div className="mobile-prize-won">{prize.toFixed(4)} SOL</div>}
         <div className="mobile-result-actions">
-          <button className="mobile-btn-primary" onClick={onPlayAgain}>Play Again</button>
+          <button className="mobile-btn-primary" onClick={handlePlayAgain} disabled={playAgainBusy}>{playAgainBusy ? 'Joining…' : 'Play Again'}</button>
           <button className="mobile-btn-secondary" onClick={onChangeTier}>Menu</button>
         </div>
       </div>
