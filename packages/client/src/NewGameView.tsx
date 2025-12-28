@@ -1593,15 +1593,16 @@ class SpermRaceGame {
       const distText = this.enemyCompassEl.querySelector('#enemy-compass-dist') as HTMLSpanElement | null;
       const arrow = this.enemyCompassEl.querySelector('#enemy-compass-arrow') as HTMLSpanElement | null;
 
-      // Objective-aware targeting (tournament only): STOP holder → EXTRACT egg → otherwise HUNT nearest enemy.
-      let target: { dx: number; dy: number; dist: number; kind: 'stop'|'extract'|'hunt' } | null = null;
+      // Objective-aware targeting (online): STOP holder → EXTRACT egg → otherwise FARM at egg → fallback HUNT nearest enemy.
+      let target: { dx: number; dy: number; dist: number; kind: 'stop'|'extract'|'farm'|'hunt' } | null = null;
       if (isTournament && myId && this.objective && this.objective.kind === 'extraction') {
         const obj = this.objective;
         const keys = Number(obj?.keysByPlayerId?.[myId] || 0) || 0;
         const req = Number(obj?.keysRequired || 0) || 3;
         const egg = obj?.egg;
         const openAt = Number(egg?.openAtMs || 0) || 0;
-        const open = openAt > 0 ? (Date.now() >= openAt) : true;
+        const nowMs = this.lastServerTimeMs > 0 ? this.lastServerTimeMs : Date.now();
+        const open = openAt > 0 ? (nowMs >= openAt) : true;
         const offsetX = -this.arena.width / 2;
         const offsetY = -this.arena.height / 2;
         const eggX = Number(egg?.x || 0) + offsetX;
@@ -1621,6 +1622,11 @@ class SpermRaceGame {
           const dy = eggY - this.player.y;
           const dist = Math.hypot(dx, dy);
           if (Number.isFinite(dist)) target = { dx, dy, dist, kind: 'extract' };
+        } else if (Number.isFinite(eggX) && Number.isFinite(eggY)) {
+          const dx = eggX - this.player.x;
+          const dy = eggY - this.player.y;
+          const dist = Math.hypot(dx, dy);
+          if (Number.isFinite(dist)) target = { dx, dy, dist, kind: 'farm' };
         }
       }
 
@@ -1650,10 +1656,10 @@ class SpermRaceGame {
       const ang = Math.atan2(target.dy, target.dx);
       const deg = (ang * 180) / Math.PI + 90; // ▲ points up, so +90 aligns 0deg to up
       if (arrow) arrow.style.transform = `rotate(${deg.toFixed(1)}deg)`;
-      if (labelEl) labelEl.textContent = target.kind === 'stop' ? 'STOP' : target.kind === 'extract' ? 'EXTRACT' : 'HUNT';
+      if (labelEl) labelEl.textContent = target.kind === 'stop' ? 'STOP' : target.kind === 'extract' ? 'EXTRACT' : target.kind === 'farm' ? 'FARM' : 'HUNT';
 
       const close = dist < 600;
-      const urgent = target.kind !== 'hunt';
+      const urgent = target.kind === 'stop' || target.kind === 'extract';
       this.enemyCompassEl.style.borderColor = urgent ? 'rgba(250,204,21,0.55)' : close ? 'rgba(239,68,68,0.55)' : 'rgba(34,211,238,0.35)';
       this.enemyCompassEl.style.boxShadow = urgent ? '0 0 26px rgba(250,204,21,0.16)' : close ? '0 0 26px rgba(239,68,68,0.18)' : '0 0 24px rgba(34,211,238,0.12)';
       this.enemyCompassEl.style.display = 'flex';
