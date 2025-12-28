@@ -6,7 +6,16 @@ import { SmartContractService } from './SmartContractService.js';
 // Constants
 // =================================================================================================
 
-const LOBBY_MAX_PLAYERS = Math.max(2, parseInt(process.env.LOBBY_MAX_PLAYERS || '32', 10));
+const LOBBY_MAX_PLAYERS_DEFAULT = Math.max(2, parseInt(process.env.LOBBY_MAX_PLAYERS || '32', 10));
+function getLobbyMaxPlayers(mode: GameMode): number {
+  const key = mode === 'tournament' ? 'LOBBY_MAX_PLAYERS_TOURNAMENT' : 'LOBBY_MAX_PLAYERS_PRACTICE';
+  const raw = process.env[key];
+  if (raw && String(raw).trim()) {
+    const n = parseInt(raw, 10);
+    if (Number.isFinite(n) && n >= 2) return n;
+  }
+  return LOBBY_MAX_PLAYERS_DEFAULT;
+}
 const LOBBY_START_COUNTDOWN = Math.max(5, parseInt(process.env.LOBBY_COUNTDOWN || '15', 10)); // seconds
 const LOBBY_MIN_START = Math.max(2, parseInt(process.env.LOBBY_MIN_START || (process.env.SKIP_ENTRY_FEE === 'true' ? '1' : '4'), 10));
 const LOBBY_MAX_WAIT_SEC = Math.max(LOBBY_START_COUNTDOWN, parseInt(process.env.LOBBY_MAX_WAIT || '120', 10));
@@ -149,7 +158,7 @@ export class LobbyManager {
 
   private findAvailableLobby(entryFee: EntryFeeTier, mode: GameMode): Lobby | undefined {
     for (const lobby of this.lobbies.values()) {
-      if (lobby.entryFee === entryFee && lobby.mode === mode &&  (lobby.status === 'waiting' || lobby.status === 'starting') && lobby.players.length < LOBBY_MAX_PLAYERS) {
+      if (lobby.entryFee === entryFee && lobby.mode === mode && (lobby.status === 'waiting' || lobby.status === 'starting') && lobby.players.length < lobby.maxPlayers) {
         return lobby;
       }
     }
@@ -157,10 +166,11 @@ export class LobbyManager {
   }
 
   private createLobby(entryFee: EntryFeeTier, mode: GameMode): Lobby {
+    const maxPlayers = getLobbyMaxPlayers(mode);
     const newLobby: Lobby = {
       lobbyId: uuidv4(),
       players: [],
-      maxPlayers: LOBBY_MAX_PLAYERS,
+      maxPlayers,
       entryFee,
       mode,
       status: 'waiting',
