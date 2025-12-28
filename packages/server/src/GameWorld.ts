@@ -26,7 +26,7 @@ function pickRoundWorldSize(playerCount: number, mode?: GameMode): { width: numb
     if (playerCount <= 8) return { width: 1900, height: 1300 };
     if (playerCount <= 12) return { width: 2300, height: 1600 };
     if (playerCount <= 20) return { width: 2600, height: 1800 };
-    if (playerCount <= 32) return { width: 2800, height: 2000 };
+    if (playerCount <= 32) return { width: 2600, height: 1800 };
     return { width: 3200, height: 2300 };
   }
   // Smaller matches need faster encounters; large lobbies keep the classic arena.
@@ -625,7 +625,7 @@ export class GameWorld {
     const lobbyMode: GameMode = this.currentLobby?.mode || 'practice';
     const spawnMode: 'cluster' | 'mid' | 'spread' =
       lobbyMode === 'practice'
-        ? (spawnPopulation <= 24 ? 'cluster' : 'mid')
+        ? (spawnPopulation <= 32 ? 'cluster' : 'mid')
         : (spawnPopulation <= 12 ? 'cluster' : spawnPopulation <= 24 ? 'mid' : 'spread');
 
     const minDim = Math.min(width, height);
