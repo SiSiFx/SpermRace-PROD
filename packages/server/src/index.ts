@@ -74,7 +74,6 @@ const wss = new WebSocketServer({
 });
 
 const smartContractService = new SmartContractService();
-const gameWorld = new GameWorld(smartContractService);
 const lobbyManager = new LobbyManager(smartContractService);
 
 // Database for leaderboards and player stats
@@ -108,10 +107,115 @@ const usedPaymentIds = new Set<string>();
 const sessionTokens = new Map<string, { playerId: string; createdAt: number }>();
 const SESSION_TOKEN_TTL_MS = 300000; // 5 minutes
 
-gameWorld.start();
-gameWorld.onAuditEvent = (type: string, payload?: any) => {
-  try { audit.log(type, payload); } catch { }
+type Match = {
+  matchId: string;
+  lobbyId: string;
+  entryFee: import('shared').EntryFeeTier;
+  mode: import('shared').GameMode;
+  entrants: string[];
+  gameWorld: GameWorld;
+  startedAtMs: number;
+  cleanupTimer?: NodeJS.Timeout;
+  lastTrailCreatedAtByPlayerId: Map<string, number>;
 };
+const matchesById = new Map<string, Match>();
+const playerToMatchId = new Map<string, string>();
+
+function getMatchForPlayer(playerId: string): Match | null {
+  const matchId = playerToMatchId.get(playerId);
+  if (!matchId) return null;
+  return matchesById.get(matchId) || null;
+}
+
+function broadcastToPlayers(playerIds: string[], message: ServerToClientMessage): void {
+  const messageString = JSON.stringify(message);
+  for (const playerId of playerIds) {
+    const ws = playerIdToSocket.get(playerId);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      safeSend(ws, messageString, 'generic');
+    }
+  }
+}
+
+function removeMatch(matchId: string): void {
+  const match = matchesById.get(matchId);
+  if (!match) return;
+  try { if (match.cleanupTimer) clearTimeout(match.cleanupTimer); } catch { }
+  try { match.gameWorld.stop(); } catch { }
+  try { audit.log('match_cleanup', { matchId, lobbyId: match.lobbyId, roundId: match.gameWorld.gameState.roundId }); } catch { }
+  matchesById.delete(matchId);
+  for (const pid of match.entrants) {
+    if (playerToMatchId.get(pid) === matchId) playerToMatchId.delete(pid);
+  }
+}
+
+function createAndStartMatch(lobby: Lobby): Match {
+  const matchId = lobby.lobbyId;
+  const existing = matchesById.get(matchId);
+  if (existing) return existing;
+
+  const entrants = [...lobby.players];
+  const gameWorld = new GameWorld(smartContractService);
+  const match: Match = {
+    matchId,
+    lobbyId: lobby.lobbyId,
+    entryFee: lobby.entryFee,
+    mode: lobby.mode,
+    entrants,
+    gameWorld,
+    startedAtMs: Date.now(),
+    lastTrailCreatedAtByPlayerId: new Map(),
+  };
+  matchesById.set(matchId, match);
+  for (const pid of entrants) playerToMatchId.set(pid, matchId);
+
+  gameWorld.onAuditEvent = (type: string, payload?: any) => {
+    try { audit.log(type, { matchId, lobbyId: lobby.lobbyId, ...(payload || {}) }); } catch { }
+  };
+
+  // Per-match eliminations and debug events
+  (gameWorld as any).onPlayerEliminatedExt = (victimId: string, killerId?: string, debug?: any) => {
+    const message: ServerToClientMessage = { type: 'playerEliminated', payload: { playerId: victimId, eliminatorId: killerId } } as any;
+    broadcastToPlayers(match.entrants, message);
+    try {
+      const allowDebug = (process.env.ENABLE_DEBUG_COLLISIONS || '').toLowerCase() === 'true';
+      if (allowDebug && debug && debug.type === 'trail') {
+        const dbg: any = { type: 'debugCollision', payload: { victimId, killerId, hit: debug.hit, segment: debug.segment, normal: debug.normal, relSpeed: debug.relSpeed, ts: Date.now() } };
+        broadcastToPlayers(match.entrants, dbg);
+      }
+    } catch { }
+  };
+
+  gameWorld.onRoundEnd = (winnerId, prizeAmount, txSignature) => {
+    const message: ServerToClientMessage = { type: 'roundEnd', payload: { winnerId, prizeAmount, txSignature } } as any;
+    broadcastToPlayers(match.entrants, message);
+
+    // Record game result in database (async, fire-and-forget)
+    try {
+      if (prizeAmount > 0) {
+        const prizeLamports = Math.floor(prizeAmount * 1_000_000_000);
+        const killsMap: Record<string, number> = {};
+        for (const wallet of match.entrants) killsMap[wallet] = 0;
+        db.recordGameResult(winnerId, prizeLamports, match.entrants.length, killsMap);
+        log.info(`[DB] Recorded game result for ${match.entrants.length} players`);
+      }
+    } catch (error) {
+      log.error('[DB] Failed to record game result:', error);
+    }
+
+    // Cleanup match after a short delay (let clients display results)
+    try {
+      if (!match.cleanupTimer) {
+        match.cleanupTimer = setTimeout(() => removeMatch(matchId), 8000);
+      }
+    } catch { }
+  };
+
+  gameWorld.startRound(entrants, lobby.entryFee);
+  gameWorld.start();
+  try { audit.log('match_world_started', { matchId, lobbyId: lobby.lobbyId, entrants, entryFee: lobby.entryFee, mode: lobby.mode }); } catch { }
+  return match;
+}
 
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://spermrace.io,https://www.spermrace.io,https://sperm-race-io.vercel.app,http://localhost:5174')
   .split(',')
@@ -513,7 +617,12 @@ lobbyManager.onGameStart = (lobby: Lobby) => {
       }
     });
   } catch { }
-  gameWorld.startRound(lobby.players, lobby.entryFee);
+  try {
+    createAndStartMatch(lobby);
+  } catch (e) {
+    log.error('[MATCH] Failed to start match world:', e);
+    try { audit.log('match_start_failed', { lobbyId: lobby.lobbyId, mode: lobby.mode, entryFee: lobby.entryFee, players: lobby.players, error: String((e as any)?.message || e) }); } catch { }
+  }
   const rules = [
     'Contrôles: pointez la souris pour nager',
     'Votre spermatozoïde laisse une trace ~5s',
@@ -631,49 +740,6 @@ lobbyManager.onLobbyRefund = async (lobby: Lobby, playerId: string, _calculatedL
     }
   }
 };
-
-gameWorld.onPlayerEliminated = (playerId) => {
-  const message: ServerToClientMessage = { type: 'playerEliminated', payload: { playerId } } as any;
-  broadcastToAll(message);
-};
-// Extended eliminations with killer
-(gameWorld as any).onPlayerEliminatedExt = (victimId: string, killerId?: string, debug?: any) => {
-  const message: ServerToClientMessage = { type: 'playerEliminated', payload: { playerId: victimId, eliminatorId: killerId } } as any;
-  broadcastToAll(message);
-  try {
-    const allowDebug = (process.env.ENABLE_DEBUG_COLLISIONS || '').toLowerCase() === 'true';
-    if (allowDebug && debug && debug.type === 'trail') {
-      const dbg: any = { type: 'debugCollision', payload: { victimId, killerId, hit: debug.hit, segment: debug.segment, normal: debug.normal, relSpeed: debug.relSpeed, ts: Date.now() } };
-      broadcastToAll(dbg);
-    }
-  } catch { }
-};
-
-gameWorld.onRoundEnd = (winnerId, prizeAmount, txSignature) => {
-  const message: ServerToClientMessage = { type: 'roundEnd', payload: { winnerId, prizeAmount, txSignature } } as any;
-  broadcastToAll(message);
-
-  // Record game result in database (async, fire-and-forget)
-  try {
-    const lobby = lobbyManager.getLobbyForPlayer(winnerId);
-    if (lobby && prizeAmount > 0) {
-      const prizeLamports = Math.floor(prizeAmount * 1_000_000_000);
-      const playerWallets = lobby.players; // all player IDs (wallet addresses)
-
-      // Build kills map (kills tracking not implemented yet, default to 0)
-      const killsMap: Record<string, number> = {};
-      for (const wallet of playerWallets) {
-        killsMap[wallet] = 0; // TODO: Add kills tracking to GameWorld
-      }
-
-      db.recordGameResult(winnerId, prizeLamports, playerWallets.length, killsMap);
-      log.info(`[DB] Recorded game result for ${playerWallets.length} players`);
-    }
-  } catch (error) {
-    log.error('[DB] Failed to record game result:', error);
-  }
-};
-
 
 // =================================================================================================
 // Connection Handling
@@ -820,7 +886,11 @@ wss.on('connection', (ws: WebSocket, req: any) => {
       socketToPlayerId.delete(ws);
       // Grace period: keep the player in the lobby for quick reconnects
       // GameWorld will remove from active round on disconnect as needed
-      gameWorld.removePlayer(playerId);
+      const match = getMatchForPlayer(playerId);
+      if (match) {
+        try { match.gameWorld.removePlayer(playerId); } catch { }
+        try { if (playerToMatchId.get(playerId) === match.matchId) playerToMatchId.delete(playerId); } catch { }
+      }
     }
     socketToNonce.delete(ws);
     socketToSessionId.delete(ws);
@@ -971,7 +1041,8 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
         }
       } else if (paidPlayers.has(publicKey)) {
         // If already paid and game in progress with this player, resume immediately
-        const inProgress = gameWorld.gameState.status === 'in_progress' && !!(gameWorld.gameState.players as any)[publicKey];
+        const match = getMatchForPlayer(publicKey);
+        const inProgress = !!match && match.gameWorld.gameState.status === 'in_progress' && !!(match.gameWorld.gameState.players as any)[publicKey];
         if (inProgress) {
           const rules = [
             'Contrôles: pointez la souris pour diriger',
@@ -981,6 +1052,7 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
           ];
           const gameStarting: ServerToClientMessage = { type: 'gameStarting', payload: { countdown: 0, rules } } as any;
           ws.send(JSON.stringify(gameStarting));
+          break;
         }
         // If paid but not in a game, requeue into a lobby so they don't lose their ticket
         const tier = expectedTierByPlayerId.get(publicKey) || 1 as any;
@@ -1024,7 +1096,8 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
           break;
         }
         // If a round is already in progress and the player is part of it, ignore join and resume
-        if (gameWorld.gameState.status === 'in_progress' && (gameWorld.gameState.players as any)[playerId]) {
+        const match = getMatchForPlayer(playerId);
+        if (match && match.gameWorld.gameState.status === 'in_progress' && (match.gameWorld.gameState.players as any)[playerId]) {
           const rules = [
             'Contrôles: pointez la souris pour diriger',
             'Votre voiture laisse une trace ~5s',
@@ -1172,20 +1245,23 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
       }
       break;
     }
-    case 'playerInput': {
-      if (!take('input')) return;
-      const playerId = socketToPlayerId.get(ws);
-      if (!playerId) return;
+	    case 'playerInput': {
+	      if (!take('input')) return;
+	      const playerId = socketToPlayerId.get(ws);
+	      if (!playerId) return;
       // Clamp bursts: accept at most one input per ~16ms (~60/s) in addition to token bucket
       const now = Date.now();
       const last = (socketRate as any).lastInputAt?.get?.(ws) as number | undefined;
       if (!(socketRate as any).lastInputAt) (socketRate as any).lastInputAt = new Map();
-      if (!last || (now - last) >= 16) {
-        (socketRate as any).lastInputAt.set(ws, now);
-        gameWorld.handlePlayerInput(playerId, (message as any).payload);
-      }
-      break;
-    }
+	      if (!last || (now - last) >= 16) {
+	        (socketRate as any).lastInputAt.set(ws, now);
+	        const match = getMatchForPlayer(playerId);
+	        if (match) {
+	          match.gameWorld.handlePlayerInput(playerId, (message as any).payload);
+	        }
+	      }
+	      break;
+	    }
     case 'leaveLobby': {
       const playerId = socketToPlayerId.get(ws);
       if (!playerId) return;
@@ -1233,126 +1309,124 @@ function safeSend(ws: WebSocket, data: string, kind: 'game' | 'generic', topic?:
 }
 
 function broadcastGameState(): void {
-  const gameState = gameWorld.gameState;
+  for (const match of matchesById.values()) {
+    const gameState = match.gameWorld.gameState;
+    if (gameState.status !== 'in_progress') continue;
 
-  const messageSlim: GameStateUpdateMessage = {
-    type: 'gameStateUpdate',
-    payload: {
-      timestamp: Date.now(),
-      players: Object.values(gameState.players).map((p: any) => ({
-        id: p.id,
-        sperm: p.sperm,
-        isAlive: p.isAlive,
-        status: p.status,
-      })),
-      world: gameState.world,
-      aliveCount: Object.values(gameState.players).filter((p: any) => p.isAlive).length,
-      objective: (gameState as any).objective,
-    },
-  };
+    const messageSlim: GameStateUpdateMessage = {
+      type: 'gameStateUpdate',
+      payload: {
+        timestamp: Date.now(),
+        players: Object.values(gameState.players).map((p: any) => ({
+          id: p.id,
+          sperm: p.sperm,
+          isAlive: p.isAlive,
+          status: p.status,
+        })),
+        world: gameState.world,
+        aliveCount: Object.values(gameState.players).filter((p: any) => p.isAlive).length,
+        objective: (gameState as any).objective,
+      },
+    };
 
-  const messageFull: GameStateUpdateMessage = {
-    type: 'gameStateUpdate',
-    payload: {
-      timestamp: messageSlim.payload.timestamp,
-      players: Object.values(gameState.players).map((p: any) => ({
-        id: p.id,
-        sperm: p.sperm,
-        isAlive: p.isAlive,
-        trail: p.trail,
-        status: p.status,
-      })),
-      world: gameState.world,
-      aliveCount: messageSlim.payload.aliveCount,
-      objective: (gameState as any).objective,
-    },
-  };
+    const messageFull: GameStateUpdateMessage = {
+      type: 'gameStateUpdate',
+      payload: {
+        timestamp: messageSlim.payload.timestamp,
+        players: Object.values(gameState.players).map((p: any) => ({
+          id: p.id,
+          sperm: p.sperm,
+          isAlive: p.isAlive,
+          trail: p.trail,
+          status: p.status,
+        })),
+        world: gameState.world,
+        aliveCount: messageSlim.payload.aliveCount,
+        objective: (gameState as any).objective,
+      },
+    };
 
-  const slimStr = JSON.stringify(messageSlim);
-  const fullStr = JSON.stringify(messageFull);
+    const slimStr = JSON.stringify(messageSlim);
+    const fullStr = JSON.stringify(messageFull);
 
-  // Broadcast only to players who are actually in the game round (with backpressure)
-  Object.keys(gameState.players).forEach((playerId: string) => {
-    const ws = playerIdToSocket.get(playerId);
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      const caps = socketCaps.get(ws);
-      safeSend(ws, (caps && caps.trailDelta) ? slimStr : fullStr, 'game', 'state');
-    }
-  });
+    // Broadcast only to players who are actually in this match round (with backpressure)
+    Object.keys(gameState.players).forEach((playerId: string) => {
+      const ws = playerIdToSocket.get(playerId);
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        const caps = socketCaps.get(ws);
+        safeSend(ws, (caps && caps.trailDelta) ? slimStr : fullStr, 'game', 'state');
+      }
+    });
+  }
 }
 
 setInterval(broadcastGameState, BROADCAST_INTERVAL);
 
 // Trail delta broadcasting (send only new trail points, not full trails every tick)
-const lastTrailCreatedAtByPlayerId = new Map<string, number>();
 function broadcastTrailDelta(): void {
-  const gameState = gameWorld.gameState;
-  if (gameState.status !== 'in_progress') return;
+  for (const match of matchesById.values()) {
+    const gameState = match.gameWorld.gameState;
+    if (gameState.status !== 'in_progress') continue;
 
-  // Only bother if at least one connected client opted into trail deltas.
-  let anyWants = false;
-  for (const playerId of Object.keys(gameState.players)) {
-    const ws = playerIdToSocket.get(playerId);
-    if (ws && ws.readyState === WebSocket.OPEN && socketCaps.get(ws)?.trailDelta) { anyWants = true; break; }
-  }
-  if (!anyWants) return;
+    // Only bother if at least one connected client opted into trail deltas.
+    let anyWants = false;
+    for (const playerId of Object.keys(gameState.players)) {
+      const ws = playerIdToSocket.get(playerId);
+      if (ws && ws.readyState === WebSocket.OPEN && socketCaps.get(ws)?.trailDelta) { anyWants = true; break; }
+    }
+    if (!anyWants) continue;
 
-  const deltas: Array<{ playerId: string; points: Array<{ x: number; y: number; expiresAt: number; createdAt?: number }> }> = [];
+    const deltas: Array<{ playerId: string; points: Array<{ x: number; y: number; expiresAt: number; createdAt?: number }> }> = [];
 
-  for (const p of Object.values(gameState.players) as any[]) {
-    const playerId = String(p?.id || '');
-    if (!playerId) continue;
-    const trail = Array.isArray(p?.trail) ? p.trail : [];
-    if (trail.length === 0) continue;
+    for (const p of Object.values(gameState.players) as any[]) {
+      const playerId = String(p?.id || '');
+      if (!playerId) continue;
+      const trail = Array.isArray(p?.trail) ? p.trail : [];
+      if (trail.length === 0) continue;
 
-    const lastCreatedAt = lastTrailCreatedAtByPlayerId.get(playerId);
-    let startIdx = 0;
+      const lastCreatedAt = match.lastTrailCreatedAtByPlayerId.get(playerId);
+      let startIdx = 0;
 
-    if (typeof lastCreatedAt === 'number') {
-      let found = false;
-      for (let i = trail.length - 1; i >= 0; i--) {
-        if (trail[i]?.createdAt === lastCreatedAt) {
-          startIdx = i + 1;
-          found = true;
-          break;
+      if (typeof lastCreatedAt === 'number') {
+        let found = false;
+        for (let i = trail.length - 1; i >= 0; i--) {
+          if (trail[i]?.createdAt === lastCreatedAt) {
+            startIdx = i + 1;
+            found = true;
+            break;
+          }
         }
+        // If we can't find the last sent point (due to expiry/cleanup), resync with current trail.
+        if (!found) startIdx = 0;
       }
-      // If we can't find the last sent point (due to expiry/cleanup), resync with current trail.
-      if (!found) startIdx = 0;
+
+      if (startIdx >= trail.length) continue;
+
+      const newPoints = trail.slice(startIdx).map((pt: any) => ({ x: pt.x, y: pt.y, expiresAt: pt.expiresAt, createdAt: pt.createdAt }));
+      if (newPoints.length === 0) continue;
+
+      const last = trail[trail.length - 1];
+      if (last && typeof last.createdAt === 'number') match.lastTrailCreatedAtByPlayerId.set(playerId, last.createdAt);
+
+      deltas.push({ playerId, points: newPoints });
     }
 
-    if (startIdx >= trail.length) continue;
+    if (deltas.length === 0) continue;
 
-    const newPoints = trail.slice(startIdx).map((pt: any) => ({ x: pt.x, y: pt.y, expiresAt: pt.expiresAt, createdAt: pt.createdAt }));
-    if (newPoints.length === 0) continue;
+    const msg = { type: 'trailDelta', payload: { timestamp: Date.now(), deltas } } as any;
+    const str = JSON.stringify(msg);
 
-    const last = trail[trail.length - 1];
-    if (last && typeof last.createdAt === 'number') lastTrailCreatedAtByPlayerId.set(playerId, last.createdAt);
-
-    deltas.push({ playerId, points: newPoints });
+    Object.keys(gameState.players).forEach((playerId: string) => {
+      const ws = playerIdToSocket.get(playerId);
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        if (socketCaps.get(ws)?.trailDelta) safeSend(ws, str, 'game', 'trail');
+      }
+    });
   }
-
-  if (deltas.length === 0) return;
-
-  const msg = { type: 'trailDelta', payload: { timestamp: Date.now(), deltas } } as any;
-  const str = JSON.stringify(msg);
-
-  Object.keys(gameState.players).forEach((playerId: string) => {
-    const ws = playerIdToSocket.get(playerId);
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      if (socketCaps.get(ws)?.trailDelta) safeSend(ws, str, 'game', 'trail');
-    }
-  });
 }
 
 setInterval(broadcastTrailDelta, BROADCAST_INTERVAL);
 
-function broadcastToAll(message: ServerToClientMessage): void {
-  const str = JSON.stringify(message);
-  playerIdToSocket.forEach(ws => {
-    if (ws.readyState === WebSocket.OPEN) safeSend(ws, str, 'generic');
-  });
-}
 // =================================================================================================
 // Global error handling
 // =================================================================================================

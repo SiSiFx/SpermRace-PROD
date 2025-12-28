@@ -12,6 +12,8 @@ function parseArgs(argv) {
     tickMs: Number(process.env.TICK_MS || 80),
     trailDelta: (process.env.TRAIL_DELTA || '1') !== '0',
     auditDir: process.env.AUDIT_DIR || path.resolve('./data/audit'),
+    exitOnFirstRoundEnd: (process.env.EXIT_ON_FIRST_ROUND_END || '1') !== '0',
+    requireAllRoundEnds: (process.env.REQUIRE_ALL_ROUND_ENDS || '0') === '1',
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -21,6 +23,8 @@ function parseArgs(argv) {
     else if (a === '--tickMs') args.tickMs = Number(argv[++i]);
     else if (a === '--no-trail-delta') args.trailDelta = false;
     else if (a === '--auditDir') args.auditDir = argv[++i];
+    else if (a === '--exitOnFirstRoundEnd') args.exitOnFirstRoundEnd = true;
+    else if (a === '--waitAllRoundEnds') { args.exitOnFirstRoundEnd = false; args.requireAllRoundEnds = true; }
   }
   if (!Number.isFinite(args.clients) || args.clients <= 0) args.clients = 12;
   if (!Number.isFinite(args.durationMs) || args.durationMs <= 0) args.durationMs = 60000;
@@ -43,7 +47,15 @@ function findLatestAuditFile(auditDir) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  console.log('[TEST] ws url=', args.url, 'clients=', args.clients, 'durationMs=', args.durationMs, 'tickMs=', args.tickMs, 'trailDelta=', args.trailDelta);
+  console.log(
+    '[TEST] ws url=', args.url,
+    'clients=', args.clients,
+    'durationMs=', args.durationMs,
+    'tickMs=', args.tickMs,
+    'trailDelta=', args.trailDelta,
+    'exitOnFirstRoundEnd=', args.exitOnFirstRoundEnd,
+    'requireAllRoundEnds=', args.requireAllRoundEnds,
+  );
 
   const startedAt = Date.now();
   const auditFileBefore = findLatestAuditFile(args.auditDir);
@@ -58,6 +70,7 @@ async function main() {
     gotGameState: 0,
     gotObjective: 0,
     gotRoundEnd: 0,
+    clientsRoundEnded: 0,
     lastRoundEnd: null,
     errors: 0,
   };
@@ -76,6 +89,7 @@ async function main() {
       phase: 'init',
       lastSentAt: 0,
       eliminated: false,
+      gotRoundEnd: false,
     };
 
     const ws = new WebSocket(args.url);
@@ -126,6 +140,10 @@ async function main() {
       }
 
       if (msg.type === 'roundEnd') {
+        if (!st.gotRoundEnd) {
+          st.gotRoundEnd = true;
+          summary.clientsRoundEnded++;
+        }
         summary.gotRoundEnd++;
         summary.lastRoundEnd = msg.payload || null;
         return;
@@ -182,7 +200,8 @@ async function main() {
 
   const endAt = startedAt + args.durationMs;
   while (Date.now() < endAt) {
-    if (summary.gotRoundEnd > 0) break;
+    if (args.exitOnFirstRoundEnd && summary.gotRoundEnd > 0) break;
+    if (args.requireAllRoundEnds && summary.clientsRoundEnded >= args.clients) break;
     await sleep(250);
   }
   clearInterval(tick);
@@ -193,7 +212,7 @@ async function main() {
 
   console.log('[RESULT] connected=', summary.connected, 'authed=', summary.authed, 'joined=', summary.joined, 'gameStarting=', summary.gotGameStarting);
   console.log('[RESULT] gameStateUpdates=', summary.gotGameState, 'objectiveSeen=', summary.gotObjective, 'serverPlayerCountMax=', globalState.serverPlayerCountMax);
-  console.log('[RESULT] roundEnd=', summary.gotRoundEnd, 'lastRoundEnd=', summary.lastRoundEnd);
+  console.log('[RESULT] roundEnd=', summary.gotRoundEnd, 'clientsRoundEnded=', summary.clientsRoundEnded, 'lastRoundEnd=', summary.lastRoundEnd);
   console.log('[RESULT] errors=', summary.errors);
 
   const auditFileAfter = findLatestAuditFile(args.auditDir);
@@ -208,7 +227,8 @@ async function main() {
 
   const ok = summary.authed >= Math.min(args.clients, summary.connected) && summary.gotGameState > 0 && summary.gotObjective > 0;
   if (!ok) process.exitCode = 2;
-  if (summary.gotRoundEnd === 0) process.exitCode = 3;
+  if (args.requireAllRoundEnds && summary.clientsRoundEnded < args.clients) process.exitCode = 3;
+  else if (summary.gotRoundEnd === 0) process.exitCode = 3;
 }
 
 main().catch((e) => {
