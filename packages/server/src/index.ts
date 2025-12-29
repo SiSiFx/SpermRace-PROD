@@ -681,7 +681,8 @@ server.listen(PORT, () => {
 lobbyManager.onLobbyUpdate = (lobby: Lobby) => {
   const playerNamesMap: Record<string, string> = {};
   lobby.players.forEach(pid => {
-    playerNamesMap[pid] = playerIdToName.get(pid) || (pid.startsWith("guest-") ? "Guest" : pid.slice(0, 4) + "…" + pid.slice(-4));
+    playerNamesMap[pid] = playerIdToName.get(pid)
+      || (pid.startsWith("BOT_") ? "Bot" : pid.startsWith("guest-") ? "Guest" : pid.slice(0, 4) + "…" + pid.slice(-4));
   });
   const message: LobbyStateMessage = { type: 'lobbyState', payload: { ...lobby, playerNames: playerNamesMap } as any };
   broadcastToLobby(lobby, message);

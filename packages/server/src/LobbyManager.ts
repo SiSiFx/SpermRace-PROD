@@ -16,9 +16,29 @@ function getLobbyMaxPlayers(mode: GameMode): number {
   }
   return LOBBY_MAX_PLAYERS_DEFAULT;
 }
-const LOBBY_START_COUNTDOWN = Math.max(5, parseInt(process.env.LOBBY_COUNTDOWN || '15', 10)); // seconds
+const LOBBY_START_COUNTDOWN_DEFAULT = Math.max(5, parseInt(process.env.LOBBY_COUNTDOWN || '15', 10)); // seconds
+function getLobbyCountdownSeconds(mode: GameMode): number {
+  const key = mode === 'tournament' ? 'LOBBY_COUNTDOWN_TOURNAMENT' : 'LOBBY_COUNTDOWN_PRACTICE';
+  const raw = process.env[key];
+  if (raw && String(raw).trim()) {
+    const n = parseInt(raw, 10);
+    if (Number.isFinite(n) && n >= 3) return n;
+  }
+  return LOBBY_START_COUNTDOWN_DEFAULT;
+}
 const LOBBY_MIN_START = Math.max(2, parseInt(process.env.LOBBY_MIN_START || (process.env.SKIP_ENTRY_FEE === 'true' ? '1' : '4'), 10));
-const LOBBY_MAX_WAIT_SEC = Math.max(LOBBY_START_COUNTDOWN, parseInt(process.env.LOBBY_MAX_WAIT || '120', 10));
+const LOBBY_MAX_WAIT_SEC = Math.max(LOBBY_START_COUNTDOWN_DEFAULT, parseInt(process.env.LOBBY_MAX_WAIT || '120', 10));
+
+function isPracticeBotsEnabled(): boolean {
+  const raw = (process.env.ENABLE_PRACTICE_BOTS ?? ((process.env.NODE_ENV || '').toLowerCase() === 'production' ? 'true' : 'false')).toLowerCase();
+  return raw === 'true' || raw === '1' || raw === 'yes';
+}
+function getPracticeBotsTarget(maxPlayers: number): number {
+  const raw = process.env.PRACTICE_BOTS_TARGET ?? (((process.env.NODE_ENV || '').toLowerCase() === 'production') ? '8' : '0');
+  const n = parseInt(String(raw || '0'), 10);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.max(1, Math.min(maxPlayers, n));
+}
 
 type SurgeRule = { afterSec: number; minPlayers: number };
 function parseSurgeRules(input: string | undefined): SurgeRule[] {
@@ -112,31 +132,27 @@ export class LobbyManager {
       }
     }
 
-    // Proactively inject bots on join except when dev exact-match mode is active
-    const isDevLike = (process.env.NODE_ENV || '').toLowerCase() !== 'production';
-    const skipFee = (process.env.SKIP_ENTRY_FEE || '').toLowerCase() === 'true';
-    const matchReal = (process.env.DEV_MATCH_REAL_PLAYERS || 'true').toLowerCase() === 'true';
-    if (!(isDevLike && skipFee && matchReal)) {
-      this.injectDevBots(lobby);
-    } else {
-      console.log(`[LOBBY] Dev match-real-players active → not injecting bots on join`);
-    }
+    // Practice bots (prod-safe): keeps online practice fun even with low real-player density.
+    this.injectPracticeBots(lobby);
 
-    // For solo players: Silent wait, then countdown in last 20s
-    // Total: 50s (30s silent + 20s visible countdown)
+    // Dev-only bot injection (legacy; guarded by ENABLE_DEV_BOTS=true).
+    this.injectDevBots(lobby);
+
+    // For solo players: tournament waits before countdown; practice starts immediately.
     if (lobby.players.length === 1) {
-      const silentWaitMs = 30000; // 30 seconds silent
-      
-      console.log(`[LOBBY] Solo player - 30s silent wait, then 20s countdown`);
-      
-      setTimeout(() => {
-        const currentLobby = this.lobbies.get(lobby.lobbyId);
-        // Only start countdown if still solo and waiting
-        if (currentLobby && currentLobby.players.length === 1 && currentLobby.status === 'waiting') {
-          console.log(`[LOBBY] Starting 20s countdown for solo player`);
-          this.startLobbyCountdown(currentLobby);
-        }
-      }, silentWaitMs);
+      if (lobby.mode === 'practice') {
+        this.startLobbyCountdown(lobby);
+      } else {
+        const silentWaitMs = 30000; // 30 seconds silent
+        console.log(`[LOBBY] Solo tournament player - 30s silent wait before countdown`);
+        setTimeout(() => {
+          const currentLobby = this.lobbies.get(lobby.lobbyId);
+          // Only start countdown if still solo and waiting
+          if (currentLobby && currentLobby.players.length === 1 && currentLobby.status === 'waiting') {
+            this.startLobbyCountdown(currentLobby);
+          }
+        }, silentWaitMs);
+      }
     } else {
       // Multiple players: start countdown immediately
       this.startLobbyCountdown(lobby);
@@ -188,17 +204,9 @@ export class LobbyManager {
     lobby.status = 'starting';
     this.onLobbyUpdate?.(lobby);
 
-    // In dev/test mode, optionally inject bots to reach a target count quickly
-    console.log(`[LOBBY] Starting countdown for ${lobby.lobbyId}; bots=${process.env.ENABLE_DEV_BOTS} target=${process.env.DEV_BOTS_TARGET}`);
-    // Respect exact-match mode: when DEV_MATCH_REAL_PLAYERS=true and SKIP_ENTRY_FEE=true, do not inject
-    const isDevLike = (process.env.NODE_ENV || '').toLowerCase() !== 'production';
-    const skipFee = (process.env.SKIP_ENTRY_FEE || '').toLowerCase() === 'true';
-    const matchReal = (process.env.DEV_MATCH_REAL_PLAYERS || 'true').toLowerCase() === 'true';
-    if (!(isDevLike && skipFee && matchReal)) {
-      this.injectDevBots(lobby);
-    } else {
-      console.log(`[LOBBY] Dev match-real-players active → skipping bot injection`);
-    }
+    // Keep counts healthy at countdown start (practice bots in prod; dev bots only when enabled).
+    this.injectPracticeBots(lobby);
+    this.injectDevBots(lobby);
 
     // mark countdown start
     if (!this.lobbyCountdownStartMs.get(lobby.lobbyId)) {
@@ -251,16 +259,18 @@ export class LobbyManager {
 
     if (maybeStart()) return;
 
-    // For solo players, show countdown until refund deadline, not game start countdown
+    // Tournament solo players show countdown until refund deadline. Practice always uses game-start countdown.
     const deadline = this.lobbyDeadlineMs.get(lobby.lobbyId) || (Date.now() + LOBBY_MAX_WAIT_SEC * 1000);
     const isSolo = lobby.players.length === 1;
-    const startAtMs = isSolo ? deadline : (Date.now() + LOBBY_START_COUNTDOWN * 1000);
+    const countdownSec = getLobbyCountdownSeconds(lobby.mode);
+    const useSoloDeadline = isSolo && lobby.mode === 'tournament';
+    const startAtMs = useSoloDeadline ? deadline : (Date.now() + countdownSec * 1000);
     this.lobbyStartAtMs.set(lobby.lobbyId, startAtMs);
     
     // Calculate timeout duration to match countdown
-    const timeoutDuration = isSolo 
+    const timeoutDuration = useSoloDeadline
       ? Math.max(0, deadline - Date.now()) 
-      : (LOBBY_START_COUNTDOWN * 1000);
+      : (countdownSec * 1000);
     
     console.log(`[LOBBY] Countdown: solo=${isSolo}, duration=${Math.ceil(timeoutDuration/1000)}s`);
     
@@ -282,7 +292,7 @@ export class LobbyManager {
         this.onGameStart?.(lobby);
         this.lobbies.delete(lobby.lobbyId);
         lobby.players.forEach(p => this.playerLobbyMap.delete(p));
-      } else if (lobby.players.length === 1 && Date.now() >= deadline) {
+      } else if (lobby.mode === 'tournament' && lobby.players.length === 1 && Date.now() >= deadline) {
         // Solo player after deadline → issue refund
         const soloPlayer = lobby.players[0];
         console.log(`[LOBBY] Solo player ${soloPlayer} in lobby ${lobby.lobbyId} after deadline - issuing refund`);
@@ -322,6 +332,24 @@ export class LobbyManager {
       if (s) { clearTimeout(s); this.lobbyStartTimeout.delete(lobbyId); }
     } catch {}
     this.lobbyStartAtMs.delete(lobbyId);
+  }
+
+  private injectPracticeBots(lobby: Lobby): void {
+    try {
+      if (lobby.mode !== 'practice') return;
+      if (!isPracticeBotsEnabled()) return;
+      const target = getPracticeBotsTarget(lobby.maxPlayers);
+      if (target <= 0) return;
+      if (lobby.players.length >= target) return;
+
+      const before = lobby.players.length;
+      while (lobby.players.length < target) {
+        const botId = `BOT_${Math.random().toString(36).slice(2, 10)}`;
+        lobby.players.push(botId);
+      }
+      const added = lobby.players.length - before;
+      if (added > 0) this.onLobbyUpdate?.(lobby);
+    } catch { }
   }
 
   /**
