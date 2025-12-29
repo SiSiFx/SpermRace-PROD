@@ -109,6 +109,93 @@ const usedPaymentIds = new Set<string>();
 const sessionTokens = new Map<string, { playerId: string; createdAt: number }>();
 const SESSION_TOKEN_TTL_MS = 300000; // 5 minutes
 
+// Guest resume (practice): lets mobile reconnect without losing the match.
+const guestSessions = new Map<string, { resumeToken: string; name: string; updatedAt: number }>();
+const GUEST_SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+
+function cleanupGuestSessions(now = Date.now()): void {
+  try {
+    for (const [guestId, s] of guestSessions.entries()) {
+      if (!s || (now - s.updatedAt) > GUEST_SESSION_TTL_MS) guestSessions.delete(guestId);
+    }
+  } catch { }
+}
+
+function sanitizeGuestName(name: string | undefined): string {
+  return (name || 'Guest').trim().slice(0, 20).replace(/[^a-zA-Z0-9 ]/g, '') || 'Guest';
+}
+
+function getGuestSession(requestedId: string | undefined, resumeToken: string | undefined, cleanName: string): { guestId: string; resumeToken: string } {
+  const now = Date.now();
+  cleanupGuestSessions(now);
+  try {
+    const rid = (requestedId || '').trim();
+    const tok = (resumeToken || '').trim();
+    if (rid && tok) {
+      const existing = guestSessions.get(rid);
+      if (existing && existing.resumeToken === tok) {
+        existing.updatedAt = now;
+        existing.name = cleanName || existing.name || 'Guest';
+        guestSessions.set(rid, existing);
+        return { guestId: rid, resumeToken: existing.resumeToken };
+      }
+    }
+  } catch { }
+
+  const guestId = `guest-${uuidv4()}`;
+  const newToken = randomUUID();
+  guestSessions.set(guestId, { resumeToken: newToken, name: cleanName || 'Guest', updatedAt: now });
+  return { guestId, resumeToken: newToken };
+}
+
+// Match resume: keep players in-round for a short grace window.
+const reconnectTimersByPlayerId = new Map<string, NodeJS.Timeout>();
+function getReconnectGraceMs(mode: import('shared').GameMode): number {
+  const key = mode === 'tournament' ? 'MATCH_RECONNECT_GRACE_MS_TOURNAMENT' : 'MATCH_RECONNECT_GRACE_MS_PRACTICE';
+  const raw = process.env[key] || process.env.MATCH_RECONNECT_GRACE_MS || '';
+  const n = parseInt(String(raw || '').trim() || (mode === 'tournament' ? '10000' : '20000'), 10);
+  if (!Number.isFinite(n) || n < 0) return mode === 'tournament' ? 10000 : 20000;
+  return Math.min(60000, n);
+}
+
+function clearReconnectTimer(playerId: string): void {
+  try {
+    const t = reconnectTimersByPlayerId.get(playerId);
+    if (t) clearTimeout(t);
+  } catch { }
+  reconnectTimersByPlayerId.delete(playerId);
+}
+
+function sendLobbyStateToPlayer(ws: WebSocket, lobby: Lobby): void {
+  try {
+    const playerNamesMap: Record<string, string> = {};
+    lobby.players.forEach((pid) => {
+      playerNamesMap[pid] = playerIdToName.get(pid)
+        || (pid.startsWith('BOT_') ? 'Bot' : pid.startsWith('guest-') ? 'Guest' : pid.slice(0, 4) + '…' + pid.slice(-4));
+    });
+    const message: LobbyStateMessage = { type: 'lobbyState', payload: { ...lobby, playerNames: playerNamesMap } as any };
+    safeSend(ws, JSON.stringify(message as any), 'generic');
+  } catch { }
+}
+
+function syncPlayerAfterAuth(playerId: string, ws: WebSocket): void {
+  try {
+    clearReconnectTimer(playerId);
+  } catch { }
+  try {
+    const match = getMatchForPlayer(playerId);
+    if (match) {
+      try { (match.gameWorld as any).handlePlayerReconnect?.(playerId); } catch { }
+      // gameStateUpdate broadcasts will pick this socket up automatically
+      return;
+    }
+  } catch { }
+  try {
+    const lobby = lobbyManager.getLobbyForPlayer(playerId);
+    if (lobby) sendLobbyStateToPlayer(ws, lobby);
+  } catch { }
+}
+
 // =================================================================================================
 // Anti-abuse telemetry (hashed; no raw IP stored)
 // =================================================================================================
@@ -208,6 +295,7 @@ function removeMatch(matchId: string): void {
   matchesById.delete(matchId);
   for (const pid of match.entrants) {
     if (playerToMatchId.get(pid) === matchId) playerToMatchId.delete(pid);
+    try { clearReconnectTimer(pid); } catch { }
   }
 }
 
@@ -848,11 +936,17 @@ wss.on('connection', (ws: WebSocket, req: any) => {
     sessionToken = url.searchParams.get('token');
 
     if (sessionToken) {
+      // Clean up expired tokens periodically (cheap; map is small in practice)
+      try {
+        const now = Date.now();
+        for (const [token, data] of sessionTokens.entries()) {
+          if (now - data.createdAt > SESSION_TOKEN_TTL_MS) sessionTokens.delete(token);
+        }
+      } catch { }
       const sessionData = sessionTokens.get(sessionToken);
       if (sessionData && (Date.now() - sessionData.createdAt < SESSION_TOKEN_TTL_MS)) {
         authenticatedPlayerId = sessionData.playerId;
-        // Consume the token (one-time use)
-        sessionTokens.delete(sessionToken);
+        // Do NOT consume the token (reusable within TTL) so mobile can reconnect without re-signing.
         log.info(`[WS] Client authenticated via HTTP token: ${maskPk(authenticatedPlayerId)}`);
       } else {
         log.warn(`[WS] Invalid or expired session token: ${sessionToken.slice(0, 8)}…`);
@@ -894,9 +988,16 @@ wss.on('connection', (ws: WebSocket, req: any) => {
 
   // If authenticated via HTTP token, skip SIWS challenge
   if (authenticatedPlayerId) {
+    try {
+      const prev = playerIdToSocket.get(authenticatedPlayerId);
+      if (prev && prev !== ws) {
+        try { prev.close(4000, 'Reconnected'); } catch { }
+      }
+    } catch { }
     // Move directly to authenticated state
     playerIdToSocket.set(authenticatedPlayerId, ws);
     socketToPlayerId.set(ws, authenticatedPlayerId);
+    (ws as any).authenticated = true;
     try {
       if (ABUSE_TELEMETRY) {
         const meta = socketToConnMeta.get(ws);
@@ -907,6 +1008,7 @@ wss.on('connection', (ws: WebSocket, req: any) => {
     const authMessage: AuthenticatedMessage = { type: 'authenticated', payload: { playerId: authenticatedPlayerId } };
     ws.send(JSON.stringify(authMessage));
     log.info(`🔌 Client connected & authenticated via token (${pendingSockets.size + playerIdToSocket.size} total)`);
+    syncPlayerAfterAuth(authenticatedPlayerId, ws);
   } else {
     // Traditional WebSocket SIWS flow
     pendingSockets.add(ws); (ws as any).authenticated = false;
@@ -946,10 +1048,16 @@ wss.on('connection', (ws: WebSocket, req: any) => {
 
       // Handle guest login specifically
       if (message.type === 'guestLogin') {
-        const { guestName } = message.payload;
-        // Basic validation for name
-        const cleanName = (guestName || 'Guest').trim().slice(0, 20).replace(/[^a-zA-Z0-9 ]/g, '');
-        const guestId = `guest-${uuidv4()}`; // Temporary ID
+        const { guestName, guestId: requestedGuestId, resumeToken: requestedResumeToken } = message.payload as any;
+        const cleanName = sanitizeGuestName(guestName);
+        const { guestId, resumeToken } = getGuestSession(requestedGuestId, requestedResumeToken, cleanName);
+
+        try {
+          const prev = playerIdToSocket.get(guestId);
+          if (prev && prev !== ws) {
+            try { prev.close(4000, 'Reconnected'); } catch { }
+          }
+        } catch { }
 
         // Register as authenticated
         // Clear auth timeout and pending status
@@ -972,10 +1080,11 @@ wss.on('connection', (ws: WebSocket, req: any) => {
         playerIdToName.set(guestId, cleanName);
 
         // Send success
-        const authMessage: AuthenticatedMessage = { type: 'authenticated', payload: { playerId: guestId } };
+        const authMessage: AuthenticatedMessage = { type: 'authenticated', payload: { playerId: guestId, resumeToken } };
         ws.send(JSON.stringify(authMessage));
 
         log.info(`🔌 Guest connected: ${cleanName} (${guestId})`);
+        syncPlayerAfterAuth(guestId, ws);
         return;
       }
 
@@ -998,12 +1107,24 @@ wss.on('connection', (ws: WebSocket, req: any) => {
 	    if (playerId) {
 	      playerIdToSocket.delete(playerId);
 	      socketToPlayerId.delete(ws);
-      // Grace period: keep the player in the lobby for quick reconnects
-      // GameWorld will remove from active round on disconnect as needed
-      const match = getMatchForPlayer(playerId);
-      if (match) {
-        try { match.gameWorld.removePlayer(playerId); } catch { }
-        try { if (playerToMatchId.get(playerId) === match.matchId) playerToMatchId.delete(playerId); } catch { }
+        // Match reconnect grace: do not instantly remove/eliminate on mobile drops.
+        const match = getMatchForPlayer(playerId);
+        if (match && !String(playerId).startsWith('BOT_')) {
+          try { (match.gameWorld as any).handlePlayerDisconnect?.(playerId); } catch { }
+          const graceMs = getReconnectGraceMs(match.mode);
+          clearReconnectTimer(playerId);
+          if (graceMs <= 0) {
+            try { (match.gameWorld as any).eliminateForDisconnect?.(playerId); } catch { }
+          } else {
+            const t = setTimeout(() => {
+              try {
+                const m = getMatchForPlayer(playerId);
+                if (!m) return;
+                try { (m.gameWorld as any).eliminateForDisconnect?.(playerId); } catch { }
+              } catch { }
+            }, graceMs);
+            reconnectTimersByPlayerId.set(playerId, t);
+          }
 	      }
 	    }
 	    try {
@@ -1132,6 +1253,12 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
       }
       if (nonceRec) nonceRec.consumed = true;
       // Promote socket to authenticated mapping
+      try {
+        const prev = playerIdToSocket.get(publicKey);
+        if (prev && prev !== ws) {
+          try { prev.close(4000, 'Reconnected'); } catch { }
+        }
+      } catch { }
 	      pendingSockets.delete(ws);
 	      (ws as any).authenticated = true; pendingSockets.delete(ws); playerIdToSocket.set(publicKey, ws);
 	      socketToPlayerId.set(ws, publicKey);
@@ -1151,6 +1278,7 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
       socketUnauthViolations.delete(ws);
       const authMessage: AuthenticatedMessage = { type: 'authenticated', payload: { playerId: publicKey } };
       ws.send(JSON.stringify(authMessage));
+      syncPlayerAfterAuth(publicKey, ws);
 
       // Reconnect/restore: if there is a pending payment and SKIP_ENTRY_FEE is not enabled, resend it
       const pending = pendingPaymentByPlayerId.get(publicKey);

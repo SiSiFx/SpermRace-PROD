@@ -117,6 +117,8 @@ export interface GuestLoginMessage {
   type: 'guestLogin';
   payload: {
     guestName: string;
+    guestId?: string;
+    resumeToken?: string;
   };
 }
 
@@ -163,6 +165,7 @@ export interface AuthenticatedMessage {
   type: 'authenticated';
   payload: {
     playerId: string; // wallet public key base58
+    resumeToken?: string; // guest resume token
   };
 }
 

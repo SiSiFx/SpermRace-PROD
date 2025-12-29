@@ -83,6 +83,7 @@ export class GameWorld {
   private currentLobby: { entryFee: EntryFeeTier, players: string[]; mode: GameMode } | null = null;
   private players: Map<string, PlayerEntity> = new Map();
   private bots: Map<string, BotController> = new Map();
+  private disconnectedAtByPlayerId: Map<string, number> = new Map();
   private roundStartedAtMs: number | null = null;
   private shrinkFactor: number = 1; // 1..0.5
   private baseWorldWidth: number = WORLD_WIDTH;
@@ -146,6 +147,7 @@ export class GameWorld {
   startRound(players: string[], entryFee: EntryFeeTier, mode: GameMode = 'practice'): void {
     this.players.clear();
     this.bots.clear();
+    this.disconnectedAtByPlayerId.clear();
     this.items.clear();
     this.lastItemSpawnTime = 0;
     this.currentLobby = { players, entryFee, mode };
@@ -513,6 +515,37 @@ export class GameWorld {
   removePlayer(playerId: string): void {
     this.players.delete(playerId);
      this.bots.delete(playerId);
+    this.disconnectedAtByPlayerId.delete(playerId);
+    this.syncGameState();
+  }
+
+  handlePlayerDisconnect(playerId: string): void {
+    const p = this.players.get(playerId);
+    if (!p) return;
+    this.disconnectedAtByPlayerId.set(playerId, Date.now());
+    try {
+      // Stop applying thrust/boost while disconnected; player remains vulnerable in-world.
+      p.setInput({ target: { x: p.sperm.position.x, y: p.sperm.position.y }, accelerate: false, boost: false });
+    } catch { }
+  }
+
+  handlePlayerReconnect(playerId: string): void {
+    this.disconnectedAtByPlayerId.delete(playerId);
+  }
+
+  eliminateForDisconnect(playerId: string): void {
+    const p = this.players.get(playerId);
+    if (!p || !p.isAlive) return;
+    try { this.dropExtractionKeysOnElim(playerId); } catch {}
+    try { p.eliminate(); } catch { return; }
+    try {
+      const idx = (this as any).onPlayerEliminatedExt;
+      if (typeof idx === 'function') idx(playerId, undefined, { reason: 'disconnect' });
+      else this.onPlayerEliminated?.(playerId);
+    } catch {
+      this.onPlayerEliminated?.(playerId);
+    }
+    try { this.onAuditEvent?.('player_disconnect_elim', { roundId: this.gameState.roundId, playerId }); } catch { }
     this.syncGameState();
   }
 
