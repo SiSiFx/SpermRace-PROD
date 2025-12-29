@@ -176,6 +176,7 @@ class SpermRaceGame {
   public gameEffects!: GameEffects; // Instantiated in setupWorld
   public wsSendInput: null | ((target: { x: number; y: number }, accelerate: boolean, boost?: boolean) => void) = null;
   private onlineModeInitialized: boolean = false;
+  private fatalLoopError: boolean = false;
 
   private container: HTMLElement;
   private cleanupFunctions: (() => void)[] = [];
@@ -2538,6 +2539,8 @@ class SpermRaceGame {
 
   gameLoop() {
     if (!this.app) return;
+    if (this.fatalLoopError) return;
+    try {
     
     // FPS limiter for mobile (prevent overheating & battery drain)
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -2992,6 +2995,11 @@ class SpermRaceGame {
         // allow a short delay to show end
         setTimeout(() => { try { this.onExit && this.onExit(); } catch {} }, 500);
       }
+    }
+    } catch (e) {
+      this.fatalLoopError = true;
+      try { console.error('[SpermRaceGame] gameLoop crashed; stopping ticker', e); } catch { }
+      try { (this.app as any)?.ticker?.stop?.(); } catch { }
     }
   }
 

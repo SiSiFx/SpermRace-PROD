@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 console.log('[BUILD] SpermRace wallet refactor bundle loaded');
 import { Buffer } from 'buffer';
 import { isMobileDevice } from './deviceDetection';
+import AppErrorBoundary from './AppErrorBoundary';
 import '/style.css';
 
 // Ensure Buffer is available for Solana/web3 dependencies running in the browser.
@@ -77,15 +78,22 @@ const loadApp = async () => {
     await import('./mobile-controls.css');
     const { default: AppMobile } = await import('./AppMobile');
     console.log('📱 Mobile app loaded');
-    root.render(<AppMobile />);
+    root.render(
+      <AppErrorBoundary>
+        <AppMobile />
+      </AppErrorBoundary>
+    );
   } else {
     // Load PC-specific styles and component
     await import('./styles-pc.css');
     const { default: AppPC } = await import('./AppPC');
     console.log('🖥️ PC app loaded');
-    root.render(<AppPC />);
+    root.render(
+      <AppErrorBoundary>
+        <AppPC />
+      </AppErrorBoundary>
+    );
   }
 };
 
 loadApp();
-
