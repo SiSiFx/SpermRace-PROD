@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react';
 import * as PIXI from 'pixi.js';
 import { useWs } from './WsProvider';
 import { HudManager } from './HudManager';
-import { WORLD as S_WORLD } from '../../shared/dist/constants.js';
+import { WORLD as S_WORLD } from '../../shared/src/constants.ts';
 
 interface Car {
   x: number;
