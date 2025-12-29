@@ -799,7 +799,8 @@ lobbyManager.onGameStart = (lobby: Lobby) => {
     'Contrôles: pointez la souris pour nager',
     'Votre spermatozoïde laisse une trace ~5s',
     'Collision avec une trace = élimination',
-    'Premier à féconder gagne (85% du prize pool)'
+    'Dernier survivant = victoire',
+    'Tournoi payant: le gagnant reçoit 85% du prize pool'
   ];
   const gameStarting: ServerToClientMessage = { type: 'gameStarting', payload: { countdown: 0, rules } } as any;
   broadcastToLobby(lobby, gameStarting);

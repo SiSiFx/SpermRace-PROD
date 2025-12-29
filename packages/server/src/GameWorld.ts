@@ -169,21 +169,8 @@ export class GameWorld {
     this.gameState.world.width = this.baseWorldWidth;
     this.gameState.world.height = this.baseWorldHeight;
 
-    // Objective: Keys → Egg extraction (forces convergence)
-    const nowMs = Date.now();
-    const keysRequired = players.length <= 12 ? 3 : 4;
-    this.gameState.objective = {
-      kind: 'extraction',
-      keysRequired,
-      egg: {
-        x: this.gameState.world.width / 2,
-        y: this.gameState.world.height / 2,
-        radius: Math.max(120, Math.min(240, Math.floor(Math.min(this.gameState.world.width, this.gameState.world.height) * 0.10))),
-        openAtMs: nowMs + pickEggOpenDelayMs(players.length, mode),
-        holdMs: 2600,
-      },
-      keysByPlayerId: {},
-    } as any;
+    // Pure battle royale: last alive wins (no extraction objective).
+    delete (this.gameState as any).objective;
 
     players.forEach(playerId => this.spawnPlayer(playerId));
     // Spawn an initial batch of DNA fragments to seed the map
@@ -201,7 +188,6 @@ export class GameWorld {
         mode,
         players,
         world: { ...this.gameState.world },
-        objective: (this.gameState as any).objective,
       });
     } catch { }
     console.log(`🏁 Fertilization race started with ${players.length} spermatozoa. Entry fee: ${entryFee} USD.`);
@@ -223,7 +209,6 @@ export class GameWorld {
         roundId: this.gameState.roundId,
         winnerId,
         reason: this.lastWinReason,
-        objective: (this.gameState as any).objective,
       });
     } catch { }
     
@@ -403,8 +388,6 @@ export class GameWorld {
         if ((process.env.NODE_ENV || '').toLowerCase() !== 'production') {
           try { console.debug(`[DEV][ELIM] victim=${victimId.startsWith('BOT_')?victimId:`${victimId.slice(0,6)}…${victimId.slice(-4)}`} killer=${killerId? (killerId.startsWith('BOT_')?killerId:`${killerId.slice(0,6)}…${killerId.slice(-4)}`) : 'arena/self/trail'}`); } catch {}
         }
-        // If the victim carried keys, drop a couple on death to create a chase point.
-        try { this.dropExtractionKeysOnElim(victimId); } catch {}
         this.players.get(victimId)!.eliminate();
         try {
           // Broadcast through handler that can include eliminatorId
@@ -416,13 +399,6 @@ export class GameWorld {
         }
       }
     });
-
-    // 2.5 Objective update (may end the round)
-    try {
-      const nowMs = Date.now();
-      this.updateExtractionObjective(nowMs);
-      if (this.gameState.status !== 'in_progress') return;
-    } catch { }
 
     // 3. Check for a winner
     const alivePlayers = Array.from(this.players.values()).filter(p => p.isAlive);
@@ -465,17 +441,6 @@ export class GameWorld {
       }
     }
 
-    // Keep egg centered within current world bounds (so it stays meaningful as the arena shrinks).
-    try {
-      const obj: any = (this.gameState as any).objective;
-      if (obj && obj.kind === 'extraction' && obj.egg) {
-        obj.egg.x = (this.gameState.world.width || this.baseWorldWidth || WORLD_WIDTH) / 2;
-        obj.egg.y = (this.gameState.world.height || this.baseWorldHeight || WORLD_HEIGHT) / 2;
-        const minDim = Math.min(this.gameState.world.width || this.baseWorldWidth || WORLD_WIDTH, this.gameState.world.height || this.baseWorldHeight || WORLD_HEIGHT);
-        obj.egg.radius = Math.max(120, Math.min(240, Math.floor(minDim * 0.10)));
-      }
-    } catch { }
-    
     // 5. Apex Predator DNA spawning (server-authoritative)
     const nowMs = Date.now();
     if (nowMs - this.lastItemSpawnTime >= DNA_RESPAWN_RATE_MS && this.items.size < MAX_DNA_ON_MAP) {
@@ -495,7 +460,6 @@ export class GameWorld {
           const dy = py - item.y;
           if ((dx * dx + dy * dy) <= pickupRadiusSq) {
             player.absorbDNA();
-            try { this.awardExtractionKey(player.id); } catch {}
             this.items.delete(id);
             break;
           }
@@ -536,7 +500,6 @@ export class GameWorld {
   eliminateForDisconnect(playerId: string): void {
     const p = this.players.get(playerId);
     if (!p || !p.isAlive) return;
-    try { this.dropExtractionKeysOnElim(playerId); } catch {}
     try { p.eliminate(); } catch { return; }
     try {
       const idx = (this as any).onPlayerEliminatedExt;
@@ -608,114 +571,6 @@ export class GameWorld {
     };
 
     this.items.set(id, item);
-  }
-
-  private awardExtractionKey(playerId: string): void {
-    const obj: any = (this.gameState as any).objective;
-    if (!obj || obj.kind !== 'extraction') return;
-    const keysRequired = Number(obj.keysRequired) || 3;
-    const prev = Number(obj.keysByPlayerId?.[playerId] || 0) || 0;
-    const cap = Math.max(keysRequired + 2, keysRequired);
-    const next = Math.min(cap, prev + 1);
-    if (!obj.keysByPlayerId) obj.keysByPlayerId = {};
-    obj.keysByPlayerId[playerId] = next;
-    try { this.onAuditEvent?.('objective_key_awarded', { roundId: this.gameState.roundId, playerId, keys: next }); } catch { }
-  }
-
-  private dropExtractionKeysOnElim(victimId: string): void {
-    const obj: any = (this.gameState as any).objective;
-    if (!obj || obj.kind !== 'extraction') return;
-    const prev = Number(obj.keysByPlayerId?.[victimId] || 0) || 0;
-    if (prev <= 0) return;
-    const dropCount = Math.min(2, prev);
-    obj.keysByPlayerId[victimId] = Math.max(0, prev - dropCount);
-    try {
-      this.onAuditEvent?.('objective_keys_dropped', { roundId: this.gameState.roundId, victimId, dropCount, remaining: obj.keysByPlayerId[victimId] });
-    } catch { }
-
-    const victim = this.players.get(victimId);
-    if (!victim) return;
-
-    const width = this.gameState.world.width || this.baseWorldWidth || WORLD_WIDTH;
-    const height = this.gameState.world.height || this.baseWorldHeight || WORLD_HEIGHT;
-    const margin = DNA_WALL_MARGIN;
-    const baseX = victim.sperm.position.x;
-    const baseY = victim.sperm.position.y;
-    for (let i = 0; i < dropCount && this.items.size < MAX_DNA_ON_MAP; i++) {
-      const jitter = 55;
-      const rawX = baseX + (Math.random() - 0.5) * jitter;
-      const rawY = baseY + (Math.random() - 0.5) * jitter;
-      const x = Math.max(margin, Math.min(width - margin, rawX));
-      const y = Math.max(margin, Math.min(height - margin, rawY));
-      const id = uuidv4();
-      const item: GameItem = { id, type: 'dna', x, y };
-      this.items.set(id, item);
-    }
-  }
-
-  private updateExtractionObjective(nowMs: number): void {
-    const obj: any = (this.gameState as any).objective;
-    if (!obj || obj.kind !== 'extraction') return;
-    const keysRequired = Number(obj.keysRequired) || 3;
-    const egg = obj.egg;
-    if (!egg) return;
-
-    // If egg isn't open yet, nobody can hold it.
-    const open = nowMs >= Number(egg.openAtMs || 0);
-    if (!open) {
-      obj.holding = undefined;
-      return;
-    }
-
-    const holdMs = Math.max(900, Number(egg.holdMs || 0) || 2600);
-    const radius = Math.max(60, Number(egg.radius || 0) || 160);
-    const radiusSq = radius * radius;
-    const cx = Number(egg.x) || 0;
-    const cy = Number(egg.y) || 0;
-
-    const qualifies = (playerId: string): boolean => {
-      const p = this.players.get(playerId);
-      if (!p || !p.isAlive) return false;
-      const keys = Number(obj.keysByPlayerId?.[playerId] || 0) || 0;
-      if (keys < keysRequired) return false;
-      const dx = p.sperm.position.x - cx;
-      const dy = p.sperm.position.y - cy;
-      return (dx * dx + dy * dy) <= radiusSq;
-    };
-
-    // Keep existing holder if still valid.
-    const currentHolder = obj.holding?.playerId as string | undefined;
-    if (currentHolder && qualifies(currentHolder)) {
-      const sinceMs = Number(obj.holding?.sinceMs || nowMs) || nowMs;
-      obj.holding.sinceMs = sinceMs;
-      if ((nowMs - sinceMs) >= holdMs) {
-        try {
-          this.onAuditEvent?.('objective_extraction_complete', {
-            roundId: this.gameState.roundId,
-            winnerId: currentHolder,
-            sinceMs,
-            holdMs,
-            keys: Number(obj.keysByPlayerId?.[currentHolder] || 0) || 0,
-          });
-        } catch { }
-        this.lastWinReason = 'extraction';
-        void this.endRound(currentHolder);
-      }
-      return;
-    }
-
-    // Otherwise pick a new holder (first valid player).
-    if (currentHolder && !qualifies(currentHolder)) {
-      try { this.onAuditEvent?.('objective_hold_lost', { roundId: this.gameState.roundId, playerId: currentHolder }); } catch { }
-    }
-    obj.holding = undefined;
-    for (const p of this.players.values()) {
-      if (!p.isAlive) continue;
-      if (!qualifies(p.id)) continue;
-      obj.holding = { playerId: p.id, sinceMs: nowMs };
-      try { this.onAuditEvent?.('objective_hold_start', { roundId: this.gameState.roundId, playerId: p.id, sinceMs: nowMs }); } catch { }
-      break;
-    }
   }
 
   private spawnPlayer(playerId: string): void {
