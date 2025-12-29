@@ -1,8 +1,9 @@
-import { GameState, PlayerInput, EntryFeeTier, Player, GameItem } from 'shared';
+import { GameState, PlayerInput, EntryFeeTier, Player, GameItem, GameMode } from 'shared';
 import { PlayerEntity } from './Player.js';
 import { BotController } from './BotController.js';
 import { CollisionSystem } from './CollisionSystem.js';
 import { SmartContractService } from './SmartContractService.js';
+import type { DatabaseService } from './DatabaseService.js';
 import { WORLD as S_WORLD, TICK as S_TICK, COLLISION as S_COLLISION, PHYSICS as S_PHYSICS } from 'shared/dist/constants.js';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -14,9 +15,50 @@ const TICK_RATE = S_TICK.RATE;
 const TICK_INTERVAL = S_TICK.INTERVAL_MS;
 const WORLD_WIDTH = S_WORLD.WIDTH; // SYNCED WITH CLIENT gameConstants.ts
 const WORLD_HEIGHT = S_WORLD.HEIGHT; // SYNCED WITH CLIENT gameConstants.ts
-const ARENA_SHRINK_START_S = S_WORLD.ARENA_SHRINK_START_S; // start shrink near mid-game per plan pacing
-const ARENA_SHRINK_DURATION_S = S_WORLD.ARENA_SHRINK_DURATION_S; // shrink over 90s to 50%
+const ARENA_SHRINK_START_S = S_WORLD.ARENA_SHRINK_START_S;
+const ARENA_SHRINK_DURATION_S = S_WORLD.ARENA_SHRINK_DURATION_S;
 const PHYSICS_CONSTANTS = { ...S_PHYSICS } as const;
+
+function pickRoundWorldSize(playerCount: number, mode?: GameMode): { width: number; height: number } {
+  if (!Number.isFinite(playerCount) || playerCount <= 0) return { width: WORLD_WIDTH, height: WORLD_HEIGHT };
+  // Practice is about fast encounters; keep the arena tighter even for 32 players.
+  if (mode === 'practice') {
+    if (playerCount <= 4) return { width: 1500, height: 1000 };
+    if (playerCount <= 8) return { width: 1900, height: 1300 };
+    if (playerCount <= 12) return { width: 2300, height: 1600 };
+    if (playerCount <= 20) return { width: 2600, height: 1800 };
+    if (playerCount <= 32) return { width: 2600, height: 1800 };
+    return { width: 3200, height: 2300 };
+  }
+  // Smaller matches need faster encounters; large lobbies keep the classic arena.
+  if (playerCount <= 4) return { width: 1600, height: 1100 };
+  if (playerCount <= 8) return { width: 2000, height: 1400 };
+  if (playerCount <= 12) return { width: 2400, height: 1700 };
+  if (playerCount <= 20) return { width: 3000, height: 2100 };
+  return { width: WORLD_WIDTH, height: WORLD_HEIGHT };
+}
+
+function pickEggOpenDelayMs(playerCount: number, mode?: GameMode): number {
+  if (!Number.isFinite(playerCount) || playerCount <= 0) return 18000;
+  if (mode === 'tournament') {
+    if (playerCount <= 8) return 13000;
+    if (playerCount <= 16) return 16000;
+    if (playerCount <= 32) return 18000;
+    return 20000;
+  }
+  if (playerCount <= 4) return 9000;
+  if (playerCount <= 8) return 12000;
+  if (playerCount <= 12) return 15000;
+  if (playerCount <= 20) return 18000;
+  return 22000;
+}
+
+function parseNumberEnv(name: string): number | null {
+  const raw = process.env[name];
+  if (!raw || !String(raw).trim()) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
 
 // Apex Predator DNA fragment settings
 const MAX_DNA_ON_MAP = 20;
@@ -34,23 +76,32 @@ export class GameWorld {
   public gameState: GameState;
   private collisionSystem: CollisionSystem;
   private smartContractService: SmartContractService;
+  private db: DatabaseService | null = null;
   private gameLoop: NodeJS.Timeout | null = null;
   private accumulatorMs: number = 0;
   private lastUpdateAtMs: number = 0;
-  private currentLobby: { entryFee: EntryFeeTier, players: string[] } | null = null;
+  private currentLobby: { entryFee: EntryFeeTier, players: string[]; mode: GameMode } | null = null;
   private players: Map<string, PlayerEntity> = new Map();
   private bots: Map<string, BotController> = new Map();
+  private disconnectedAtByPlayerId: Map<string, number> = new Map();
   private roundStartedAtMs: number | null = null;
   private shrinkFactor: number = 1; // 1..0.5
+  private baseWorldWidth: number = WORLD_WIDTH;
+  private baseWorldHeight: number = WORLD_HEIGHT;
   private lastDevAliveLogMs: number = 0;
   private items: Map<string, GameItem> = new Map();
   private lastItemSpawnTime: number = 0;
+  private arenaShrinkStartS: number = ARENA_SHRINK_START_S;
+  private arenaShrinkDurationS: number = ARENA_SHRINK_DURATION_S;
   public onPlayerEliminated: ((playerId: string) => void) | null = null;
   public onRoundEnd: ((winnerId: string, prizeAmountSol: number, payoutSignature?: string) => void) | null = null;
+  public onAuditEvent: ((type: string, payload?: any) => void) | null = null;
+  private lastWinReason: 'last_alive' | 'extraction' | 'draw' | null = null;
 
-  constructor(smartContractService: SmartContractService) {
+  constructor(smartContractService: SmartContractService, db?: DatabaseService) {
     this.collisionSystem = new CollisionSystem(WORLD_WIDTH, WORLD_HEIGHT);
     this.smartContractService = smartContractService;
+    this.db = db || null;
     this.gameState = this.createInitialGameState();
   }
 
@@ -93,12 +144,34 @@ export class GameWorld {
     }
   }
 
-  startRound(players: string[], entryFee: EntryFeeTier): void {
+  startRound(players: string[], entryFee: EntryFeeTier, mode: GameMode = 'practice'): void {
     this.players.clear();
     this.bots.clear();
+    this.disconnectedAtByPlayerId.clear();
     this.items.clear();
     this.lastItemSpawnTime = 0;
-    this.currentLobby = { players, entryFee };
+    this.currentLobby = { players, entryFee, mode };
+
+    // Reset arena sizing for this round based on expected player count.
+    const roundSize = pickRoundWorldSize(players.length, mode);
+    this.baseWorldWidth = roundSize.width;
+    this.baseWorldHeight = roundSize.height;
+    this.shrinkFactor = 1;
+    // Mode-aware shrink pacing (can be overridden via env vars)
+    if (mode === 'tournament') {
+      this.arenaShrinkStartS = Math.max(0, parseNumberEnv('ARENA_SHRINK_START_S_TOURNAMENT') ?? parseNumberEnv('ARENA_SHRINK_START_S') ?? 12);
+      this.arenaShrinkDurationS = Math.max(5, parseNumberEnv('ARENA_SHRINK_DURATION_S_TOURNAMENT') ?? parseNumberEnv('ARENA_SHRINK_DURATION_S') ?? 45);
+    } else {
+      this.arenaShrinkStartS = Math.max(0, parseNumberEnv('ARENA_SHRINK_START_S_PRACTICE') ?? parseNumberEnv('ARENA_SHRINK_START_S') ?? 8);
+      this.arenaShrinkDurationS = Math.max(5, parseNumberEnv('ARENA_SHRINK_DURATION_S_PRACTICE') ?? parseNumberEnv('ARENA_SHRINK_DURATION_S') ?? 30);
+    }
+    this.collisionSystem.setWorldBounds(this.baseWorldWidth, this.baseWorldHeight);
+    this.gameState.world.width = this.baseWorldWidth;
+    this.gameState.world.height = this.baseWorldHeight;
+
+    // Pure battle royale: last alive wins (no extraction objective).
+    delete (this.gameState as any).objective;
+
     players.forEach(playerId => this.spawnPlayer(playerId));
     // Spawn an initial batch of DNA fragments to seed the map
     for (let i = 0; i < 10 && this.items.size < MAX_DNA_ON_MAP; i++) {
@@ -107,6 +180,16 @@ export class GameWorld {
     this.lastItemSpawnTime = Date.now();
     this.gameState.status = 'in_progress';
     this.syncGameState();
+    this.lastWinReason = null;
+    try {
+      this.onAuditEvent?.('round_start', {
+        roundId: this.gameState.roundId,
+        entryFee,
+        mode,
+        players,
+        world: { ...this.gameState.world },
+      });
+    } catch { }
     console.log(`🏁 Fertilization race started with ${players.length} spermatozoa. Entry fee: ${entryFee} USD.`);
     if ((process.env.NODE_ENV || '').toLowerCase() !== 'production') {
       try {
@@ -121,33 +204,98 @@ export class GameWorld {
     this.gameState.status = 'finished';
     this.gameState.winnerId = winnerId;
     console.log(`Round ended. Winner: ${winnerId}`);
+    try {
+      this.onAuditEvent?.('round_end', {
+        roundId: this.gameState.roundId,
+        winnerId,
+        reason: this.lastWinReason,
+      });
+    } catch { }
     
     // --- Payout Logic ---
     if (this.currentLobby && winnerId !== 'draw') {
       try {
-        const { players, entryFee } = this.currentLobby;
+        const roundId = this.gameState.roundId;
+        const { players, entryFee, mode } = this.currentLobby;
+        const isMoneyMatch = mode === 'tournament' && Number(entryFee) > 0;
+        const platformFeeBps = 1500;
+
+        // Only attempt on-chain payouts for real money matches.
+        if (!isMoneyMatch) {
+          this.onRoundEnd?.(winnerId, 0, undefined);
+          return;
+        }
+
         const lamportsPerPlayer = await this.smartContractService.getEntryFeeInLamports(entryFee);
-        const totalLamports = lamportsPerPlayer * players.length;
-        const winnerPrizeLamports = Math.floor(totalLamports * 0.85);
+        const totalLamports = Math.max(0, lamportsPerPlayer * players.length);
+        const winnerPrizeLamports = Math.max(0, Math.floor(totalLamports * 0.85));
         const winnerPrizeSol = winnerPrizeLamports / 1_000_000_000;
+        if (winnerPrizeLamports <= 0) {
+          try { this.onAuditEvent?.('payout_skipped', { roundId, winnerId, reason: 'no_prize' }); } catch { }
+          this.onRoundEnd?.(winnerId, 0, undefined);
+          return;
+        }
+
+        // Idempotency: if we already paid this round, never pay again.
+        try {
+          const existing = this.db?.getPayoutByRoundId(roundId) || null;
+          if (existing && existing.status === 'sent' && existing.tx_signature) {
+            try { this.onAuditEvent?.('payout_skipped', { roundId, winnerId, reason: 'already_sent', txSig: existing.tx_signature }); } catch { }
+            this.onRoundEnd?.(winnerId, winnerPrizeSol, existing.tx_signature);
+            return;
+          }
+        } catch { }
+
+        try {
+          this.onAuditEvent?.('payout_planned', {
+            roundId,
+            winnerId,
+            entryFee,
+            mode,
+            players,
+            lamportsPerPlayer,
+            totalLamports,
+            winnerPrizeLamports,
+            platformFeeBps,
+          });
+        } catch { }
+
+        try {
+          this.db?.recordPayoutPlanned({
+            roundId,
+            winnerWallet: winnerId,
+            prizeLamports: winnerPrizeLamports,
+            platformFeeBps,
+          });
+        } catch { }
         // Payout 85% to winner, 15% routed to platform within service
         // Only payout if winnerId appears to be a real wallet (not a bot)
         let txSig: string | undefined = undefined;
         const isBotWinner = typeof winnerId === 'string' && (winnerId.startsWith('BOT_') || winnerId.startsWith('Guest_') || winnerId.startsWith('PLAYER_'));
         if (isBotWinner) {
           console.log('[PAYOUT] Skipping payout: winner is a dev bot');
+          try { this.onAuditEvent?.('payout_skipped', { roundId, winnerId, reason: 'bot_winner' }); } catch { }
+          try { this.db?.recordPayoutSkipped(roundId, 'bot_winner'); } catch { }
         } else {
           try {
             const { PublicKey } = await import('@solana/web3.js');
             const winnerPk = new PublicKey(winnerId); // will throw if invalid base58
-            txSig = await this.smartContractService.payoutPrizeLamports(winnerPk, winnerPrizeLamports, 1500);
+            txSig = await this.smartContractService.payoutPrizeLamports(winnerPk, winnerPrizeLamports, platformFeeBps);
+            try { this.onAuditEvent?.('payout_sent', { roundId, winnerId, winnerPrizeLamports, txSig }); } catch { }
+            try { if (txSig) this.db?.recordPayoutSent(roundId, txSig); } catch { }
           } catch (e) {
             console.warn('[PAYOUT] Skipping payout (invalid winner pubkey or configuration error):', e);
+            const err = String((e as any)?.message || e);
+            try { this.onAuditEvent?.('payout_failed', { roundId, winnerId, error: err }); } catch { }
+            try { this.db?.recordPayoutFailed(roundId, err); } catch { }
           }
         }
         this.onRoundEnd?.(winnerId, winnerPrizeSol, txSig);
       } catch (error) {
         console.error('❌ Payout failed:', error);
+        const err = String((error as any)?.message || error);
+        try { this.onAuditEvent?.('payout_failed', { roundId: this.gameState.roundId, winnerId, error: err }); } catch { }
+        try { this.db?.recordPayoutFailed(this.gameState.roundId, err); } catch { }
       }
     }
     
@@ -268,29 +416,31 @@ export class GameWorld {
           console.debug(`[DEV][WIN] single survivor → ${id.startsWith('BOT_')?id:`${id.slice(0,6)}…${id.slice(-4)}`}`);
         } catch {}
       }
+      this.lastWinReason = 'last_alive';
       this.endRound(alivePlayers[0].id);
     } else if (this.players.size > 0 && alivePlayers.length === 0) {
       // Handle case where all players are eliminated simultaneously (draw)
       if ((process.env.NODE_ENV || '').toLowerCase() !== 'production') {
         try { console.debug('[DEV][WIN] draw → all eliminated'); } catch {}
       }
+      this.lastWinReason = 'draw';
       this.endRound('draw');
     }
 
     // 4. Shrinking arena logic
     if (this.roundStartedAtMs) {
       const elapsedS = (Date.now() - this.roundStartedAtMs) / 1000;
-      if (elapsedS > ARENA_SHRINK_START_S) {
-        const t = Math.min(1, (elapsedS - ARENA_SHRINK_START_S) / ARENA_SHRINK_DURATION_S);
+      if (elapsedS > this.arenaShrinkStartS) {
+        const t = Math.min(1, (elapsedS - this.arenaShrinkStartS) / this.arenaShrinkDurationS);
         this.shrinkFactor = 1 - 0.5 * t; // shrink to 50%
-        const newW = Math.max(800, Math.floor(WORLD_WIDTH * this.shrinkFactor));
-        const newH = Math.max(600, Math.floor(WORLD_HEIGHT * this.shrinkFactor));
+        const newW = Math.max(800, Math.floor(this.baseWorldWidth * this.shrinkFactor));
+        const newH = Math.max(600, Math.floor(this.baseWorldHeight * this.shrinkFactor));
         this.collisionSystem.setWorldBounds(newW, newH);
         this.gameState.world.width = newW;
         this.gameState.world.height = newH;
       }
     }
-    
+
     // 5. Apex Predator DNA spawning (server-authoritative)
     const nowMs = Date.now();
     if (nowMs - this.lastItemSpawnTime >= DNA_RESPAWN_RATE_MS && this.items.size < MAX_DNA_ON_MAP) {
@@ -329,6 +479,36 @@ export class GameWorld {
   removePlayer(playerId: string): void {
     this.players.delete(playerId);
      this.bots.delete(playerId);
+    this.disconnectedAtByPlayerId.delete(playerId);
+    this.syncGameState();
+  }
+
+  handlePlayerDisconnect(playerId: string): void {
+    const p = this.players.get(playerId);
+    if (!p) return;
+    this.disconnectedAtByPlayerId.set(playerId, Date.now());
+    try {
+      // Stop applying thrust/boost while disconnected; player remains vulnerable in-world.
+      p.setInput({ target: { x: p.sperm.position.x, y: p.sperm.position.y }, accelerate: false, boost: false });
+    } catch { }
+  }
+
+  handlePlayerReconnect(playerId: string): void {
+    this.disconnectedAtByPlayerId.delete(playerId);
+  }
+
+  eliminateForDisconnect(playerId: string): void {
+    const p = this.players.get(playerId);
+    if (!p || !p.isAlive) return;
+    try { p.eliminate(); } catch { return; }
+    try {
+      const idx = (this as any).onPlayerEliminatedExt;
+      if (typeof idx === 'function') idx(playerId, undefined, { reason: 'disconnect' });
+      else this.onPlayerEliminated?.(playerId);
+    } catch {
+      this.onPlayerEliminated?.(playerId);
+    }
+    try { this.onAuditEvent?.('player_disconnect_elim', { roundId: this.gameState.roundId, playerId }); } catch { }
     this.syncGameState();
   }
 
@@ -371,8 +551,16 @@ export class GameWorld {
     const width = this.gameState.world.width || WORLD_WIDTH;
     const height = this.gameState.world.height || WORLD_HEIGHT;
     const margin = DNA_WALL_MARGIN;
-    const x = margin + Math.random() * Math.max(0, width - margin * 2);
-    const y = margin + Math.random() * Math.max(0, height - margin * 2);
+    // Bias spawns toward the middle to create natural meeting points.
+    const cx = width / 2;
+    const cy = height / 2;
+    const maxR = Math.max(0, Math.min(width, height) * 0.42);
+    const theta = Math.random() * Math.PI * 2;
+    const r = maxR * Math.pow(Math.random(), 0.65); // more density near center
+    const rawX = cx + Math.cos(theta) * r;
+    const rawY = cy + Math.sin(theta) * r;
+    const x = Math.max(margin, Math.min(width - margin, rawX));
+    const y = Math.max(margin, Math.min(height - margin, rawY));
     const id = uuidv4();
 
     const item: GameItem = {
@@ -386,12 +574,49 @@ export class GameWorld {
   }
 
   private spawnPlayer(playerId: string): void {
-    // Spawn farther apart by sampling until a minimum distance from existing spawns
-    const MIN_SPAWN_DIST = 1100; // increased for ultrafast speeds
-    const WALL_MARGIN = 240; // keep away from walls to avoid instant bounces
+    const width = this.gameState.world.width || this.baseWorldWidth || WORLD_WIDTH;
+    const height = this.gameState.world.height || this.baseWorldHeight || WORLD_HEIGHT;
+
+    // Smaller matches should start closer for faster encounters.
+    const spawnPopulation = this.currentLobby?.players.length ?? (this.players.size + 1);
+    const lobbyMode: GameMode = this.currentLobby?.mode || 'practice';
+    const spawnMode: 'cluster' | 'mid' | 'spread' =
+      lobbyMode === 'practice'
+        ? (spawnPopulation <= 32 ? 'cluster' : 'mid')
+        : (spawnPopulation <= 8 ? 'cluster' : spawnPopulation <= 16 ? 'mid' : 'spread');
+
+    const minDim = Math.min(width, height);
+    const WALL_MARGIN = Math.min(240, Math.max(120, Math.floor(minDim * 0.08))); // keep away from walls
+    const requestedMinSpawnDist = spawnMode === 'cluster' ? 420 : spawnMode === 'mid' ? 750 : 1100;
+    const maxInside = Math.max(200, Math.floor(minDim - 2 * WALL_MARGIN));
+    const MIN_SPAWN_DIST = Math.min(requestedMinSpawnDist, Math.floor(maxInside * 0.75));
+
+    const center = { x: width / 2, y: height / 2 };
+    const clusterRadius =
+      spawnMode === 'cluster'
+        ? Math.max(320, Math.floor(minDim * 0.20))
+        : Math.max(520, Math.floor(minDim * 0.38));
+
+    const sampleCandidate = (): { x: number; y: number } => {
+      if (spawnMode === 'spread') {
+        return {
+          x: WALL_MARGIN + Math.random() * (width - 2 * WALL_MARGIN),
+          y: WALL_MARGIN + Math.random() * (height - 2 * WALL_MARGIN),
+        };
+      }
+      const theta = Math.random() * Math.PI * 2;
+      const r = clusterRadius * Math.sqrt(Math.random());
+      const x = center.x + Math.cos(theta) * r;
+      const y = center.y + Math.sin(theta) * r;
+      return {
+        x: Math.max(WALL_MARGIN, Math.min(width - WALL_MARGIN, x)),
+        y: Math.max(WALL_MARGIN, Math.min(height - WALL_MARGIN, y)),
+      };
+    };
+
     let spawnPosition: { x: number; y: number } = { x: 0, y: 0 };
-    for (let tries = 0; tries < 40; tries++) {
-      const cand = { x: WALL_MARGIN + Math.random() * (WORLD_WIDTH - 2 * WALL_MARGIN), y: WALL_MARGIN + Math.random() * (WORLD_HEIGHT - 2 * WALL_MARGIN) };
+    for (let tries = 0; tries < 60; tries++) {
+      const cand = sampleCandidate();
       let ok = true;
       for (const p of this.players.values()) {
         const dx = cand.x - p.sperm.position.x;

@@ -68,6 +68,13 @@ function AppInner() {
   const overlayActive = (wsState.phase === 'connecting' || wsState.phase === 'authenticating' || wsState.entryFee.pending);
 
   useEffect(() => {
+    try {
+      const qs = new URLSearchParams(window.location.search);
+      if (qs.get('practice') === '1') setScreen('practice');
+    } catch { }
+  }, []);
+
+  useEffect(() => {
     let id: any;
     if (overlayActive) {
       setLoadProg(0);
@@ -1466,7 +1473,7 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void }
 }
 
 function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onChangeTier: () => void }) {
-  const { state: wsState } = useWs();
+  const { state: wsState, connectAndJoin } = useWs();
   const { publicKey } = useWallet();
   const tx = wsState.lastRound?.txSignature;
   const winner = wsState.lastRound?.winnerId;
@@ -1474,6 +1481,30 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
   const solscan = tx ? `https://solscan.io/tx/${tx}${SOLANA_CLUSTER === 'devnet' ? '?cluster=devnet' : ''}` : null;
   const selfId = wsState.playerId || publicKey || '';
   const isWinner = !!winner && winner === selfId;
+  const [playAgainBusy, setPlayAgainBusy] = useState(false);
+
+  const handlePlayAgain = async () => {
+    if (playAgainBusy) return;
+    // Only auto-requeue for real online matches; fallback for solo/offline flows.
+    if (wsState.phase !== 'ended') { onPlayAgain(); return; }
+    setPlayAgainBusy(true);
+    try {
+      let last: any = null;
+      try { last = JSON.parse(localStorage.getItem('sr_last_join') || 'null'); } catch { }
+      const lobby: any = wsState.lobby || null;
+      const entryFeeTier = (lobby?.entryFee ?? last?.entryFeeTier ?? 0) as any;
+      const mode = (lobby?.mode ?? last?.mode ?? (entryFeeTier === 0 ? 'practice' : 'tournament')) as any;
+      const guestName =
+        mode === 'practice'
+          ? (last?.guestName || localStorage.getItem('sr_guest_name') || lobby?.playerNames?.[wsState.playerId || ''] || 'Guest')
+          : undefined;
+      await connectAndJoin({ entryFeeTier, mode, ...(guestName ? { guestName } : {}) });
+    } catch {
+      onPlayAgain();
+    } finally {
+      setPlayAgainBusy(false);
+    }
+  };
 
   let rankText: string | null = null;
   try {
@@ -1523,8 +1554,8 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
         )}
 
         <div className="round-actions pc-actions">
-          <button className="btn-primary pc-btn-large" onClick={onPlayAgain}>
-            Play Again
+          <button className="btn-primary pc-btn-large" onClick={handlePlayAgain} disabled={playAgainBusy}>
+            {playAgainBusy ? 'Joining…' : 'Play Again'}
           </button>
           <button className="btn-secondary pc-btn" onClick={onChangeTier}>
             Main Menu
@@ -1534,4 +1565,3 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
     </div>
   );
 }
-

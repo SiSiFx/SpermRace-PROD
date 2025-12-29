@@ -1,7 +1,7 @@
 import 'dotenv/config.js';
 import { WebSocketServer, WebSocket } from 'ws';
 import http from 'http';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHash } from 'crypto';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -12,6 +12,7 @@ import { LobbyManager } from './LobbyManager.js';
 import { AuthService } from './AuthService.js';
 import { SmartContractService } from './SmartContractService.js';
 import { DatabaseService } from './DatabaseService.js';
+import { AuditLogger } from './AuditLogger.js';
 import { ClientToServerMessage, ServerToClientMessage, GameStateUpdateMessage, LobbyStateMessage, Lobby, AuthenticatedMessage } from 'shared';
 import { clientToServerMessageSchema } from 'shared/dist/schemas.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -66,20 +67,24 @@ if (IS_PRODUCTION) {
 // Single HTTP server hosting both API and WebSocket (path /ws)
 const app = express();
 const server = http.createServer(app);
+const WS_PERMESSAGE_DEFLATE = (process.env.WS_PERMESSAGE_DEFLATE || (IS_PRODUCTION ? '0' : '1')).toLowerCase();
+const enableWsDeflate = WS_PERMESSAGE_DEFLATE === '1' || WS_PERMESSAGE_DEFLATE === 'true' || WS_PERMESSAGE_DEFLATE === 'yes';
 const wss = new WebSocketServer({
   server,
   path: '/ws',
-  perMessageDeflate: { threshold: 1024 }
+  perMessageDeflate: enableWsDeflate ? { threshold: 1024 } : false
 });
 
 const smartContractService = new SmartContractService();
-const gameWorld = new GameWorld(smartContractService);
 const lobbyManager = new LobbyManager(smartContractService);
 
 // Database for leaderboards and player stats
 const DB_PATH = process.env.DB_PATH || './packages/server/data/spermrace.db';
 const db = new DatabaseService(DB_PATH);
 log.info(`[DB] Using database: ${DB_PATH}`);
+const BUILD_SHA = (process.env.GIT_SHA || process.env.COMMIT_SHA || process.env.VERCEL_GIT_COMMIT_SHA || process.env.RENDER_GIT_COMMIT || '').toString() || undefined;
+const AUDIT_DIR = process.env.AUDIT_DIR || './packages/server/data/audit';
+const audit = new AuditLogger({ dir: AUDIT_DIR, build: BUILD_SHA });
 const pendingSockets = new Set<WebSocket>();
 const playerIdToSocket = new Map<string, WebSocket>();
 const socketToPlayerId = new Map<WebSocket, string>();
@@ -104,7 +109,284 @@ const usedPaymentIds = new Set<string>();
 const sessionTokens = new Map<string, { playerId: string; createdAt: number }>();
 const SESSION_TOKEN_TTL_MS = 300000; // 5 minutes
 
-gameWorld.start();
+// Guest resume (practice): lets mobile reconnect without losing the match.
+const guestSessions = new Map<string, { resumeToken: string; name: string; updatedAt: number }>();
+const GUEST_SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+
+function cleanupGuestSessions(now = Date.now()): void {
+  try {
+    for (const [guestId, s] of guestSessions.entries()) {
+      if (!s || (now - s.updatedAt) > GUEST_SESSION_TTL_MS) guestSessions.delete(guestId);
+    }
+  } catch { }
+}
+
+function sanitizeGuestName(name: string | undefined): string {
+  return (name || 'Guest').trim().slice(0, 20).replace(/[^a-zA-Z0-9 ]/g, '') || 'Guest';
+}
+
+function getGuestSession(requestedId: string | undefined, resumeToken: string | undefined, cleanName: string): { guestId: string; resumeToken: string } {
+  const now = Date.now();
+  cleanupGuestSessions(now);
+  try {
+    const rid = (requestedId || '').trim();
+    const tok = (resumeToken || '').trim();
+    if (rid && tok) {
+      const existing = guestSessions.get(rid);
+      if (existing && existing.resumeToken === tok) {
+        existing.updatedAt = now;
+        existing.name = cleanName || existing.name || 'Guest';
+        guestSessions.set(rid, existing);
+        return { guestId: rid, resumeToken: existing.resumeToken };
+      }
+    }
+  } catch { }
+
+  const guestId = `guest-${uuidv4()}`;
+  const newToken = randomUUID();
+  guestSessions.set(guestId, { resumeToken: newToken, name: cleanName || 'Guest', updatedAt: now });
+  return { guestId, resumeToken: newToken };
+}
+
+// Match resume: keep players in-round for a short grace window.
+const reconnectTimersByPlayerId = new Map<string, NodeJS.Timeout>();
+function getReconnectGraceMs(mode: import('shared').GameMode): number {
+  const key = mode === 'tournament' ? 'MATCH_RECONNECT_GRACE_MS_TOURNAMENT' : 'MATCH_RECONNECT_GRACE_MS_PRACTICE';
+  const raw = process.env[key] || process.env.MATCH_RECONNECT_GRACE_MS || '';
+  const n = parseInt(String(raw || '').trim() || (mode === 'tournament' ? '10000' : '20000'), 10);
+  if (!Number.isFinite(n) || n < 0) return mode === 'tournament' ? 10000 : 20000;
+  return Math.min(60000, n);
+}
+
+function clearReconnectTimer(playerId: string): void {
+  try {
+    const t = reconnectTimersByPlayerId.get(playerId);
+    if (t) clearTimeout(t);
+  } catch { }
+  reconnectTimersByPlayerId.delete(playerId);
+}
+
+function sendLobbyStateToPlayer(ws: WebSocket, lobby: Lobby): void {
+  try {
+    const playerNamesMap: Record<string, string> = {};
+    lobby.players.forEach((pid) => {
+      playerNamesMap[pid] = playerIdToName.get(pid)
+        || (pid.startsWith('BOT_') ? 'Bot' : pid.startsWith('guest-') ? 'Guest' : pid.slice(0, 4) + '…' + pid.slice(-4));
+    });
+    const message: LobbyStateMessage = { type: 'lobbyState', payload: { ...lobby, playerNames: playerNamesMap } as any };
+    safeSend(ws, JSON.stringify(message as any), 'generic');
+  } catch { }
+}
+
+function syncPlayerAfterAuth(playerId: string, ws: WebSocket): void {
+  try {
+    clearReconnectTimer(playerId);
+  } catch { }
+  try {
+    const match = getMatchForPlayer(playerId);
+    if (match) {
+      try { (match.gameWorld as any).handlePlayerReconnect?.(playerId); } catch { }
+      // gameStateUpdate broadcasts will pick this socket up automatically
+      return;
+    }
+  } catch { }
+  try {
+    const lobby = lobbyManager.getLobbyForPlayer(playerId);
+    if (lobby) sendLobbyStateToPlayer(ws, lobby);
+  } catch { }
+}
+
+// =================================================================================================
+// Anti-abuse telemetry (hashed; no raw IP stored)
+// =================================================================================================
+
+const ABUSE_TELEMETRY = (process.env.ABUSE_TELEMETRY || '1').toLowerCase() !== '0';
+const ABUSE_SALT = (process.env.ABUSE_SALT || '').toString();
+const ABUSE_LOG_FULL_IP_HASH = (process.env.ABUSE_LOG_FULL_IP_HASH || '0').toLowerCase() === '1';
+if (ABUSE_TELEMETRY && IS_PRODUCTION && !ABUSE_SALT) {
+  log.warn('[ABUSE] ABUSE_SALT is not set; hashes are unsalted (set ABUSE_SALT for stronger anti-collusion signals).');
+}
+
+type ConnMeta = { ipHash?: string; ipPrefixHash?: string; uaHash?: string };
+const socketToConnMeta = new Map<WebSocket, ConnMeta>();
+const playerIdToConnMeta = new Map<string, ConnMeta>();
+
+function sha256Hex(input: string): string {
+  return createHash('sha256').update(input).digest('hex');
+}
+function hashWithSalt(value: string): string {
+  const base = ABUSE_SALT ? `${ABUSE_SALT}|${value}` : value;
+  return sha256Hex(base);
+}
+function normalizeIp(ip: string | null | undefined): string | null {
+  if (!ip) return null;
+  const s = String(ip).trim();
+  if (!s) return null;
+  if (s.startsWith('::ffff:')) return s.slice('::ffff:'.length);
+  return s;
+}
+function ipPrefix(ip: string | null): string | null {
+  if (!ip) return null;
+  if (ip.includes('.')) {
+    const parts = ip.split('.');
+    if (parts.length === 4) return `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
+  }
+  if (ip.includes(':')) {
+    const parts = ip.split(':').filter(Boolean);
+    return parts.slice(0, 4).join(':') + '::/64';
+  }
+  return ip;
+}
+function getClientIp(req: any): string | null {
+  try {
+    const xff = req?.headers?.['x-forwarded-for'];
+    const first = Array.isArray(xff) ? xff[0] : (typeof xff === 'string' ? xff.split(',')[0] : null);
+    return normalizeIp(first || req?.socket?.remoteAddress || null);
+  } catch {
+    return null;
+  }
+}
+function getUserAgent(req: any): string | null {
+  try {
+    const ua = req?.headers?.['user-agent'];
+    if (!ua) return null;
+    return String(ua).slice(0, 256);
+  } catch {
+    return null;
+  }
+}
+
+type Match = {
+  matchId: string;
+  lobbyId: string;
+  entryFee: import('shared').EntryFeeTier;
+  mode: import('shared').GameMode;
+  entrants: string[];
+  gameWorld: GameWorld;
+  startedAtMs: number;
+  cleanupTimer?: NodeJS.Timeout;
+  lastTrailCreatedAtByPlayerId: Map<string, number>;
+};
+const matchesById = new Map<string, Match>();
+const playerToMatchId = new Map<string, string>();
+
+function getMatchForPlayer(playerId: string): Match | null {
+  const matchId = playerToMatchId.get(playerId);
+  if (!matchId) return null;
+  return matchesById.get(matchId) || null;
+}
+
+function broadcastToPlayers(playerIds: string[], message: ServerToClientMessage): void {
+  const messageString = JSON.stringify(message);
+  for (const playerId of playerIds) {
+    const ws = playerIdToSocket.get(playerId);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      safeSend(ws, messageString, 'generic');
+    }
+  }
+}
+
+function removeMatch(matchId: string): void {
+  const match = matchesById.get(matchId);
+  if (!match) return;
+  try { if (match.cleanupTimer) clearTimeout(match.cleanupTimer); } catch { }
+  try { match.gameWorld.stop(); } catch { }
+  try { audit.log('match_cleanup', { matchId, lobbyId: match.lobbyId, roundId: match.gameWorld.gameState.roundId }); } catch { }
+  matchesById.delete(matchId);
+  for (const pid of match.entrants) {
+    if (playerToMatchId.get(pid) === matchId) playerToMatchId.delete(pid);
+    try { clearReconnectTimer(pid); } catch { }
+  }
+}
+
+function createAndStartMatch(lobby: Lobby): Match {
+  const matchId = lobby.lobbyId;
+  const existing = matchesById.get(matchId);
+  if (existing) return existing;
+
+  const entrants = [...lobby.players];
+  const gameWorld = new GameWorld(smartContractService, db);
+  const match: Match = {
+    matchId,
+    lobbyId: lobby.lobbyId,
+    entryFee: lobby.entryFee,
+    mode: lobby.mode,
+    entrants,
+    gameWorld,
+    startedAtMs: Date.now(),
+    lastTrailCreatedAtByPlayerId: new Map(),
+  };
+  matchesById.set(matchId, match);
+  for (const pid of entrants) playerToMatchId.set(pid, matchId);
+
+  // Anti-abuse match telemetry (hashed): detect clustering by IP prefix.
+  try {
+    if (ABUSE_TELEMETRY) {
+      const counts = new Map<string, number>();
+      for (const pid of entrants) {
+        const meta = playerIdToConnMeta.get(pid);
+        if (meta?.ipPrefixHash) counts.set(meta.ipPrefixHash, (counts.get(meta.ipPrefixHash) || 0) + 1);
+      }
+      let maxSamePrefix = 0;
+      for (const c of counts.values()) if (c > maxSamePrefix) maxSamePrefix = c;
+      audit.log('match_conn_fingerprint', {
+        matchId,
+        lobbyId: lobby.lobbyId,
+        mode: lobby.mode,
+        entrants: entrants.length,
+        uniqueIpPrefixHashes: counts.size,
+        maxSameIpPrefix: maxSamePrefix,
+      });
+    }
+  } catch { }
+
+  gameWorld.onAuditEvent = (type: string, payload?: any) => {
+    try { audit.log(type, { matchId, lobbyId: lobby.lobbyId, mode: lobby.mode, ...(payload || {}) }); } catch { }
+  };
+
+  // Per-match eliminations and debug events
+  (gameWorld as any).onPlayerEliminatedExt = (victimId: string, killerId?: string, debug?: any) => {
+    const message: ServerToClientMessage = { type: 'playerEliminated', payload: { playerId: victimId, eliminatorId: killerId } } as any;
+    broadcastToPlayers(match.entrants, message);
+    try {
+      const allowDebug = (process.env.ENABLE_DEBUG_COLLISIONS || '').toLowerCase() === 'true';
+      if (allowDebug && debug && debug.type === 'trail') {
+        const dbg: any = { type: 'debugCollision', payload: { victimId, killerId, hit: debug.hit, segment: debug.segment, normal: debug.normal, relSpeed: debug.relSpeed, ts: Date.now() } };
+        broadcastToPlayers(match.entrants, dbg);
+      }
+    } catch { }
+  };
+
+  gameWorld.onRoundEnd = (winnerId, prizeAmount, txSignature) => {
+    const message: ServerToClientMessage = { type: 'roundEnd', payload: { winnerId, prizeAmount, txSignature } } as any;
+    broadcastToPlayers(match.entrants, message);
+
+    // Record game result in database (async, fire-and-forget)
+    try {
+      if (prizeAmount > 0) {
+        const prizeLamports = Math.floor(prizeAmount * 1_000_000_000);
+        const killsMap: Record<string, number> = {};
+        for (const wallet of match.entrants) killsMap[wallet] = 0;
+        db.recordGameResult(winnerId, prizeLamports, match.entrants.length, killsMap);
+        log.info(`[DB] Recorded game result for ${match.entrants.length} players`);
+      }
+    } catch (error) {
+      log.error('[DB] Failed to record game result:', error);
+    }
+
+    // Cleanup match after a short delay (let clients display results)
+    try {
+      if (!match.cleanupTimer) {
+        match.cleanupTimer = setTimeout(() => removeMatch(matchId), 8000);
+      }
+    } catch { }
+  };
+
+  gameWorld.startRound(entrants, lobby.entryFee, lobby.mode as any);
+  gameWorld.start();
+  try { audit.log('match_world_started', { matchId, lobbyId: lobby.lobbyId, entrants, entryFee: lobby.entryFee, mode: lobby.mode }); } catch { }
+  return match;
+}
 
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://spermrace.io,https://www.spermrace.io,https://sperm-race-io.vercel.app,http://localhost:5174')
   .split(',')
@@ -487,14 +769,17 @@ server.listen(PORT, () => {
 lobbyManager.onLobbyUpdate = (lobby: Lobby) => {
   const playerNamesMap: Record<string, string> = {};
   lobby.players.forEach(pid => {
-    playerNamesMap[pid] = playerIdToName.get(pid) || (pid.startsWith("guest-") ? "Guest" : pid.slice(0, 4) + "…" + pid.slice(-4));
+    playerNamesMap[pid] = playerIdToName.get(pid)
+      || (pid.startsWith("BOT_") ? "Bot" : pid.startsWith("guest-") ? "Guest" : pid.slice(0, 4) + "…" + pid.slice(-4));
   });
   const message: LobbyStateMessage = { type: 'lobbyState', payload: { ...lobby, playerNames: playerNamesMap } as any };
   broadcastToLobby(lobby, message);
+  try { audit.log('lobby_update', { lobbyId: lobby.lobbyId, mode: lobby.mode, entryFee: lobby.entryFee, status: lobby.status, players: lobby.players }); } catch { }
 };
 
 lobbyManager.onGameStart = (lobby: Lobby) => {
   log.info(`📢 Fertilization race starting for lobby ${lobby.lobbyId}`);
+  try { audit.log('match_start', { lobbyId: lobby.lobbyId, mode: lobby.mode, entryFee: lobby.entryFee, players: lobby.players }); } catch { }
   // Consume paid tickets for players admitted to this game round
   try {
     lobby.players.forEach(pid => {
@@ -504,12 +789,18 @@ lobbyManager.onGameStart = (lobby: Lobby) => {
       }
     });
   } catch { }
-  gameWorld.startRound(lobby.players, lobby.entryFee);
+  try {
+    createAndStartMatch(lobby);
+  } catch (e) {
+    log.error('[MATCH] Failed to start match world:', e);
+    try { audit.log('match_start_failed', { lobbyId: lobby.lobbyId, mode: lobby.mode, entryFee: lobby.entryFee, players: lobby.players, error: String((e as any)?.message || e) }); } catch { }
+  }
   const rules = [
     'Contrôles: pointez la souris pour nager',
     'Votre spermatozoïde laisse une trace ~5s',
     'Collision avec une trace = élimination',
-    'Premier à féconder gagne (85% du prize pool)'
+    'Dernier survivant = victoire',
+    'Tournoi payant: le gagnant reçoit 85% du prize pool'
   ];
   const gameStarting: ServerToClientMessage = { type: 'gameStarting', payload: { countdown: 0, rules } } as any;
   broadcastToLobby(lobby, gameStarting);
@@ -518,6 +809,11 @@ lobbyManager.onGameStart = (lobby: Lobby) => {
 lobbyManager.onLobbyCountdown = (lobby, remaining, startAtMs) => {
   const msg: ServerToClientMessage = { type: 'lobbyCountdown', payload: { lobbyId: lobby.lobbyId, remaining, startAtMs } } as any;
   broadcastToLobby(lobby, msg);
+  try {
+    if (remaining === Math.ceil((startAtMs - Date.now()) / 1000) || remaining % 5 === 0 || remaining <= 5) {
+      audit.log('lobby_countdown', { lobbyId: lobby.lobbyId, remaining, startAtMs, players: lobby.players.length });
+    }
+  } catch { }
 
   // If solo player, show discrete countdown
   // Timeline: 0-30s = silent waiting, 30-50s = show countdown every second
@@ -553,6 +849,7 @@ lobbyManager.onLobbyRefund = async (lobby: Lobby, playerId: string, _calculatedL
   try {
     // Issue refund transaction with network fee deducted
     const txSignature = await smartContractService.refundPlayer(playerId, refundAmount);
+    try { audit.log('refund_sent', { lobbyId: lobby.lobbyId, playerId, lamports: refundAmount, txSignature }); } catch { }
 
     // Clear payment tracking - player needs to pay again if they want to rejoin
     paidPlayers.delete(playerId);
@@ -583,6 +880,7 @@ lobbyManager.onLobbyRefund = async (lobby: Lobby, playerId: string, _calculatedL
     console.log(`[REFUND] ✅ Refund completed for ${playerId}: ${txSignature}`);
   } catch (error) {
     console.error(`[REFUND] ❌ Failed to refund ${playerId}:`, error);
+    try { audit.log('refund_failed', { lobbyId: lobby.lobbyId, playerId, lamports: refundAmount, error: String((error as any)?.message || error) }); } catch { }
 
     // ✅ FIX #2: Notify player of refund failure with details
     const socket = playerIdToSocket.get(playerId);
@@ -616,49 +914,6 @@ lobbyManager.onLobbyRefund = async (lobby: Lobby, playerId: string, _calculatedL
   }
 };
 
-gameWorld.onPlayerEliminated = (playerId) => {
-  const message: ServerToClientMessage = { type: 'playerEliminated', payload: { playerId } } as any;
-  broadcastToAll(message);
-};
-// Extended eliminations with killer
-(gameWorld as any).onPlayerEliminatedExt = (victimId: string, killerId?: string, debug?: any) => {
-  const message: ServerToClientMessage = { type: 'playerEliminated', payload: { playerId: victimId, eliminatorId: killerId } } as any;
-  broadcastToAll(message);
-  try {
-    const allowDebug = (process.env.ENABLE_DEBUG_COLLISIONS || '').toLowerCase() === 'true';
-    if (allowDebug && debug && debug.type === 'trail') {
-      const dbg: any = { type: 'debugCollision', payload: { victimId, killerId, hit: debug.hit, segment: debug.segment, normal: debug.normal, relSpeed: debug.relSpeed, ts: Date.now() } };
-      broadcastToAll(dbg);
-    }
-  } catch { }
-};
-
-gameWorld.onRoundEnd = (winnerId, prizeAmount, txSignature) => {
-  const message: ServerToClientMessage = { type: 'roundEnd', payload: { winnerId, prizeAmount, txSignature } } as any;
-  broadcastToAll(message);
-
-  // Record game result in database (async, fire-and-forget)
-  try {
-    const lobby = lobbyManager.getLobbyForPlayer(winnerId);
-    if (lobby && prizeAmount > 0) {
-      const prizeLamports = Math.floor(prizeAmount * 1_000_000_000);
-      const playerWallets = lobby.players; // all player IDs (wallet addresses)
-
-      // Build kills map (kills tracking not implemented yet, default to 0)
-      const killsMap: Record<string, number> = {};
-      for (const wallet of playerWallets) {
-        killsMap[wallet] = 0; // TODO: Add kills tracking to GameWorld
-      }
-
-      db.recordGameResult(winnerId, prizeLamports, playerWallets.length, killsMap);
-      log.info(`[DB] Recorded game result for ${playerWallets.length} players`);
-    }
-  } catch (error) {
-    log.error('[DB] Failed to record game result:', error);
-  }
-};
-
-
 // =================================================================================================
 // Connection Handling
 // =================================================================================================
@@ -682,11 +937,17 @@ wss.on('connection', (ws: WebSocket, req: any) => {
     sessionToken = url.searchParams.get('token');
 
     if (sessionToken) {
+      // Clean up expired tokens periodically (cheap; map is small in practice)
+      try {
+        const now = Date.now();
+        for (const [token, data] of sessionTokens.entries()) {
+          if (now - data.createdAt > SESSION_TOKEN_TTL_MS) sessionTokens.delete(token);
+        }
+      } catch { }
       const sessionData = sessionTokens.get(sessionToken);
       if (sessionData && (Date.now() - sessionData.createdAt < SESSION_TOKEN_TTL_MS)) {
         authenticatedPlayerId = sessionData.playerId;
-        // Consume the token (one-time use)
-        sessionTokens.delete(sessionToken);
+        // Do NOT consume the token (reusable within TTL) so mobile can reconnect without re-signing.
         log.info(`[WS] Client authenticated via HTTP token: ${maskPk(authenticatedPlayerId)}`);
       } else {
         log.warn(`[WS] Invalid or expired session token: ${sessionToken.slice(0, 8)}…`);
@@ -703,6 +964,21 @@ wss.on('connection', (ws: WebSocket, req: any) => {
 
   const sessionId = uuidv4();
   socketToSessionId.set(ws, sessionId);
+  try {
+    if (ABUSE_TELEMETRY) {
+      const ip = getClientIp(req);
+      const ua = getUserAgent(req);
+      const meta: ConnMeta = {};
+      if (ip) {
+        if (ABUSE_LOG_FULL_IP_HASH) meta.ipHash = hashWithSalt(ip);
+        const pref = ipPrefix(ip);
+        if (pref) meta.ipPrefixHash = hashWithSalt(pref);
+      }
+      if (ua) meta.uaHash = hashWithSalt(ua);
+      socketToConnMeta.set(ws, meta);
+      audit.log('ws_connect', { sessionId, ipPrefixHash: meta.ipPrefixHash, ...(ABUSE_LOG_FULL_IP_HASH ? { ipHash: meta.ipHash } : {}), uaHash: meta.uaHash });
+    }
+  } catch { }
   socketRate.set(ws, {
     auth: { tokens: RATE_LIMITS.auth.capacity, lastRefill: Date.now() },
     join: { tokens: RATE_LIMITS.join.capacity, lastRefill: Date.now() },
@@ -713,12 +989,27 @@ wss.on('connection', (ws: WebSocket, req: any) => {
 
   // If authenticated via HTTP token, skip SIWS challenge
   if (authenticatedPlayerId) {
+    try {
+      const prev = playerIdToSocket.get(authenticatedPlayerId);
+      if (prev && prev !== ws) {
+        try { prev.close(4000, 'Reconnected'); } catch { }
+      }
+    } catch { }
     // Move directly to authenticated state
     playerIdToSocket.set(authenticatedPlayerId, ws);
     socketToPlayerId.set(ws, authenticatedPlayerId);
+    (ws as any).authenticated = true;
+    try {
+      if (ABUSE_TELEMETRY) {
+        const meta = socketToConnMeta.get(ws);
+        if (meta) playerIdToConnMeta.set(authenticatedPlayerId, meta);
+        audit.log('ws_authenticated', { sessionId, playerId: authenticatedPlayerId, ipPrefixHash: meta?.ipPrefixHash, uaHash: meta?.uaHash });
+      }
+    } catch { }
     const authMessage: AuthenticatedMessage = { type: 'authenticated', payload: { playerId: authenticatedPlayerId } };
     ws.send(JSON.stringify(authMessage));
     log.info(`🔌 Client connected & authenticated via token (${pendingSockets.size + playerIdToSocket.size} total)`);
+    syncPlayerAfterAuth(authenticatedPlayerId, ws);
   } else {
     // Traditional WebSocket SIWS flow
     pendingSockets.add(ws); (ws as any).authenticated = false;
@@ -740,27 +1031,34 @@ wss.on('connection', (ws: WebSocket, req: any) => {
     ws.send(JSON.stringify(challenge));
   }
 
-  ws.on('message', (data) => {
-    try {
-      const raw = data.toString();
-      console.log(`[WS=>] Message received: ${raw.length} bytes at ${Date.now()}`);
-      if (raw.length > 64_000) { ws.send(JSON.stringify({ type: 'error', payload: { message: 'Payload too large' } })); return; }
-      const parsed = JSON.parse(raw);
-      console.log(`[WS=>] Parsed message type: ${parsed?.type || 'unknown'}`);
-      const result = clientToServerMessageSchema.safeParse(parsed);
-      if (!result.success) {
-        console.warn(`[WS=>] Invalid schema for type ${parsed?.type}:`, result.error.errors);
-        ws.send(JSON.stringify({ type: 'error', payload: { message: 'Invalid message schema' } }));
-        return;
-      }
-      const message: ClientToServerMessage = result.data as any;
+	  ws.on('message', (data) => {
+	    try {
+	      const raw = data.toString();
+	      log.debug(`[WS=>] Message received: ${raw.length} bytes at ${Date.now()}`);
+	      if (raw.length > 64_000) { ws.send(JSON.stringify({ type: 'error', payload: { message: 'Payload too large' } })); return; }
+	      const parsed = JSON.parse(raw);
+	      log.debug(`[WS=>] Parsed message type: ${parsed?.type || 'unknown'}`);
+	      const result = clientToServerMessageSchema.safeParse(parsed);
+	      if (!result.success) {
+	        log.warn(`[WS=>] Invalid message schema for type ${parsed?.type || 'unknown'}`);
+	        log.debug(`[WS=>] Schema errors:`, result.error.errors);
+	        ws.send(JSON.stringify({ type: 'error', payload: { message: 'Invalid message schema' } }));
+	        return;
+	      }
+	      const message: ClientToServerMessage = result.data as any;
 
       // Handle guest login specifically
       if (message.type === 'guestLogin') {
-        const { guestName } = message.payload;
-        // Basic validation for name
-        const cleanName = (guestName || 'Guest').trim().slice(0, 20).replace(/[^a-zA-Z0-9 ]/g, '');
-        const guestId = `guest-${uuidv4()}`; // Temporary ID
+        const { guestName, guestId: requestedGuestId, resumeToken: requestedResumeToken } = message.payload as any;
+        const cleanName = sanitizeGuestName(guestName);
+        const { guestId, resumeToken } = getGuestSession(requestedGuestId, requestedResumeToken, cleanName);
+
+        try {
+          const prev = playerIdToSocket.get(guestId);
+          if (prev && prev !== ws) {
+            try { prev.close(4000, 'Reconnected'); } catch { }
+          }
+        } catch { }
 
         // Register as authenticated
         // Clear auth timeout and pending status
@@ -773,13 +1071,21 @@ wss.on('connection', (ws: WebSocket, req: any) => {
         (ws as any).authenticated = true;
         playerIdToSocket.set(guestId, ws);
         socketToPlayerId.set(ws, guestId);
+        try {
+          if (ABUSE_TELEMETRY) {
+            const meta = socketToConnMeta.get(ws);
+            if (meta) playerIdToConnMeta.set(guestId, meta);
+            audit.log('ws_authenticated', { sessionId: socketToSessionId.get(ws), playerId: guestId, ipPrefixHash: meta?.ipPrefixHash, uaHash: meta?.uaHash });
+          }
+        } catch { }
         playerIdToName.set(guestId, cleanName);
 
         // Send success
-        const authMessage: AuthenticatedMessage = { type: 'authenticated', payload: { playerId: guestId } };
+        const authMessage: AuthenticatedMessage = { type: 'authenticated', payload: { playerId: guestId, resumeToken } };
         ws.send(JSON.stringify(authMessage));
 
         log.info(`🔌 Guest connected: ${cleanName} (${guestId})`);
+        syncPlayerAfterAuth(guestId, ws);
         return;
       }
 
@@ -798,17 +1104,42 @@ wss.on('connection', (ws: WebSocket, req: any) => {
       const t = socketToAuthTimeout.get(ws);
       if (t) { clearTimeout(t); socketToAuthTimeout.delete(ws); }
     } catch { }
-    const playerId = socketToPlayerId.get(ws);
-    if (playerId) {
-      playerIdToSocket.delete(playerId);
-      socketToPlayerId.delete(ws);
-      // Grace period: keep the player in the lobby for quick reconnects
-      // GameWorld will remove from active round on disconnect as needed
-      gameWorld.removePlayer(playerId);
-    }
-    socketToNonce.delete(ws);
-    socketToSessionId.delete(ws);
-    socketRate.delete(ws);
+	    const playerId = socketToPlayerId.get(ws);
+	    if (playerId) {
+	      playerIdToSocket.delete(playerId);
+	      socketToPlayerId.delete(ws);
+        // Match reconnect grace: do not instantly remove/eliminate on mobile drops.
+        const match = getMatchForPlayer(playerId);
+        if (match && !String(playerId).startsWith('BOT_')) {
+          try { (match.gameWorld as any).handlePlayerDisconnect?.(playerId); } catch { }
+          const graceMs = getReconnectGraceMs(match.mode);
+          clearReconnectTimer(playerId);
+          if (graceMs <= 0) {
+            try { (match.gameWorld as any).eliminateForDisconnect?.(playerId); } catch { }
+          } else {
+            const t = setTimeout(() => {
+              try {
+                const m = getMatchForPlayer(playerId);
+                if (!m) return;
+                try { (m.gameWorld as any).eliminateForDisconnect?.(playerId); } catch { }
+              } catch { }
+            }, graceMs);
+            reconnectTimersByPlayerId.set(playerId, t);
+          }
+	      }
+	    }
+	    try {
+	      if (ABUSE_TELEMETRY) {
+	        const sessionId = socketToSessionId.get(ws);
+	        const meta = socketToConnMeta.get(ws);
+	        audit.log('ws_disconnect', { sessionId, playerId: playerId || undefined, code, ipPrefixHash: meta?.ipPrefixHash, uaHash: meta?.uaHash });
+	      }
+	    } catch { }
+	    try { socketToConnMeta.delete(ws); } catch { }
+	    try { if (playerId) playerIdToConnMeta.delete(playerId); } catch { }
+	    socketToNonce.delete(ws);
+	    socketToSessionId.delete(ws);
+	    socketRate.delete(ws);
     socketUnauthViolations.delete(ws);
     socketCaps.delete(ws);
 
@@ -923,10 +1254,23 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
       }
       if (nonceRec) nonceRec.consumed = true;
       // Promote socket to authenticated mapping
-      pendingSockets.delete(ws);
-      (ws as any).authenticated = true; pendingSockets.delete(ws); playerIdToSocket.set(publicKey, ws);
-      socketToPlayerId.set(ws, publicKey);
-      playerIdToName.set(publicKey, publicKey.slice(0, 4) + "…" + publicKey.slice(-4));
+      try {
+        const prev = playerIdToSocket.get(publicKey);
+        if (prev && prev !== ws) {
+          try { prev.close(4000, 'Reconnected'); } catch { }
+        }
+      } catch { }
+	      pendingSockets.delete(ws);
+	      (ws as any).authenticated = true; pendingSockets.delete(ws); playerIdToSocket.set(publicKey, ws);
+	      socketToPlayerId.set(ws, publicKey);
+	      try {
+	        if (ABUSE_TELEMETRY) {
+	          const meta = socketToConnMeta.get(ws);
+	          if (meta) playerIdToConnMeta.set(publicKey, meta);
+	          audit.log('ws_authenticated', { sessionId: socketToSessionId.get(ws), playerId: publicKey, ipPrefixHash: meta?.ipPrefixHash, uaHash: meta?.uaHash });
+	        }
+	      } catch { }
+	      playerIdToName.set(publicKey, publicKey.slice(0, 4) + "…" + publicKey.slice(-4));
       // Clear auth timeout and reset violation count
       try {
         const t = socketToAuthTimeout.get(ws);
@@ -935,6 +1279,7 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
       socketUnauthViolations.delete(ws);
       const authMessage: AuthenticatedMessage = { type: 'authenticated', payload: { playerId: publicKey } };
       ws.send(JSON.stringify(authMessage));
+      syncPlayerAfterAuth(publicKey, ws);
 
       // Reconnect/restore: if there is a pending payment and SKIP_ENTRY_FEE is not enabled, resend it
       const pending = pendingPaymentByPlayerId.get(publicKey);
@@ -948,13 +1293,15 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
           (async () => {
             const { lamports, tier, paymentId } = pending;
             const { txBase64, recentBlockhash, prizePool } = await smartContractService.createEntryFeeTransactionBase64((new (await import('@solana/web3.js')).PublicKey(publicKey)), lamports);
+            try { audit.log('payment_tx_resend', { playerId: publicKey, tier, lamports, paymentId }); } catch { }
             const entryFeeTxMessage: any = { type: 'entryFeeTx', payload: { txBase64, lamports, recentBlockhash, prizePool, entryFeeTier: tier, paymentId, sessionNonce: socketToNonce.get(ws)?.nonce } };
             ws.send(JSON.stringify(entryFeeTxMessage));
           })().catch(() => { });
         }
       } else if (paidPlayers.has(publicKey)) {
         // If already paid and game in progress with this player, resume immediately
-        const inProgress = gameWorld.gameState.status === 'in_progress' && !!(gameWorld.gameState.players as any)[publicKey];
+        const match = getMatchForPlayer(publicKey);
+        const inProgress = !!match && match.gameWorld.gameState.status === 'in_progress' && !!(match.gameWorld.gameState.players as any)[publicKey];
         if (inProgress) {
           const rules = [
             'Contrôles: pointez la souris pour diriger',
@@ -964,6 +1311,7 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
           ];
           const gameStarting: ServerToClientMessage = { type: 'gameStarting', payload: { countdown: 0, rules } } as any;
           ws.send(JSON.stringify(gameStarting));
+          break;
         }
         // If paid but not in a game, requeue into a lobby so they don't lose their ticket
         const tier = expectedTierByPlayerId.get(publicKey) || 1 as any;
@@ -1007,7 +1355,8 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
           break;
         }
         // If a round is already in progress and the player is part of it, ignore join and resume
-        if (gameWorld.gameState.status === 'in_progress' && (gameWorld.gameState.players as any)[playerId]) {
+        const match = getMatchForPlayer(playerId);
+        if (match && match.gameWorld.gameState.status === 'in_progress' && (match.gameWorld.gameState.players as any)[playerId]) {
           const rules = [
             'Contrôles: pointez la souris pour diriger',
             'Votre voiture laisse une trace ~5s',
@@ -1043,6 +1392,7 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
           const { txBase64, recentBlockhash, prizePool } = await smartContractService.createEntryFeeTransactionBase64((new (await import('@solana/web3.js')).PublicKey(playerId)), lamports);
           const paymentId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
           pendingPaymentByPlayerId.set(playerId, { paymentId, createdAt: Date.now(), lamports, tier });
+          try { audit.log('payment_tx_created', { playerId, tier, lamports, paymentId }); } catch { }
           const entryFeeTxMessage: any = { type: 'entryFeeTx', payload: { txBase64, lamports, recentBlockhash, prizePool, entryFeeTier: tier, paymentId, sessionNonce: socketToNonce.get(ws)?.nonce } };
           ws.send(JSON.stringify(entryFeeTxMessage));
         }
@@ -1121,6 +1471,7 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
       const reason = errorReason || (timedOut ? 'Timeout waiting for confirmation' : 'Payment not found');
       const resp: any = { type: 'entryFeeVerified', payload: { ok: verified, reason: verified ? undefined : reason } };
       ws.send(JSON.stringify(resp));
+      try { audit.log('payment_verified', { playerId, ok: verified, reason: verified ? undefined : reason, signature }); } catch { }
       if (verified) {
         log.info(`[PAYMENT] ✅ Adding player ${maskPk(playerId)} to paidPlayers set`);
         paidPlayers.add(playerId);
@@ -1153,20 +1504,23 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
       }
       break;
     }
-    case 'playerInput': {
-      if (!take('input')) return;
-      const playerId = socketToPlayerId.get(ws);
-      if (!playerId) return;
+	    case 'playerInput': {
+	      if (!take('input')) return;
+	      const playerId = socketToPlayerId.get(ws);
+	      if (!playerId) return;
       // Clamp bursts: accept at most one input per ~16ms (~60/s) in addition to token bucket
       const now = Date.now();
       const last = (socketRate as any).lastInputAt?.get?.(ws) as number | undefined;
       if (!(socketRate as any).lastInputAt) (socketRate as any).lastInputAt = new Map();
-      if (!last || (now - last) >= 16) {
-        (socketRate as any).lastInputAt.set(ws, now);
-        gameWorld.handlePlayerInput(playerId, (message as any).payload);
-      }
-      break;
-    }
+	      if (!last || (now - last) >= 16) {
+	        (socketRate as any).lastInputAt.set(ws, now);
+	        const match = getMatchForPlayer(playerId);
+	        if (match) {
+	          match.gameWorld.handlePlayerInput(playerId, (message as any).payload);
+	        }
+	      }
+	      break;
+	    }
     case 'leaveLobby': {
       const playerId = socketToPlayerId.get(ws);
       if (!playerId) return;
@@ -1214,124 +1568,139 @@ function safeSend(ws: WebSocket, data: string, kind: 'game' | 'generic', topic?:
 }
 
 function broadcastGameState(): void {
-  const gameState = gameWorld.gameState;
+  for (const match of matchesById.values()) {
+    const gameState = match.gameWorld.gameState;
+    if (gameState.status !== 'in_progress') continue;
 
-  const messageSlim: GameStateUpdateMessage = {
-    type: 'gameStateUpdate',
-    payload: {
-      timestamp: Date.now(),
-      players: Object.values(gameState.players).map((p: any) => ({
-        id: p.id,
-        sperm: p.sperm,
-        isAlive: p.isAlive,
-        status: p.status,
-      })),
-      world: gameState.world,
-      aliveCount: Object.values(gameState.players).filter((p: any) => p.isAlive).length,
-    },
-  };
+    const timestamp = Date.now();
+    const playersArray = Object.values(gameState.players) as any[];
+    let aliveCount = 0;
+    for (const p of playersArray) if (p?.isAlive) aliveCount++;
+    const world = gameState.world;
+    const objective = (gameState as any).objective;
 
-  const messageFull: GameStateUpdateMessage = {
-    type: 'gameStateUpdate',
-    payload: {
-      timestamp: messageSlim.payload.timestamp,
-      players: Object.values(gameState.players).map((p: any) => ({
-        id: p.id,
-        sperm: p.sperm,
-        isAlive: p.isAlive,
-        trail: p.trail,
-        status: p.status,
-      })),
-      world: gameState.world,
-      aliveCount: messageSlim.payload.aliveCount,
-    },
-  };
+    let slimStr: string | null = null;
+    let fullStr: string | null = null;
+    const getSlimStr = (): string => {
+      if (slimStr) return slimStr;
+      const messageSlim: GameStateUpdateMessage = {
+        type: 'gameStateUpdate',
+        payload: {
+          timestamp,
+          players: playersArray.map((p: any) => ({
+            id: p.id,
+            sperm: p.sperm,
+            isAlive: p.isAlive,
+            status: p.status,
+          })),
+          world,
+          aliveCount,
+          objective,
+        },
+      };
+      slimStr = JSON.stringify(messageSlim);
+      return slimStr;
+    };
+    const getFullStr = (): string => {
+      if (fullStr) return fullStr;
+      const messageFull: GameStateUpdateMessage = {
+        type: 'gameStateUpdate',
+        payload: {
+          timestamp,
+          players: playersArray.map((p: any) => ({
+            id: p.id,
+            sperm: p.sperm,
+            isAlive: p.isAlive,
+            trail: p.trail,
+            status: p.status,
+          })),
+          world,
+          aliveCount,
+          objective,
+        },
+      };
+      fullStr = JSON.stringify(messageFull);
+      return fullStr;
+    };
 
-  const slimStr = JSON.stringify(messageSlim);
-  const fullStr = JSON.stringify(messageFull);
-
-  // Broadcast only to players who are actually in the game round (with backpressure)
-  Object.keys(gameState.players).forEach((playerId: string) => {
-    const ws = playerIdToSocket.get(playerId);
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      const caps = socketCaps.get(ws);
-      safeSend(ws, (caps && caps.trailDelta) ? slimStr : fullStr, 'game', 'state');
-    }
-  });
+    // Broadcast only to players who are actually in this match round (with backpressure)
+    Object.keys(gameState.players).forEach((playerId: string) => {
+      const ws = playerIdToSocket.get(playerId);
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        const caps = socketCaps.get(ws);
+        safeSend(ws, (caps && caps.trailDelta) ? getSlimStr() : getFullStr(), 'game', 'state');
+      }
+    });
+  }
 }
 
 setInterval(broadcastGameState, BROADCAST_INTERVAL);
 
 // Trail delta broadcasting (send only new trail points, not full trails every tick)
-const lastTrailCreatedAtByPlayerId = new Map<string, number>();
 function broadcastTrailDelta(): void {
-  const gameState = gameWorld.gameState;
-  if (gameState.status !== 'in_progress') return;
+  for (const match of matchesById.values()) {
+    const gameState = match.gameWorld.gameState;
+    if (gameState.status !== 'in_progress') continue;
 
-  // Only bother if at least one connected client opted into trail deltas.
-  let anyWants = false;
-  for (const playerId of Object.keys(gameState.players)) {
-    const ws = playerIdToSocket.get(playerId);
-    if (ws && ws.readyState === WebSocket.OPEN && socketCaps.get(ws)?.trailDelta) { anyWants = true; break; }
-  }
-  if (!anyWants) return;
+    // Only bother if at least one connected client opted into trail deltas.
+    let anyWants = false;
+    for (const playerId of Object.keys(gameState.players)) {
+      const ws = playerIdToSocket.get(playerId);
+      if (ws && ws.readyState === WebSocket.OPEN && socketCaps.get(ws)?.trailDelta) { anyWants = true; break; }
+    }
+    if (!anyWants) continue;
 
-  const deltas: Array<{ playerId: string; points: Array<{ x: number; y: number; expiresAt: number; createdAt?: number }> }> = [];
+    const deltas: Array<{ playerId: string; points: Array<{ x: number; y: number; expiresAt: number; createdAt?: number }> }> = [];
 
-  for (const p of Object.values(gameState.players) as any[]) {
-    const playerId = String(p?.id || '');
-    if (!playerId) continue;
-    const trail = Array.isArray(p?.trail) ? p.trail : [];
-    if (trail.length === 0) continue;
+    for (const p of Object.values(gameState.players) as any[]) {
+      const playerId = String(p?.id || '');
+      if (!playerId) continue;
+      const trail = Array.isArray(p?.trail) ? p.trail : [];
+      if (trail.length === 0) continue;
 
-    const lastCreatedAt = lastTrailCreatedAtByPlayerId.get(playerId);
-    let startIdx = 0;
+      const lastCreatedAt = match.lastTrailCreatedAtByPlayerId.get(playerId);
+      let startIdx = 0;
 
-    if (typeof lastCreatedAt === 'number') {
-      let found = false;
-      for (let i = trail.length - 1; i >= 0; i--) {
-        if (trail[i]?.createdAt === lastCreatedAt) {
-          startIdx = i + 1;
-          found = true;
-          break;
+      if (typeof lastCreatedAt === 'number') {
+        let found = false;
+        for (let i = trail.length - 1; i >= 0; i--) {
+          if (trail[i]?.createdAt === lastCreatedAt) {
+            startIdx = i + 1;
+            found = true;
+            break;
+          }
         }
+        // If we can't find the last sent point (due to expiry/cleanup), resync with current trail.
+        if (!found) startIdx = 0;
       }
-      // If we can't find the last sent point (due to expiry/cleanup), resync with current trail.
-      if (!found) startIdx = 0;
+
+      if (startIdx >= trail.length) continue;
+
+      const newPoints = trail.slice(startIdx).map((pt: any) => ({ x: pt.x, y: pt.y, expiresAt: pt.expiresAt, createdAt: pt.createdAt }));
+      if (newPoints.length === 0) continue;
+
+      const last = trail[trail.length - 1];
+      if (last && typeof last.createdAt === 'number') match.lastTrailCreatedAtByPlayerId.set(playerId, last.createdAt);
+
+      deltas.push({ playerId, points: newPoints });
     }
 
-    if (startIdx >= trail.length) continue;
+    if (deltas.length === 0) continue;
 
-    const newPoints = trail.slice(startIdx).map((pt: any) => ({ x: pt.x, y: pt.y, expiresAt: pt.expiresAt, createdAt: pt.createdAt }));
-    if (newPoints.length === 0) continue;
+    const msg = { type: 'trailDelta', payload: { timestamp: Date.now(), deltas } } as any;
+    const str = JSON.stringify(msg);
 
-    const last = trail[trail.length - 1];
-    if (last && typeof last.createdAt === 'number') lastTrailCreatedAtByPlayerId.set(playerId, last.createdAt);
-
-    deltas.push({ playerId, points: newPoints });
+    Object.keys(gameState.players).forEach((playerId: string) => {
+      const ws = playerIdToSocket.get(playerId);
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        if (socketCaps.get(ws)?.trailDelta) safeSend(ws, str, 'game', 'trail');
+      }
+    });
   }
-
-  if (deltas.length === 0) return;
-
-  const msg = { type: 'trailDelta', payload: { timestamp: Date.now(), deltas } } as any;
-  const str = JSON.stringify(msg);
-
-  Object.keys(gameState.players).forEach((playerId: string) => {
-    const ws = playerIdToSocket.get(playerId);
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      if (socketCaps.get(ws)?.trailDelta) safeSend(ws, str, 'game', 'trail');
-    }
-  });
 }
 
 setInterval(broadcastTrailDelta, BROADCAST_INTERVAL);
 
-function broadcastToAll(message: ServerToClientMessage): void {
-  const str = JSON.stringify(message);
-  playerIdToSocket.forEach(ws => {
-    if (ws.readyState === WebSocket.OPEN) safeSend(ws, str, 'generic');
-  });
-}
 // =================================================================================================
 // Global error handling
 // =================================================================================================

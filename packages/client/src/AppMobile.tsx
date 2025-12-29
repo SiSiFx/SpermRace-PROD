@@ -5,6 +5,8 @@ import MobileTutorial from './MobileTutorial';
 import { PracticeModeSelection } from './PracticeModeSelection';
 import PracticeFullTutorial from './PracticeFullTutorial';
 
+const PRACTICE_TUTORIAL_SEEN_KEY = 'sr_practice_full_tuto_seen';
+
 const API_BASE: string = (() => {
   try {
     const host = (window?.location?.hostname || '').toLowerCase();
@@ -82,6 +84,13 @@ function AppInner() {
   const [showHowTo, setShowHowTo] = useState<boolean>(false);
   const [loadProg, setLoadProg] = useState<number>(0);
   const overlayActive = (wsState.phase === 'connecting' || wsState.phase === 'authenticating' || wsState.entryFee.pending);
+
+  useEffect(() => {
+    try {
+      const qs = new URLSearchParams(window.location.search);
+      if (qs.get('practice') === '1') setScreen('practice');
+    } catch { }
+  }, []);
 
   useEffect(() => {
     let id: any;
@@ -277,11 +286,23 @@ function Landing({ solPrice, onPractice, onTournament, onWallet, onLeaderboard }
   );
 }
 
-function Practice({ onFinish, onBack }: { onFinish: () => void; onBack: () => void; }) {
-  const [step, setStep] = useState<'lobby' | 'game'>('lobby');
+function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBack: () => void; }) {
+  const [step, setStep] = useState<'lobby' | 'game'>(() => {
+    try {
+      return localStorage.getItem(PRACTICE_TUTORIAL_SEEN_KEY) ? 'game' : 'lobby';
+    } catch {
+      return 'lobby';
+    }
+  });
   const [meId] = useState<string>('PLAYER_' + Math.random().toString(36).slice(2, 8));
   const [players, setPlayers] = useState<string[]>([]);
-  const [showPracticeIntro, setShowPracticeIntro] = useState<boolean>(true);
+  const [showPracticeIntro, setShowPracticeIntro] = useState<boolean>(() => {
+    try {
+      return !localStorage.getItem(PRACTICE_TUTORIAL_SEEN_KEY);
+    } catch {
+      return true;
+    }
+  });
   const [gameCountdown, setGameCountdown] = useState<number>(6);
 
   useEffect(() => {
@@ -301,7 +322,17 @@ function Practice({ onFinish, onBack }: { onFinish: () => void; onBack: () => vo
   if (step === 'lobby') {
     return (
       <div className="screen active mobile-lobby-screen">
-        {showPracticeIntro && <PracticeFullTutorial onDone={() => setShowPracticeIntro(false)} />}
+        {showPracticeIntro && (
+          <PracticeFullTutorial
+            onDone={() => {
+              setShowPracticeIntro(false);
+              try {
+                localStorage.setItem(PRACTICE_TUTORIAL_SEEN_KEY, '1');
+              } catch { }
+              setStep('game');
+            }}
+          />
+        )}
         <div className="mobile-lobby-container">
           <header style={{ textAlign: "center", marginBottom: "20px" }}>
             <Atom size={32} weight="duotone" color="#00f5ff" />
@@ -331,13 +362,29 @@ function Practice({ onFinish, onBack }: { onFinish: () => void; onBack: () => vo
   );
 }
 
-function TournamentModesScreen({ onSelect, onClose, onNotify }: { onSelect: () => void; onClose: () => void; onNotify: (msg: string) => void }) {
+function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify }: { onSelect: () => void; onClose: () => void; onNotify: (msg: string) => void }) {
   const { publicKey, connect } = useWallet();
   const { connectAndJoin, state: wsState } = useWs();
+  const [preflight, setPreflight] = useState<{ address: string | null; sol: number | null; configured: boolean } | null>(null);
+  const [preflightError, setPreflightError] = useState<boolean>(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const tiers = [{ name: 'MICRO', usd: 1, prize: 10 }, { name: 'NANO', usd: 5, prize: 50 }, { name: 'MEGA', usd: 25, prize: 250 }, { name: 'ELITE', usd: 100, prize: 1000 }];
   const selected = tiers[selectedIndex];
-  const isDisabled = wsState.phase === 'connecting' || wsState.phase === 'authenticating';
+  const isDisabled = preflightError || wsState.phase === 'connecting' || wsState.phase === 'authenticating';
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch(`${API_BASE}/prize-preflight`);
+        if (!r.ok) throw new Error(`preflight ${r.status}`);
+        const j = await r.json();
+        setPreflight(j);
+        setPreflightError(!j?.configured || !j?.address || j?.sol == null);
+      } catch {
+        setPreflightError(true);
+      }
+    })();
+  }, []);
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'linear-gradient(180deg, #030712 0%, #0a1628 100%)', display: 'flex', flexDirection: 'column', padding: '20px 16px', paddingTop: 'calc(20px + env(safe-area-inset-top, 0px))', paddingBottom: 'calc(40px + env(safe-area-inset-bottom, 0px))', overflowY: 'auto' }}>
@@ -345,6 +392,16 @@ function TournamentModesScreen({ onSelect, onClose, onNotify }: { onSelect: () =
         <h1 style={{ fontSize: 22, fontWeight: 900, color: '#fff', margin: 0 }}>TOURNAMENT</h1>
         <p style={{ fontSize: 13, color: 'rgba(0,245,255,0.8)', margin: 0 }}>Win Real Crypto in 3 Minutes ⚡</p>
       </header>
+      {preflight && !preflightError && (
+        <div style={{ margin: '0 0 14px 0', padding: '10px 12px', borderRadius: 14, background: 'rgba(0, 245, 255, 0.06)', border: '1px solid rgba(0, 245, 255, 0.18)', color: 'rgba(255,255,255,0.8)', fontSize: 11, lineHeight: 1.35, textAlign: 'center' }}>
+          Payouts: OK • Wallet: {preflight.address ? `${preflight.address.slice(0, 4)}…${preflight.address.slice(-4)}` : '—'} • Balance: {typeof preflight.sol === 'number' ? `${preflight.sol.toFixed(2)} SOL` : '—'}
+        </div>
+      )}
+      {preflightError && (
+        <div style={{ margin: '0 0 14px 0', padding: '12px 12px', borderRadius: 14, background: 'rgba(255, 59, 48, 0.08)', border: '1px solid rgba(255, 59, 48, 0.28)', color: 'rgba(255,255,255,0.85)', fontSize: 12, lineHeight: 1.35 }}>
+          Tournament payouts are not configured right now. Please try again later.
+        </div>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
         {tiers.map((tier, i) => (
           <button key={tier.name} onClick={() => setSelectedIndex(i)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '12px 8px', borderRadius: 16, border: i === selectedIndex ? '2px solid #00f5ff' : '1px solid rgba(255,255,255,0.1)', background: i === selectedIndex ? 'rgba(0,245,255,0.1)' : 'rgba(255,255,255,0.03)', cursor: 'pointer' }}>
@@ -358,7 +415,24 @@ function TournamentModesScreen({ onSelect, onClose, onNotify }: { onSelect: () =
         <div style={{ fontSize: 10, textTransform: 'uppercase', color: 'rgba(255,255,255,0.6)' }}>Pot</div>
         <div style={{ fontSize: 32, fontWeight: 900, color: '#00ff88' }}>${selected.prize}</div>
       </div>
-      <button onClick={async () => { if (!publicKey && !(await connect())) return; connectAndJoin({ entryFeeTier: selected.usd as any, mode: 'tournament' }); }} disabled={isDisabled} style={{ width: '100%', padding: '14px', borderRadius: 14, background: 'linear-gradient(135deg, #00f5ff 0%, #00ff88 100%)', color: '#000', fontWeight: 900 }}>JOIN NOW</button>
+      <button
+        onClick={async () => {
+          if (isDisabled) return;
+          if (!publicKey && !(await connect())) {
+            onNotify?.('Connect wallet to enter tournament');
+            return;
+          }
+          try {
+            await connectAndJoin({ entryFeeTier: selected.usd as any, mode: 'tournament' });
+          } catch (e) {
+            onNotify?.('Failed to join tournament');
+          }
+        }}
+        disabled={isDisabled}
+        style={{ width: '100%', padding: '14px', borderRadius: 14, background: 'linear-gradient(135deg, #00f5ff 0%, #00ff88 100%)', color: '#000', fontWeight: 900, opacity: isDisabled ? 0.6 : 1 }}
+      >
+        {preflightError ? 'UNAVAILABLE' : 'JOIN NOW'}
+      </button>
       <button onClick={onClose} style={{ marginTop: 10, width: '100%', padding: '14px', borderRadius: 14, background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: '#fff' }}>BACK</button>
     </div>
   );
@@ -378,19 +452,38 @@ function Wallet({ onConnected, onClose }: { onConnected: () => void; onClose: ()
   );
 }
 
-function Lobby({ onStart, onBack, onRefund }: { onStart: () => void; onBack: () => void; onRefund?: () => void }) {
+function Lobby({ onStart: _onStart, onBack, onRefund }: { onStart: () => void; onBack: () => void; onRefund?: () => void }) {
   const { state } = useWs();
   const [showTutorial, setShowTutorial] = useState(false);
   const players = state.lobby?.players || [];
+  const botCount = players.filter(p => String(p).startsWith('BOT_')).length;
+  const realCount = Math.max(0, players.length - botCount);
   const realPlayers = players.filter(p => !String(p).startsWith('BOT_'));
   const prize = state.lobby ? Math.max(0, Math.floor(realPlayers.length * (state.lobby.entryFee as number) * 0.85)) : 0;
 
-  useEffect(() => { if (state.lobby?.entryFee === 0) setShowTutorial(true); }, [state.lobby]);
+  useEffect(() => {
+    if (state.lobby?.entryFee !== 0) {
+      setShowTutorial(false);
+      return;
+    }
+    let seen = false;
+    try { seen = !!localStorage.getItem(PRACTICE_TUTORIAL_SEEN_KEY); } catch { }
+    setShowTutorial(!seen);
+  }, [state.lobby?.entryFee]);
   useEffect(() => { if ((state as any).refundReceived && !state.lobby && onRefund) onRefund(); }, [(state as any).refundReceived, state.lobby, onRefund]);
 
   return (
     <div className="screen active mobile-lobby-screen" style={{ background: "#030712", display: "flex", flexDirection: "column", padding: "20px 16px", paddingTop: "calc(20px + env(safe-area-inset-top, 0px))", height: "100dvh", boxSizing: "border-box", overflow: "hidden" }}>
-      {showTutorial && <PracticeFullTutorial onDone={() => setShowTutorial(false)} />}
+      {showTutorial && (
+        <PracticeFullTutorial
+          onDone={() => {
+            setShowTutorial(false);
+            try {
+              localStorage.setItem(PRACTICE_TUTORIAL_SEEN_KEY, '1');
+            } catch { }
+          }}
+        />
+      )}
       <header style={{ textAlign: "center", marginBottom: "20px" }}>
         <Atom size={32} weight="duotone" color="#00f5ff" style={{ margin: '0 auto 12px' }} />
         <h1 style={{ fontSize: 24, fontWeight: 900, color: "#fff", fontFamily: "Orbitron, sans-serif" }}>LOBBY</h1>
@@ -399,6 +492,11 @@ function Lobby({ onStart, onBack, onRefund }: { onStart: () => void; onBack: () 
         <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "12px", textAlign: "center" }}>
           <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)" }}>Pilots</div>
           <div style={{ fontSize: 18, fontWeight: 800, color: "#00f5ff" }}>{players.length} / {state.lobby?.maxPlayers ?? 32}</div>
+          {botCount > 0 && (
+            <div style={{ marginTop: 4, fontSize: 10, color: "rgba(255,255,255,0.55)" }}>
+              Real: {realCount} • Bots: {botCount}
+            </div>
+          )}
         </div>
         <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "12px", textAlign: "center" }}>
           <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)" }}>Prize</div>
@@ -440,12 +538,34 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void; 
 }
 
 function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onChangeTier: () => void; }) {
-  const { state: wsState } = useWs();
+  const { state: wsState, connectAndJoin } = useWs();
   const { publicKey } = useWallet();
   const tx = wsState.lastRound?.txSignature;
   const winner = wsState.lastRound?.winnerId;
   const prize = wsState.lastRound?.prizeAmount;
   const isWinner = !!winner && (winner === wsState.playerId || winner === publicKey);
+  const [playAgainBusy, setPlayAgainBusy] = useState(false);
+  const handlePlayAgain = async () => {
+    if (playAgainBusy) return;
+    if (wsState.phase !== 'ended') { onPlayAgain(); return; }
+    setPlayAgainBusy(true);
+    try {
+      let last: any = null;
+      try { last = JSON.parse(localStorage.getItem('sr_last_join') || 'null'); } catch { }
+      const lobby: any = wsState.lobby || null;
+      const entryFeeTier = (lobby?.entryFee ?? last?.entryFeeTier ?? 0) as any;
+      const mode = (lobby?.mode ?? last?.mode ?? (entryFeeTier === 0 ? 'practice' : 'tournament')) as any;
+      const guestName =
+        mode === 'practice'
+          ? (last?.guestName || localStorage.getItem('sr_guest_name') || lobby?.playerNames?.[wsState.playerId || ''] || 'Guest')
+          : undefined;
+      await connectAndJoin({ entryFeeTier, mode, ...(guestName ? { guestName } : {}) });
+    } catch {
+      onPlayAgain();
+    } finally {
+      setPlayAgainBusy(false);
+    }
+  };
   return (
     <div className="screen active mobile-results-screen">
       <div className="mobile-results-container">
@@ -453,7 +573,7 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
         <p className="mobile-result-subtitle">Winner: {winner ? winner.slice(0, 4) + "…" : "—"}</p>
         {typeof prize === 'number' && <div className="mobile-prize-won">{prize.toFixed(4)} SOL</div>}
         <div className="mobile-result-actions">
-          <button className="mobile-btn-primary" onClick={onPlayAgain}>Play Again</button>
+          <button className="mobile-btn-primary" onClick={handlePlayAgain} disabled={playAgainBusy}>{playAgainBusy ? 'Joining…' : 'Play Again'}</button>
           <button className="mobile-btn-secondary" onClick={onChangeTier}>Menu</button>
         </div>
       </div>

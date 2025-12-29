@@ -34,6 +34,9 @@ export const guestLoginMessageSchema = z.object({
   type: z.literal('guestLogin'),
   payload: z.object({
     guestName: z.string().min(1).max(20),
+    // Optional resume fields for mobile reconnects (practice mode).
+    guestId: z.string().min(1).max(80).optional(),
+    resumeToken: z.string().min(8).max(128).optional(),
   }),
 });
 

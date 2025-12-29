@@ -18,7 +18,7 @@ const API_BASE: string = (() => {
   } catch { }
   return '/api';
 })();
-import type { EntryFeeTier, GameMode, Lobby, TrailPoint } from 'shared';
+import type { EntryFeeTier, GameMode, Lobby, TrailPoint, ExtractionObjectiveState } from 'shared';
 import { useWallet } from './WalletProvider';
 import { handleSIWS } from './siws';
 import { sendEntryFeeTransaction } from './walletUtils';
@@ -36,7 +36,7 @@ type WsState = {
   entryFee: { pending: boolean; verified: boolean };
   lastError: string | null;
   joining: boolean;
-  game: { timestamp: number; players: Array<{ id: string; isAlive: boolean; sperm: { position: { x: number; y: number }; angle: number; color: string }; trail: Array<{ x: number; y: number }> }>; world: { width: number; height: number }; aliveCount: number } | null;
+  game: { timestamp: number; players: Array<{ id: string; isAlive: boolean; sperm: { position: { x: number; y: number }; angle: number; color: string }; trail: Array<{ x: number; y: number }> }>; world: { width: number; height: number }; aliveCount: number; objective?: ExtractionObjectiveState } | null;
   hasFirstGameState?: boolean;
   kills: Record<string, number>;
   killFeed: Array<{ killerId?: string; victimId: string; ts: number }>;
@@ -113,13 +113,46 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
   const lastInputSentRef = useRef<number>(0);
   const lastSentPayloadRef = useRef<{ target: { x: number; y: number }; accelerate: boolean; boost?: boolean } | null>(null);
   const lastBoostTsRef = useRef<number>(0);
+  const disableClientHelloRef = useRef<boolean>(false);
+  const lastClientHelloSentAtRef = useRef<number>(0);
   const expectedCloseRef = useRef<boolean>(false);
   const reconnectAttemptsRef = useRef<number>(0);
   const reconnectTimerRef = useRef<number | null>(null);
+  const storedSessionTokenRef = useRef<{ token: string; expiresAt: number } | null>(null);
+
+  const getStoredSessionToken = (): { token: string; expiresAt: number } | null => {
+    try {
+      const cur = storedSessionTokenRef.current;
+      if (cur && cur.token && cur.expiresAt > Date.now()) return cur;
+    } catch { }
+    try {
+      const token = localStorage.getItem('sr_session_token') || '';
+      const exp = Number(localStorage.getItem('sr_session_token_expires_at') || 0) || 0;
+      if (token && exp > Date.now()) return { token, expiresAt: exp };
+    } catch { }
+    return null;
+  };
+
+  const getGuestResume = (): { guestName: string; guestId?: string; resumeToken?: string } => {
+    let guestName = '';
+    try { guestName = localStorage.getItem('sr_guest_name') || ''; } catch { }
+    if (!guestName) guestName = 'Guest';
+    let guestId: string | undefined;
+    let resumeToken: string | undefined;
+    try { guestId = localStorage.getItem('sr_guest_id') || undefined; } catch { }
+    try { resumeToken = localStorage.getItem('sr_guest_resume_token') || undefined; } catch { }
+    return { guestName, guestId, resumeToken };
+  };
 
   const connectAndJoin = async (opts: JoinOpts) => {
     console.log(`[JOIN] Requested → mode=${opts.mode ?? 'tournament'} tier=$${opts.entryFeeTier} guest=${opts.guestName || 'no'}`);
+    expectedCloseRef.current = false;
     try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'join_requested', payload: { mode: opts.mode ?? 'tournament', tier: opts.entryFeeTier, isGuest: !!opts.guestName } }) }); } catch { }
+    try {
+      const last = { entryFeeTier: opts.entryFeeTier, mode: (opts.mode ?? 'tournament'), guestName: opts.guestName || undefined };
+      localStorage.setItem('sr_last_join', JSON.stringify(last));
+      if (opts.guestName) localStorage.setItem('sr_guest_name', opts.guestName);
+    } catch { }
 
     // Reset/Set guest state
     setIsGuest(!!opts.guestName);
@@ -131,6 +164,16 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
     // If GUEST, skip wallet checks entirely
     if (opts.guestName) {
       pendingJoinRef.current = opts;
+
+      // If we already have an open authenticated guest socket, just re-join without reconnecting.
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && state.playerId && state.playerId.startsWith('guest-')) {
+        try {
+          wsRef.current.send(JSON.stringify({ type: 'joinLobby', payload: { entryFeeTier: opts.entryFeeTier, mode: opts.mode } }));
+          joinBusyRef.current = false;
+          setState(s => ({ ...s, phase: 'connecting', joining: true, lastError: null }));
+          return;
+        } catch { }
+      }
 
       // Close existing if open
       if (wsRef.current) {
@@ -153,8 +196,12 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
         console.log('[WS] Open (Guest)');
         reconnectAttemptsRef.current = 0;
         setState(s => ({ ...s, connected: true, phase: 'authenticating' }));
-        // Send guest login immediately
-        ws.send(JSON.stringify({ type: 'guestLogin', payload: { guestName: opts.guestName } }));
+        // Send guest login immediately (with resume token if available)
+        const r = getGuestResume();
+        const payload: any = { guestName: opts.guestName };
+        if (r.guestId) payload.guestId = r.guestId;
+        if (r.resumeToken) payload.resumeToken = r.resumeToken;
+        ws.send(JSON.stringify({ type: 'guestLogin', payload }));
       };
       return;
     }
@@ -260,6 +307,17 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
       const authData = await authResp.json();
       sessionToken = authData.sessionToken;
       console.log('[HTTP AUTH] ✓ Session token received:', sessionToken?.slice(0, 8) ?? 'unknown');
+      try {
+        const expiresInMs = Math.max(0, Number(authData.expiresIn || 0) || 0) || 300000;
+        if (sessionToken) {
+          const expiresAt = Date.now() + expiresInMs;
+          storedSessionTokenRef.current = { token: sessionToken, expiresAt };
+          try {
+            localStorage.setItem('sr_session_token', sessionToken);
+            localStorage.setItem('sr_session_token_expires_at', String(expiresAt));
+          } catch { }
+        }
+      } catch { }
 
     } catch (e: any) {
       console.error('[HTTP AUTH] Failed:', e);
@@ -279,7 +337,17 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
       sock.onopen = () => {
         console.log('[WS] open');
         reconnectAttemptsRef.current = 0;
-        setState(s => ({ ...s, connected: true }));
+        setState(s => ({ ...s, connected: true, phase: isGuestRef.current ? 'authenticating' : s.phase, joining: isGuestRef.current ? true : s.joining, lastError: null }));
+        // If this is a guest session (practice), authenticate immediately (supports reconnect resume).
+        if (isGuestRef.current) {
+          try {
+            const r = getGuestResume();
+            const payload: any = { guestName: r.guestName };
+            if (r.guestId) payload.guestId = r.guestId;
+            if (r.resumeToken) payload.resumeToken = r.resumeToken;
+            sock.send(JSON.stringify({ type: 'guestLogin', payload }));
+          } catch { }
+        }
       };
       sock.onerror = (e: any) => {
         // Only retry fallback if we're on localhost
@@ -298,11 +366,11 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
         try { fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_ws_close', payload: { code: ev.code, reason: ev.reason || 'none', wasClean: ev.wasClean } }) }); } catch { }
         joinBusyRef.current = false;
         if (joinRetryTimerRef.current) { clearTimeout(joinRetryTimerRef.current); joinRetryTimerRef.current = null; }
-        setState(s => ({ ...s, connected: false, phase: 'ended', joining: false }));
         wsRef.current = null;
         // Auto-reconnect if not an intentional leave and we have a pending intent
         const shouldReconnect = !expectedCloseRef.current && (pendingJoinRef.current != null || !!state.playerId || state.phase === 'lobby' || state.phase === 'game' || state.phase === 'authenticating');
         if (shouldReconnect) {
+          setState(s => ({ ...s, connected: false, phase: 'connecting', joining: true, lastError: null }));
           const attempt = (reconnectAttemptsRef.current = reconnectAttemptsRef.current + 1);
           const delay = Math.min(15000, 1000 * Math.pow(2, attempt - 1));
           console.log(`[WS] scheduling reconnect in ${delay}ms (attempt ${attempt})`);
@@ -310,10 +378,14 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
           reconnectTimerRef.current = (window as any).setTimeout(() => {
             try {
               console.log('[WS] reconnecting...');
-              const ws3 = new WebSocket(WS_URL);
+              const token = !isGuestRef.current ? getStoredSessionToken() : null;
+              const url = token ? `${WS_URL}?token=${encodeURIComponent(token.token)}` : WS_URL;
+              const ws3 = new WebSocket(url);
               attach(ws3, true);
             } catch (e) { console.error('[WS] reconnect failed to initiate', e); }
           }, delay);
+        } else {
+          setState(s => ({ ...s, connected: false, phase: 'ended', joining: false }));
         }
       };
       sock.onmessage = async (ev) => {
@@ -433,10 +505,25 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
               break;
             }
             case 'authenticated': {
-              setState(s => ({ ...s, playerId: msg.payload.playerId }));
+              const pid = String(msg.payload?.playerId || '');
+              setState(s => ({ ...s, playerId: pid }));
               console.log(`[AUTH] authenticated as ${String(msg.payload.playerId).slice(0, 6)}…`);
+              try {
+                if (pid.startsWith('guest-')) {
+                  setIsGuest(true);
+                  isGuestRef.current = true;
+                  localStorage.setItem('sr_guest_id', pid);
+                  const rt = (msg.payload as any)?.resumeToken as string | undefined;
+                  if (rt && typeof rt === 'string') localStorage.setItem('sr_guest_resume_token', rt);
+                }
+              } catch { }
               // Capability negotiation: tell server we support trail deltas (server will then omit full trails in gameStateUpdate).
-              try { sock.send(JSON.stringify({ type: 'clientHello', payload: { trailDelta: true } })); } catch { }
+              if (!disableClientHelloRef.current) {
+                try {
+                  lastClientHelloSentAtRef.current = Date.now();
+                  sock.send(JSON.stringify({ type: 'clientHello', payload: { trailDelta: true } }));
+                } catch { }
+              }
               // Clear pending auth since we successfully authenticated
               pendingAuthRef.current = null;
               const join = pendingJoinRef.current;
@@ -650,7 +737,13 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
                 if (!ids.has(k)) delete trailLastCreatedAtRef.current[k];
               }
 
-              setState(s => ({ ...s, game: { timestamp: p.timestamp, players: mergedPlayers, world: p.world, aliveCount: p.aliveCount }, hasFirstGameState: s.hasFirstGameState || true }));
+              setState(s => ({
+                ...s,
+                phase: 'game',
+                joining: false,
+                game: { timestamp: p.timestamp, players: mergedPlayers, world: p.world, aliveCount: p.aliveCount, objective: p?.objective },
+                hasFirstGameState: s.hasFirstGameState || true
+              }));
               try { (window as any).__SR_HAS_FIRST_GAME_STATE__ = true; } catch { }
               break;
             }
@@ -760,8 +853,20 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
             case 'error': {
               joinBusyRef.current = false;
               if (joinRetryTimerRef.current) { clearTimeout(joinRetryTimerRef.current); joinRetryTimerRef.current = null; }
-              console.error('[WS] server error', msg.payload?.message);
-              setState(s => ({ ...s, lastError: msg.payload?.message || 'Server error', joining: false }));
+              const message = msg.payload?.message || 'Server error';
+              // Backward-compatible: older servers might reject optional capability messages like `clientHello`.
+              // Don't block the user for that; just disable the feature and continue.
+              if (
+                /invalid message schema/i.test(message) &&
+                lastClientHelloSentAtRef.current > 0 &&
+                (Date.now() - lastClientHelloSentAtRef.current) < 5000
+              ) {
+                disableClientHelloRef.current = true;
+                console.warn('[WS] server rejected clientHello; disabling capability negotiation');
+                break;
+              }
+              console.error('[WS] server error', message);
+              setState(s => ({ ...s, lastError: message, joining: false }));
               break;
             }
             default: break;

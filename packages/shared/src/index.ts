@@ -42,6 +42,16 @@ export interface GameItem {
   y: number;
 }
 
+/** Match objective state (optional). */
+export interface ExtractionObjectiveState {
+  kind: 'extraction';
+  keysRequired: number;
+  // Egg is centered in world-space (0..width/height); client may re-center.
+  egg: { x: number; y: number; radius: number; openAtMs: number; holdMs: number };
+  holding?: { playerId: string; sinceMs: number };
+  keysByPlayerId: Record<string, number>;
+}
+
 /** Represents a player in the game. */
 export interface Player {
   id: string; // Solana public key
@@ -67,6 +77,7 @@ export interface GameState {
     height: number;
   };
   items: Record<string, GameItem>;
+  objective?: ExtractionObjectiveState;
 }
 
 /** Represents the entry fee tiers in USD. */
@@ -106,6 +117,8 @@ export interface GuestLoginMessage {
   type: 'guestLogin';
   payload: {
     guestName: string;
+    guestId?: string;
+    resumeToken?: string;
   };
 }
 
@@ -152,6 +165,7 @@ export interface AuthenticatedMessage {
   type: 'authenticated';
   payload: {
     playerId: string; // wallet public key base58
+    resumeToken?: string; // guest resume token
   };
 }
 
@@ -216,6 +230,7 @@ export interface GameStateUpdateMessage {
     players: Array<Pick<Player, 'id' | 'sperm' | 'isAlive' | 'status'> & { trail?: TrailPoint[] }>;
     world: { width: number; height: number };
     aliveCount: number;
+    objective?: ExtractionObjectiveState;
   };
 }
 

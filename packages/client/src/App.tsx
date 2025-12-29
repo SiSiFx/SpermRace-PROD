@@ -627,7 +627,7 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void }
 }
 
 function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onChangeTier: () => void }) {
-  const { state: wsState } = useWs();
+  const { state: wsState, connectAndJoin } = useWs();
   const { publicKey } = useWallet();
   const tx = wsState.lastRound?.txSignature;
   const winner = wsState.lastRound?.winnerId;
@@ -635,6 +635,28 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
   const solscan = tx ? `https://solscan.io/tx/${tx}${SOLANA_CLUSTER === 'devnet' ? '?cluster=devnet' : ''}` : null;
   const selfId = wsState.playerId || publicKey || '';
   const isWinner = !!winner && winner === selfId;
+  const [playAgainBusy, setPlayAgainBusy] = useState(false);
+  const handlePlayAgain = async () => {
+    if (playAgainBusy) return;
+    if (wsState.phase !== 'ended') { onPlayAgain(); return; }
+    setPlayAgainBusy(true);
+    try {
+      let last: any = null;
+      try { last = JSON.parse(localStorage.getItem('sr_last_join') || 'null'); } catch { }
+      const lobby: any = wsState.lobby || null;
+      const entryFeeTier = (lobby?.entryFee ?? last?.entryFeeTier ?? 0) as any;
+      const mode = (lobby?.mode ?? last?.mode ?? (entryFeeTier === 0 ? 'practice' : 'tournament')) as any;
+      const guestName =
+        mode === 'practice'
+          ? (last?.guestName || localStorage.getItem('sr_guest_name') || lobby?.playerNames?.[wsState.playerId || ''] || 'Guest')
+          : undefined;
+      await connectAndJoin({ entryFeeTier, mode, ...(guestName ? { guestName } : {}) });
+    } catch {
+      onPlayAgain();
+    } finally {
+      setPlayAgainBusy(false);
+    }
+  };
   // Compute compact summary: your kills and rank if known (use wsState.playerId)
   let rankText: string | null = null;
   try {
@@ -664,12 +686,14 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
         {rankText && (
           <div className="modal-subtitle">{rankText} • Kills: {wsState.kills?.[selfId] || 0}</div>
         )}
-        <div className="round-actions"><button className="btn-primary" onClick={onPlayAgain}>Replay</button><button className="btn-secondary" onClick={onChangeTier}>Quit</button></div>
+        <div className="round-actions">
+          <button className="btn-primary" onClick={handlePlayAgain} disabled={playAgainBusy}>{playAgainBusy ? 'Joining…' : 'Replay'}</button>
+          <button className="btn-secondary" onClick={onChangeTier}>Quit</button>
+        </div>
       </div>
     </div>
   );
 }
-
 
 
 

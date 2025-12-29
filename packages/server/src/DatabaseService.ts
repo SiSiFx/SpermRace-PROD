@@ -19,6 +19,22 @@ interface Game {
   ended_at: string;
 }
 
+type PayoutStatus = 'planned' | 'sent' | 'failed' | 'skipped';
+interface PayoutRecord {
+  round_id: string;
+  match_id: string | null;
+  lobby_id: string | null;
+  mode: string | null;
+  winner_wallet: string;
+  prize_lamports: number;
+  platform_fee_bps: number;
+  tx_signature: string | null;
+  status: PayoutStatus;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 interface LeaderboardEntry {
   wallet_address: string;
   username: string | null;
@@ -78,6 +94,24 @@ export class DatabaseService {
       );
     `);
 
+    // Payouts table (idempotency + ops)
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS payouts (
+        round_id TEXT PRIMARY KEY,
+        match_id TEXT,
+        lobby_id TEXT,
+        mode TEXT,
+        winner_wallet TEXT NOT NULL,
+        prize_lamports INTEGER NOT NULL,
+        platform_fee_bps INTEGER NOT NULL,
+        tx_signature TEXT,
+        status TEXT NOT NULL,
+        error TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
     // Indexes for fast queries
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_players_wins 
@@ -91,6 +125,9 @@ export class DatabaseService {
       
       CREATE INDEX IF NOT EXISTS idx_games_ended 
         ON games(ended_at DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_payouts_status
+        ON payouts(status, updated_at DESC);
     `);
 
     console.log('[DB] ✅ Database schema initialized');
@@ -149,6 +186,74 @@ export class DatabaseService {
     } catch (error) {
       console.error('[DB] ❌ Failed to record game:', error);
     }
+  }
+
+  getPayoutByRoundId(roundId: string): PayoutRecord | null {
+    const stmt = this.db.prepare(`SELECT * FROM payouts WHERE round_id = ?`);
+    return (stmt.get(roundId) as PayoutRecord | undefined) || null;
+  }
+
+  recordPayoutPlanned(input: {
+    roundId: string;
+    matchId?: string | null;
+    lobbyId?: string | null;
+    mode?: string | null;
+    winnerWallet: string;
+    prizeLamports: number;
+    platformFeeBps: number;
+  }): void {
+    const stmt = this.db.prepare(`
+      INSERT INTO payouts (
+        round_id, match_id, lobby_id, mode, winner_wallet, prize_lamports, platform_fee_bps, status, error, updated_at
+      ) VALUES (
+        @roundId, @matchId, @lobbyId, @mode, @winnerWallet, @prizeLamports, @platformFeeBps, 'planned', NULL, CURRENT_TIMESTAMP
+      )
+      ON CONFLICT(round_id) DO UPDATE SET
+        match_id=COALESCE(excluded.match_id, payouts.match_id),
+        lobby_id=COALESCE(excluded.lobby_id, payouts.lobby_id),
+        mode=COALESCE(excluded.mode, payouts.mode),
+        winner_wallet=excluded.winner_wallet,
+        prize_lamports=excluded.prize_lamports,
+        platform_fee_bps=excluded.platform_fee_bps,
+        status=CASE WHEN payouts.status='sent' THEN payouts.status ELSE 'planned' END,
+        updated_at=CURRENT_TIMESTAMP
+    `);
+    stmt.run({
+      roundId: input.roundId,
+      matchId: input.matchId ?? null,
+      lobbyId: input.lobbyId ?? null,
+      mode: input.mode ?? null,
+      winnerWallet: input.winnerWallet,
+      prizeLamports: input.prizeLamports,
+      platformFeeBps: input.platformFeeBps,
+    });
+  }
+
+  recordPayoutSent(roundId: string, txSignature: string): void {
+    const stmt = this.db.prepare(`
+      UPDATE payouts
+      SET status='sent', tx_signature=?, error=NULL, updated_at=CURRENT_TIMESTAMP
+      WHERE round_id=?
+    `);
+    stmt.run(txSignature, roundId);
+  }
+
+  recordPayoutFailed(roundId: string, error: string): void {
+    const stmt = this.db.prepare(`
+      UPDATE payouts
+      SET status='failed', error=?, updated_at=CURRENT_TIMESTAMP
+      WHERE round_id=?
+    `);
+    stmt.run(error.slice(0, 2000), roundId);
+  }
+
+  recordPayoutSkipped(roundId: string, reason: string): void {
+    const stmt = this.db.prepare(`
+      UPDATE payouts
+      SET status='skipped', error=?, updated_at=CURRENT_TIMESTAMP
+      WHERE round_id=?
+    `);
+    stmt.run(reason.slice(0, 2000), roundId);
   }
 
   // Get player stats
