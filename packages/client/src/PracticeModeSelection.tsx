@@ -16,6 +16,7 @@ export function PracticeModeSelection({ onSelectSolo, onBack, onNotify }: Practi
     const [showNameInput, setShowNameInput] = useState(false);
     const [guestName, setGuestName] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
+    const [inviteBusy, setInviteBusy] = useState(false);
 
     useEffect(() => {
         try {
@@ -90,6 +91,51 @@ export function PracticeModeSelection({ onSelectSolo, onBack, onNotify }: Practi
     }, []);
 
     const [hovered, setHovered] = useState<string | null>(null);
+
+    const inviteLink = (() => {
+        try {
+            const u = new URL(window.location.href);
+            u.searchParams.set('practice', '1');
+            u.searchParams.delete('tournament');
+            return u.toString();
+        } catch {
+            return '';
+        }
+    })();
+
+    const copyInviteLink = async () => {
+        if (!inviteLink) return;
+        if (inviteBusy) return;
+        setInviteBusy(true);
+        try {
+            const navAny: any = navigator as any;
+            if (navAny?.share) {
+                await navAny.share({ title: 'SpermRace Practice Multiplayer', text: 'Join my free practice match', url: inviteLink });
+                onNotify?.('Invite sent');
+                return;
+            }
+            try {
+                await navigator.clipboard.writeText(inviteLink);
+                onNotify?.('Invite link copied');
+                return;
+            } catch { }
+            const ta = document.createElement('textarea');
+            ta.value = inviteLink;
+            ta.setAttribute('readonly', 'true');
+            ta.style.position = 'fixed';
+            ta.style.top = '-1000px';
+            ta.style.left = '-1000px';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            onNotify?.('Invite link copied');
+        } catch {
+            onNotify?.('Failed to copy invite link');
+        } finally {
+            setInviteBusy(false);
+        }
+    };
 
     return (
         <div className="practice-mode-overlay" style={{
@@ -175,6 +221,33 @@ export function PracticeModeSelection({ onSelectSolo, onBack, onNotify }: Practi
                     }}>
                         SELECT MODE
                     </h1>
+                    <div style={{ marginTop: 10, display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
+                        {!!inviteLink && (
+                            <button
+                                type="button"
+                                onClick={copyInviteLink}
+                                disabled={inviteBusy}
+                                style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 10,
+                                    padding: isMobile ? '10px 14px' : '10px 16px',
+                                    borderRadius: 999,
+                                    border: '1px solid rgba(0, 245, 255, 0.24)',
+                                    background: 'rgba(0, 245, 255, 0.06)',
+                                    color: 'rgba(255,255,255,0.9)',
+                                    fontWeight: 800,
+                                    letterSpacing: '0.06em',
+                                    cursor: inviteBusy ? 'wait' : 'pointer'
+                                }}
+                            >
+                                <span style={{ fontSize: 12 }}>{inviteBusy ? 'SENDING…' : 'INVITE FRIEND'}</span>
+                            </button>
+                        )}
+                    </div>
+                    <div style={{ marginTop: 10, fontSize: 12, color: 'rgba(255,255,255,0.55)', maxWidth: 560 }}>
+                        Practice multiplayer is free. Bots may fill empty slots so you can fight instantly.
+                    </div>
                 </div>
 
                 {/* Options Grid/Flex */}

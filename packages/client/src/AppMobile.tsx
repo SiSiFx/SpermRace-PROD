@@ -86,6 +86,13 @@ function AppInner() {
   const overlayActive = (wsState.phase === 'connecting' || wsState.phase === 'authenticating' || wsState.entryFee.pending);
 
   useEffect(() => {
+    try {
+      const qs = new URLSearchParams(window.location.search);
+      if (qs.get('practice') === '1') setScreen('practice');
+    } catch { }
+  }, []);
+
+  useEffect(() => {
     let id: any;
     if (overlayActive) {
       setLoadProg(0);
@@ -449,6 +456,8 @@ function Lobby({ onStart: _onStart, onBack, onRefund }: { onStart: () => void; o
   const { state } = useWs();
   const [showTutorial, setShowTutorial] = useState(false);
   const players = state.lobby?.players || [];
+  const botCount = players.filter(p => String(p).startsWith('BOT_')).length;
+  const realCount = Math.max(0, players.length - botCount);
   const realPlayers = players.filter(p => !String(p).startsWith('BOT_'));
   const prize = state.lobby ? Math.max(0, Math.floor(realPlayers.length * (state.lobby.entryFee as number) * 0.85)) : 0;
 
@@ -483,6 +492,11 @@ function Lobby({ onStart: _onStart, onBack, onRefund }: { onStart: () => void; o
         <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "12px", textAlign: "center" }}>
           <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)" }}>Pilots</div>
           <div style={{ fontSize: 18, fontWeight: 800, color: "#00f5ff" }}>{players.length} / {state.lobby?.maxPlayers ?? 32}</div>
+          {botCount > 0 && (
+            <div style={{ marginTop: 4, fontSize: 10, color: "rgba(255,255,255,0.55)" }}>
+              Real: {realCount} • Bots: {botCount}
+            </div>
+          )}
         </div>
         <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "12px", textAlign: "center" }}>
           <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)" }}>Prize</div>

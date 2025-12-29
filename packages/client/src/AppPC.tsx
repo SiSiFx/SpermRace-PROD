@@ -68,6 +68,13 @@ function AppInner() {
   const overlayActive = (wsState.phase === 'connecting' || wsState.phase === 'authenticating' || wsState.entryFee.pending);
 
   useEffect(() => {
+    try {
+      const qs = new URLSearchParams(window.location.search);
+      if (qs.get('practice') === '1') setScreen('practice');
+    } catch { }
+  }, []);
+
+  useEffect(() => {
     let id: any;
     if (overlayActive) {
       setLoadProg(0);
