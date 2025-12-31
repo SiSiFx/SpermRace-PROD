@@ -6012,17 +6012,21 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
         try { game.applyServerWorld(wsState.game.world as any); } catch {}
         try { (game as any).objective = (wsState.game as any).objective || null; } catch {}
         try { (game as any).lastServerTimeMs = Number((wsState.game as any).timestamp || 0) || 0; } catch {}
-        // Align the pre-start zoom/countdown to the server's GO time (prevents players moving before countdown).
+        // Align the pre-start zoom/countdown to the server's GO time using *server-relative* time
+        // (robust against device clock skew so we never get stuck frozen with no movement).
         try {
           const goAtMs = Number((wsState.game as any).goAtMs || 0) || 0;
           const srvNow = Number((wsState.game as any).timestamp || 0) || 0;
           if (goAtMs > 0 && srvNow > 0) {
-            const offset = srvNow - Date.now();
-            const goAtLocal = goAtMs - offset;
+            const msUntilGo = goAtMs - srvNow;
             const preMs = 3000;
-            if (Date.now() < goAtLocal) {
-              const startAtLocal = (goAtMs - preMs) - offset;
-              (game as any).preStart = { startAt: startAtLocal, durationMs: preMs };
+            if (msUntilGo <= 0) {
+              (game as any).preStart = null;
+            } else {
+              // If we join late, shorten the countdown instead of freezing longer than needed.
+              const durationMs = Math.max(0, Math.min(preMs, msUntilGo));
+              const startAt = Date.now() + (msUntilGo - durationMs);
+              (game as any).preStart = { startAt, durationMs };
             }
           }
         } catch { }
