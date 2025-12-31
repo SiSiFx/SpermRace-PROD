@@ -2098,9 +2098,16 @@ class SpermRaceGame {
         if ((this.player as any).nameplate) {
           try { (this.player as any).nameplate.style.display = p.isAlive ? "block" : "none"; } catch {}
         }
-        // During the pre-start countdown we freeze physics; still snap to server position so all
-        // players render correctly in the tactical overview.
-        if (this.preStart) {
+        // Always snap on the first server sync to avoid "moving during countdown" caused by
+        // starting at a local spawn and then interpolating to the authoritative server spawn.
+        const hadSync = !!(this.player as any).serverEverSynced;
+        (this.player as any).serverEverSynced = true;
+        const dx0 = tx - this.player.x;
+        const dy0 = ty - this.player.y;
+        const farSpawnMismatch = (dx0 * dx0 + dy0 * dy0) > (600 * 600);
+
+        // During the pre-start countdown we freeze physics; also snap so the overview camera sees everyone correctly.
+        if (this.preStart || !hadSync || farSpawnMismatch) {
           try {
             this.player.x = tx;
             this.player.y = ty;
@@ -2991,6 +2998,26 @@ class SpermRaceGame {
           if (this.player && myId && this.player.trailGraphics && Array.isArray((this.player as any).serverTrailPoints)) {
             this.renderTrail({ carId: this.player.id || myId, car: this.player, points: (this.player as any).serverTrailPoints, graphics: this.player.trailGraphics } as any);
           }
+          // Fallback: if the server trail hasn't arrived yet (common right after GO on slow mobile),
+          // draw a local-only trail so the player never has "head only".
+          try {
+            const pts = (this.player as any)?.serverTrailPoints;
+            const hasServerTrail = Array.isArray(pts) && pts.length >= 2;
+            if (this.player && !this.player.destroyed && !hasServerTrail) {
+              // Use a slightly lower rate on mobile to avoid perf issues.
+              const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+              this.addTrailPoint(this.player, isMobile ? 55 : 35, isMobile ? 45 : 60);
+            } else if (this.player && hasServerTrail) {
+              // Remove any temporary local trail for the player once server trail is available.
+              const idx = this.trails.findIndex(t => t.car === this.player);
+              if (idx >= 0) {
+                const t = this.trails[idx];
+                try { if (t.graphics && t.graphics.parent && this.trailContainer) this.trailContainer.removeChild(t.graphics); } catch {}
+                try { t.graphics?.destroy?.(); } catch {}
+                this.trails.splice(idx, 1);
+              }
+            }
+          } catch {}
           for (const [id, car] of this.serverPlayers.entries()) {
             if (!car || car.destroyed || !car.trailGraphics) continue;
             const pts = (car as any).serverTrailPoints;
@@ -5899,11 +5926,37 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
   const mountRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<SpermRaceGame | null>(null);
   const { state: wsState, sendInput } = useWs();
+  const initialWsStateRef = useRef<any>(wsState);
+  // Keep latest WS state available without re-creating the Pixi app.
+  useEffect(() => { initialWsStateRef.current = wsState as any; }, [wsState]);
 
   // Initialize Pixi only once on mount; update callbacks via a separate effect
   useEffect(() => {
     if (!mountRef.current) return;
     const game = new SpermRaceGame(mountRef.current, onReplay, onExit);
+    // If we mounted while WS is already in game phase, pre-enable online mode immediately.
+    // This avoids a short window where local/offline physics can run during server countdown on mobile.
+    try {
+      const s = initialWsStateRef.current as any;
+      if (s?.phase === 'game') {
+        const lobbyAny: any = s?.lobby || null;
+        const mode = lobbyAny?.mode ?? ((Number(lobbyAny?.entryFee || 0) === 0) ? 'practice' : 'tournament');
+        const entryFee = lobbyAny?.entryFee ?? null;
+        (game as any).wsHud = {
+          active: true,
+          kills: s?.kills || {},
+          killFeed: s?.killFeed || [],
+          playerId: s?.playerId || null,
+          idToName: {},
+          aliveSet: new Set<string>(),
+          eliminationOrder: s?.eliminationOrder || [],
+          mode,
+          entryFee
+        };
+        // Keep the countdown clean even before the first `gameStateUpdate` arrives.
+        if (!(game as any).preStart) (game as any).preStart = { startAt: Date.now(), durationMs: 3000 };
+      }
+    } catch {}
     gameRef.current = game;
     game.init().catch(console.error);
     return () => {
