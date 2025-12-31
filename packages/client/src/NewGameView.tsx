@@ -3061,20 +3061,20 @@ class SpermRaceGame {
       } catch {}
     }
     
-    // Update sonar radar
-    this.radarAngle = (this.radarAngle + deltaTime * 2) % (Math.PI * 2);
-    this.updateRadar();
-    this.updateEnemyCompass();
-    this.updateObjectiveStatus();
+    // Update sonar radar + compass (never let UI exceptions freeze the whole match)
+    try { this.radarAngle = (this.radarAngle + deltaTime * 2) % (Math.PI * 2); } catch { }
+    try { this.updateRadar(); } catch { try { this.radarCtx = null as any; } catch { } }
+    try { this.updateEnemyCompass(); } catch { }
+    try { this.updateObjectiveStatus(); } catch { }
     
     // Update alive count (legacy HUD removed; kept for practice header only)
-    this.updateAliveCount();
+    try { this.updateAliveCount(); } catch { }
     
     // Update boost bar
-    this.updateBoostBar();
+    try { this.updateBoostBar(); } catch { }
     
     // Update trail status
-    this.updateTrailStatus();
+    try { this.updateTrailStatus(); } catch { }
     // Update emotes positions
     try {
       if (this.emotes.length && this.app) {
@@ -3093,17 +3093,17 @@ class SpermRaceGame {
 
     // Countdown overlay drawings disabled to reduce CPU
     
-    // Update HUD elements: nameplates and alive count
-    this.updateNameplates();
-    this.updateLeaderboard();
+    // Update HUD elements: nameplates and leaderboard
+    try { this.updateNameplates(); } catch { }
+    try { this.updateLeaderboard(); } catch { }
     // Kill feed removed - clutters mobile screen
     // Combo notifications removed - too cluttered
 
     // Render debug collision overlays (short TTL)
-    this.renderDebugOverlays();
+    try { this.renderDebugOverlays(); } catch { }
     
     // Handle respawning
-    this.handleRespawning(deltaTime);
+    try { this.handleRespawning(deltaTime); } catch { }
 
     // WS debug overlay update (opt-in)
     if (this.debugWsEl) {
@@ -3118,9 +3118,16 @@ class SpermRaceGame {
       } catch { }
     }
     } catch (e) {
-      this.fatalLoopError = true;
-      try { console.error('[SpermRaceGame] gameLoop crashed; stopping ticker', e); } catch { }
-      try { (this.app as any)?.ticker?.stop?.(); } catch { }
+      // Never hard-stop the ticker on the first exception; that looks like "no movement" in multiplayer.
+      // Instead, log once per second and keep going. If errors spam, we can still circuit-break later.
+      const nowMs = Date.now();
+      try {
+        const last = (this as any).__sr_lastLoopErrLogMs || 0;
+        if (nowMs - last > 1000) {
+          (this as any).__sr_lastLoopErrLogMs = nowMs;
+          console.error('[SpermRaceGame] gameLoop error (continuing)', e);
+        }
+      } catch { }
     }
   }
 
