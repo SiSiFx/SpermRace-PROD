@@ -452,7 +452,9 @@ const corsOptions: cors.CorsOptions = {
   origin: (origin, cb) => {
     if (!origin) return cb(null, true);
     if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
-    return cb(new Error('Not allowed by CORS'));
+    // Do not throw here: it spams server logs with stack traces for random/bot origins.
+    // Returning `false` blocks the browser from reading responses and keeps logs clean.
+    return cb(null, false);
   },
   credentials: true,
 };

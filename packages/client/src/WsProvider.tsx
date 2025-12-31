@@ -943,6 +943,7 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
         tx = Math.max(0, Math.min(world.width, tx));
         ty = Math.max(0, Math.min(world.height, ty));
       }
+      if (!Number.isFinite(tx) || !Number.isFinite(ty)) return;
       const sock = wsRef.current;
       if (!sock || sock.readyState !== WebSocket.OPEN) return;
       const payload = { target: { x: tx, y: ty }, accelerate, ...(boost !== undefined ? { boost } : {}) };

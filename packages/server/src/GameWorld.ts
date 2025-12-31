@@ -172,7 +172,8 @@ export class GameWorld {
     // Pure battle royale: last alive wins (no extraction objective).
     delete (this.gameState as any).objective;
 
-    players.forEach(playerId => this.spawnPlayer(playerId));
+    // Spawn players with a deterministic "face-off" layout so they see each other immediately.
+    this.spawnInitialPlayers(players, mode);
     // Spawn an initial batch of DNA fragments to seed the map
     for (let i = 0; i < 10 && this.items.size < MAX_DNA_ON_MAP; i++) {
       this.spawnDNA();
@@ -632,6 +633,59 @@ export class GameWorld {
     // Wrap bots with AI controllers (identified by BOT_ prefix)
     if (typeof playerId === 'string' && playerId.startsWith('BOT_')) {
       this.bots.set(playerId, new BotController(player));
+    }
+  }
+
+  private spawnInitialPlayers(playerIds: string[], mode: GameMode): void {
+    const width = this.gameState.world.width || this.baseWorldWidth || WORLD_WIDTH;
+    const height = this.gameState.world.height || this.baseWorldHeight || WORLD_HEIGHT;
+    const minDim = Math.min(width, height);
+    const wallMargin = Math.min(240, Math.max(120, Math.floor(minDim * 0.08)));
+    const center = { x: width / 2, y: height / 2 };
+    const insideMaxR = Math.max(180, Math.floor(minDim / 2 - wallMargin));
+
+    const n = Array.isArray(playerIds) ? playerIds.length : 0;
+    if (n <= 0) return;
+
+    // Ring count scales with lobby size so spacing stays sane even in compact practice arenas.
+    const ringCount = n <= 12 ? 1 : n <= 24 ? 2 : 3;
+    const baseRadii =
+      ringCount === 1
+        ? [Math.floor(insideMaxR * 0.42)]
+        : ringCount === 2
+          ? [Math.floor(insideMaxR * 0.30), Math.floor(insideMaxR * 0.55)]
+          : [Math.floor(insideMaxR * 0.24), Math.floor(insideMaxR * 0.44), Math.floor(insideMaxR * 0.64)];
+
+    const radii = baseRadii.map(r => Math.max(220, Math.min(insideMaxR, r)));
+    const rotation = Math.random() * Math.PI * 2;
+
+    // Distribute player ids across rings (outer rings slightly larger capacity).
+    const ringBuckets: string[][] = Array.from({ length: ringCount }, () => []);
+    for (let i = 0; i < n; i++) {
+      const ringIdx = ringCount === 1 ? 0 : ringCount === 2 ? (i % 2) : (i % 3);
+      ringBuckets[ringIdx].push(playerIds[i]);
+    }
+
+    for (let rIdx = 0; rIdx < ringBuckets.length; rIdx++) {
+      const ids = ringBuckets[rIdx];
+      if (!ids.length) continue;
+      const r = radii[Math.min(rIdx, radii.length - 1)];
+      const step = (Math.PI * 2) / ids.length;
+      const ringRot = rotation + (rIdx * step * 0.5);
+
+      for (let j = 0; j < ids.length; j++) {
+        const theta = ringRot + j * step;
+        const x = Math.max(wallMargin, Math.min(width - wallMargin, center.x + Math.cos(theta) * r));
+        const y = Math.max(wallMargin, Math.min(height - wallMargin, center.y + Math.sin(theta) * r));
+        const angleTowardCenter = Math.atan2(center.y - y, center.x - x);
+
+        const player = new PlayerEntity(ids[j], { x, y }, angleTowardCenter);
+        this.players.set(ids[j], player);
+
+        if (typeof ids[j] === 'string' && ids[j].startsWith('BOT_')) {
+          this.bots.set(ids[j], new BotController(player));
+        }
+      }
     }
   }
 
