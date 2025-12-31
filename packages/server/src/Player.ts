@@ -59,7 +59,7 @@ export class PlayerEntity implements Player {
   // Last raw input-derived aim angle for anti-cheat smoothing
   private lastInputAngle: number | null = null;
 
-  constructor(id: string, spawnPosition: Vector2) {
+  constructor(id: string, spawnPosition: Vector2, spawnAngle?: number) {
     this.id = id;
     this.isAlive = true;
     this.trail = [];
@@ -67,15 +67,17 @@ export class PlayerEntity implements Player {
       target: { ...spawnPosition },
       accelerate: true,
     };
+    const initialAngle = Number.isFinite(spawnAngle as number) ? (spawnAngle as number) : (Math.random() * Math.PI * 2);
     this.sperm = {
       position: spawnPosition,
       velocity: { x: 0, y: 0 },
-      angle: Math.random() * Math.PI * 2,
+      angle: initialAngle,
       angularVelocity: 0,
       color: CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)],
     };
     this.timeSinceLastTrailEmit = 0;
     this.targetAngle = this.sperm.angle;
+    this.lastInputAngle = this.targetAngle;
     this.spawnAtMs = Date.now();
     this.lastBounceAt = 0;
     this.lastLungeAt = 0;
