@@ -2864,7 +2864,8 @@ class SpermRaceGame {
         }
       }
       if (this.player && !this.player.destroyed) {
-        if (!isOnline) {
+        // Freeze local (offline) physics during the pre-start countdown.
+        if (!isOnline && !this.preStart) {
           this.updateCar(this.player, deltaTime);
           this.checkArenaCollision(this.player);
         } else {
@@ -2909,14 +2910,14 @@ class SpermRaceGame {
       }
       
       if (!isOnline) {
-        if (this.bot && !this.bot.destroyed) {
+        if (!this.preStart && this.bot && !this.bot.destroyed) {
           this.updateBot(this.bot, deltaTime);
           this.checkArenaCollision(this.bot);
         }
         
         // Update extra bots
         for (const extraBot of this.extraBots) {
-          if (!extraBot.destroyed) {
+          if (!this.preStart && !extraBot.destroyed) {
             this.updateBot(extraBot, deltaTime);
             this.checkArenaCollision(extraBot);
           }
@@ -2973,12 +2974,16 @@ class SpermRaceGame {
       }
       
       if (!isOnline) {
+        if (this.preStart) {
+          // no-op: keep the countdown clean and deterministic
+        } else {
         // Update trails
         this.updateTrails(deltaTime);
         
         // Check trail collisions
         this.checkTrailCollisions();
         this.resolveCarBumps(deltaTime);
+        }
       } else {
         // Online: re-render server trails every frame so tails stay attached between WS snapshots.
         try {
@@ -5925,7 +5930,31 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
   useEffect(() => {
     const game = gameRef.current;
     if (!game) return;
-    if (wsState?.phase === 'game' && wsState.game) {
+    if (wsState?.phase === 'game') {
+      // Important: `gameStarting` arrives before the first `gameStateUpdate`.
+      // Treat that window as online so we don't run local/offline physics during the server countdown.
+      const lobbyAny: any = wsState.lobby || null;
+      const mode = lobbyAny?.mode ?? ((Number(lobbyAny?.entryFee || 0) === 0) ? 'practice' : 'tournament');
+      const entryFee = lobbyAny?.entryFee ?? null;
+      const placeholderHud = {
+        active: true,
+        kills: wsState.kills || {},
+        killFeed: wsState.killFeed || [],
+        playerId: wsState.playerId,
+        idToName: {},
+        aliveSet: new Set<string>(),
+        eliminationOrder: wsState.eliminationOrder || [],
+        mode,
+        entryFee
+      };
+      try { (game as any).wsHud = placeholderHud as any; } catch {}
+      try {
+        // If GO time hasn't been provided yet, at least run a short preStart countdown locally.
+        if (!(game as any).preStart) (game as any).preStart = { startAt: Date.now(), durationMs: 3000 };
+      } catch {}
+
+      if (!wsState.game) return;
+
       try {
         try { game.applyServerWorld(wsState.game.world as any); } catch {}
         try { (game as any).objective = (wsState.game as any).objective || null; } catch {}
@@ -5947,25 +5976,16 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
         const players = wsState.game.players || [];
         const aliveSet = new Set<string>(players.filter(p => p.isAlive).map(p => p.id));
         const idToName: Record<string, string> = {};
-        const lobbyAny: any = wsState.lobby || null;
         const playerNames: Record<string, string> = (lobbyAny && typeof lobbyAny === 'object' && lobbyAny.playerNames) ? lobbyAny.playerNames : {};
-        const mode = lobbyAny?.mode ?? ((Number(lobbyAny?.entryFee || 0) === 0) ? 'practice' : 'tournament');
-        const entryFee = lobbyAny?.entryFee ?? null;
         for (const p of players) {
           const short = `${p.id.slice(0,4)}…${p.id.slice(-4)}`;
           idToName[p.id] = (typeof playerNames?.[p.id] === 'string' && playerNames[p.id]) ? playerNames[p.id] : short;
         }
         game.wsHud = {
-          active: true,
-          kills: wsState.kills || {},
-          killFeed: wsState.killFeed || [],
-          playerId: wsState.playerId,
+          ...placeholderHud,
           idToName,
-          aliveSet,
-          eliminationOrder: wsState.eliminationOrder || [],
-          mode,
-          entryFee
-        };
+          aliveSet
+        } as any;
         try {
           if (!(game as any).srOnlineHintShown && mode === 'practice') {
             (game as any).srOnlineHintShown = true;
@@ -5981,10 +6001,10 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
       } catch {
         game.wsHud = { active: false, kills: {}, killFeed: [], playerId: null, idToName: {}, aliveSet: new Set(), eliminationOrder: [] } as any;
       }
-    } else {
-      game.wsHud = { active: false, kills: {}, killFeed: [], playerId: null, idToName: {}, aliveSet: new Set(), eliminationOrder: [] } as any;
+      return;
     }
-  }, [wsState.phase, wsState.game, wsState.kills, wsState.killFeed, wsState.playerId]);
+    game.wsHud = { active: false, kills: {}, killFeed: [], playerId: null, idToName: {}, aliveSet: new Set(), eliminationOrder: [] } as any;
+  }, [wsState.phase, wsState.game, wsState.lobby, wsState.kills, wsState.killFeed, wsState.playerId, wsState.eliminationOrder]);
 
   return (
     <div
