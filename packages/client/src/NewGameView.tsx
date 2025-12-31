@@ -1262,7 +1262,8 @@ class SpermRaceGame {
     
     // Touch controls - Enhanced for mobile
     const onTouchStart = (e: TouchEvent) => {
-      e.preventDefault();
+      // Avoid noisy browser warnings when the event is not cancelable (e.g. scrolling already in progress).
+      try { if (e.cancelable) e.preventDefault(); } catch {}
       const touch = e.touches[0];
       const rect = this.app!.canvas.getBoundingClientRect();
       const now = Date.now();
@@ -1295,7 +1296,7 @@ class SpermRaceGame {
     };
     
     const onTouchMove = (e: TouchEvent) => {
-      e.preventDefault();
+      try { if (e.cancelable) e.preventDefault(); } catch {}
       if (this.touch.active && e.touches.length > 0) {
         const touch = e.touches[0];
         const rect = this.app!.canvas.getBoundingClientRect();
@@ -1305,7 +1306,7 @@ class SpermRaceGame {
     };
     
     const onTouchEnd = (e: TouchEvent) => {
-      e.preventDefault();
+      try { if (e.cancelable) e.preventDefault(); } catch {}
       this.touch.active = false;
     };
     
@@ -6008,12 +6009,17 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
         entryFee
       };
       try { (game as any).wsHud = placeholderHud as any; } catch {}
-      try {
-        // If GO time hasn't been provided yet, at least run a short preStart countdown locally.
-        if (!(game as any).preStart) (game as any).preStart = { startAt: Date.now(), durationMs: 3000 };
-      } catch {}
 
-      if (!wsState.game) return;
+      // If we don't have a server state yet, run a one-shot local countdown and wait.
+      if (!wsState.game) {
+        try {
+          if (!(game as any).__srPlaceholderPrestartArmed && !(game as any).preStart) {
+            (game as any).__srPlaceholderPrestartArmed = true;
+            (game as any).preStart = { startAt: Date.now(), durationMs: 3000 };
+          }
+        } catch {}
+        return;
+      }
 
       try {
         try { game.applyServerWorld(wsState.game.world as any); } catch {}
@@ -6035,6 +6041,9 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
               const startAt = Date.now() + (msUntilGo - durationMs);
               (game as any).preStart = { startAt, durationMs };
             }
+          } else if (wsState.hasFirstGameState) {
+            // If server doesn't provide GO timing, never loop a local countdown after the first tick.
+            (game as any).preStart = null;
           }
         } catch { }
         const players = wsState.game.players || [];
