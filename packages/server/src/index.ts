@@ -1589,6 +1589,7 @@ function broadcastGameState(): void {
         type: 'gameStateUpdate',
         payload: {
           timestamp,
+          goAtMs: (gameState as any).goAtMs,
           players: playersArray.map((p: any) => ({
             id: p.id,
             sperm: p.sperm,
@@ -1609,6 +1610,7 @@ function broadcastGameState(): void {
         type: 'gameStateUpdate',
         payload: {
           timestamp,
+          goAtMs: (gameState as any).goAtMs,
           players: playersArray.map((p: any) => ({
             id: p.id,
             sperm: p.sperm,
