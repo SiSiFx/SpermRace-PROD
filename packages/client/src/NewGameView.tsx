@@ -2902,8 +2902,9 @@ class SpermRaceGame {
               this.player.angle += da * a2;
               this.player.sprite.rotation = this.player.angle;
             }
-            this.updateCarVisuals(this.player, deltaTime);
           } catch {}
+          // Always update visuals, even if interpolation fails
+          this.updateCarVisuals(this.player, deltaTime);
         }
         // Keep nameplate pinned above player
         try {
