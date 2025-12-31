@@ -177,6 +177,9 @@ class SpermRaceGame {
   public wsSendInput: null | ((target: { x: number; y: number }, accelerate: boolean, boost?: boolean) => void) = null;
   private onlineModeInitialized: boolean = false;
   private fatalLoopError: boolean = false;
+  private lastWsStateAtMs: number = 0;
+  private wsDebug: { players: number; withTrail: number; totalTrailPoints: number } = { players: 0, withTrail: 0, totalTrailPoints: 0 };
+  private debugWsEl: HTMLDivElement | null = null;
 
   private container: HTMLElement;
   private cleanupFunctions: (() => void)[] = [];
@@ -1565,6 +1568,33 @@ class SpermRaceGame {
     Object.assign(toast.style, { position: 'absolute', bottom: '20px', left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.55)', color: this.theme.text, padding: '6px 10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', fontSize: '12px', opacity: '0', transition: 'opacity 180ms ease', pointerEvents: 'none', zIndex: '12' });
     this.uiContainer.appendChild(toast);
 
+    // WS debug overlay (opt-in): `localStorage.sr_debug_ws = "1"`
+    try {
+      if (localStorage.getItem('sr_debug_ws') === '1') {
+        const el = document.createElement('div');
+        el.id = 'sr-ws-debug';
+        Object.assign(el.style, {
+          position: 'absolute',
+          left: '10px',
+          bottom: '10px',
+          zIndex: '9999',
+          padding: '8px 10px',
+          borderRadius: '10px',
+          background: 'rgba(0,0,0,0.65)',
+          border: '1px solid rgba(255,255,255,0.16)',
+          color: '#e5e7eb',
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+          fontSize: '11px',
+          lineHeight: '1.3',
+          pointerEvents: 'none',
+          whiteSpace: 'pre',
+        } as any);
+        el.textContent = 'WS debug…';
+        this.uiContainer.appendChild(el);
+        this.debugWsEl = el;
+      }
+    } catch { }
+
     // Create emote buttons (mobile-friendly)
     this.createEmoteButtons();
   }
@@ -2015,6 +2045,7 @@ class SpermRaceGame {
 
   syncServerPlayers(playerData: any[]) {
     if (!this.app || !this.worldContainer) return;
+    this.lastWsStateAtMs = Date.now();
     const currentIds = new Set(playerData.map(p => p.id));
     const myId = this.wsHud?.playerId;
     const isTournament = !!(this.wsHud && this.wsHud.active);
@@ -2032,12 +2063,28 @@ class SpermRaceGame {
       }
     }
 
+    // WS debug stats
+    try {
+      let withTrail = 0;
+      let totalTrailPoints = 0;
+      for (const p of playerData as any[]) {
+        const t = Array.isArray(p?.trail) ? p.trail : null;
+        if (t && t.length) {
+          withTrail += 1;
+          totalTrailPoints += t.length;
+        }
+      }
+      this.wsDebug = { players: playerData.length, withTrail, totalTrailPoints };
+    } catch { }
+
     // Update or create players
     playerData.forEach(p => {
       // In online matches, also drive *our* avatar from the server to avoid desync.
       if (isTournament && myId && p.id === myId && this.player) {
-        (this.player as any).serverTargetX = (p.sperm.position.x || 0) + offsetX;
-        (this.player as any).serverTargetY = (p.sperm.position.y || 0) + offsetY;
+        const tx = (p.sperm.position.x || 0) + offsetX;
+        const ty = (p.sperm.position.y || 0) + offsetY;
+        (this.player as any).serverTargetX = tx;
+        (this.player as any).serverTargetY = ty;
         this.player.vx = p.sperm.velocity?.x || 0;
         this.player.vy = p.sperm.velocity?.y || 0;
         (this.player as any).serverTargetAngle = p.sperm.angle;
@@ -2048,6 +2095,18 @@ class SpermRaceGame {
         this.player.sprite.visible = !!p.isAlive;
         if ((this.player as any).nameplate) {
           try { (this.player as any).nameplate.style.display = p.isAlive ? "block" : "none"; } catch {}
+        }
+        // During the pre-start countdown we freeze physics; still snap to server position so all
+        // players render correctly in the tactical overview.
+        if (this.preStart) {
+          try {
+            this.player.x = tx;
+            this.player.y = ty;
+            this.player.angle = p.sperm.angle;
+            this.player.sprite.position.set(this.player.x, this.player.y);
+            this.player.sprite.rotation = this.player.angle;
+            this.updateCarVisuals(this.player, 0);
+          } catch { }
         }
 
         if (p.trail && this.trailContainer) {
@@ -2089,11 +2148,13 @@ class SpermRaceGame {
       car.vy = p.sperm.velocity?.y || 0;
       (car as any).serverTargetAngle = p.sperm.angle;
       car.isBoosting = p.status?.boosting || false;
-      // Initialize to the target to avoid a visible jump on first update.
-      if (!Number.isFinite(car.x) || !Number.isFinite(car.y) || (car.x === 0 && car.y === 0)) {
+      // During pre-start (and on first spawn), snap so the overview camera sees everyone immediately.
+      if (this.preStart || !Number.isFinite(car.x) || !Number.isFinite(car.y) || (car.x === 0 && car.y === 0)) {
         car.x = tx;
         car.y = ty;
+        car.angle = p.sperm.angle;
         car.sprite.position.set(car.x, car.y);
+        car.sprite.rotation = car.angle;
       }
       car.destroyed = !p.isAlive;
       car.sprite.visible = p.isAlive;
@@ -2987,14 +3048,17 @@ class SpermRaceGame {
     // Handle respawning
     this.handleRespawning(deltaTime);
 
-    // If server ends the round, auto-navigate out once
-    if (this.wsHud?.active && !this.notifiedServerEnd) {
-      const aliveCount = this.wsHud.aliveSet?.size ?? 0;
-      if (aliveCount <= 1 && this.onExit) {
-        this.notifiedServerEnd = true;
-        // allow a short delay to show end
-        setTimeout(() => { try { this.onExit && this.onExit(); } catch {} }, 500);
-      }
+    // WS debug overlay update (opt-in)
+    if (this.debugWsEl) {
+      try {
+        const nowMs = Date.now();
+        const lines: string[] = [];
+        lines.push(`wsHud.active=${!!this.wsHud?.active} mode=${String((this.wsHud as any)?.mode || '')}`);
+        lines.push(`serverPlayers=${this.serverPlayers.size} alive=${this.wsHud?.aliveSet?.size ?? 0}`);
+        lines.push(`wsPlayers=${this.wsDebug.players} trails=${this.wsDebug.withTrail} trailPts=${this.wsDebug.totalTrailPoints}`);
+        lines.push(`lastStateMsAgo=${this.lastWsStateAtMs ? (nowMs - this.lastWsStateAtMs) : -1}`);
+        this.debugWsEl.textContent = lines.join('\n');
+      } catch { }
     }
     } catch (e) {
       this.fatalLoopError = true;
@@ -5717,6 +5781,7 @@ updateProximityRadar() {
       } catch (error) {
         console.warn('Error removing UI container:', error);
       }
+      this.debugWsEl = null;
 
       // Also clean up any document.body elements (like game-over-overlay)
       const bodyElements = ['game-over-overlay'];
