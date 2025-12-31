@@ -120,6 +120,26 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
   const reconnectTimerRef = useRef<number | null>(null);
   const storedSessionTokenRef = useRef<{ token: string; expiresAt: number } | null>(null);
 
+  // Best-effort cleanup: if the user refreshes/navigates away while queued in a lobby,
+  // tell the server immediately so their slot doesn't "ghost" until the WS timeout.
+  useEffect(() => {
+    const onPageExit = () => {
+      try {
+        const sock = wsRef.current;
+        if (!sock || sock.readyState !== WebSocket.OPEN) return;
+        try { sock.send(JSON.stringify({ type: 'leaveLobby', payload: {} })); } catch { }
+        try { expectedCloseRef.current = true; } catch { }
+        try { sock.close(); } catch { }
+      } catch { }
+    };
+    window.addEventListener('beforeunload', onPageExit);
+    window.addEventListener('pagehide', onPageExit);
+    return () => {
+      window.removeEventListener('beforeunload', onPageExit);
+      window.removeEventListener('pagehide', onPageExit);
+    };
+  }, []);
+
   const getStoredSessionToken = (): { token: string; expiresAt: number } | null => {
     try {
       const cur = storedSessionTokenRef.current;

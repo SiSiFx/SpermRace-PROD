@@ -164,11 +164,48 @@ export class LobbyManager {
     if (!lobbyId) return;
 
     const lobby = this.lobbies.get(lobbyId);
-    if (lobby) {
-      lobby.players = lobby.players.filter(p => p !== playerId);
-      this.playerLobbyMap.delete(playerId);
-      if (lobby.players.length === 0) this.lobbies.delete(lobbyId);
-      else this.onLobbyUpdate?.(lobby);
+    // Always clear the player -> lobby mapping even if the lobby vanished.
+    this.playerLobbyMap.delete(playerId);
+    if (!lobby) return;
+
+    lobby.players = lobby.players.filter(p => p !== playerId);
+
+    // If the lobby is now empty, fully clean up its timers/metadata.
+    if (lobby.players.length === 0) {
+      this.clearLobbyTimers(lobbyId);
+      this.lobbies.delete(lobbyId);
+      this.lobbyDeadlineMs.delete(lobbyId);
+      this.lobbyCountdownStartMs.delete(lobbyId);
+      this.lobbyStartAtMs.delete(lobbyId);
+      return;
+    }
+
+    // If a player leaves during countdown, reset the countdown to avoid "ghost slots" + stale start times.
+    if (lobby.status === 'starting') {
+      this.clearLobbyTimers(lobbyId);
+      this.lobbyCountdownStartMs.delete(lobbyId);
+      lobby.status = 'waiting';
+    }
+
+    this.onLobbyUpdate?.(lobby);
+
+    // Re-evaluate countdown after a leave so remaining players don't get stuck in waiting forever.
+    if (lobby.status === 'waiting') {
+      if (lobby.players.length === 1) {
+        if (lobby.mode === 'practice') {
+          this.startLobbyCountdown(lobby);
+        } else {
+          const silentWaitMs = 30000;
+          setTimeout(() => {
+            const currentLobby = this.lobbies.get(lobby.lobbyId);
+            if (currentLobby && currentLobby.players.length === 1 && currentLobby.status === 'waiting') {
+              this.startLobbyCountdown(currentLobby);
+            }
+          }, silentWaitMs);
+        }
+      } else {
+        this.startLobbyCountdown(lobby);
+      }
     }
   }
 
@@ -332,6 +369,7 @@ export class LobbyManager {
       if (s) { clearTimeout(s); this.lobbyStartTimeout.delete(lobbyId); }
     } catch {}
     this.lobbyStartAtMs.delete(lobbyId);
+    this.lobbyCountdownStartMs.delete(lobbyId);
   }
 
   private injectPracticeBots(lobby: Lobby): void {

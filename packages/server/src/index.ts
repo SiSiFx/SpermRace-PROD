@@ -1097,22 +1097,25 @@ wss.on('connection', (ws: WebSocket, req: any) => {
     }
   });
 
-  ws.on('close', (code, reason) => {
-    const reasonStr = reason?.toString() || 'no reason';
-    console.log(`🔌 WebSocket closed: code=${code}, reason="${reasonStr}"`);
-    pendingSockets.delete(ws);
-    try { wsHeartbeat.delete(ws); } catch { }
-    try {
-      const t = socketToAuthTimeout.get(ws);
-      if (t) { clearTimeout(t); socketToAuthTimeout.delete(ws); }
-    } catch { }
-	    const playerId = socketToPlayerId.get(ws);
-	    if (playerId) {
-	      playerIdToSocket.delete(playerId);
-	      socketToPlayerId.delete(ws);
-        // Match reconnect grace: do not instantly remove/eliminate on mobile drops.
-        const match = getMatchForPlayer(playerId);
-        if (match && !String(playerId).startsWith('BOT_')) {
+	  ws.on('close', (code, reason) => {
+	    const reasonStr = reason?.toString() || 'no reason';
+	    console.log(`🔌 WebSocket closed: code=${code}, reason="${reasonStr}"`);
+	    pendingSockets.delete(ws);
+	    try { wsHeartbeat.delete(ws); } catch { }
+	    try {
+	      const t = socketToAuthTimeout.get(ws);
+	      if (t) { clearTimeout(t); socketToAuthTimeout.delete(ws); }
+	    } catch { }
+		    const playerId = socketToPlayerId.get(ws);
+		    if (playerId) {
+          // If a player refreshes/leaves while in a lobby, remove them immediately so they don't "ghost" a slot.
+          // This also ensures they can re-join after refresh (LobbyManager blocks duplicate joins by playerId).
+          try { lobbyManager.leaveLobby(playerId); } catch { }
+		      playerIdToSocket.delete(playerId);
+		      socketToPlayerId.delete(ws);
+	        // Match reconnect grace: do not instantly remove/eliminate on mobile drops.
+	        const match = getMatchForPlayer(playerId);
+	        if (match && !String(playerId).startsWith('BOT_')) {
           try { (match.gameWorld as any).handlePlayerDisconnect?.(playerId); } catch { }
           const graceMs = getReconnectGraceMs(match.mode);
           clearReconnectTimer(playerId);
