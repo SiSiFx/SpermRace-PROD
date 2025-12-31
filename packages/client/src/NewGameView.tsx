@@ -3656,19 +3656,17 @@ class SpermRaceGame {
   updateTrails(_deltaTime: number) {
     // Add trail points for active cars
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const isTournament = !!(this.wsHud && this.wsHud.active);
-    const hidePlayerTrailInMobilePractice = isMobile && !isTournament;
-
-    if (this.player && !this.player.destroyed && !hidePlayerTrailInMobilePractice) {
-      this.addTrailPoint(this.player);
-    }
+    // Never hide the local player's gameplay trail (it is core feedback + mechanics).
+    // On mobile, reduce emission rate instead of disabling.
+    const playerTrailInterval = isMobile ? 55 : 30;
+    if (this.player && !this.player.destroyed) this.addTrailPoint(this.player, playerTrailInterval, isMobile ? 45 : 60);
     if (this.bot && !this.bot.destroyed) {
-      this.addTrailPoint(this.bot);
+      this.addTrailPoint(this.bot, isMobile ? 55 : 30, isMobile ? 45 : 60);
     }
     // Add trail points for server-synced players
     for (const car of this.serverPlayers.values()) {
       if (!car.destroyed) {
-        this.addTrailPoint(car);
+        this.addTrailPoint(car, isMobile ? 55 : 30, isMobile ? 45 : 60);
       }
     }
     // Add trail points for extra bots (LOD: only near camera)
@@ -3680,7 +3678,7 @@ class SpermRaceGame {
         const dx = extraBot.x - camX;
         const dy = extraBot.y - camY;
         if (dx*dx + dy*dy < lodRadius*lodRadius) {
-          this.addTrailPoint(extraBot);
+          this.addTrailPoint(extraBot, isMobile ? 65 : 30, isMobile ? 40 : 60);
         }
       }
     }
@@ -3691,7 +3689,7 @@ class SpermRaceGame {
       const now = Date.now();
       
       // Remove old points
-      const maxAge = 3.0;
+      const maxAge = isMobile ? 2.4 : 3.0;
       trail.points = trail.points.filter(point => {
         return (now - point.time) / 1000 <= maxAge;
       });
@@ -3731,9 +3729,8 @@ class SpermRaceGame {
     }
   }
 
-  addTrailPoint(car: Car) {
+  addTrailPoint(car: Car, interval: number = 30, maxPoints: number = 60) {
     const now = Date.now();
-    const interval = 30;
     
     if (now - car.lastTrailTime > interval) {
       if (!this.trailContainer) {
@@ -3770,7 +3767,7 @@ class SpermRaceGame {
       car.lastTrailTime = now;
       
       // Limit trail length
-      if (trail.points.length > 60) {
+      if (trail.points.length > maxPoints) {
         trail.points.shift();
       }
     }
