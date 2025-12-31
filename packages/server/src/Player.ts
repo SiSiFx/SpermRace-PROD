@@ -235,9 +235,8 @@ export class PlayerEntity implements Player {
 
   private updateTrail(): void {
     if (!this.isAlive) return;
-    // Do not emit trails immediately after spawn to prevent spawn-collisions
-    // Matches SPAWN_SELF_COLLISION_GRACE_MS from constants
-    if (Date.now() - this.spawnAtMs < 2200) return;
+    // Short spawn delay so the round can start cleanly, but players still see trails quickly.
+    if (Date.now() - this.spawnAtMs < 450) return;
     if (this.timeSinceLastTrailEmit >= TRAIL_CONSTANTS.EMIT_INTERVAL) {
       this.timeSinceLastTrailEmit = 0;
 

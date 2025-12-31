@@ -228,6 +228,9 @@ export interface GameStateUpdateMessage {
   type: 'gameStateUpdate';
   payload: {
     timestamp: number;
+    // When present, the server will not advance physics/collisions until this time (server ms).
+    // Clients can use it to align their pre-start countdown/zoom.
+    goAtMs?: number;
     // Trails are intentionally optional here; newer servers send trails via `trailDelta`.
     players: Array<Pick<Player, 'id' | 'sperm' | 'isAlive' | 'status'> & { trail?: TrailPoint[] }>;
     world: { width: number; height: number };

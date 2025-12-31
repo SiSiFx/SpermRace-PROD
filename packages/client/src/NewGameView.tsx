@@ -63,6 +63,8 @@ interface Car {
   contactCooldown?: number;
   spawnTime?: number; // For growth over time
   killBoostUntil?: number; // Speed boost from kills
+  // Online-only: server trail points (world coords mapped into renderer coords).
+  serverTrailPoints?: Array<{ x: number; y: number; time: number; isBoosting: boolean; expiresAt?: number }>;
 }
 
 interface Trail {
@@ -2115,10 +2117,12 @@ class SpermRaceGame {
             (this.player.trailGraphics as any).zIndex = 20;
             this.trailContainer.addChild(this.player.trailGraphics);
           }
+          const points = p.trail.map((pt: any) => ({ x: (pt.x || 0) + offsetX, y: (pt.y || 0) + offsetY, time: (typeof pt.createdAt === 'number' ? pt.createdAt : (pt.expiresAt - 8000)), isBoosting: false, ...(typeof pt?.expiresAt === 'number' ? { expiresAt: pt.expiresAt } : {}) }));
+          (this.player as any).serverTrailPoints = points;
           const trailObj = {
             carId: this.player.id || myId,
             car: this.player,
-            points: p.trail.map((pt: any) => ({ x: (pt.x || 0) + offsetX, y: (pt.y || 0) + offsetY, time: (typeof pt.createdAt === 'number' ? pt.createdAt : (pt.expiresAt - 8000)), isBoosting: false, ...(typeof pt?.expiresAt === 'number' ? { expiresAt: pt.expiresAt } : {}) })),
+            points,
             graphics: this.player.trailGraphics
           };
           this.renderTrail(trailObj);
@@ -2168,11 +2172,13 @@ class SpermRaceGame {
           (car.trailGraphics as any).zIndex = 20;
           this.trailContainer.addChild(car.trailGraphics);
         }
+        const points = p.trail.map((pt: any) => ({ x: (pt.x || 0) + offsetX, y: (pt.y || 0) + offsetY, time: (typeof pt.createdAt === 'number' ? pt.createdAt : (pt.expiresAt - 8000)), isBoosting: false, ...(typeof pt?.expiresAt === 'number' ? { expiresAt: pt.expiresAt } : {}) }));
+        (car as any).serverTrailPoints = points;
         const trailObj = {
           carId: car.id,
           car: car,
           // Use createdAt when available so the trail ages correctly and doesn't stick to the head.
-          points: p.trail.map((pt: any) => ({ x: (pt.x || 0) + offsetX, y: (pt.y || 0) + offsetY, time: (typeof pt.createdAt === 'number' ? pt.createdAt : (pt.expiresAt - 8000)), isBoosting: false, ...(typeof pt?.expiresAt === 'number' ? { expiresAt: pt.expiresAt } : {}) })),
+          points,
           graphics: car.trailGraphics
         };
         this.renderTrail(trailObj);
@@ -2617,6 +2623,10 @@ class SpermRaceGame {
     const deltaTime = this.app.ticker.deltaMS / 1000;
     const isOnline = !!(this.wsHud && this.wsHud.active);
     const isTournament = isOnline;
+    // Advance server time locally between 20Hz WS updates so trail expiration/fades stay smooth.
+    if (isOnline && this.lastServerTimeMs > 0) {
+      try { this.lastServerTimeMs += Math.max(0, deltaTime) * 1000; } catch { }
+    }
     if (isOnline && !this.onlineModeInitialized) {
       this.onlineModeInitialized = true;
       // Ensure no local-only bots/trails remain when switching into online mode.
@@ -2969,6 +2979,21 @@ class SpermRaceGame {
         // Check trail collisions
         this.checkTrailCollisions();
         this.resolveCarBumps(deltaTime);
+      } else {
+        // Online: re-render server trails every frame so tails stay attached between WS snapshots.
+        try {
+          const myId = this.wsHud?.playerId;
+          if (this.player && myId && this.player.trailGraphics && Array.isArray((this.player as any).serverTrailPoints)) {
+            this.renderTrail({ carId: this.player.id || myId, car: this.player, points: (this.player as any).serverTrailPoints, graphics: this.player.trailGraphics } as any);
+          }
+          for (const [id, car] of this.serverPlayers.entries()) {
+            if (!car || car.destroyed || !car.trailGraphics) continue;
+            const pts = (car as any).serverTrailPoints;
+            if (Array.isArray(pts) && pts.length >= 2) {
+              this.renderTrail({ carId: id, car, points: pts, graphics: car.trailGraphics } as any);
+            }
+          }
+        } catch { }
       }
     }
     
@@ -5908,6 +5933,20 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
         try { game.applyServerWorld(wsState.game.world as any); } catch {}
         try { (game as any).objective = (wsState.game as any).objective || null; } catch {}
         try { (game as any).lastServerTimeMs = Number((wsState.game as any).timestamp || 0) || 0; } catch {}
+        // Align the pre-start zoom/countdown to the server's GO time (prevents players moving before countdown).
+        try {
+          const goAtMs = Number((wsState.game as any).goAtMs || 0) || 0;
+          const srvNow = Number((wsState.game as any).timestamp || 0) || 0;
+          if (goAtMs > 0 && srvNow > 0) {
+            const offset = srvNow - Date.now();
+            const goAtLocal = goAtMs - offset;
+            const preMs = 3000;
+            if (Date.now() < goAtLocal) {
+              const startAtLocal = (goAtMs - preMs) - offset;
+              (game as any).preStart = { startAt: startAtLocal, durationMs: preMs };
+            }
+          }
+        } catch { }
         const players = wsState.game.players || [];
         const aliveSet = new Set<string>(players.filter(p => p.isAlive).map(p => p.id));
         const idToName: Record<string, string> = {};

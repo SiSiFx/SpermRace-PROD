@@ -97,6 +97,7 @@ export class GameWorld {
   public onRoundEnd: ((winnerId: string, prizeAmountSol: number, payoutSignature?: string) => void) | null = null;
   public onAuditEvent: ((type: string, payload?: any) => void) | null = null;
   private lastWinReason: 'last_alive' | 'extraction' | 'draw' | null = null;
+  private roundGoAtMs: number | null = null;
 
   constructor(smartContractService: SmartContractService, db?: DatabaseService) {
     this.collisionSystem = new CollisionSystem(WORLD_WIDTH, WORLD_HEIGHT);
@@ -172,6 +173,10 @@ export class GameWorld {
     // Pure battle royale: last alive wins (no extraction objective).
     delete (this.gameState as any).objective;
 
+    // Pre-start window (used by the client for cinematic zoom + countdown).
+    // Server holds physics/collisions until this time so nobody moves early.
+    this.roundGoAtMs = Date.now() + 3000;
+
     // Spawn players with a deterministic "face-off" layout so they see each other immediately.
     this.spawnInitialPlayers(players, mode);
     // Spawn an initial batch of DNA fragments to seed the map
@@ -198,7 +203,8 @@ export class GameWorld {
         console.debug(`[DEV][ROUND_START] players (${players.length}):`, masked);
       } catch {}
     }
-    this.roundStartedAtMs = Date.now();
+    // Time-based systems (shrink, etc.) start at GO.
+    this.roundStartedAtMs = this.roundGoAtMs;
   }
 
   private async endRound(winnerId: string): Promise<void> {
@@ -306,11 +312,25 @@ export class GameWorld {
     setTimeout(() => {
       this.gameState = this.createInitialGameState();
       this.players.clear();
+      this.roundGoAtMs = null;
     }, 5000); // 5-second delay
   }
   
   private update(): void {
     if (this.gameState.status !== 'in_progress') return;
+
+    // During pre-start: keep state synced but do not advance physics/collisions/trails.
+    const nowGate = Date.now();
+    if (this.roundGoAtMs && nowGate < this.roundGoAtMs) {
+      for (const p of this.players.values()) {
+        try {
+          p.sperm.velocity.x = 0;
+          p.sperm.velocity.y = 0;
+        } catch { }
+      }
+      this.syncGameState();
+      return;
+    }
 
     const deltaTime = TICK_INTERVAL / 1000; // in seconds
 
@@ -514,6 +534,8 @@ export class GameWorld {
   }
 
   handlePlayerInput(playerId: string, input: PlayerInput): void {
+    // Ignore inputs before the round starts (server-authoritative countdown).
+    if (this.roundGoAtMs && Date.now() < this.roundGoAtMs) return;
     const player = this.players.get(playerId);
     if (player && player.isAlive) {
       // Sanity-check pointer target: ignore obviously invalid coordinates that would break physics.
@@ -680,6 +702,9 @@ export class GameWorld {
         const angleTowardCenter = Math.atan2(center.y - y, center.x - x);
 
         const player = new PlayerEntity(ids[j], { x, y }, angleTowardCenter);
+        try {
+          if (this.roundGoAtMs) player.spawnAtMs = this.roundGoAtMs;
+        } catch { }
         this.players.set(ids[j], player);
 
         if (typeof ids[j] === 'string' && ids[j].startsWith('BOT_')) {
@@ -702,6 +727,10 @@ export class GameWorld {
       };
     });
     this.gameState.players = newPlayersState;
+    // Attach non-schema metadata (safe extra field) so the broadcast layer can include it.
+    try {
+      (this.gameState as any).goAtMs = this.roundGoAtMs || undefined;
+    } catch { }
 
     const itemsState: Record<string, GameItem> = {};
     this.items.forEach((item, id) => {
