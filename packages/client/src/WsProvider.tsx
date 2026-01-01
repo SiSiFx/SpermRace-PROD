@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 // API base for HTTP calls from the client.
 // For any spermrace.io host (prod/dev/www), always use same-origin /api so we avoid CORS and
 // let the frontend host proxy to the API.
