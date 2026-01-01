@@ -140,6 +140,7 @@ function AppInner() {
   useEffect(() => {
     if (wsState.phase === 'lobby') setScreen('lobby');
     else if (wsState.phase === 'game') setScreen('game');
+    else if (wsState.phase === 'ended') setScreen('results');
   }, [wsState.phase]);
 
   // PC Keyboard shortcuts
