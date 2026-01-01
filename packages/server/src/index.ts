@@ -817,9 +817,9 @@ lobbyManager.onLobbyCountdown = (lobby, remaining, startAtMs) => {
     }
   } catch { }
 
-  // If solo player, show discrete countdown
+  // If solo tournament player, show discrete countdown (refund timeline)
   // Timeline: 0-30s = silent waiting, 30-50s = show countdown every second
-  if (lobby.players.length === 1) {
+  if (lobby.mode === 'tournament' && lobby.players.length === 1) {
     // Show countdown for every second in the last 20 seconds
     const shouldWarn = remaining <= 20 && remaining > 0;
     if (shouldWarn) {

@@ -460,6 +460,8 @@ function Lobby({ onStart: _onStart, onBack, onRefund }: { onStart: () => void; o
   const realCount = Math.max(0, players.length - botCount);
   const realPlayers = players.filter(p => !String(p).startsWith('BOT_'));
   const prize = state.lobby ? Math.max(0, Math.floor(realPlayers.length * (state.lobby.entryFee as number) * 0.85)) : 0;
+  const lobbyMode = (state.lobby as any)?.mode as ('practice' | 'tournament' | undefined);
+  const practiceMissingPlayers = lobbyMode === 'practice' ? Math.max(0, 2 - realPlayers.length) : 0;
 
   useEffect(() => {
     if (state.lobby?.entryFee !== 0) {
@@ -517,7 +519,19 @@ function Lobby({ onStart: _onStart, onBack, onRefund }: { onStart: () => void; o
             <div style={{ fontSize: "84px", fontWeight: 900, color: "#fff", fontFamily: "Orbitron, sans-serif" }}>{state.countdown.remaining}</div>
           </div>
         ) : (
-          <div style={{ textAlign: "center" }}><div className="mobile-lobby-spinner" style={{ margin: '0 auto 20px' }}></div><div style={{ fontSize: "12px", color: "rgba(255,255,255,0.5)" }}>WAITING FOR RIVALS...</div></div>
+          <div style={{ textAlign: "center" }}>
+            <div className="mobile-lobby-spinner" style={{ margin: '0 auto 20px' }}></div>
+            <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.5)", fontWeight: 800 }}>
+              {lobbyMode === 'practice' && practiceMissingPlayers > 0
+                ? `NEED ${practiceMissingPlayers} MORE PLAYER${practiceMissingPlayers === 1 ? '' : 'S'} TO START`
+                : 'WAITING FOR RIVALS...'}
+            </div>
+            {lobbyMode === 'practice' && practiceMissingPlayers > 0 && (
+              <div style={{ marginTop: 8, fontSize: 11, color: "rgba(148,163,184,0.8)" }}>
+                Practice is pure multiplayer (2+ players).
+              </div>
+            )}
+          </div>
         )}
       </div>
       <footer style={{ marginTop: "auto", paddingBottom: "20px" }}><button className="mobile-btn-back" style={{ width: '100%', background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "12px", padding: "14px" }} onClick={onBack}>← ABORT MISSION</button></footer>

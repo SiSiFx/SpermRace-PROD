@@ -1242,6 +1242,8 @@ function Lobby({ onStart: _onStart, onBack }: { onStart: () => void; onBack: () 
   const players = state.lobby?.players || [];
   const realPlayers = players.filter(p => !String(p).startsWith('BOT_'));
   const estimatedPrizeUsd = state.lobby ? Math.max(0, Math.floor(realPlayers.length * (state.lobby.entryFee as number) * 0.85)) : 0;
+  const lobbyMode = (state.lobby as any)?.mode as ('practice' | 'tournament' | undefined);
+  const practiceMissingPlayers = lobbyMode === 'practice' ? Math.max(0, 2 - realPlayers.length) : 0;
 
   return (
     <div className="screen active pc-lobby" id="lobby-screen" style={{ 
@@ -1315,8 +1317,15 @@ function Lobby({ onStart: _onStart, onBack }: { onStart: () => void; onBack: () 
               </div>
             </div>
           ) : (
-            <div style={{ fontSize: "16px", color: "rgba(255,255,255,0.5)", fontWeight: 700 }}>
-              WAITING FOR RIVALS...
+            <div style={{ fontSize: "16px", color: "rgba(255,255,255,0.5)", fontWeight: 800 }}>
+              {lobbyMode === 'practice' && practiceMissingPlayers > 0
+                ? `NEED ${practiceMissingPlayers} MORE PLAYER${practiceMissingPlayers === 1 ? '' : 'S'} TO START`
+                : 'WAITING FOR RIVALS...'}
+              {lobbyMode === 'practice' && practiceMissingPlayers > 0 && (
+                <div style={{ marginTop: 10, fontSize: 13, color: "rgba(148,163,184,0.85)", fontWeight: 600 }}>
+                  Practice is pure multiplayer (2+ players).
+                </div>
+              )}
             </div>
           )}
         </div>

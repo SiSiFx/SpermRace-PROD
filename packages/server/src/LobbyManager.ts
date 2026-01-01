@@ -138,10 +138,12 @@ export class LobbyManager {
     // Dev-only bot injection (legacy; guarded by ENABLE_DEV_BOTS=true).
     this.injectDevBots(lobby);
 
-    // For solo players: tournament waits before countdown; practice starts immediately.
+    // Practice requires at least 2 real players (no bots/solo-start unless explicitly configured).
+    // Tournaments can start solo after a silent wait.
     if (lobby.players.length === 1) {
       if (lobby.mode === 'practice') {
-        this.startLobbyCountdown(lobby);
+        console.log(`[LOBBY] Practice mode waiting for minimum 2 players (current: 1)`);
+        // Don't start countdown - wait for another player
       } else {
         const silentWaitMs = 30000; // 30 seconds silent
         console.log(`[LOBBY] Solo tournament player - 30s silent wait before countdown`);
@@ -251,6 +253,8 @@ export class LobbyManager {
     }
 
     const dynamicMinPlayers = (): number => {
+      // Practice is pure multiplayer but should start as soon as 2 real players join.
+      if (lobby.mode === 'practice') return 2;
       const baseMin = process.env.SKIP_ENTRY_FEE === 'true' ? Math.max(1, LOBBY_MIN_START) : Math.max(2, LOBBY_MIN_START);
       const startedAt = this.lobbyCountdownStartMs.get(lobby.lobbyId) || Date.now();
       const elapsedSec = Math.floor((Date.now() - startedAt) / 1000);
@@ -260,7 +264,7 @@ export class LobbyManager {
           minReq = Math.min(minReq, rule.minPlayers);
         }
       }
-      if (process.env.SKIP_ENTRY_FEE === 'true' || lobby.mode === 'practice') return 1;
+      if (process.env.SKIP_ENTRY_FEE === 'true') return 1;
       return Math.max(2, minReq);
     };
 
@@ -276,7 +280,7 @@ export class LobbyManager {
       }
       // If deadline passed, start with whoever is here if at least 2 players
       const minPlayers = dynamicMinPlayers();
-      if (Date.now() >= deadline && (lobby.players.length >= 2 || lobby.mode === 'practice')) {
+      if (Date.now() >= deadline && lobby.players.length >= 2) {
         if (lobby.mode === 'tournament') {
           const realPlayers = lobby.players.filter(p => !String(p).startsWith('BOT_'));
           if (realPlayers.length < 2) {
@@ -324,7 +328,7 @@ export class LobbyManager {
       // Lock lobby: no late joins here; start if minimal players else revert and requeue
       const minPlayers = dynamicMinPlayers();
       const deadline = this.lobbyDeadlineMs.get(lobby.lobbyId) || (Date.now() + LOBBY_MAX_WAIT_SEC * 1000);
-      if (lobby.players.length >= minPlayers || (Date.now() >= deadline && (lobby.players.length >= 2 || lobby.mode === 'practice'))) {
+      if (lobby.players.length >= minPlayers || (Date.now() >= deadline && lobby.players.length >= 2)) {
         this.clearLobbyTimers(lobby.lobbyId);
         this.onGameStart?.(lobby);
         this.lobbies.delete(lobby.lobbyId);
@@ -374,9 +378,19 @@ export class LobbyManager {
 
   private injectPracticeBots(lobby: Lobby): void {
     try {
+      console.log(`[PRACTICE-BOT] injectPracticeBots called for lobby ${lobby.lobbyId}:`);
+      console.log(`[PRACTICE-BOT] - ENABLE_PRACTICE_BOTS=${process.env.ENABLE_PRACTICE_BOTS}`);
+      console.log(`[PRACTICE-BOT] - PRACTICE_BOTS_TARGET=${process.env.PRACTICE_BOTS_TARGET}`);
+      console.log(`[PRACTICE-BOT] - lobby.mode=${lobby.mode}`);
+      console.log(`[PRACTICE-BOT] - Current players: ${lobby.players.length}`);
+
       if (lobby.mode !== 'practice') return;
-      if (!isPracticeBotsEnabled()) return;
+      if (!isPracticeBotsEnabled()) {
+        console.log(`[PRACTICE-BOT] ❌ Practice bot injection disabled`);
+        return;
+      }
       const target = getPracticeBotsTarget(lobby.maxPlayers);
+      console.log(`[PRACTICE-BOT] ✅ Practice bots enabled, target: ${target}`);
       if (target <= 0) return;
       if (lobby.players.length >= target) return;
 
@@ -386,6 +400,7 @@ export class LobbyManager {
         lobby.players.push(botId);
       }
       const added = lobby.players.length - before;
+      console.log(`[PRACTICE-BOT] ✅ Injected ${added} practice bots`);
       if (added > 0) this.onLobbyUpdate?.(lobby);
     } catch { }
   }
