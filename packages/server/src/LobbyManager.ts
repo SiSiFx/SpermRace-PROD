@@ -132,17 +132,15 @@ export class LobbyManager {
       }
     }
 
-    // Practice bots (prod-safe): keeps online practice fun even with low real-player density.
-    this.injectPracticeBots(lobby);
-
     // Dev-only bot injection (legacy; guarded by ENABLE_DEV_BOTS=true).
     this.injectDevBots(lobby);
 
     // Practice requires at least 2 real players (no bots/solo-start unless explicitly configured).
     // Tournaments can start solo after a silent wait.
-    if (lobby.players.length === 1) {
+    const realPlayers = lobby.players.filter(p => !String(p).startsWith('BOT_'));
+    if (realPlayers.length < 2) {
       if (lobby.mode === 'practice') {
-        console.log(`[LOBBY] Practice mode waiting for minimum 2 players (current: 1)`);
+        console.log(`[LOBBY] Practice mode waiting for minimum 2 real players (current: ${realPlayers.length})`);
         // Don't start countdown - wait for another player
       } else {
         const silentWaitMs = 30000; // 30 seconds silent
@@ -193,9 +191,11 @@ export class LobbyManager {
 
     // Re-evaluate countdown after a leave so remaining players don't get stuck in waiting forever.
     if (lobby.status === 'waiting') {
-      if (lobby.players.length === 1) {
+      const realPlayers = lobby.players.filter(p => !String(p).startsWith('BOT_'));
+      if (realPlayers.length < 2) {
         if (lobby.mode === 'practice') {
-          this.startLobbyCountdown(lobby);
+          // Practice is pure multiplayer: never run countdown loops with <2 real players.
+          return;
         } else {
           const silentWaitMs = 30000;
           setTimeout(() => {
@@ -239,12 +239,16 @@ export class LobbyManager {
 
   private startLobbyCountdown(lobby: Lobby): void {
     if (lobby.status !== 'waiting') return;
+    const realPlayers = lobby.players.filter(p => !String(p).startsWith('BOT_'));
+    if (lobby.mode === 'practice' && realPlayers.length < 2) {
+      // Practice is pure multiplayer: don't start countdown until 2 real players are present.
+      return;
+    }
 
     lobby.status = 'starting';
     this.onLobbyUpdate?.(lobby);
 
-    // Keep counts healthy at countdown start (practice bots in prod; dev bots only when enabled).
-    this.injectPracticeBots(lobby);
+    // Keep counts healthy at countdown start (dev bots only when enabled).
     this.injectDevBots(lobby);
 
     // mark countdown start
@@ -281,7 +285,7 @@ export class LobbyManager {
       // If deadline passed, start with whoever is here if at least 2 players
       const minPlayers = dynamicMinPlayers();
       if (Date.now() >= deadline && lobby.players.length >= 2) {
-        if (lobby.mode === 'tournament') {
+        if (lobby.mode === 'tournament' || lobby.mode === 'practice') {
           const realPlayers = lobby.players.filter(p => !String(p).startsWith('BOT_'));
           if (realPlayers.length < 2) {
             console.log(`[LOBBY] Deadline reached but <2 real players; keeping lobby waiting`);
@@ -328,7 +332,18 @@ export class LobbyManager {
       // Lock lobby: no late joins here; start if minimal players else revert and requeue
       const minPlayers = dynamicMinPlayers();
       const deadline = this.lobbyDeadlineMs.get(lobby.lobbyId) || (Date.now() + LOBBY_MAX_WAIT_SEC * 1000);
-      if (lobby.players.length >= minPlayers || (Date.now() >= deadline && lobby.players.length >= 2)) {
+      const realPlayers = lobby.players.filter(p => !String(p).startsWith('BOT_'));
+      const minOk =
+        lobby.mode === 'practice'
+          ? (realPlayers.length >= 2)
+          : (lobby.players.length >= minPlayers);
+      const deadlineOk =
+        Date.now() >= deadline && (
+          lobby.mode === 'practice'
+            ? (realPlayers.length >= 2)
+            : (lobby.players.length >= 2)
+        );
+      if (minOk || deadlineOk) {
         this.clearLobbyTimers(lobby.lobbyId);
         this.onGameStart?.(lobby);
         this.lobbies.delete(lobby.lobbyId);
