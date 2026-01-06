@@ -290,6 +290,9 @@ class SpermRaceGame {
     aliveSet: Set<string>;
     eliminationOrder: string[];
   } | null = null;
+  public serverGoAtMs: number = 0;
+  public serverMode: 'practice' | 'tournament' | null = null;
+  private lastElimToastKey: string | null = null;
   public debugCollisions: Array<{
     victimId: string;
     killerId?: string;
@@ -3051,17 +3054,47 @@ class SpermRaceGame {
     } else {
       // Hide local safe-zone overlay during online matches.
       try { if (this.zoneGraphics) this.zoneGraphics.visible = false; } catch {}
-      // Drive HUD timer from the server-side shrink schedule (best-effort).
+      // Drive HUD timer from server GO time (stable; avoids countdown jitter).
       try {
-        if (!(this as any).onlineRoundStartAtMs) (this as any).onlineRoundStartAtMs = Date.now();
-        const elapsedMs = Date.now() - (this as any).onlineRoundStartAtMs;
-        const startMs = Math.max(0, Number(S_WORLD.ARENA_SHRINK_START_S || 0)) * 1000;
-        const durMs = Math.max(0, Number(S_WORLD.ARENA_SHRINK_DURATION_S || 0)) * 1000;
+        const mode = this.serverMode || (this.wsHud as any)?.mode || null;
+        // Mirror server defaults (GameWorld.startRound) so the timer matches what players feel.
+        const startS = mode === 'practice' ? 8 : mode === 'tournament' ? 12 : Number(S_WORLD.ARENA_SHRINK_START_S || 0);
+        const durS = mode === 'practice' ? 30 : mode === 'tournament' ? 45 : Number(S_WORLD.ARENA_SHRINK_DURATION_S || 0);
+        const startMs = Math.max(0, startS) * 1000;
+        const durMs = Math.max(0, durS) * 1000;
         const totalMs = startMs + durMs;
+        const srvNow = (this.lastServerTimeMs > 0 ? this.lastServerTimeMs : Date.now());
+        const goAt = Number(this.serverGoAtMs || 0) || 0;
+        const elapsedMs = (goAt > 0 && srvNow > 0) ? Math.max(0, srvNow - goAt) : 0;
         const remainMs = Math.max(0, totalMs - elapsedMs);
         if (this.hudManager) this.hudManager.updateZoneTimer(Math.ceil(remainMs / 1000));
       } catch {}
     }
+
+    // Online-only: surface eliminations (mobile kill feed is hidden, so deaths look "silent").
+    try {
+      if (isOnline && this.wsHud?.playerId && Array.isArray(this.wsHud.killFeed) && this.wsHud.killFeed.length) {
+        const ev = this.wsHud.killFeed[0];
+        if (ev && ev.victimId === this.wsHud.playerId) {
+          const key = `${String(ev.ts || 0)}:${String(ev.killerId || '')}:${String(ev.victimId || '')}`;
+          if (this.lastElimToastKey !== key) {
+            this.lastElimToastKey = key;
+            const killerId = ev.killerId;
+            const killerName = killerId
+              ? (this.wsHud.idToName?.[killerId] || `${killerId.slice(0, 4)}…${killerId.slice(-4)}`)
+              : 'ZONE';
+            const el = document.getElementById('game-toast');
+            if (el) {
+              el.textContent = `ELIMINATED BY ${killerName}`;
+              (el as any).style.borderColor = 'rgba(239,68,68,0.45)';
+              (el as any).style.color = '#fee2e2';
+              (el as any).style.opacity = '1';
+              setTimeout(() => { try { (el as any).style.opacity = '0'; } catch {} }, 2400);
+            }
+          }
+        }
+      }
+    } catch {}
     
     // Update sonar radar + compass (never let UI exceptions freeze the whole match)
     try { this.radarAngle = (this.radarAngle + deltaTime * 2) % (Math.PI * 2); } catch { }
@@ -6026,6 +6059,8 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
         try { game.applyServerWorld(wsState.game.world as any); } catch {}
         try { (game as any).objective = (wsState.game as any).objective || null; } catch {}
         try { (game as any).lastServerTimeMs = Number((wsState.game as any).timestamp || 0) || 0; } catch {}
+        try { (game as any).serverGoAtMs = Number((wsState.game as any).goAtMs || 0) || 0; } catch {}
+        try { (game as any).serverMode = mode; } catch {}
         // Align the pre-start zoom/countdown to the server's GO time using *server-relative* time
         // (robust against device clock skew so we never get stuck frozen with no movement).
         try {
