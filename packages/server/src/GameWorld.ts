@@ -120,6 +120,10 @@ export class GameWorld {
   // Lag compensation: Track RTT per player
   private playerRttMs: Map<string, number> = new Map();
 
+  // Reusable arrays to reduce GC pressure (avoid creating arrays every frame)
+  private playersArrayCache: PlayerEntity[] = [];
+  private itemsArrayCache: GameItem[] = [];
+
   constructor(smartContractService: SmartContractService, db?: DatabaseService) {
     const latencyCompensation = new LatencyCompensation();
     this.collisionSystem = new CollisionSystem(WORLD_WIDTH, WORLD_HEIGHT, latencyCompensation);
@@ -363,11 +367,20 @@ export class GameWorld {
 
     const deltaTime = TICK_INTERVAL / 1000; // in seconds
 
-    const playersArray = Array.from(this.players.values());
+    // Reuse cached arrays instead of creating new ones every frame
+    this.playersArrayCache.length = 0;
+    for (const player of this.players.values()) {
+      this.playersArrayCache.push(player);
+    }
+    const playersArray = this.playersArrayCache;
 
     // -1. Drive bot AI before physics so inputs are ready for the tick
     if (this.bots.size > 0) {
-      const itemsArray = Array.from(this.items.values());
+      this.itemsArrayCache.length = 0;
+      for (const item of this.items.values()) {
+        this.itemsArrayCache.push(item);
+      }
+      const itemsArray = this.itemsArrayCache;
       const worldWidth = this.gameState.world.width || WORLD_WIDTH;
       const worldHeight = this.gameState.world.height || WORLD_HEIGHT;
       this.bots.forEach(bot => {
@@ -529,25 +542,32 @@ export class GameWorld {
       }
     });
 
-    // 3. Check for a winner
-    const currentAlivePlayers = Array.from(this.players.values()).filter(p => p.isAlive);
+    // 3. Check for a winner (reuse cached array and filter in place to avoid allocation)
+    let aliveCount = 0;
+    let lastAlivePlayer: PlayerEntity | null = null;
+    for (let i = 0; i < playersArray.length; i++) {
+      if (playersArray[i].isAlive) {
+        aliveCount++;
+        lastAlivePlayer = playersArray[i];
+      }
+    }
     if ((process.env.NODE_ENV || '').toLowerCase() !== 'production') {
       const now = Date.now();
       if (now - this.lastDevAliveLogMs > 1000) {
-        try { console.debug(`[DEV][ALIVE] ${currentAlivePlayers.length}/${this.players.size}`); } catch {}
+        try { console.debug(`[DEV][ALIVE] ${aliveCount}/${this.players.size}`); } catch {}
         this.lastDevAliveLogMs = now;
       }
     }
-    if (this.players.size > 1 && currentAlivePlayers.length === 1) {
+    if (this.players.size > 1 && aliveCount === 1 && lastAlivePlayer) {
       if ((process.env.NODE_ENV || '').toLowerCase() !== 'production') {
         try {
-          const id = alivePlayers[0].id;
+          const id = lastAlivePlayer.id;
           console.debug(`[DEV][WIN] single survivor → ${id.startsWith('BOT_')?id:`${id.slice(0,6)}…${id.slice(-4)}`}`);
         } catch {}
       }
       this.lastWinReason = 'last_alive';
-      this.endRound(currentAlivePlayers[0].id);
-    } else if (this.players.size > 0 && currentAlivePlayers.length === 0) {
+      this.endRound(lastAlivePlayer.id);
+    } else if (this.players.size > 0 && aliveCount === 0) {
       // Handle case where all players are eliminated simultaneously (draw)
       if ((process.env.NODE_ENV || '').toLowerCase() !== 'production') {
         try { console.debug('[DEV][WIN] draw → all eliminated'); } catch {}
