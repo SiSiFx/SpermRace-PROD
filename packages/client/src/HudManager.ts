@@ -23,6 +23,12 @@ export class HudManager {
 
     const isMobile = window.innerWidth <= 768;
 
+    // Create scanline overlay for entire game
+    const scanlineOverlay = document.createElement('div');
+    scanlineOverlay.id = 'hud-scanline-overlay';
+    scanlineOverlay.className = 'hud-scanline-overlay';
+    this.container.appendChild(scanlineOverlay);
+
     // Create unified top bar
     this.topBar = document.createElement('div');
     this.topBar.id = 'unified-top-bar';
@@ -43,7 +49,8 @@ export class HudManager {
       boxShadow: '0 4px 12px rgba(0, 0, 0, 0.5)',
       fontSize: isMobile ? '12px' : '14px',
       fontWeight: '700',
-      color: '#ffffff'
+      color: '#ffffff',
+      transition: 'all 0.3s ease'
     });
 
     // Zone timer section
@@ -167,6 +174,7 @@ export class HudManager {
       this.zoneTimerEl.style.color = '#ef4444';
       this.zoneTimerEl.style.textShadow = '0 0 10px rgba(239, 68, 68, 0.9)';
       this.zoneTimerEl.style.animation = '';
+      this.zoneTimerEl.classList.remove('zone-timer-critical');
       return;
     }
 
@@ -175,11 +183,13 @@ export class HudManager {
       this.zoneTimerEl.style.color = '#ef4444';
       this.zoneTimerEl.style.textShadow = '0 0 10px rgba(239, 68, 68, 0.9)';
       this.zoneTimerEl.style.animation = 'blink 1s ease-in-out infinite';
+      this.zoneTimerEl.classList.add('zone-timer-critical');
     } else {
       this.zoneTimerEl.innerHTML = `SAFE TIME: <span>${timeLabel}</span>`;
       this.zoneTimerEl.style.color = '#22d3ee';
       this.zoneTimerEl.style.textShadow = '0 0 6px rgba(34, 211, 238, 0.6)';
       this.zoneTimerEl.style.animation = '';
+      this.zoneTimerEl.classList.remove('zone-timer-critical');
     }
   }
 
@@ -190,25 +200,28 @@ export class HudManager {
     if (!this.boostBarFillEl) return;
 
     const boostIcon = document.getElementById('boost-icon');
-    
+
     // Update width
     this.boostBarFillEl.style.width = `${Math.max(0, Math.min(100, percentage))}%`;
 
     // Update colors based on state
     if (isBoosting) {
       this.boostBarFillEl.style.background = 'linear-gradient(90deg, #00ff88 0%, #22d3ee 100%)';
+      this.boostBarFillEl.classList.remove('low-boost');
       if (boostIcon) {
         boostIcon.style.color = '#00ff88';
         boostIcon.style.textShadow = '0 0 10px rgba(0, 255, 136, 0.8)';
       }
     } else if (isLow) {
       this.boostBarFillEl.style.background = 'linear-gradient(90deg, #ef4444 0%, #dc2626 100%)';
+      this.boostBarFillEl.classList.add('low-boost');
       if (boostIcon) {
         boostIcon.style.color = '#ef4444';
         boostIcon.style.textShadow = '0 0 8px rgba(239, 68, 68, 0.6)';
       }
     } else {
       this.boostBarFillEl.style.background = 'linear-gradient(90deg, #22d3ee 0%, #06b6d4 100%)';
+      this.boostBarFillEl.classList.remove('low-boost');
       if (boostIcon) {
         boostIcon.style.color = '#22d3ee';
         boostIcon.style.textShadow = '0 0 8px rgba(34, 211, 238, 0.6)';
@@ -222,7 +235,15 @@ export class HudManager {
   updateAliveCount(count: number) {
     if (!this.aliveCountEl) return;
 
+    const previousCount = parseInt(this.aliveCountEl.textContent || '0');
     this.aliveCountEl.textContent = `${count} ALIVE`;
+
+    // Add pulse animation when count changes
+    if (count !== previousCount && count > 0) {
+      this.aliveCountEl.classList.remove('alive-count-update');
+      void this.aliveCountEl.offsetWidth; // Trigger reflow
+      this.aliveCountEl.classList.add('alive-count-update');
+    }
 
     // Color based on count
     if (count <= 2) {
@@ -241,6 +262,7 @@ export class HudManager {
     // Remove all old HUD elements
     const oldElements = [
       'unified-top-bar',
+      'hud-scanline-overlay',
       'top-hud-bar',
       'game-zone-timer',
       'game-boost-bar',

@@ -5,6 +5,7 @@ import { Buffer } from 'buffer';
 import { isMobileDevice } from './deviceDetection';
 import AppErrorBoundary from './AppErrorBoundary';
 import '/style.css';
+import './hud-effects.css';
 
 // Ensure Buffer is available for Solana/web3 dependencies running in the browser.
 if (typeof globalThis !== 'undefined' && !(globalThis as any).Buffer) {
