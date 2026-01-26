@@ -1,148 +1,94 @@
-# SpermRace.io - Smart Multiplayer Upgrade
+# SpermRace.io - UI/UX & Gameplay Polish
 
 ## Overview
-Make SpermRace.io smarter with improved multiplayer fluency, AI-powered features, and optimized game feel.
+This batch focuses on refining the user experience, ensuring the HUD accurately reflects game events (especially bot eliminations), and polishing gameplay feedback.
 
 ---
 
-## Task 1: Client-Side Prediction System
-**Branch: feat/client-prediction**
+## Task 1: Real-time HUD Updates for Bot Eliminations
+**Branch: feat/hud-bot-updates**
 
-Eliminate 100-200ms input lag with client-side prediction.
+Ensure the "Alive" count and Leaderboard/Kill Feed update immediately when a bot is eliminated in both Practice and Online modes.
 
 ### Requirements
-- Player moves instantly on input (within 16ms)
-- Store input history with sequence numbers
-- Reconcile with server state smoothly (no jarring snaps)
-- Interpolate corrections over 100ms
+- **Practice Mode**: When a local bot dies, decrement the "Alive" counter immediately.
+- **Online Mode**: Ensure server-side bot eliminations propagate to the client HUD instantly.
+- **Visuals**: Trigger a visual pulse or effect on the Alive counter when it changes.
+- **Kill Feed**: Clearly show "Bot X eliminated" in the kill feed.
 
 ### Implementation
-1. Add InputHistory class in `packages/client/src/game/`
-2. Predict local player movement immediately on input
-3. On server update, compare predicted vs actual
-4. If mismatch > threshold, smoothly correct position
+1.  **Modify `NewGameView.tsx`**:
+    - Locate the bot elimination logic (local and server-synced).
+    - Ensure `this.hudManager.updateAliveCount()` is called with the correct value.
+    - For practice mode, calculate alive players based on `this.player` + `this.bot` + `this.extraBots`.
+2.  **Modify `HudManager.ts`**:
+    - Add a pulse animation class to `aliveCountEl` when the number decreases.
 
 ### Acceptance Criteria
-- [x] Input response < 16ms
-- [x] No visible snapping on correction
-- [x] Existing gameplay tests pass
+- [ ] Alive counter updates instantly when a bot hits a trail.
+- [ ] Kill feed shows the elimination event.
+- [ ] Alive counter pulses red/white on update.
 
 ---
 
-## Task 2: Trail Delta Compression
-**Branch: feat/trail-compression**
+## Task 2: Enhanced Results Screen
+**Branch: feat/enhanced-results**
 
-Reduce bandwidth 60% by sending trail deltas instead of full arrays.
+Make the end-of-game dashboard ("Results") more detailed and responsive.
 
 ### Requirements
-- Send only new trail points, not full trails
-- Add trail point IDs for sync
-- Client interpolates between points
-- Compress trail data efficiently
+- Show the winner clearly (Player or specific Bot).
+- If a bot won, display "Winner: Bot [Name]".
+- Display stats: Time survived, Kills, Rank.
+- "Play Again" button should be prominent and work for both modes.
 
 ### Implementation
-1. Modify server trail broadcast in `packages/server/`
-2. Add TrailDelta message type in `packages/shared/`
-3. Client reconstructs trails from deltas
-4. Add interpolation for smooth rendering
+1.  **Modify `AppMobile.tsx` / `AppPC.tsx` (Results Component)**:
+    - Pass detailed stats to the `Results` component.
+    - Differentiate between "You Won", "You Died", and "Bot Won".
+2.  **Styling**: Use the existing neon theme but improve layout/typography.
 
 ### Acceptance Criteria
-- [x] Bandwidth reduced 60%+ (measure in devtools)
-- [x] Trails render smoothly
-- [x] Trail collision still works correctly
+- [ ] Results screen correctly identifies the winner (even if it's a bot).
+- [ ] Display player's rank (e.g., "Placed #5").
+- [ ] "Play Again" restarts the game loop cleanly.
 
 ---
 
-## Task 3: Smart Bot AI System
-**Branch: feat/smart-bots**
+## Task 3: Gameplay Feedback Juice
+**Branch: feat/gameplay-juice**
 
-Add AI bots that play intelligently to fill empty lobbies.
+Add visual/audio feedback for key events to make the game feel more responsive ("juicy").
 
 ### Requirements
-- Bots use pathfinding to avoid trails
-- Bots target other players strategically
-- Difficulty levels (easy, medium, hard)
-- Bots fill lobbies when < 8 players
+- **Elimination**: Screen shake and red vignette when the *player* dies.
+- **Kill**: Gold/Green flash or particles when the player eliminates someone (including bots).
+- **Near Miss**: Show "Close Call!" text near the player when narrowly avoiding a trail.
 
 ### Implementation
-1. Create BotController in `packages/server/src/game/`
-2. Implement trail avoidance algorithm
-3. Add strategic targeting (chase weakest player)
-4. Difficulty affects reaction time and accuracy
+1.  **Screen Shake**: Existing `screenShake` in `NewGameView` seems implemented; verify it triggers on death.
+2.  **Vignette**: Add a CSS-based red vignette overlay in `index.html` or `NewGameView` that fades in on death.
+3.  **Floating Text**: Implement a simple floating text system for "Close Call" or "+100" (score/energy).
 
 ### Acceptance Criteria
-- [x] Bots avoid trails 80%+ of time
-- [x] Bots feel like human players
-- [x] No performance impact with 8 bots
+- [ ] Screen shakes on player death.
+- [ ] Red vignette effect on death.
+- [ ] Visual feedback for eliminating an opponent.
 
 ---
 
-## Task 4: Lag Compensation for Collisions
-**Branch: feat/lag-compensation**
+## Task 4: Responsive Dashboard (Ralph Dashboard)
+**Branch: fix/ralph-dashboard**
 
-Fair collision detection across varying latencies.
-
-### Requirements
-- Store game state history (last 200ms)
-- Rewind to player's perceived time for collision checks
-- Interpolate between stored states
-- Handle 50-200ms latency fairly
-
-### Implementation
-1. Create StateHistory buffer in `packages/server/`
-2. Store snapshots every tick (16ms)
-3. On collision check, rewind based on player RTT
-4. Interpolate positions for accurate detection
-
-### Acceptance Criteria
-- [x] Fair collisions across 50-200ms latency
-- [x] No "I was already past!" complaints
-- [x] Memory usage < 50MB for history buffer
-
----
-
-## Task 5: Smart Matchmaking
-**Branch: feat/smart-matchmaking**
-
-Skill-based matchmaking for fair tournaments.
+Ensure the Ralph Dashboard (`http://...:3333`) correctly displays agent status during this batch.
 
 ### Requirements
-- Track player skill rating (ELO-like)
-- Match similar skill levels
-- Separate queues per tier
-- Quick match < 30 seconds
+- The dashboard should show active agents working on these tasks.
+- No file access errors in the dashboard logs.
 
 ### Implementation
-1. Add SkillRating to player model
-2. Create MatchmakingService in `packages/server/`
-3. Implement ELO calculation on match end
-4. Group players by skill band
+- (This is a meta-task to ensure our tooling works; verify `server.js` fixes from previous batch are persisted/effective).
 
 ### Acceptance Criteria
-- [x] Skill rating updates correctly
-- [x] Matches have <500 ELO spread
-- [x] Queue time < 30 seconds for 100+ players
-
----
-
-## Task 6: Performance Optimizer
-**Branch: feat/perf-optimizer**
-
-Optimize game for 60fps on mobile devices.
-
-### Requirements
-- Spatial partitioning for collision
-- Object pooling for trails
-- Reduce garbage collection
-- Target 60fps on mid-range mobile
-
-### Implementation
-1. Add QuadTree for collision in `packages/shared/`
-2. Implement object pools for trails and particles
-3. Profile and fix GC hotspots
-4. Add quality settings (low/medium/high)
-
-### Acceptance Criteria
-- [x] 60fps on iPhone 12 / Pixel 6
-- [x] Collision check < 1ms for 32 players
-- [x] No GC pauses > 5ms
+- [ ] Dashboard shows agents connecting and working.
+- [ ] No "ENOENT" errors in dashboard console.
