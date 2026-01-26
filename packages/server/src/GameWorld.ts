@@ -101,6 +101,21 @@ export class GameWorld {
   private roundGoAtMs: number | null = null;
   private stateHistory: StateHistory;
 
+  // Performance monitoring
+  private perfStats: {
+    updateMs: number[];
+    botAiMs: number[];
+    collisionMs: number[];
+    schoolMs: number[];
+    lastLogMs: number;
+  } = {
+    updateMs: [],
+    botAiMs: [],
+    collisionMs: [],
+    schoolMs: [],
+    lastLogMs: 0,
+  };
+
   constructor(smartContractService: SmartContractService, db?: DatabaseService) {
     this.collisionSystem = new CollisionSystem(WORLD_WIDTH, WORLD_HEIGHT);
     this.smartContractService = smartContractService;
@@ -361,31 +376,66 @@ export class GameWorld {
     }
 
     // 0. Schooling (flocking buff) - compute per-player speed multipliers before physics
+    // OPTIMIZATION: Use spatial partitioning to reduce O(n²) complexity with 8+ bots
     const count = playersArray.length;
     const SCHOOL_RADIUS = 300;
     const SCHOOL_RADIUS_SQ = SCHOOL_RADIUS * SCHOOL_RADIUS;
     const ANGLE_THRESHOLD = 0.5; // radians
     const neighborCounts: number[] = new Array(count).fill(0);
 
-    for (let i = 0; i < count; i++) {
-      const p1 = playersArray[i];
-      if (!p1.isAlive) continue;
-      const pos1 = p1.sperm.position;
-      const angle1 = p1.sperm.angle;
-      for (let j = i + 1; j < count; j++) {
-        const p2 = playersArray[j];
-        if (!p2.isAlive) continue;
-        const pos2 = p2.sperm.position;
-        const dx = pos1.x - pos2.x;
-        const dy = pos1.y - pos2.y;
-        const distSq = dx * dx + dy * dy;
-        if (distSq > SCHOOL_RADIUS_SQ) continue;
-        const angle2 = p2.sperm.angle;
-        const rawDiff = angle1 - angle2;
-        const angleDiff = Math.abs(Math.atan2(Math.sin(rawDiff), Math.cos(rawDiff)));
-        if (angleDiff < ANGLE_THRESHOLD) {
-          neighborCounts[i]++;
-          neighborCounts[j]++;
+    // Only compute schooling for alive players
+    const alivePlayers = playersArray.filter(p => p.isAlive);
+    const aliveCount = alivePlayers.length;
+
+    // Skip expensive calculation if very few players
+    if (aliveCount > 1 && aliveCount < 50) {
+      // Use simple spatial grid for schooling optimization
+      const gridSize = SCHOOL_RADIUS;
+      const grid = new Map<string, number[]>();
+
+      // Build grid
+      for (let i = 0; i < aliveCount; i++) {
+        const p = alivePlayers[i];
+        const cellX = Math.floor(p.sperm.position.x / gridSize);
+        const cellY = Math.floor(p.sperm.position.y / gridSize);
+        const key = `${cellX},${cellY}`;
+        if (!grid.has(key)) grid.set(key, []);
+        grid.get(key)!.push(i);
+      }
+
+      // Check only nearby cells
+      for (let i = 0; i < aliveCount; i++) {
+        const p1 = alivePlayers[i];
+        const pos1 = p1.sperm.position;
+        const angle1 = p1.sperm.angle;
+        const cellX = Math.floor(pos1.x / gridSize);
+        const cellY = Math.floor(pos1.y / gridSize);
+
+        // Check 3x3 grid neighborhood
+        for (let dx = -1; dx <= 1; dx++) {
+          for (let dy = -1; dy <= 1; dy++) {
+            const key = `${cellX + dx},${cellY + dy}`;
+            const cellIndices = grid.get(key);
+            if (!cellIndices) continue;
+
+            for (const j of cellIndices) {
+              if (j <= i) continue; // Avoid double counting
+              const p2 = alivePlayers[j];
+              const pos2 = p2.sperm.position;
+              const distSq = (pos1.x - pos2.x) ** 2 + (pos1.y - pos2.y) ** 2;
+              if (distSq > SCHOOL_RADIUS_SQ) continue;
+
+              const angle2 = p2.sperm.angle;
+              const rawDiff = angle1 - angle2;
+              const angleDiff = Math.abs(Math.atan2(Math.sin(rawDiff), Math.cos(rawDiff)));
+              if (angleDiff < ANGLE_THRESHOLD) {
+                const idx1 = playersArray.indexOf(p1);
+                const idx2 = playersArray.indexOf(p2);
+                if (idx1 >= 0) neighborCounts[idx1]++;
+                if (idx2 >= 0) neighborCounts[idx2]++;
+              }
+            }
+          }
         }
       }
     }
@@ -427,15 +477,15 @@ export class GameWorld {
     });
 
     // 3. Check for a winner
-    const alivePlayers = Array.from(this.players.values()).filter(p => p.isAlive);
+    const currentAlivePlayers = Array.from(this.players.values()).filter(p => p.isAlive);
     if ((process.env.NODE_ENV || '').toLowerCase() !== 'production') {
       const now = Date.now();
       if (now - this.lastDevAliveLogMs > 1000) {
-        try { console.debug(`[DEV][ALIVE] ${alivePlayers.length}/${this.players.size}`); } catch {}
+        try { console.debug(`[DEV][ALIVE] ${currentAlivePlayers.length}/${this.players.size}`); } catch {}
         this.lastDevAliveLogMs = now;
       }
     }
-    if (this.players.size > 1 && alivePlayers.length === 1) {
+    if (this.players.size > 1 && currentAlivePlayers.length === 1) {
       if ((process.env.NODE_ENV || '').toLowerCase() !== 'production') {
         try {
           const id = alivePlayers[0].id;
@@ -443,8 +493,8 @@ export class GameWorld {
         } catch {}
       }
       this.lastWinReason = 'last_alive';
-      this.endRound(alivePlayers[0].id);
-    } else if (this.players.size > 0 && alivePlayers.length === 0) {
+      this.endRound(currentAlivePlayers[0].id);
+    } else if (this.players.size > 0 && currentAlivePlayers.length === 0) {
       // Handle case where all players are eliminated simultaneously (draw)
       if ((process.env.NODE_ENV || '').toLowerCase() !== 'production') {
         try { console.debug('[DEV][WIN] draw → all eliminated'); } catch {}
