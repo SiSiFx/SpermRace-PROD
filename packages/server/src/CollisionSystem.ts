@@ -93,10 +93,22 @@ export class CollisionSystem {
     const eliminated: Array<{ victimId: string; killerId?: string; debug?: { type: 'trail'; hit: { x: number; y: number }; segment?: { from: { x: number; y: number }; to: { x: number; y: number } }; normal?: { x: number; y: number }; relSpeed?: number } }> = [];
 
     // 1. Build the spatial grid from player trails
+    // OPTIMIZATION: Reduce trail point density for bots by sampling every Nth point
     this.grid.clear();
     for (const player of players.values()) {
       if (!player.isAlive) continue;
-      player.trail.forEach(point => this.grid.insert(player.id, point));
+      const isBot = player.id.startsWith('BOT_');
+      const trail = player.trail;
+
+      if (isBot && trail.length > 100) {
+        // For bots with long trails, sample every 2nd point to reduce grid size
+        for (let i = 0; i < trail.length; i += 2) {
+          this.grid.insert(player.id, trail[i]);
+        }
+      } else {
+        // For real players or short trails, use all points
+        trail.forEach(point => this.grid.insert(player.id, point));
+      }
     }
 
     // 2. Check for collisions for each player

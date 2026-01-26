@@ -187,12 +187,41 @@ export class BotController {
     const probeY = pos.y + Math.sin(self.sperm.angle) * lookAhead;
     if (probeX < 60 || probeY < 60 || probeX > sense.worldWidth - 60 || probeY > sense.worldHeight - 60) return true;
     const dangerRadius = 45;
+    const dangerRadiusSq = dangerRadius * dangerRadius;
+
+    // OPTIMIZATION: Only check trails of nearby players to reduce checks with 8+ bots
     for (const p of sense.players) {
       if (!p.isAlive || p.id === self.id) continue;
-      for (const point of p.trail) {
-        if (Math.hypot(point.x - probeX, point.y - probeY) < dangerRadius) return true;
+
+      // Quick bounding box check before iterating trail points
+      const trailBounds = this.getTrailBounds(p.trail);
+      if (trailBounds) {
+        const dx = Math.max(trailBounds.minX - probeX, probeX - trailBounds.maxX, 0);
+        const dy = Math.max(trailBounds.minY - probeY, probeY - trailBounds.maxY, 0);
+        if (dx * dx + dy * dy > dangerRadiusSq) continue;
+      }
+
+      // Sample trail points instead of checking all (check every 3rd point)
+      const step = Math.max(1, Math.floor(p.trail.length / 50));
+      for (let i = 0; i < p.trail.length; i += step) {
+        const point = p.trail[i];
+        const dx = point.x - probeX;
+        const dy = point.y - probeY;
+        if (dx * dx + dy * dy < dangerRadiusSq) return true;
       }
     }
     return false;
+  }
+
+  private getTrailBounds(trail: any[]): { minX: number; maxX: number; minY: number; maxY: number } | null {
+    if (!trail || trail.length === 0) return null;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const p of trail) {
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }
+    return { minX, maxX, minY, maxY };
   }
 }
