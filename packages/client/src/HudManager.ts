@@ -1,8 +1,10 @@
 /**
  * HUD Manager - Clean, unified HUD system
- * Single source of truth for all UI elements
+ * Single source of truth for all UI elements with perfect scaling
  * Supports multiple themes: default, tactical
  */
+
+import { getMobileControlsScale, responsiveFontSize, getSafeAreaInsets } from './uiScalingUtils';
 
 export type HudTheme = 'default' | 'tactical';
 
@@ -15,10 +17,26 @@ export class HudManager {
   private theme: HudTheme = 'default';
   private tacticalElements: HTMLElement[] = [];
   private tacticalStylesLoaded: boolean = false;
+  private currentScale: number = 1;
 
   constructor(container: HTMLElement, theme: HudTheme = 'default') {
     this.container = container;
     this.theme = theme;
+    this.currentScale = getMobileControlsScale();
+  }
+
+  /**
+   * Get responsive padding based on viewport
+   */
+  private getResponsivePadding(): { vertical: string; horizontal: string; gap: string } {
+    const width = window.innerWidth;
+    if (width <= 374) {
+      return { vertical: '6px', horizontal: '10px', gap: '6px' };
+    } else if (width <= 767) {
+      return { vertical: '6px', horizontal: '12px', gap: '8px' };
+    } else {
+      return { vertical: '10px', horizontal: '20px', gap: '12px' };
+    }
   }
 
   /**
@@ -34,6 +52,7 @@ export class HudManager {
     }
 
     const isMobile = window.innerWidth <= 768;
+    const padding = this.getResponsivePadding();
 
     // Create scanline overlay for entire game
     const scanlineOverlay = document.createElement('div');
@@ -41,7 +60,7 @@ export class HudManager {
     scanlineOverlay.className = 'hud-scanline-overlay';
     this.container.appendChild(scanlineOverlay);
 
-    // Create unified top bar
+    // Create unified top bar with responsive sizing
     this.topBar = document.createElement('div');
     this.topBar.id = 'unified-top-bar';
     if (this.theme === 'tactical') {
@@ -50,14 +69,14 @@ export class HudManager {
 
     Object.assign(this.topBar.style, {
       position: 'absolute',
-      top: 'calc(10px + env(safe-area-inset-top, 0px))',
+      top: `calc(10px + ${getSafeAreaInsets().top})`,
       left: '50%',
       transform: 'translateX(-50%)',
       display: 'flex',
       alignItems: 'center',
-      gap: isMobile ? '8px' : '12px',
+      gap: padding.gap,
       background: this.theme === 'tactical' ? 'rgba(0, 20, 0, 0.85)' : 'rgba(0, 0, 0, 0.85)',
-      padding: isMobile ? '6px 12px' : '10px 20px',
+      padding: `${padding.vertical} ${padding.horizontal}`,
       borderRadius: this.theme === 'tactical' ? '4px' : '24px',
       border: this.theme === 'tactical' ? '2px solid rgba(0, 255, 65, 0.5)' : '1px solid rgba(0, 255, 255, 0.2)',
       zIndex: '100',
@@ -119,7 +138,7 @@ export class HudManager {
 
     const boostBarContainer = document.createElement('div');
     Object.assign(boostBarContainer.style, {
-      width: isMobile ? '60px' : '100px',
+      width: isMobile ? 'clamp(50px, 12vw, 60px)' : 'clamp(80px, 8vw, 100px)',
       height: '6px',
       background: this.theme === 'tactical' ? 'rgba(0, 255, 65, 0.1)' : 'rgba(34, 211, 238, 0.15)',
       borderRadius: '3px',
