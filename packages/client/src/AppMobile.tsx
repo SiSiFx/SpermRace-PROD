@@ -22,35 +22,13 @@ const API_BASE: string = (() => {
   return '/api';
 })();
 
-const SOLANA_CLUSTER: 'devnet' | 'mainnet' = (() => {
-  const env = (import.meta as any).env?.VITE_SOLANA_CLUSTER as string | undefined;
-  if (env && /^(devnet|mainnet)$/i.test(env)) return env.toLowerCase() as any;
-  try {
-    const host = (window?.location?.hostname || '').toLowerCase();
-    return host.includes('dev.spermrace.io') ? 'devnet' : 'mainnet';
-  } catch { }
-  return 'devnet';
-})();
-
 import { WalletProvider, useWallet } from './WalletProvider';
-import { getWalletDeepLink, isMobileDevice } from './walletUtils';
-import { useWallet as useAdapterWallet } from '@solana/wallet-adapter-react';
 import { WsProvider, useWs } from './WsProvider';
 import NewGameView from './NewGameView';
 import { Leaderboard } from './Leaderboard';
 import HowToPlayOverlay from './HowToPlayOverlay';
 import {
-  CrownSimple,
-  Lightning,
-  Diamond,
   WarningCircle,
-  GameController,
-  Trophy,
-  Skull,
-  LinkSimple,
-  ArrowClockwise,
-  House,
-  CheckCircle,
   Atom,
   Question,
 } from 'phosphor-react';
@@ -221,7 +199,7 @@ function AppInner() {
   );
 }
 
-function HeaderWallet({ screen, wsState, publicKey }: { screen: string; wsState: any; publicKey: any }) {
+function HeaderWallet({ publicKey }: { screen: string; wsState: any; publicKey: any }) {
   const { disconnect } = useWallet() as any;
   if (!publicKey) return null;
   const short = `${publicKey.slice(0, 4)}…${publicKey.slice(-4)}`;
@@ -555,7 +533,6 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void; 
 function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onChangeTier: () => void; }) {
   const { state: wsState, connectAndJoin } = useWs();
   const { publicKey } = useWallet();
-  const tx = wsState.lastRound?.txSignature;
   const winner = wsState.lastRound?.winnerId;
   const prize = wsState.lastRound?.prizeAmount;
   const isWinner = !!winner && (winner === wsState.playerId || winner === publicKey);

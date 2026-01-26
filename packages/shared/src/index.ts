@@ -92,6 +92,7 @@ export type GameMode = 'practice' | 'tournament';
 export interface Lobby {
   lobbyId: string;
   players: string[]; // List of player IDs (public keys)
+  playerNames?: Record<string, string>; // Optional mapping of player IDs to display names
   maxPlayers: number;
   entryFee: EntryFeeTier;
   mode: GameMode;

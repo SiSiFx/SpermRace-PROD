@@ -1,4 +1,5 @@
-import { useEffect, useState, ReactNode } from 'react';
+import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import { GameController, Skull, WarningCircle } from 'phosphor-react';
 
 interface PracticeFullTutorialProps {

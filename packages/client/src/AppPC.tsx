@@ -35,7 +35,7 @@ import HowToPlayOverlay from './HowToPlayOverlay';
 import PracticeFullTutorial from './PracticeFullTutorial';
 import { PracticeModeSelection } from './PracticeModeSelection';
 import { Leaderboard } from './Leaderboard';
-import { CrownSimple, Lightning, Diamond, Atom } from 'phosphor-react';
+import { CrownSimple, Atom } from 'phosphor-react';
 
 type AppScreen = 'landing' | 'practice' | 'practice-solo' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
 
@@ -59,7 +59,6 @@ function AppInner() {
     setToast(msg);
     window.setTimeout(() => setToast(null), duration);
   };
-  const [showHelp] = useState<boolean>(false);
   const [showHowTo, setShowHowTo] = useState<boolean>(false);
   const [showLeaderboard, setShowLeaderboard] = useState<boolean>(false);
 
@@ -135,7 +134,6 @@ function AppInner() {
   const onTournament = () => setScreen('modes');
   const onWallet = () => setScreen('wallet');
   const openLeaderboard = () => setShowLeaderboard(true);
-  const openHowTo = () => setShowHowTo(true);
 
   useEffect(() => {
     if (wsState.phase === 'lobby') setScreen('lobby');
@@ -177,7 +175,6 @@ function AppInner() {
           onPractice={onPractice}
           onTournament={onTournament}
           onLeaderboard={openLeaderboard}
-          onShowHowTo={openHowTo}
         />
       )}
       <div id="bg-particles" />
@@ -393,10 +390,9 @@ function HeaderWallet({
   screen,
   status,
   solPrice,
-  onPractice,
+  onPractice: _onPractice,
   onTournament,
   onLeaderboard,
-  onShowHowTo,
 }: {
   screen: string;
   status: string;
@@ -404,7 +400,6 @@ function HeaderWallet({
   onPractice: () => void;
   onTournament: () => void;
   onLeaderboard?: () => void;
-  onShowHowTo?: () => void;
 }) {
   const { publicKey, disconnect, connect } = useWallet() as any;
   const short = publicKey ? `${publicKey.slice(0, 4)}…${publicKey.slice(-4)}` : null;
@@ -562,11 +557,11 @@ interface LandingProps {
 }
 
 function Landing({
-  solPrice,
+  solPrice: _solPrice,
   onPractice,
   onTournament,
-  onWallet,
-  onLeaderboard,
+  onWallet: _onWallet,
+  onLeaderboard: _onLeaderboard,
 }: LandingProps) {
 
   const getPlayerStats = () => {
@@ -859,10 +854,11 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
   return null;
 }
 
-function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify, solPrice }: { onSelect: () => void; onClose: () => void; onNotify: (msg: string, duration?: number) => void; solPrice: number | null }) {
+function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify, solPrice: _solPrice }: { onSelect: () => void; onClose: () => void; onNotify: (msg: string, duration?: number) => void; solPrice: number | null }) {
   const { publicKey, connect } = useWallet();
   const { connectAndJoin, state: wsState } = useWs();
   const [isJoining, setIsJoining] = useState<boolean>(false);
+  // @ts-expect-error - preflight is set but not currently read, will be used in future
   const [preflight, setPreflight] = useState<{ address: string | null; sol: number | null; configured: boolean } | null>(null);
   const [preflightError, setPreflightError] = useState<boolean>(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
