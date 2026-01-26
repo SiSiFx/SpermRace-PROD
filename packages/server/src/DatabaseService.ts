@@ -8,6 +8,7 @@ interface Player {
   total_wins: number;
   total_kills: number;
   total_earnings: number; // lamports
+  skill_rating: number; // ELO rating
   created_at: string;
 }
 
@@ -49,6 +50,7 @@ export class DatabaseService {
     wins: LeaderboardEntry[];
     earnings: LeaderboardEntry[];
     kills: LeaderboardEntry[];
+    skillRating: LeaderboardEntry[];
     lastRefresh: number;
   };
   private readonly CACHE_TTL = 60000; // 60 seconds
@@ -62,6 +64,7 @@ export class DatabaseService {
       wins: [],
       earnings: [],
       kills: [],
+      skillRating: [],
       lastRefresh: 0,
     };
 
@@ -79,9 +82,19 @@ export class DatabaseService {
         total_wins INTEGER DEFAULT 0,
         total_kills INTEGER DEFAULT 0,
         total_earnings INTEGER DEFAULT 0,
+        skill_rating INTEGER DEFAULT 1200,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
     `);
+
+    // Add skill_rating column to existing players table if it doesn't exist
+    try {
+      this.db.exec(`
+        ALTER TABLE players ADD COLUMN skill_rating INTEGER DEFAULT 1200;
+      `);
+    } catch (e) {
+      // Column already exists - ignore error
+    }
 
     // Games table
     this.db.exec(`
@@ -114,16 +127,19 @@ export class DatabaseService {
 
     // Indexes for fast queries
     this.db.exec(`
-      CREATE INDEX IF NOT EXISTS idx_players_wins 
+      CREATE INDEX IF NOT EXISTS idx_players_wins
         ON players(total_wins DESC, total_earnings DESC);
-      
-      CREATE INDEX IF NOT EXISTS idx_players_earnings 
+
+      CREATE INDEX IF NOT EXISTS idx_players_earnings
         ON players(total_earnings DESC, total_wins DESC);
-      
-      CREATE INDEX IF NOT EXISTS idx_players_kills 
+
+      CREATE INDEX IF NOT EXISTS idx_players_kills
         ON players(total_kills DESC);
-      
-      CREATE INDEX IF NOT EXISTS idx_games_ended 
+
+      CREATE INDEX IF NOT EXISTS idx_players_skill_rating
+        ON players(skill_rating DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_games_ended
         ON games(ended_at DESC);
 
       CREATE INDEX IF NOT EXISTS idx_payouts_status
@@ -181,6 +197,9 @@ export class DatabaseService {
         const earnings = isWinner ? prizeLamports : 0;
         updateStmt.run(isWinner, kills, earnings, wallet);
       }
+
+      // Update skill ratings
+      this.updateSkillRatings(winnerWallet, playerKills);
 
       console.log(`[DB] ✅ Recorded game: winner=${winnerWallet.slice(0, 8)}, prize=${prizeLamports}, players=${playerCount}`);
     } catch (error) {
@@ -289,8 +308,8 @@ export class DatabaseService {
   }
 
   // Refresh cache for specific leaderboard
-  private refreshCache(type: 'wins' | 'earnings' | 'kills', limit: number = 100): LeaderboardEntry[] {
-    const column = type === 'wins' ? 'total_wins' : type === 'earnings' ? 'total_earnings' : 'total_kills';
+  private refreshCache(type: 'wins' | 'earnings' | 'kills' | 'skillRating', limit: number = 100): LeaderboardEntry[] {
+    const column = type === 'wins' ? 'total_wins' : type === 'earnings' ? 'total_earnings' : type === 'kills' ? 'total_kills' : 'skill_rating';
     
     const stmt = this.db.prepare(`
       SELECT 
@@ -322,6 +341,7 @@ export class DatabaseService {
         this.refreshCache('wins', 100);
         this.refreshCache('earnings', 100);
         this.refreshCache('kills', 100);
+        this.refreshCache('skillRating', 100);
         this.leaderboardCache.lastRefresh = Date.now();
         console.log('[DB] 🔄 Leaderboard cache refreshed');
       } catch (error) {
@@ -333,6 +353,7 @@ export class DatabaseService {
     this.refreshCache('wins', 100);
     this.refreshCache('earnings', 100);
     this.refreshCache('kills', 100);
+    this.refreshCache('skillRating', 100);
     this.leaderboardCache.lastRefresh = Date.now();
     console.log('[DB] ✅ Cache refresh started (60s interval)');
   }
@@ -379,6 +400,139 @@ export class DatabaseService {
       totalPlayers: players.count,
       totalPrizes: prizes.total || 0,
     };
+  }
+
+  // =================================================================================================
+  // SKILL RATING SYSTEM (ELO-based)
+  // =================================================================================================
+
+  /**
+   * Calculate expected score using ELO formula
+   * Returns a value between 0 and 1
+   */
+  private calculateExpectedScore(playerRating: number, opponentRating: number): number {
+    return 1 / (1 + Math.pow(10, (opponentRating - playerRating) / 400));
+  }
+
+  /**
+   * Get K-factor based on player experience
+   * New players get higher K-factor for faster adjustment
+   */
+  private getKFactor(totalGames: number): number {
+    if (totalGames < 10) return 60;  // New players - rapid adjustment
+    if (totalGames < 30) return 40;  // Still learning
+    if (totalGames < 100) return 25; // Established players
+    return 20;                       // Veterans - slower changes
+  }
+
+  /**
+   * Calculate new skill rating based on match outcome
+   * @param winnerRating - Winner's current rating
+   * @param winnerGames - Winner's total games played
+   * @param loserRating - Loser's current rating
+   * @param loserGames - Loser's total games played
+   * @returns Object with new ratings for winner and loser
+   */
+  calculateSkillRatingChange(
+    winnerRating: number,
+    winnerGames: number,
+    loserRating: number,
+    loserGames: number
+  ): { winnerNewRating: number; loserNewRating: number } {
+    // Calculate expected scores
+    const winnerExpected = this.calculateExpectedScore(winnerRating, loserRating);
+    const loserExpected = this.calculateExpectedScore(loserRating, winnerRating);
+
+    // Get K-factors
+    const winnerK = this.getKFactor(winnerGames);
+    const loserK = this.getKFactor(loserGames);
+
+    // Calculate new ratings
+    // Winner gets 1.0 points (won), loser gets 0.0 points (lost)
+    const winnerNewRating = Math.round(winnerRating + winnerK * (1 - winnerExpected));
+    const loserNewRating = Math.round(loserRating + loserK * (0 - loserExpected));
+
+    return { winnerNewRating, loserNewRating };
+  }
+
+  /**
+   * Update skill ratings after a match
+   * This is called automatically by recordGameResult
+   */
+  private updateSkillRatings(
+    winnerWallet: string,
+    playerKills: Record<string, number>
+  ): void {
+    try {
+      // Get all players' current ratings and games
+      const players: Array<{ wallet: string; rating: number; games: number; isWinner: boolean }> = [];
+
+      for (const wallet of Object.keys(playerKills)) {
+        const stmt = this.db.prepare(`
+          SELECT skill_rating, total_games FROM players WHERE wallet_address = ?
+        `);
+        const row = stmt.get(wallet) as { skill_rating: number; total_games: number } | undefined;
+
+        if (row) {
+          players.push({
+            wallet,
+            rating: row.skill_rating,
+            games: row.total_games,
+            isWinner: wallet === winnerWallet,
+          });
+        }
+      }
+
+      if (players.length < 2) return;
+
+      // Separate winner and losers
+      const winner = players.find(p => p.isWinner);
+      if (!winner) return;
+
+      const losers = players.filter(p => !p.isWinner);
+
+      // Update ratings for each loser vs winner
+      const updateStmt = this.db.prepare(`
+        UPDATE players SET skill_rating = ? WHERE wallet_address = ?
+      `);
+
+      // Update winner rating based on average opponent rating
+      const avgLoserRating = losers.reduce((sum, p) => sum + p.rating, 0) / losers.length;
+      const avgLoserGames = losers.reduce((sum, p) => sum + p.games, 0) / losers.length;
+
+      const { winnerNewRating } = this.calculateSkillRatingChange(
+        winner.rating,
+        winner.games,
+        avgLoserRating,
+        avgLoserGames
+      );
+      updateStmt.run(winnerNewRating, winner.wallet);
+
+      // Update each loser rating
+      for (const loser of losers) {
+        const { loserNewRating } = this.calculateSkillRatingChange(
+          winner.rating,
+          winner.games,
+          loser.rating,
+          loser.games
+        );
+        updateStmt.run(loserNewRating, loser.wallet);
+      }
+
+      console.log(`[SKILL] Updated ratings: winner=${winner.wallet.slice(0, 8)} ${winner.rating}→${winnerNewRating}`);
+    } catch (error) {
+      console.error('[SKILL] Failed to update ratings:', error);
+    }
+  }
+
+  /**
+   * Get top N players by skill rating
+   */
+  getTopSkillRating(limit: number = 100): LeaderboardEntry[] {
+    if (Date.now() - this.leaderboardCache.lastRefresh < this.CACHE_TTL) {
+      return this.leaderboardCache.skillRating.slice(0, limit);
+    }
+    return this.refreshCache('skillRating', limit);
   }
 
   close(): void {
