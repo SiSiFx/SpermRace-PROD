@@ -215,6 +215,7 @@ class SpermRaceGame {
   public echoPings: RadarPing[] = [];
   public alivePlayers: number = 0;
   public gamePhase: 'waiting' | 'active' | 'finished' = 'active';
+  private spectateTarget: Car | null = null; // Camera follows this when player is dead
   public gameStartTime: number = Date.now();
   public pickupsUnlocked: boolean = false;
   public artifactsUnlocked: boolean = false;
@@ -2568,9 +2569,10 @@ class SpermRaceGame {
       const crowdFactor = Math.min(1, nearbyCount / 8);
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       const baseZoom = isMobile ? 0.55 : 0.75; // Wider for better tactical view
-      
-      // BOOST ZOOM: Zoom IN when boosting for speed sensation
-      if (this.player.isBoosting) {
+
+      // BOOST ZOOM: Zoom IN when boosting for speed sensation (only if player is alive)
+      const playerAlive = this.player && !this.player.destroyed;
+      if (playerAlive && this.player.isBoosting) {
         const boostZoom = isMobile ? 0.65 : 0.85; // Tighter view = feels faster
         this.camera.targetZoom = boostZoom;
       } else {
@@ -2589,9 +2591,14 @@ class SpermRaceGame {
       this.camera.zoom += (this.camera.targetZoom - this.camera.zoom) * zoomSpeed;
     }
     
-    // Center camera on player, or on average player position during overview
-    let desiredCenterX = this.player.x;
-    let desiredCenterY = this.player.y;
+    // Center camera on player, or on spectate target if player is dead
+    let cameraTarget = this.player && !this.player.destroyed ? this.player : this.spectateTarget;
+    if (!cameraTarget) {
+      // Fallback to player position if no spectate target
+      cameraTarget = this.player;
+    }
+    let desiredCenterX = cameraTarget.x;
+    let desiredCenterY = cameraTarget.y;
     if (this.preStart) {
       const totalDuration = this.preStart.durationMs;
       const overviewEnd = totalDuration * 0.65;
@@ -4064,6 +4071,14 @@ class SpermRaceGame {
             this.updateAliveCount();
             this.renderKillFeed();
 
+            // If player died, set spectate target to a random alive bot
+            if (car === this.player) {
+              const allBots = [this.bot, ...this.extraBots].filter((b): b is Car => b !== null && !b.destroyed);
+              if (allBots.length > 0) {
+                this.spectateTarget = allBots[Math.floor(Math.random() * allBots.length)];
+              }
+            }
+
             // Complete destruction (visual cleanup, etc.)
             this.destroyCar(car);
             break;
@@ -4319,6 +4334,9 @@ class SpermRaceGame {
       // Red flash effect for player death
       this.gameEffects?.flashScreen('rgba(255, 0, 0, 0.5)', 150);
 
+      // Strong screen shake for player death
+      this.screenShake(0.8);
+
       // RESET KILL STREAK WHEN PLAYER DIES
       this.killStreak = 0;
       this.lastKillTime = 0;
@@ -4379,18 +4397,10 @@ class SpermRaceGame {
     
     // Update alive count and handle elimination flow
     this.updateAliveCount();
-    
-    // If player died, show death screen immediately (practice only; tournament uses App Results)
-    if (car === this.player && this.gamePhase === 'active' && !(this.wsHud && this.wsHud.active)) {
-      // Calculate player's rank at time of death
-      const playerRank = this.alivePlayers + 1;
-      setTimeout(() => {
-        this.showGameOverScreen(false, playerRank);
-      }, 1000); // Short delay to see explosion
-      this.gamePhase = 'finished';
-    }
-    // Check for game end (only if player is still alive)
-    else if (this.alivePlayers <= 1 && this.gamePhase === 'active' && this.player && !this.player.destroyed) {
+
+    // Check for game end (regardless of whether player is alive or dead)
+    // This allows spectating after death until a winner is determined
+    if (this.alivePlayers <= 1 && this.gamePhase === 'active') {
       this.endGame();
     }
   }
@@ -4632,18 +4642,107 @@ class SpermRaceGame {
       ? 'Champion'
       : `Rank #${rank} / ${totalPlayersCount}`;
 
-    // Winner display (only show if player didn't win and we have winner info)
+    // Winner display (show info about who won)
     let winnerDisplay: HTMLElement | null = null;
-    if (!isVictory && winner) {
+    if (isVictory) {
+      // Player won - show victory stats
       winnerDisplay = document.createElement('div');
       winnerDisplay.style.cssText = `
-        font-size: 18px;
-        margin: 4px 0 20px 0;
-        color: #22d3ee;
-        font-weight: 600;
-        opacity: 0.9;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        margin: 16px 0 24px 0;
+        padding: 16px 20px;
+        background: linear-gradient(135deg, rgba(34,211,238,0.15), rgba(99,102,241,0.15));
+        border: 2px solid rgba(34,211,238,0.5);
+        border-radius: 16px;
+        backdrop-filter: blur(8px);
       `;
-      winnerDisplay.textContent = `Winner: ${winner.name || 'Unknown'}`;
+
+      const winnerTitle = document.createElement('div');
+      winnerTitle.style.cssText = `
+        font-size: 26px;
+        color: #22d3ee;
+        font-weight: 800;
+        text-shadow: 0 0 20px rgba(34,211,238,0.6), 0 2px 8px rgba(0,0,0,0.4);
+        letter-spacing: -0.01em;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      `;
+      winnerTitle.innerHTML = `👑 You are the Champion!`;
+
+      const playerStats = document.createElement('div');
+      playerStats.style.cssText = `
+        display: flex;
+        gap: 20px;
+        font-size: 15px;
+        color: rgba(255,255,255,0.9);
+        font-weight: 600;
+      `;
+      playerStats.innerHTML = `
+        <span style="display: flex; align-items: center; gap: 6px;">
+          💥 ${kills} KO${kills !== 1 ? 's' : ''}
+        </span>
+        <span style="display: flex; align-items: center; gap: 6px;">
+          🏆 #1 / ${totalPlayersCount}
+        </span>
+      `;
+
+      winnerDisplay.appendChild(winnerTitle);
+      winnerDisplay.appendChild(playerStats);
+    } else if (winner) {
+      // Opponent won - show who beat you
+      winnerDisplay = document.createElement('div');
+      winnerDisplay.style.cssText = `
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        margin: 16px 0 24px 0;
+        padding: 16px 20px;
+        background: linear-gradient(135deg, rgba(244,63,94,0.12), rgba(251,146,60,0.08));
+        border: 2px solid rgba(244,63,94,0.3);
+        border-radius: 16px;
+        backdrop-filter: blur(8px);
+      `;
+
+      // Winner name with trophy icon
+      const winnerName = document.createElement('div');
+      winnerName.style.cssText = `
+        font-size: 26px;
+        color: #f43f5e;
+        font-weight: 800;
+        text-shadow: 0 0 20px rgba(244,63,94,0.6), 0 2px 8px rgba(0,0,0,0.4);
+        letter-spacing: -0.01em;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      `;
+      const winnerKills = winner.kills || 0;
+      winnerName.innerHTML = `🏆 Winner: ${winner.name || 'Unknown'}`;
+
+      // Winner stats row
+      const winnerStats = document.createElement('div');
+      winnerStats.style.cssText = `
+        display: flex;
+        gap: 20px;
+        font-size: 15px;
+        color: rgba(255,255,255,0.9);
+        font-weight: 600;
+      `;
+      winnerStats.innerHTML = `
+        <span style="display: flex; align-items: center; gap: 6px;">
+          💥 ${winnerKills} KO${winnerKills !== 1 ? 's' : ''}
+        </span>
+        <span style="display: flex; align-items: center; gap: 6px;">
+          🎯 ${winner.type === 'player' ? 'Player' : 'Bot'}
+        </span>
+      `;
+
+      winnerDisplay.appendChild(winnerName);
+      winnerDisplay.appendChild(winnerStats);
     }
 
     // Stats container
@@ -4661,7 +4760,6 @@ class SpermRaceGame {
     const minutes = Math.floor(survivalTime / 60);
     const seconds = survivalTime % 60;
 
-    const eliminated = Math.max(0, (totalPlayersCount - this.alivePlayers - (this.player?.destroyed ? 0 : 1)));
     stats.innerHTML = `
       <div style="color:#ffffff; font-size: 16px; font-weight:700; margin-bottom: 12px;">BATTLE STATS</div>
       <div style="display: flex; justify-content: space-between; margin: 8px 0;">
@@ -4670,7 +4768,7 @@ class SpermRaceGame {
       </div>
       <div style="display: flex; justify-content: space-between; margin: 8px 0;">
         <span style="color:rgba(255,255,255,0.8); font-size: 14px;">Knockouts</span>
-        <span style="color:#ffffff; font-size: 14px; font-weight:600;">${eliminated}</span>
+        <span style="color:#ffffff; font-size: 14px; font-weight:600;">${kills}</span>
       </div>
       <div style="display: flex; justify-content: space-between; margin: 8px 0;">
         <span style="color:rgba(255,255,255,0.8); font-size: 14px;">Placement</span>
