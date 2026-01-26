@@ -35,6 +35,7 @@ import HowToPlayOverlay from './HowToPlayOverlay';
 import PracticeFullTutorial from './PracticeFullTutorial';
 import { PracticeModeSelection } from './PracticeModeSelection';
 import { Leaderboard } from './Leaderboard';
+import { HolographicKeycard } from './HolographicKeycard';
 import { CrownSimple, Atom } from 'phosphor-react';
 
 type AppScreen = 'landing' | 'practice' | 'practice-solo' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
@@ -950,113 +951,15 @@ function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify, solPric
           gap: 16,
           marginBottom: 20
         }}>
-          {tiers.map((tier, i) => {
-            const isActive = i === selectedIndex;
-            const roi = ((tier.prize / tier.usd - 1) * 100).toFixed(0);
-
-            return (
-              <button
-                key={tier.name}
-                onClick={() => setSelectedIndex(i)}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '22px 16px',
-                  borderRadius: 20,
-                  border: isActive ? '2px solid #00f5ff' : '1px solid rgba(255,255,255,0.1)',
-                  background: isActive
-                    ? 'linear-gradient(135deg, rgba(0,245,255,0.2) 0%, rgba(0,200,255,0.08) 100%)'
-                    : 'rgba(255,255,255,0.03)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  boxShadow: isActive ? '0 0 50px rgba(0,245,255,0.4), inset 0 1px 0 rgba(255,255,255,0.15)' : 'none',
-                  opacity: preflightError ? 0.5 : 1,
-                  position: 'relative',
-                }}
-              >
-                {/* Popular Badge */}
-                {tier.popular && (
-                  <div style={{
-                    position: 'absolute',
-                    top: -8,
-                    right: -8,
-                    background: 'linear-gradient(135deg, #ff6b00, #ff8c00)',
-                    color: '#fff',
-                    fontSize: 9,
-                    fontWeight: 900,
-                    padding: '4px 12px',
-                    borderRadius: 14,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.1em',
-                    boxShadow: '0 3px 12px rgba(255,107,0,0.5)',
-                  }}>
-                    🔥 HOT
-                  </div>
-                )}
-
-                {/* Entry Fee */}
-                <div style={{
-                  padding: '6px 18px',
-                  borderRadius: 20,
-                  background: isActive
-                    ? 'linear-gradient(135deg, #00f5ff, #00ff88)'
-                    : 'rgba(255,255,255,0.1)',
-                  fontSize: 20,
-                  fontWeight: 900,
-                  color: isActive ? '#000' : '#fff',
-                  marginBottom: 12,
-                }}>
-                  ${tier.usd}
-                </div>
-
-                {/* Tier Name */}
-                <div style={{
-                  fontSize: 16,
-                  fontWeight: 700,
-                  color: isActive ? '#00f5ff' : 'rgba(255,255,255,0.7)',
-                  marginBottom: 12,
-                  letterSpacing: '0.08em'
-                }}>
-                  {tier.name}
-                </div>
-
-                {/* Prize - Huge */}
-                <div style={{
-                  fontSize: 40,
-                  fontWeight: 900,
-                  color: isActive ? '#00ff88' : 'rgba(255,255,255,0.6)',
-                  textShadow: isActive ? '0 0 35px rgba(0,255,136,0.7)' : 'none',
-                  lineHeight: 1,
-                  marginBottom: 8,
-                }}>
-                  ${tier.prize}
-                </div>
-
-                {/* ROI Badge */}
-                <div style={{
-                  fontSize: 11,
-                  color: isActive ? '#00ff88' : 'rgba(255,255,255,0.4)',
-                  letterSpacing: '0.1em',
-                  fontWeight: 800,
-                  marginBottom: 10,
-                  textTransform: 'uppercase',
-                }}>
-                  {roi}% ROI
-                </div>
-
-                {/* Description */}
-                <div style={{
-                  fontSize: 12,
-                  color: 'rgba(255,255,255,0.5)',
-                  textAlign: 'center',
-                }}>
-                  {tier.desc}
-                </div>
-              </button>
-            );
-          })}
+          {tiers.map((tier, i) => (
+            <HolographicKeycard
+              key={tier.name}
+              tier={tier}
+              isActive={i === selectedIndex}
+              onClick={() => setSelectedIndex(i)}
+              disabled={preflightError}
+            />
+          ))}
         </div>
 
         {/* Feature Highlights Row */}
