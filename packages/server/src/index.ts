@@ -15,6 +15,7 @@ import { DatabaseService } from './DatabaseService.js';
 import { AuditLogger } from './AuditLogger.js';
 import { ClientToServerMessage, ServerToClientMessage, GameStateUpdateMessage, LobbyStateMessage, Lobby, AuthenticatedMessage } from 'shared';
 import { clientToServerMessageSchema } from 'shared/dist/schemas.js';
+import { INPUT } from 'shared/constants';
 import { v4 as uuidv4 } from 'uuid';
 
 // =================================================================================================
@@ -1528,7 +1529,7 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
       const now = Date.now();
       const last = (socketRate as any).lastInputAt?.get?.(ws) as number | undefined;
       if (!(socketRate as any).lastInputAt) (socketRate as any).lastInputAt = new Map();
-	      if (!last || (now - last) >= 16) {
+	      if (!last || (now - last) >= INPUT.MAX_BURST_INTERVAL_MS) {
 	        (socketRate as any).lastInputAt.set(ws, now);
 	        const match = getMatchForPlayer(playerId);
 	        if (match) {

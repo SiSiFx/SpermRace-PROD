@@ -4,6 +4,7 @@ import GameEffects from './GameEffects';
 import { startSpermBackground, stopSpermBackground } from './spermBackground';
 import type { PlayerInput, GameStateUpdateMessage, TrailPoint } from 'shared';
 import { TRAIL } from 'shared';
+import { INPUT } from 'shared/constants';
 import { VersionedTransaction, Connection } from '@solana/web3.js';
 import bs58 from 'bs58';
 
@@ -155,7 +156,7 @@ const sfx = {
 
 type Snapshot = { time: number; state: GameStateUpdateMessage['payload'] };
 const snapshots: Snapshot[] = [];
-let INTERPOLATION_DELAY_MS = 80; // Reduced for more responsive movement
+let INTERPOLATION_DELAY_MS = 50; // Reduced to 50ms for better responsiveness with 60fps input
 
 // Trail interpolation cache for smooth rendering
 interface TrailCache {
@@ -289,14 +290,14 @@ function startInterpolatedRender(): void {
     const span = Math.max(1, right.time - left.time);
     const t = Math.min(1, Math.max(0, (target - left.time) / span));
 
-    // Auto-tune interpolation delay to maintain ~2–3 snapshot buffer
+    // Auto-tune interpolation delay to maintain ~1.5–2 snapshot buffer for lower latency
     if (snapshots.length >= 3) {
       let totalDelta = 0;
       for (let i = 1; i < snapshots.length; i++) totalDelta += (snapshots[i].time - snapshots[i - 1].time);
       const avgDelta = totalDelta / (snapshots.length - 1);
-      const desiredBacklog = 2.0; // Reduced for lower latency
-      const desiredDelay = Math.max(50, Math.min(180, avgDelta * desiredBacklog));
-      INTERPOLATION_DELAY_MS += (desiredDelay - INTERPOLATION_DELAY_MS) * 0.08; // Faster adaptation
+      const desiredBacklog = 1.5; // Target lower backlog for minimal latency
+      const desiredDelay = Math.max(30, Math.min(120, avgDelta * desiredBacklog));
+      INTERPOLATION_DELAY_MS += (desiredDelay - INTERPOLATION_DELAY_MS) * 0.1; // Faster adaptation
     }
 
     // Interpolate players
@@ -860,12 +861,12 @@ async function initializeGame(): Promise<void> {
   // No keyboard accelerate on keyup
   
   // Start input loop
-  // Send player input at higher rate for better responsiveness
+  // Send player input at 60fps for sub-16ms response time
   setInterval(() => {
     if (ws && ws.readyState === WebSocket.OPEN && state.isInGame) {
       ws.send(JSON.stringify({ type: 'playerInput', payload: playerInput }));
     }
-  }, 33); // ~30fps input rate for smoother control
+  }, INPUT.INTERVAL_MS); // 60fps input rate for sub-16ms response time
 
 
 }
