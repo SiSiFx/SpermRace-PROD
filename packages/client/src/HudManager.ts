@@ -35,6 +35,12 @@ export class HudManager {
 
     const isMobile = window.innerWidth <= 768;
 
+    // Create scanline overlay for entire game
+    const scanlineOverlay = document.createElement('div');
+    scanlineOverlay.id = 'hud-scanline-overlay';
+    scanlineOverlay.className = 'hud-scanline-overlay';
+    this.container.appendChild(scanlineOverlay);
+
     // Create unified top bar
     this.topBar = document.createElement('div');
     this.topBar.id = 'unified-top-bar';
@@ -62,7 +68,8 @@ export class HudManager {
       color: '#ffffff',
       fontFamily: this.theme === 'tactical' ? "'Courier New', monospace" : 'inherit',
       letterSpacing: this.theme === 'tactical' ? '2px' : 'normal',
-      textTransform: this.theme === 'tactical' ? 'uppercase' : 'none'
+      textTransform: this.theme === 'tactical' ? 'uppercase' : 'none',
+      transition: 'all 0.3s ease'
     });
 
     // Zone timer section
@@ -311,6 +318,8 @@ export class HudManager {
       this.zoneTimerEl.style.color = alertColor;
       this.zoneTimerEl.style.textShadow = `0 0 10px rgba(${this.theme === 'tactical' ? '255, 51, 51' : '239, 68, 68'}, 0.9)`;
       this.zoneTimerEl.className = this.theme === 'tactical' ? 'zone-timer alert' : '';
+      this.zoneTimerEl.style.animation = '';
+      this.zoneTimerEl.classList.remove('zone-timer-critical');
       return;
     }
 
@@ -322,6 +331,7 @@ export class HudManager {
         this.zoneTimerEl.className = 'zone-timer alert';
       } else {
         this.zoneTimerEl.style.animation = 'blink 1s ease-in-out infinite';
+        this.zoneTimerEl.classList.add('zone-timer-critical');
       }
     } else {
       this.zoneTimerEl.innerHTML = `SAFE TIME: <span>${timeLabel}</span>`;
@@ -329,6 +339,7 @@ export class HudManager {
       this.zoneTimerEl.style.textShadow = `0 0 6px rgba(${this.theme === 'tactical' ? '0, 255, 65' : '34, 211, 238'}, 0.6)`;
       this.zoneTimerEl.className = 'zone-timer';
       this.zoneTimerEl.style.animation = '';
+      this.zoneTimerEl.classList.remove('zone-timer-critical');
     }
   }
 
@@ -354,6 +365,8 @@ export class HudManager {
       this.boostBarFillEl.style.background = boostGradient;
       if (this.theme === 'tactical') {
         this.boostBarFillEl.className = 'boosting';
+      } else {
+        this.boostBarFillEl.classList.remove('low-boost');
       }
       if (boostIcon) {
         boostIcon.style.color = boostColor;
@@ -369,6 +382,8 @@ export class HudManager {
       this.boostBarFillEl.style.background = lowGradient;
       if (this.theme === 'tactical') {
         this.boostBarFillEl.className = 'low';
+      } else {
+        this.boostBarFillEl.classList.add('low-boost');
       }
       if (boostIcon) {
         boostIcon.style.color = lowColor;
@@ -382,7 +397,11 @@ export class HudManager {
       const glowColor = this.theme === 'tactical' ? '0, 255, 65' : '34, 211, 238';
 
       this.boostBarFillEl.style.background = normalGradient;
-      this.boostBarFillEl.className = '';
+      if (this.theme === 'tactical') {
+        this.boostBarFillEl.className = '';
+      } else {
+        this.boostBarFillEl.classList.remove('low-boost');
+      }
       if (boostIcon) {
         boostIcon.style.color = normalColor;
         boostIcon.style.textShadow = `0 0 8px rgba(${glowColor}, 0.6)`;
@@ -396,7 +415,15 @@ export class HudManager {
   updateAliveCount(count: number) {
     if (!this.aliveCountEl) return;
 
+    const previousCount = parseInt(this.aliveCountEl.textContent || '0');
     this.aliveCountEl.textContent = `${count} ALIVE`;
+
+    // Add pulse animation when count changes
+    if (count !== previousCount && count > 0) {
+      this.aliveCountEl.classList.remove('alive-count-update');
+      void this.aliveCountEl.offsetWidth; // Trigger reflow
+      this.aliveCountEl.classList.add('alive-count-update');
+    }
 
     // Color based on count
     if (count <= 2) {
@@ -459,6 +486,7 @@ export class HudManager {
     // Remove all old HUD elements
     const oldElements = [
       'unified-top-bar',
+      'hud-scanline-overlay',
       'top-hud-bar',
       'game-zone-timer',
       'game-boost-bar',
