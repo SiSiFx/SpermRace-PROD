@@ -2,7 +2,7 @@
 // CORE GAME TYPES
 // =================================================================================================
 
-export { WORLD, PHYSICS, TRAIL, COLLISION, TICK } from './constants';
+export { WORLD, PHYSICS, TRAIL, COLLISION, TICK, INPUT } from './constants';
 
 /** Represents a 2D vector. */
 export interface Vector2 {
@@ -92,6 +92,7 @@ export type GameMode = 'practice' | 'tournament';
 export interface Lobby {
   lobbyId: string;
   players: string[]; // List of player IDs (public keys)
+  playerNames?: Record<string, string>; // Optional mapping of player IDs to display names
   maxPlayers: number;
   entryFee: EntryFeeTier;
   mode: GameMode;
@@ -151,13 +152,22 @@ export interface EntryFeeSignatureMessage {
   };
 }
 
+export interface PongMessage {
+  type: 'pong';
+  payload: {
+    pingId: number;
+    timestamp: number;
+  };
+}
+
 export type ClientToServerMessage =
   | AuthenticateMessage
   | GuestLoginMessage
   | JoinLobbyMessage
   | LeaveLobbyMessage
   | PlayerInputMessage
-  | EntryFeeSignatureMessage;
+  | EntryFeeSignatureMessage
+  | PongMessage;
 
 // -------------------------------------------------------------------------------------------------
 // Server -> Client Messages
@@ -271,6 +281,14 @@ export interface ErrorMessage {
   };
 }
 
+export interface PingMessage {
+  type: 'ping';
+  payload: {
+    pingId: number;
+    timestamp: number;
+  };
+}
+
 export type ServerToClientMessage =
   | AuthenticatedMessage
   | LobbyStateMessage
@@ -283,7 +301,8 @@ export type ServerToClientMessage =
   | LobbyCountdownMessage
   | SiwsChallengeMessage
   | EntryFeeTransactionMessage
-  | EntryFeeVerifiedMessage;
+  | EntryFeeVerifiedMessage
+  | PingMessage;
 // =================================================================================================
 // RUNTIME SCHEMAS (zod)
 // =================================================================================================

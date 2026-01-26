@@ -2,10 +2,12 @@ import { GameState, PlayerInput, EntryFeeTier, Player, GameItem, GameMode } from
 import { PlayerEntity } from './Player.js';
 import { BotController } from './BotController.js';
 import { CollisionSystem } from './CollisionSystem.js';
+import { LatencyCompensation } from './LatencyCompensation.js';
 import { SmartContractService } from './SmartContractService.js';
 import type { DatabaseService } from './DatabaseService.js';
 import { WORLD as S_WORLD, TICK as S_TICK, COLLISION as S_COLLISION, PHYSICS as S_PHYSICS } from 'shared/dist/constants.js';
 import { v4 as uuidv4 } from 'uuid';
+import { StateHistory } from './StateHistory.js';
 
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 // Constants
@@ -98,12 +100,42 @@ export class GameWorld {
   public onAuditEvent: ((type: string, payload?: any) => void) | null = null;
   private lastWinReason: 'last_alive' | 'extraction' | 'draw' | null = null;
   private roundGoAtMs: number | null = null;
+  private stateHistory: StateHistory;
+
+  // Performance monitoring
+  private perfStats: {
+    updateMs: number[];
+    botAiMs: number[];
+    collisionMs: number[];
+    schoolMs: number[];
+    lastLogMs: number;
+  } = {
+    updateMs: [],
+    botAiMs: [],
+    collisionMs: [],
+    schoolMs: [],
+    lastLogMs: 0,
+  };
+
+  // Lag compensation: Track RTT per player
+  private playerRttMs: Map<string, number> = new Map();
+
+  // Reusable arrays to reduce GC pressure (avoid creating arrays every frame)
+  private playersArrayCache: PlayerEntity[] = [];
+  private itemsArrayCache: GameItem[] = [];
 
   constructor(smartContractService: SmartContractService, db?: DatabaseService) {
-    this.collisionSystem = new CollisionSystem(WORLD_WIDTH, WORLD_HEIGHT);
+    const latencyCompensation = new LatencyCompensation();
+    this.collisionSystem = new CollisionSystem(WORLD_WIDTH, WORLD_HEIGHT, latencyCompensation);
     this.smartContractService = smartContractService;
     this.db = db || null;
     this.gameState = this.createInitialGameState();
+    // Initialize state history with 200ms buffer for lag compensation
+    this.stateHistory = new StateHistory(200, TICK_INTERVAL);
+  }
+
+  getLatencyCompensation(): LatencyCompensation {
+    return this.collisionSystem.getLatencyCompensation();
   }
 
   private createInitialGameState(): GameState {
@@ -152,6 +184,7 @@ export class GameWorld {
     this.items.clear();
     this.lastItemSpawnTime = 0;
     this.currentLobby = { players, entryFee, mode };
+    this.stateHistory.clear(); // Clear history buffer for new round
 
     // Reset arena sizing for this round based on expected player count.
     const roundSize = pickRoundWorldSize(players.length, mode);
@@ -334,11 +367,20 @@ export class GameWorld {
 
     const deltaTime = TICK_INTERVAL / 1000; // in seconds
 
-    const playersArray = Array.from(this.players.values());
+    // Reuse cached arrays instead of creating new ones every frame
+    this.playersArrayCache.length = 0;
+    for (const player of this.players.values()) {
+      this.playersArrayCache.push(player);
+    }
+    const playersArray = this.playersArrayCache;
 
     // -1. Drive bot AI before physics so inputs are ready for the tick
     if (this.bots.size > 0) {
-      const itemsArray = Array.from(this.items.values());
+      this.itemsArrayCache.length = 0;
+      for (const item of this.items.values()) {
+        this.itemsArrayCache.push(item);
+      }
+      const itemsArray = this.itemsArrayCache;
       const worldWidth = this.gameState.world.width || WORLD_WIDTH;
       const worldHeight = this.gameState.world.height || WORLD_HEIGHT;
       this.bots.forEach(bot => {
@@ -356,31 +398,66 @@ export class GameWorld {
     }
 
     // 0. Schooling (flocking buff) - compute per-player speed multipliers before physics
+    // OPTIMIZATION: Use spatial partitioning to reduce O(n²) complexity with 8+ bots
     const count = playersArray.length;
     const SCHOOL_RADIUS = 300;
     const SCHOOL_RADIUS_SQ = SCHOOL_RADIUS * SCHOOL_RADIUS;
     const ANGLE_THRESHOLD = 0.5; // radians
     const neighborCounts: number[] = new Array(count).fill(0);
 
-    for (let i = 0; i < count; i++) {
-      const p1 = playersArray[i];
-      if (!p1.isAlive) continue;
-      const pos1 = p1.sperm.position;
-      const angle1 = p1.sperm.angle;
-      for (let j = i + 1; j < count; j++) {
-        const p2 = playersArray[j];
-        if (!p2.isAlive) continue;
-        const pos2 = p2.sperm.position;
-        const dx = pos1.x - pos2.x;
-        const dy = pos1.y - pos2.y;
-        const distSq = dx * dx + dy * dy;
-        if (distSq > SCHOOL_RADIUS_SQ) continue;
-        const angle2 = p2.sperm.angle;
-        const rawDiff = angle1 - angle2;
-        const angleDiff = Math.abs(Math.atan2(Math.sin(rawDiff), Math.cos(rawDiff)));
-        if (angleDiff < ANGLE_THRESHOLD) {
-          neighborCounts[i]++;
-          neighborCounts[j]++;
+    // Only compute schooling for alive players
+    const alivePlayers = playersArray.filter(p => p.isAlive);
+    const aliveCount = alivePlayers.length;
+
+    // Skip expensive calculation if very few players
+    if (aliveCount > 1 && aliveCount < 50) {
+      // Use simple spatial grid for schooling optimization
+      const gridSize = SCHOOL_RADIUS;
+      const grid = new Map<string, number[]>();
+
+      // Build grid
+      for (let i = 0; i < aliveCount; i++) {
+        const p = alivePlayers[i];
+        const cellX = Math.floor(p.sperm.position.x / gridSize);
+        const cellY = Math.floor(p.sperm.position.y / gridSize);
+        const key = `${cellX},${cellY}`;
+        if (!grid.has(key)) grid.set(key, []);
+        grid.get(key)!.push(i);
+      }
+
+      // Check only nearby cells
+      for (let i = 0; i < aliveCount; i++) {
+        const p1 = alivePlayers[i];
+        const pos1 = p1.sperm.position;
+        const angle1 = p1.sperm.angle;
+        const cellX = Math.floor(pos1.x / gridSize);
+        const cellY = Math.floor(pos1.y / gridSize);
+
+        // Check 3x3 grid neighborhood
+        for (let dx = -1; dx <= 1; dx++) {
+          for (let dy = -1; dy <= 1; dy++) {
+            const key = `${cellX + dx},${cellY + dy}`;
+            const cellIndices = grid.get(key);
+            if (!cellIndices) continue;
+
+            for (const j of cellIndices) {
+              if (j <= i) continue; // Avoid double counting
+              const p2 = alivePlayers[j];
+              const pos2 = p2.sperm.position;
+              const distSq = (pos1.x - pos2.x) ** 2 + (pos1.y - pos2.y) ** 2;
+              if (distSq > SCHOOL_RADIUS_SQ) continue;
+
+              const angle2 = p2.sperm.angle;
+              const rawDiff = angle1 - angle2;
+              const angleDiff = Math.abs(Math.atan2(Math.sin(rawDiff), Math.cos(rawDiff)));
+              if (angleDiff < ANGLE_THRESHOLD) {
+                const idx1 = playersArray.indexOf(p1);
+                const idx2 = playersArray.indexOf(p2);
+                if (idx1 >= 0) neighborCounts[idx1]++;
+                if (idx2 >= 0) neighborCounts[idx2]++;
+              }
+            }
+          }
         }
       }
     }
@@ -394,17 +471,61 @@ export class GameWorld {
     }
 
     // 1. Update all players (pass shrink factor for trail lifetime logic)
+    const latencyComp = this.getLatencyCompensation();
     this.players.forEach(player => {
       player.update(deltaTime, this.shrinkFactor);
       player.cleanExpiredTrails();
+      // Record position snapshot for latency compensation
+      if (player.isAlive) {
+        latencyComp.recordPositionSnapshot(player.id, player.sperm.position, player.sperm.angle);
+      }
     });
+
+    // 1.1. Send pings for latency measurement
+    const playersNeedingPings = latencyComp.getPlayersNeedingPings();
+    for (const playerId of playersNeedingPings) {
+      const ping = latencyComp.generatePing(playerId);
+      if (ping) {
+        // Send ping via WebSocket (will be handled by lobby manager)
+        try {
+          (this as any).sendPing?.(playerId, ping.pingId, ping.timestamp);
+        } catch { }
+      }
+    }
+
+    // Cleanup expired pings for all players
+    for (const playerId of this.players.keys()) {
+      latencyComp.cleanupExpiredPings(playerId);
+    }
 
     // 1.5. Resolve player-vs-player collisions (bump/bounce logic)
     this.collisionSystem.checkPlayerCollisions(this.players);
 
-    // 2. Detect collisions (walls & trails)
-    const eliminated = this.collisionSystem.update(this.players);
-    eliminated.forEach(({ victimId, killerId, debug }) => {
+    // 2. Detect collisions (walls & trails) with lag compensation
+    // Build lag-compensated positions for all players
+    const lagCompensatedPositions = new Map<string, { x: number; y: number }>();
+    const now = Date.now();
+
+    for (const player of this.players.values()) {
+      if (!player.isAlive) continue;
+
+      // Get this player's RTT
+      const rtt = this.getPlayerRtt(player.id);
+
+      // Rewind time by half the RTT (one-way latency approximation)
+      const rewindTime = now - Math.floor(rtt / 2);
+
+      // Get the player's position at the rewound time
+      const pastPosition = this.getPlayerPositionAtTime(player.id, rewindTime);
+
+      if (pastPosition) {
+        lagCompensatedPositions.set(player.id, { x: pastPosition.x, y: pastPosition.y });
+      }
+    }
+
+    // Use lag-compensated positions for collision detection
+    const eliminated = (this.collisionSystem as any).updateWithLagCompensation(this.players, lagCompensatedPositions);
+    eliminated.forEach(({ victimId, killerId, debug }: { victimId: string; killerId?: string; debug?: any }) => {
       if (this.players.has(victimId)) {
         if ((process.env.NODE_ENV || '').toLowerCase() !== 'production') {
           try { console.debug(`[DEV][ELIM] victim=${victimId.startsWith('BOT_')?victimId:`${victimId.slice(0,6)}…${victimId.slice(-4)}`} killer=${killerId? (killerId.startsWith('BOT_')?killerId:`${killerId.slice(0,6)}…${killerId.slice(-4)}`) : 'arena/self/trail'}`); } catch {}
@@ -421,25 +542,32 @@ export class GameWorld {
       }
     });
 
-    // 3. Check for a winner
-    const alivePlayers = Array.from(this.players.values()).filter(p => p.isAlive);
+    // 3. Check for a winner (reuse cached array and filter in place to avoid allocation)
+    let aliveCount = 0;
+    let lastAlivePlayer: PlayerEntity | null = null;
+    for (let i = 0; i < playersArray.length; i++) {
+      if (playersArray[i].isAlive) {
+        aliveCount++;
+        lastAlivePlayer = playersArray[i];
+      }
+    }
     if ((process.env.NODE_ENV || '').toLowerCase() !== 'production') {
       const now = Date.now();
       if (now - this.lastDevAliveLogMs > 1000) {
-        try { console.debug(`[DEV][ALIVE] ${alivePlayers.length}/${this.players.size}`); } catch {}
+        try { console.debug(`[DEV][ALIVE] ${aliveCount}/${this.players.size}`); } catch {}
         this.lastDevAliveLogMs = now;
       }
     }
-    if (this.players.size > 1 && alivePlayers.length === 1) {
+    if (this.players.size > 1 && aliveCount === 1 && lastAlivePlayer) {
       if ((process.env.NODE_ENV || '').toLowerCase() !== 'production') {
         try {
-          const id = alivePlayers[0].id;
+          const id = lastAlivePlayer.id;
           console.debug(`[DEV][WIN] single survivor → ${id.startsWith('BOT_')?id:`${id.slice(0,6)}…${id.slice(-4)}`}`);
         } catch {}
       }
       this.lastWinReason = 'last_alive';
-      this.endRound(alivePlayers[0].id);
-    } else if (this.players.size > 0 && alivePlayers.length === 0) {
+      this.endRound(lastAlivePlayer.id);
+    } else if (this.players.size > 0 && aliveCount === 0) {
       // Handle case where all players are eliminated simultaneously (draw)
       if ((process.env.NODE_ENV || '').toLowerCase() !== 'production') {
         try { console.debug('[DEV][WIN] draw → all eliminated'); } catch {}
@@ -488,19 +616,26 @@ export class GameWorld {
       });
     }
 
-    // 7. Sync game state for broadcasting
+    // 7. Record state snapshot for lag compensation (memory-efficient, <50MB)
+    this.stateHistory.addSnapshot(this.players);
+
+    // 8. Sync game state for broadcasting
     this.syncGameState();
   }
 
   addPlayer(playerId: string): void {
     if (this.players.has(playerId)) return;
+    // Add to latency compensation system
+    this.getLatencyCompensation().addPlayer(playerId);
     this.spawnPlayer(playerId);
   }
 
   removePlayer(playerId: string): void {
     this.players.delete(playerId);
-     this.bots.delete(playerId);
+    this.bots.delete(playerId);
     this.disconnectedAtByPlayerId.delete(playerId);
+    // Remove from latency compensation system
+    this.getLatencyCompensation().removePlayer(playerId);
     this.syncGameState();
   }
 
@@ -533,9 +668,19 @@ export class GameWorld {
     this.syncGameState();
   }
 
+  handlePong(playerId: string, pingId: number, clientTimestamp: number): void {
+    this.getLatencyCompensation().processPong(playerId, pingId, clientTimestamp);
+  }
+
   handlePlayerInput(playerId: string, input: PlayerInput): void {
     // Ignore inputs before the round starts (server-authoritative countdown).
     if (this.roundGoAtMs && Date.now() < this.roundGoAtMs) return;
+
+    // Update RTT tracking if client timestamp is provided
+    if ((input as any).clientTimestamp) {
+      this.updatePlayerRtt(playerId, (input as any).clientTimestamp);
+    }
+
     const player = this.players.get(playerId);
     if (player && player.isAlive) {
       // Sanity-check pointer target: ignore obviously invalid coordinates that would break physics.
@@ -737,5 +882,56 @@ export class GameWorld {
       itemsState[id] = item;
     });
     this.gameState.items = itemsState;
+  }
+
+  /**
+   * Get state history statistics for monitoring memory usage.
+   * Useful for ensuring the history buffer stays under 50MB.
+   */
+  getStateHistoryStats() {
+    return this.stateHistory.getStats();
+  }
+
+  /**
+   * Get player state at a specific point in time for lag compensation.
+   * @param playerId Player ID to look up
+   * @param timestamp Target timestamp in milliseconds
+   */
+  getPlayerStateAt(playerId: string, timestamp: number) {
+    return this.stateHistory.getPlayerStateAt(playerId, timestamp);
+  }
+
+  /**
+   * Update the estimated RTT for a player based on client input timestamps.
+   */
+  public updatePlayerRtt(playerId: string, clientTimestamp: number): void {
+    const now = Date.now();
+    const rtt = now - clientTimestamp;
+
+    // Smooth the RTT value (exponential moving average)
+    const currentRtt = this.playerRttMs.get(playerId) || 0;
+    const smoothedRtt = currentRtt * 0.7 + rtt * 0.3;
+
+    // Clamp to reasonable values (10ms to 500ms)
+    this.playerRttMs.set(playerId, Math.max(10, Math.min(500, smoothedRtt)));
+  }
+
+  /**
+   * Get the RTT for a specific player.
+   */
+  public getPlayerRtt(playerId: string): number {
+    return this.playerRttMs.get(playerId) || 100; // Default to 100ms if unknown
+  }
+
+  /**
+   * Get a player's position at a specific point in time for lag compensation.
+   * This method wraps the StateHistory functionality.
+   */
+  private getPlayerPositionAtTime(playerId: string, targetTime: number): { x: number; y: number; angle: number } | null {
+    const state = this.stateHistory.getPlayerStateAt(playerId, targetTime);
+    if (state) {
+      return { x: state.x, y: state.y, angle: state.angle };
+    }
+    return null;
   }
 }

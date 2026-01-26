@@ -15,6 +15,7 @@ import { DatabaseService } from './DatabaseService.js';
 import { AuditLogger } from './AuditLogger.js';
 import { ClientToServerMessage, ServerToClientMessage, GameStateUpdateMessage, LobbyStateMessage, Lobby, AuthenticatedMessage } from 'shared';
 import { clientToServerMessageSchema } from 'shared/dist/schemas.js';
+import { INPUT } from 'shared/constants';
 import { v4 as uuidv4 } from 'uuid';
 
 // =================================================================================================
@@ -22,7 +23,7 @@ import { v4 as uuidv4 } from 'uuid';
 // =================================================================================================
 
 const PORT = parseInt(process.env.PORT || '8080', 10);
-const BROADCAST_INTERVAL = 1000 / 20; // 20 FPS to reduce bandwidth
+const BROADCAST_INTERVAL = 1000 / 15; // 15 FPS to reduce bandwidth (25% reduction from 20 FPS)
 const NONCE_TTL_MS = parseInt(process.env.SIWS_NONCE_TTL_MS || '60000', 10);
 const AUTH_GRACE_MS = parseInt(process.env.AUTH_GRACE_MS || '60000', 10);
 const UNAUTH_MAX = parseInt(process.env.WS_UNAUTH_MAX || '3', 10);
@@ -67,21 +68,22 @@ if (IS_PRODUCTION) {
 // Single HTTP server hosting both API and WebSocket (path /ws)
 const app = express();
 const server = http.createServer(app);
-const WS_PERMESSAGE_DEFLATE = (process.env.WS_PERMESSAGE_DEFLATE || (IS_PRODUCTION ? '0' : '1')).toLowerCase();
+const WS_PERMESSAGE_DEFLATE = (process.env.WS_PERMESSAGE_DEFLATE || (IS_PRODUCTION ? '1' : '1')).toLowerCase();
 const enableWsDeflate = WS_PERMESSAGE_DEFLATE === '1' || WS_PERMESSAGE_DEFLATE === 'true' || WS_PERMESSAGE_DEFLATE === 'yes';
 const wss = new WebSocketServer({
   server,
   path: '/ws',
-  perMessageDeflate: enableWsDeflate ? { threshold: 1024 } : false
+  perMessageDeflate: enableWsDeflate ? { threshold: 512 } : false
 });
 
 const smartContractService = new SmartContractService();
-const lobbyManager = new LobbyManager(smartContractService);
 
 // Database for leaderboards and player stats
 const DB_PATH = process.env.DB_PATH || './packages/server/data/spermrace.db';
 const db = new DatabaseService(DB_PATH);
 log.info(`[DB] Using database: ${DB_PATH}`);
+
+const lobbyManager = new LobbyManager(smartContractService, db);
 const BUILD_SHA = (process.env.GIT_SHA || process.env.COMMIT_SHA || process.env.VERCEL_GIT_COMMIT_SHA || process.env.RENDER_GIT_COMMIT || '').toString() || undefined;
 const AUDIT_DIR = process.env.AUDIT_DIR || './packages/server/data/audit';
 const audit = new AuditLogger({ dir: AUDIT_DIR, build: BUILD_SHA });
@@ -266,6 +268,7 @@ type Match = {
   startedAtMs: number;
   cleanupTimer?: NodeJS.Timeout;
   lastTrailCreatedAtByPlayerId: Map<string, number>;
+  eliminationOrder: string[]; // Track elimination order for ELO calculation
 };
 const matchesById = new Map<string, Match>();
 const playerToMatchId = new Map<string, string>();
@@ -315,6 +318,7 @@ function createAndStartMatch(lobby: Lobby): Match {
     gameWorld,
     startedAtMs: Date.now(),
     lastTrailCreatedAtByPlayerId: new Map(),
+    eliminationOrder: [],
   };
   matchesById.set(matchId, match);
   for (const pid of entrants) playerToMatchId.set(pid, matchId);
@@ -346,6 +350,11 @@ function createAndStartMatch(lobby: Lobby): Match {
 
   // Per-match eliminations and debug events
   (gameWorld as any).onPlayerEliminatedExt = (victimId: string, killerId?: string, debug?: any) => {
+    // Track elimination order for ELO calculation
+    if (!match.eliminationOrder.includes(victimId)) {
+      match.eliminationOrder.push(victimId);
+    }
+
     const message: ServerToClientMessage = { type: 'playerEliminated', payload: { playerId: victimId, eliminatorId: killerId } } as any;
     broadcastToPlayers(match.entrants, message);
     try {
@@ -361,6 +370,20 @@ function createAndStartMatch(lobby: Lobby): Match {
     const message: ServerToClientMessage = { type: 'roundEnd', payload: { winnerId, prizeAmount, txSignature } } as any;
     broadcastToPlayers(match.entrants, message);
 
+    // Build player rankings: winner first, then elimination order
+    const playerRankings: string[] = [winnerId];
+    for (const eliminatedId of match.eliminationOrder) {
+      if (eliminatedId !== winnerId) {
+        playerRankings.push(eliminatedId);
+      }
+    }
+    // Add any remaining players (disconnected, etc.) at the end
+    for (const entrant of match.entrants) {
+      if (!playerRankings.includes(entrant)) {
+        playerRankings.push(entrant);
+      }
+    }
+
     // Record game result in database (async, fire-and-forget)
     try {
       if (prizeAmount > 0) {
@@ -369,6 +392,12 @@ function createAndStartMatch(lobby: Lobby): Match {
         for (const wallet of match.entrants) killsMap[wallet] = 0;
         db.recordGameResult(winnerId, prizeLamports, match.entrants.length, killsMap);
         log.info(`[DB] Recorded game result for ${match.entrants.length} players`);
+      }
+
+      // Update ELO ratings for all players (tournament mode only)
+      if (match.mode === 'tournament') {
+        db.updateMatchEloRatings(winnerId, match.entrants, playerRankings);
+        log.info(`[ELO] Updated ELO ratings for ${match.entrants.length} players, winner: ${winnerId.slice(0, 8)}`);
       }
     } catch (error) {
       log.error('[DB] Failed to record game result:', error);
@@ -607,6 +636,17 @@ app.get('/api/leaderboard/kills', limiterSensitive, (req, res) => {
     const limit = Math.min(parseInt(req.query.limit as string || '100'), 100);
     const leaderboard = db.getTopKills(limit);
     res.json({ leaderboard, type: 'kills', count: leaderboard.length });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || String(e) });
+  }
+});
+
+// Get top players by skill rating
+app.get('/api/leaderboard/skill-rating', limiterSensitive, (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string || '100'), 100);
+    const leaderboard = db.getTopSkillRating(limit);
+    res.json({ leaderboard, type: 'skillRating', count: leaderboard.length });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || String(e) });
   }
@@ -1517,7 +1557,7 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
       const now = Date.now();
       const last = (socketRate as any).lastInputAt?.get?.(ws) as number | undefined;
       if (!(socketRate as any).lastInputAt) (socketRate as any).lastInputAt = new Map();
-	      if (!last || (now - last) >= 16) {
+	      if (!last || (now - last) >= INPUT.MAX_BURST_INTERVAL_MS) {
 	        (socketRate as any).lastInputAt.set(ws, now);
 	        const match = getMatchForPlayer(playerId);
 	        if (match) {
@@ -1572,6 +1612,45 @@ function safeSend(ws: WebSocket, data: string, kind: 'game' | 'generic', topic?:
   } catch { }
 }
 
+// Helper function to quantize coordinates to reduce JSON size
+function quantizeCoord(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+// Helper function to optimize player data for transmission
+function optimizePlayerData(p: any, includeTrail: boolean): any {
+  const optimized: any = {
+    id: p.id,
+    sperm: {
+      position: { x: quantizeCoord(p.sperm.position.x), y: quantizeCoord(p.sperm.position.y) },
+      velocity: { x: quantizeCoord(p.sperm.velocity.x), y: quantizeCoord(p.sperm.velocity.y) },
+      angle: Math.round(p.sperm.angle * 100) / 100,
+      angularVelocity: quantizeCoord(p.sperm.angularVelocity),
+      color: p.sperm.color,
+    },
+    isAlive: p.isAlive,
+  };
+
+  // Only include status if it exists and has meaningful data (skip if mostly empty)
+  if (p.status && (p.status.boostActive || p.status.boostEndTimeMs)) {
+    optimized.status = {
+      boostActive: p.status.boostActive,
+      boostEndTimeMs: p.status.boostEndTimeMs,
+    };
+  }
+
+  // Only include trail if requested (trailDelta clients get separate trail updates)
+  if (includeTrail && p.trail && p.trail.length > 0) {
+    optimized.trail = p.trail.map((tp: any) => ({
+      x: quantizeCoord(tp.x),
+      y: quantizeCoord(tp.y),
+      expiresAt: tp.expiresAt,
+    }));
+  }
+
+  return optimized;
+}
+
 function broadcastGameState(): void {
   for (const match of matchesById.values()) {
     const gameState = match.gameWorld.gameState;
@@ -1593,12 +1672,7 @@ function broadcastGameState(): void {
         payload: {
           timestamp,
           goAtMs: (gameState as any).goAtMs,
-          players: playersArray.map((p: any) => ({
-            id: p.id,
-            sperm: p.sperm,
-            isAlive: p.isAlive,
-            status: p.status,
-          })),
+          players: playersArray.map((p: any) => optimizePlayerData(p, false)),
           world,
           aliveCount,
           objective,
@@ -1614,13 +1688,7 @@ function broadcastGameState(): void {
         payload: {
           timestamp,
           goAtMs: (gameState as any).goAtMs,
-          players: playersArray.map((p: any) => ({
-            id: p.id,
-            sperm: p.sperm,
-            isAlive: p.isAlive,
-            trail: p.trail,
-            status: p.status,
-          })),
+          players: playersArray.map((p: any) => optimizePlayerData(p, true)),
           world,
           aliveCount,
           objective,
@@ -1683,7 +1751,12 @@ function broadcastTrailDelta(): void {
 
       if (startIdx >= trail.length) continue;
 
-      const newPoints = trail.slice(startIdx).map((pt: any) => ({ x: pt.x, y: pt.y, expiresAt: pt.expiresAt, createdAt: pt.createdAt }));
+      const newPoints = trail.slice(startIdx).map((pt: any) => ({
+        x: quantizeCoord(pt.x),
+        y: quantizeCoord(pt.y),
+        expiresAt: pt.expiresAt,
+        createdAt: pt.createdAt
+      }));
       if (newPoints.length === 0) continue;
 
       const last = trail[trail.length - 1];
@@ -1706,7 +1779,7 @@ function broadcastTrailDelta(): void {
   }
 }
 
-setInterval(broadcastTrailDelta, BROADCAST_INTERVAL);
+setInterval(broadcastTrailDelta, BROADCAST_INTERVAL * 2); // Send trail deltas at half frequency (7.5 FPS)
 
 // =================================================================================================
 // Global error handling

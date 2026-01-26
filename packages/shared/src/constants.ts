@@ -39,3 +39,9 @@ export const TICK = {
   INTERVAL_MS: Math.floor(1000 / 66),
 };
 
+export const INPUT = {
+  RATE: 60, // Hz - target input rate for sub-16ms response
+  INTERVAL_MS: Math.floor(1000 / 60), // ~16ms
+  MAX_BURST_INTERVAL_MS: 16, // Maximum time between inputs for burst limiting
+};
+

@@ -1,12 +1,13 @@
 import { Lobby, EntryFeeTier, GameMode } from 'shared';
 import { v4 as uuidv4 } from 'uuid';
 import { SmartContractService } from './SmartContractService.js';
+import { DatabaseService } from './DatabaseService.js';
 
 // =================================================================================================
 // Constants
 // =================================================================================================
 
-const LOBBY_MAX_PLAYERS_DEFAULT = Math.max(2, parseInt(process.env.LOBBY_MAX_PLAYERS || '32', 10));
+const LOBBY_MAX_PLAYERS_DEFAULT = Math.max(2, parseInt(process.env.LOBBY_MAX_PLAYERS || '100', 10));
 function getLobbyMaxPlayers(mode: GameMode): number {
   const key = mode === 'tournament' ? 'LOBBY_MAX_PLAYERS_TOURNAMENT' : 'LOBBY_MAX_PLAYERS_PRACTICE';
   const raw = process.env[key];
@@ -27,7 +28,7 @@ function getLobbyCountdownSeconds(mode: GameMode): number {
   return LOBBY_START_COUNTDOWN_DEFAULT;
 }
 const LOBBY_MIN_START = Math.max(2, parseInt(process.env.LOBBY_MIN_START || (process.env.SKIP_ENTRY_FEE === 'true' ? '1' : '4'), 10));
-const LOBBY_MAX_WAIT_SEC = Math.max(LOBBY_START_COUNTDOWN_DEFAULT, parseInt(process.env.LOBBY_MAX_WAIT || '120', 10));
+const LOBBY_MAX_WAIT_SEC = Math.max(LOBBY_START_COUNTDOWN_DEFAULT, parseInt(process.env.LOBBY_MAX_WAIT || '30', 10));
 
 function isPracticeBotsEnabled(): boolean {
   const raw = (process.env.ENABLE_PRACTICE_BOTS ?? ((process.env.NODE_ENV || '').toLowerCase() === 'production' ? 'true' : 'false')).toLowerCase();
@@ -57,7 +58,12 @@ function parseSurgeRules(input: string | undefined): SurgeRule[] {
 }
 
 // Example format: "60:3,120:2" → after 60s require 3 players, after 120s require 2 players
-const SURGE_RULES: SurgeRule[] = parseSurgeRules(process.env.LOBBY_SURGE_RULES);
+// Default surge rules optimized for <30s queue times with 100+ players
+const DEFAULT_SURGE_RULES = "10:2,20:3,30:4";
+const SURGE_RULES: SurgeRule[] = parseSurgeRules(process.env.LOBBY_SURGE_RULES || DEFAULT_SURGE_RULES);
+
+// Maximum ELO spread allowed in a lobby
+const MAX_ELO_SPREAD = Math.max(0, parseInt(process.env.MAX_ELO_SPREAD || '500', 10));
 
 // =================================================================================================
 // LobbyManager Class
@@ -70,19 +76,21 @@ export class LobbyManager {
   private lobbies: Map<string, Lobby> = new Map();
   private playerLobbyMap: Map<string, string> = new Map();
   private smartContractService: SmartContractService;
+  private databaseService: DatabaseService;
   private lobbyDeadlineMs: Map<string, number> = new Map();
   private lobbyCountdownStartMs: Map<string, number> = new Map();
   private lobbyStartAtMs: Map<string, number> = new Map();
   private lobbyCountdownTick: Map<string, NodeJS.Timeout> = new Map();
   private lobbyStartTimeout: Map<string, NodeJS.Timeout> = new Map();
-  
+
   public onLobbyUpdate: LobbyEventCallback | null = null;
   public onGameStart: LobbyEventCallback | null = null;
   public onLobbyCountdown: LobbyCountdownCallback | null = null;
   public onLobbyRefund: ((lobby: Lobby, playerId: string, lamports: number) => void) | null = null;
 
-  constructor(smartContractService: SmartContractService) {
+  constructor(smartContractService: SmartContractService, databaseService: DatabaseService) {
     this.smartContractService = smartContractService;
+    this.databaseService = databaseService;
   }
 
   getLobbyForPlayer(playerId: string): Lobby | null {
@@ -104,7 +112,11 @@ export class LobbyManager {
       return;
     }
 
-    let lobby = this.findAvailableLobby(entryFee, mode);
+    // Get player's ELO rating for matchmaking
+    const playerElo = this.databaseService.getPlayerElo(playerId);
+    console.log(`[LOBBY] Player ${playerId.slice(0,6)}… ELO: ${playerElo}`);
+
+    let lobby = this.findAvailableLobby(entryFee, mode, playerElo);
     if (!lobby) {
       lobby = this.createLobby(entryFee, mode);
       console.log(`[LOBBY] Created new lobby ${lobby.lobbyId} (mode=${mode}, fee=$${entryFee})`);
@@ -112,9 +124,9 @@ export class LobbyManager {
 
     // Finalize: re-check status just before admitting player to avoid races
     const current = this.lobbies.get(lobby.lobbyId);
-    if (!current || current.status !== 'waiting') {
+    if (!current || current.status !== 'waiting' || !this.isEloSpreadAcceptable(current, playerElo)) {
       // Find another waiting lobby or create a new one
-      const alt = this.findAvailableLobby(entryFee, mode);
+      const alt = this.findAvailableLobby(entryFee, mode, playerElo);
       lobby = alt ?? this.createLobby(entryFee, mode);
     }
 
@@ -143,8 +155,8 @@ export class LobbyManager {
         console.log(`[LOBBY] Practice mode waiting for minimum 2 real players (current: ${realPlayers.length})`);
         // Don't start countdown - wait for another player
       } else {
-        const silentWaitMs = 30000; // 30 seconds silent
-        console.log(`[LOBBY] Solo tournament player - 30s silent wait before countdown`);
+        const silentWaitMs = 10000; // 10 seconds silent (reduced from 30s for faster queue times)
+        console.log(`[LOBBY] Solo tournament player - 10s silent wait before countdown`);
         setTimeout(() => {
           const currentLobby = this.lobbies.get(lobby.lobbyId);
           // Only start countdown if still solo and waiting
@@ -197,7 +209,7 @@ export class LobbyManager {
           // Practice is pure multiplayer: never run countdown loops with <2 real players.
           return;
         } else {
-          const silentWaitMs = 30000;
+          const silentWaitMs = 10000; // 10 seconds silent (reduced from 30s for faster queue times)
           setTimeout(() => {
             const currentLobby = this.lobbies.get(lobby.lobbyId);
             if (currentLobby && currentLobby.players.length === 1 && currentLobby.status === 'waiting') {
@@ -211,13 +223,54 @@ export class LobbyManager {
     }
   }
 
-  private findAvailableLobby(entryFee: EntryFeeTier, mode: GameMode): Lobby | undefined {
+  private findAvailableLobby(entryFee: EntryFeeTier, mode: GameMode, playerElo: number): Lobby | undefined {
     for (const lobby of this.lobbies.values()) {
       if (lobby.entryFee === entryFee && lobby.mode === mode && (lobby.status === 'waiting' || lobby.status === 'starting') && lobby.players.length < lobby.maxPlayers) {
+        // Check ELO spread for tournament mode
+        if (mode === 'tournament' && !this.isEloSpreadAcceptable(lobby, playerElo)) {
+          continue;
+        }
         return lobby;
       }
     }
     return undefined;
+  }
+
+  /**
+   * Checks if a player's ELO is within the acceptable range for the lobby.
+   * Returns true if the player can join without exceeding MAX_ELO_SPREAD.
+   */
+  private isEloSpreadAcceptable(lobby: Lobby, playerElo: number): boolean {
+    // Skip ELO check for practice mode or if lobby is empty
+    if (lobby.mode === 'practice' || lobby.players.length === 0) {
+      return true;
+    }
+
+    // Get ELOs of all real players in the lobby (skip bots)
+    const realPlayers = lobby.players.filter(p => !String(p).startsWith('BOT_'));
+    if (realPlayers.length === 0) {
+      return true;
+    }
+
+    const playerElos = this.databaseService.getPlayersElo(realPlayers);
+    const eloValues = Array.from(playerElos.values());
+
+    // Calculate min and max ELO in the lobby
+    const minElo = Math.min(...eloValues);
+    const maxElo = Math.max(...eloValues);
+
+    // Check if adding this player would exceed the spread
+    const newMinElo = Math.min(minElo, playerElo);
+    const newMaxElo = Math.max(maxElo, playerElo);
+    const newSpread = newMaxElo - newMinElo;
+
+    const acceptable = newSpread <= MAX_ELO_SPREAD;
+
+    if (!acceptable) {
+      console.log(`[LOBBY] ELO spread check failed for lobby ${lobby.lobbyId}: current spread=${maxElo - minElo}, new spread would be=${newSpread}, max allowed=${MAX_ELO_SPREAD}`);
+    }
+
+    return acceptable;
   }
 
   private createLobby(entryFee: EntryFeeTier, mode: GameMode): Lobby {
