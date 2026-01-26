@@ -4,6 +4,7 @@ import * as PIXI from 'pixi.js';
 import { useWs } from './WsProvider';
 import { HudManager } from './HudManager';
 import { WORLD as S_WORLD } from 'shared';
+import { getPerformanceSettings, isHighPerformanceMobile } from './deviceDetection';
 
 interface Car {
   x: number;
@@ -265,9 +266,16 @@ class SpermRaceGame {
   })();
   private lastVisCheckAt: number = 0;
 
-  // Mobile FPS limiting (cap at 60 FPS to prevent overheating)
+  // Adaptive FPS limiting based on device performance
   private lastFrameTime: number = 0;
-  private frameInterval: number = 1000 / 60; // 16.67ms per frame
+  private frameInterval: number = 1000 / 60; // Default to 60 FPS (16.67ms)
+  private performanceTier: 'low' | 'medium' | 'high' = 'high';
+
+  // Frame time monitoring for dynamic quality scaling
+  private frameTimeSamples: number[] = [];
+  private maxFrameTimeSamples: number = 60; // Sample over ~1 second at 60fps
+  private lastQualityAdjustment: number = 0;
+  private qualityAdjustmentInterval: number = 2000; // Check every 2 seconds
 
   // Particle object pooling (prevent memory leaks)
   private particlePool: PIXI.Graphics[] = [];
@@ -488,24 +496,54 @@ class SpermRaceGame {
   async init() {
     const width = this.container.clientWidth || window.innerWidth;
     const height = this.container.clientHeight || window.innerHeight;
-    
-    // High-quality rendering settings
+
+    // Get performance-based settings
+    const perfSettings = getPerformanceSettings();
+    const isHighPerfMobile = isHighPerformanceMobile();
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+    // Adaptive resolution: High-performance devices can handle higher DPR
     const rawPixelRatio = window.devicePixelRatio || 1;
-    // Cap at 2x on mobile to prevent 3x (9x pixels) on high-end phones - massive performance boost
-    const pixelRatio = isMobile ? Math.min(rawPixelRatio, 2) : rawPixelRatio;
-    
-    console.log('[RENDERER] Resolution:', pixelRatio, 'Device:', isMobile ? 'Mobile' : 'Desktop', 'Raw DPR:', rawPixelRatio);
-    
+    let pixelRatio: number;
+
+    if (isHighPerfMobile) {
+      // High-performance mobile (iPhone 12+, Pixel 6+) can handle 2x or even 3x
+      pixelRatio = Math.min(rawPixelRatio, 3); // Allow up to 3x on high-end devices
+    } else if (isMobile) {
+      // Regular mobile capped at 2x to prevent 9x pixel rendering
+      pixelRatio = Math.min(rawPixelRatio, 2);
+    } else {
+      // Desktop uses native resolution
+      pixelRatio = rawPixelRatio;
+    }
+
+    console.log('[RENDERER] Performance Settings:', {
+      tier: perfSettings.targetFPS === 60 ? 'high' : perfSettings.targetFPS === 45 ? 'medium' : 'low',
+      isHighPerfMobile,
+      targetFPS: perfSettings.targetFPS,
+      resolution: pixelRatio,
+      maxParticles: perfSettings.maxParticles,
+      antialias: perfSettings.antiAliasing,
+      shadows: perfSettings.shadowsEnabled,
+      deviceMemory: (navigator as any).deviceMemory,
+      cores: navigator.hardwareConcurrency
+    });
+
     this.app = new PIXI.Application();
     await this.app.init({
       width,
       height,
-      backgroundColor: 0x1a1f2e, // Lighter dark blue for better visibility
-      antialias: true,
-      resolution: pixelRatio, // Capped at 2x on mobile (was causing 9x pixels on 3x devices)
-      autoDensity: true, // Auto-adjust CSS to match resolution
-      powerPreference: 'high-performance' // Use better GPU
+      backgroundColor: 0x1a1f2e,
+      antialias: perfSettings.antiAliasing,
+      resolution: pixelRatio,
+      autoDensity: true,
+      powerPreference: 'high-performance',
+      // Performance optimizations for 60fps
+      hello: true,
+      // Reduce background color processing overhead
+      backgroundAlpha: 1,
+      // Prefer discrete GPU for better performance
+      preference: 'webgl'
     });
     this.loadThemeFromCSS();
     this.dbg('init', { width, height });
@@ -633,6 +671,16 @@ class SpermRaceGame {
     
     // Setup the game world immediately
     this.setupWorld();
+
+    // Initialize performance settings
+    const perfSettings = getPerformanceSettings();
+    this.performanceTier = perfSettings.targetFPS === 60 ? 'high' : perfSettings.targetFPS === 45 ? 'medium' : 'low';
+    this.frameInterval = 1000 / perfSettings.targetFPS;
+
+    // Log performance tier for debugging
+    console.log('[GAME] Performance tier:', this.performanceTier, 'Target FPS:', perfSettings.targetFPS);
+
+    this.dbg('setupWorld: done, stageChildren=', (this.app as any)?.stage?.children?.length);
     this.dbg('setupWorld: done, stageChildren=', (this.app as any)?.stage?.children?.length);
     try { this.updateCamera(); } catch {}
     // Fallback: guarantee world container exists
@@ -2616,18 +2664,20 @@ class SpermRaceGame {
     if (!this.app) return;
     if (this.fatalLoopError) return;
     try {
-    
-    // FPS limiter for mobile (prevent overheating & battery drain)
+
+    const frameStart = performance.now();
+
+    // Adaptive FPS limiting based on device performance tier
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     if (isMobile) {
       const now = performance.now();
       const elapsed = now - this.lastFrameTime;
-      
-      if (elapsed < this.frameInterval) return; // Skip frame to cap at 60 FPS
-      
+
+      if (elapsed < this.frameInterval) return; // Skip frame to cap at target FPS
+
       this.lastFrameTime = now - (elapsed % this.frameInterval); // Carry over remainder
     }
-    
+
     const deltaTime = this.app.ticker.deltaMS / 1000;
     const isOnline = !!(this.wsHud && this.wsHud.active);
     const isTournament = isOnline;
@@ -3119,6 +3169,31 @@ class SpermRaceGame {
         this.debugWsEl.textContent = lines.join('\n');
       } catch { }
     }
+
+    // Frame time monitoring for dynamic quality scaling
+    const frameEnd = performance.now();
+    const frameTime = frameEnd - frameStart;
+    this.frameTimeSamples.push(frameTime);
+    if (this.frameTimeSamples.length > this.maxFrameTimeSamples) {
+      this.frameTimeSamples.shift();
+    }
+
+    // Periodically check performance and adjust quality
+    if (frameStart - this.lastQualityAdjustment > this.qualityAdjustmentInterval) {
+      this.lastQualityAdjustment = frameStart;
+      const avgFrameTime = this.frameTimeSamples.reduce((a, b) => a + b, 0) / this.frameTimeSamples.length;
+      const targetFPS = 1000 / this.frameInterval;
+      const currentFPS = avgFrameTime > 0 ? Math.min(1000 / avgFrameTime, targetFPS) : targetFPS;
+
+      // Log performance stats occasionally
+      if (this.debugEnabled && Math.random() < 0.01) {
+        console.log('[PERF] FPS:', currentFPS.toFixed(1), 'Avg frame time:', avgFrameTime.toFixed(2) + 'ms', 'Tier:', this.performanceTier);
+      }
+
+      // Dynamic quality adjustment could go here in the future
+      // For now, we trust the initial device detection
+    }
+
     } catch (e) {
       // Never hard-stop the ticker on the first exception; that looks like "no movement" in multiplayer.
       // Instead, log once per second and keep going. If errors spam, we can still circuit-break later.
