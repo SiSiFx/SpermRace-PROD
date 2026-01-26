@@ -6,7 +6,7 @@ import { SmartContractService } from './SmartContractService.js';
 // Constants
 // =================================================================================================
 
-const LOBBY_MAX_PLAYERS_DEFAULT = Math.max(2, parseInt(process.env.LOBBY_MAX_PLAYERS || '32', 10));
+const LOBBY_MAX_PLAYERS_DEFAULT = Math.max(2, parseInt(process.env.LOBBY_MAX_PLAYERS || '100', 10));
 function getLobbyMaxPlayers(mode: GameMode): number {
   const key = mode === 'tournament' ? 'LOBBY_MAX_PLAYERS_TOURNAMENT' : 'LOBBY_MAX_PLAYERS_PRACTICE';
   const raw = process.env[key];
@@ -27,7 +27,7 @@ function getLobbyCountdownSeconds(mode: GameMode): number {
   return LOBBY_START_COUNTDOWN_DEFAULT;
 }
 const LOBBY_MIN_START = Math.max(2, parseInt(process.env.LOBBY_MIN_START || (process.env.SKIP_ENTRY_FEE === 'true' ? '1' : '4'), 10));
-const LOBBY_MAX_WAIT_SEC = Math.max(LOBBY_START_COUNTDOWN_DEFAULT, parseInt(process.env.LOBBY_MAX_WAIT || '120', 10));
+const LOBBY_MAX_WAIT_SEC = Math.max(LOBBY_START_COUNTDOWN_DEFAULT, parseInt(process.env.LOBBY_MAX_WAIT || '30', 10));
 
 function isPracticeBotsEnabled(): boolean {
   const raw = (process.env.ENABLE_PRACTICE_BOTS ?? ((process.env.NODE_ENV || '').toLowerCase() === 'production' ? 'true' : 'false')).toLowerCase();
@@ -57,7 +57,9 @@ function parseSurgeRules(input: string | undefined): SurgeRule[] {
 }
 
 // Example format: "60:3,120:2" → after 60s require 3 players, after 120s require 2 players
-const SURGE_RULES: SurgeRule[] = parseSurgeRules(process.env.LOBBY_SURGE_RULES);
+// Default surge rules optimized for <30s queue times with 100+ players
+const DEFAULT_SURGE_RULES = "10:2,20:3,30:4";
+const SURGE_RULES: SurgeRule[] = parseSurgeRules(process.env.LOBBY_SURGE_RULES || DEFAULT_SURGE_RULES);
 
 // =================================================================================================
 // LobbyManager Class
@@ -145,8 +147,8 @@ export class LobbyManager {
         console.log(`[LOBBY] Practice mode waiting for minimum 2 players (current: 1)`);
         // Don't start countdown - wait for another player
       } else {
-        const silentWaitMs = 30000; // 30 seconds silent
-        console.log(`[LOBBY] Solo tournament player - 30s silent wait before countdown`);
+        const silentWaitMs = 10000; // 10 seconds silent (reduced from 30s for faster queue times)
+        console.log(`[LOBBY] Solo tournament player - 10s silent wait before countdown`);
         setTimeout(() => {
           const currentLobby = this.lobbies.get(lobby.lobbyId);
           // Only start countdown if still solo and waiting
@@ -197,7 +199,7 @@ export class LobbyManager {
         if (lobby.mode === 'practice') {
           this.startLobbyCountdown(lobby);
         } else {
-          const silentWaitMs = 30000;
+          const silentWaitMs = 10000; // 10 seconds silent (reduced from 30s for faster queue times)
           setTimeout(() => {
             const currentLobby = this.lobbies.get(lobby.lobbyId);
             if (currentLobby && currentLobby.players.length === 1 && currentLobby.status === 'waiting') {
