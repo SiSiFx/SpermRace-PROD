@@ -560,6 +560,11 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
   };
   return (
     <div className="screen active mobile-results-screen">
+      {isWinner && (
+        <div className="god-ray-container active">
+          <div className="god-ray"></div>
+        </div>
+      )}
       <div className="mobile-results-container">
         <h1 className={`mobile-result-title ${isWinner ? 'win' : 'lose'}`}>{isWinner ? 'Victory!' : 'Eliminated'}</h1>
         <p className="mobile-result-subtitle">Winner: {winner ? winner.slice(0, 4) + "…" : "—"}</p>

@@ -678,6 +678,11 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
   } catch {}
   return (
     <div className="screen active" id="round-end">
+      {isWinner && (
+        <div className="god-ray-container active">
+          <div className="god-ray"></div>
+        </div>
+      )}
       <div className="modal-card">
         <div className="modal-header"><h2 className={`round-result ${isWinner ? 'victory' : 'defeat'}`}>{isWinner ? 'Fertilization!' : 'Eliminated'}</h2><p className="round-description">Winner: {winner ? `${winner.slice(0,4)}…${winner.slice(-4)}` : '—'}{typeof prize === 'number' ? ` • Prize: ${prize.toFixed(4)} SOL` : ''}</p></div>
         {solscan && (
