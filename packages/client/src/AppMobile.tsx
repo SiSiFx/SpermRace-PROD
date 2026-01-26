@@ -537,6 +537,32 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
   const prize = wsState.lastRound?.prizeAmount;
   const isWinner = !!winner && (winner === wsState.playerId || winner === publicKey);
   const [playAgainBusy, setPlayAgainBusy] = useState(false);
+
+  const selfId = wsState.playerId || publicKey || '';
+
+  // Calculate stats
+  const initialPlayers = wsState.initialPlayers || [];
+  const totalPlayers = initialPlayers.length;
+  const myKills = wsState.kills?.[selfId] || 0;
+
+  // Calculate rank
+  let rank = 0;
+  try {
+    const order = wsState.eliminationOrder || [];
+    const uniqueOrder: string[] = [];
+    for (const pid of order) {
+      if (pid && !uniqueOrder.includes(pid)) uniqueOrder.push(pid);
+    }
+    const rankMap: Record<string, number> = {};
+    if (winner) rankMap[winner] = 1;
+    let r = 2;
+    for (let i = uniqueOrder.length - 1; i >= 0; i--) {
+      const pid = uniqueOrder[i];
+      if (pid && !rankMap[pid]) { rankMap[pid] = r; r++; }
+    }
+    rank = rankMap[selfId] || 0;
+  } catch {}
+
   const handlePlayAgain = async () => {
     if (playAgainBusy) return;
     if (wsState.phase !== 'ended') { onPlayAgain(); return; }
@@ -558,12 +584,71 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
       setPlayAgainBusy(false);
     }
   };
+
   return (
     <div className="screen active mobile-results-screen">
       <div className="mobile-results-container">
         <h1 className={`mobile-result-title ${isWinner ? 'win' : 'lose'}`}>{isWinner ? 'Victory!' : 'Eliminated'}</h1>
         <p className="mobile-result-subtitle">Winner: {winner ? winner.slice(0, 4) + "…" : "—"}</p>
         {typeof prize === 'number' && <div className="mobile-prize-won">{prize.toFixed(4)} SOL</div>}
+
+        {/* Tech-styled Mobile Stats */}
+        <div className="match-stats-dashboard">
+          <div className="tech-gauge-container">
+            <div className="tech-gauge">
+              <div className="gauge-label">Rank</div>
+              <div className={`gauge-value ${isWinner ? 'gold' : 'accent'}`}>#{rank}</div>
+              <div className="gauge-subtext">of {totalPlayers}</div>
+            </div>
+            <div className="tech-gauge">
+              <div className="gauge-label">Kills</div>
+              <div className="gauge-value accent">{myKills}</div>
+              <div className="gauge-subtext">eliminations</div>
+            </div>
+          </div>
+
+          {totalPlayers > 0 && (
+            <>
+              <div className="tech-progress-bar">
+                <div className="tech-progress-label">
+                  <span className="label-text">Placement</span>
+                  <span className="label-value">{totalPlayers - rank + 1} / {totalPlayers}</span>
+                </div>
+                <div className="tech-progress-track">
+                  <div
+                    className={`tech-progress-fill ${isWinner ? 'gold' : ''}`}
+                    style={{ width: `${Math.min(100, ((totalPlayers - rank + 1) / totalPlayers) * 100)}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="tech-progress-bar">
+                <div className="tech-progress-label">
+                  <span className="label-text">Kill Performance</span>
+                  <span className="label-value">{myKills} / {Math.max(5, Math.ceil(totalPlayers / 3))}</span>
+                </div>
+                <div className="tech-progress-track">
+                  <div
+                    className={`tech-progress-fill ${myKills > 0 ? '' : 'danger'}`}
+                    style={{ width: `${Math.min(100, (myKills / Math.max(5, Math.ceil(totalPlayers / 3))) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          <div className="match-stats-grid">
+            <div className="stat-card">
+              <div className="stat-card-label">Position</div>
+              <div className={`stat-card-value ${isWinner ? 'gold' : ''}`}>#{rank}</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-card-label">Players</div>
+              <div className="stat-card-value">{totalPlayers}</div>
+            </div>
+          </div>
+        </div>
+
         <div className="mobile-result-actions">
           <button className="mobile-btn-primary" onClick={handlePlayAgain} disabled={playAgainBusy}>{playAgainBusy ? 'Joining…' : 'Play Again'}</button>
           <button className="mobile-btn-secondary" onClick={onChangeTier}>Menu</button>
