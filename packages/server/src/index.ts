@@ -22,7 +22,7 @@ import { v4 as uuidv4 } from 'uuid';
 // =================================================================================================
 
 const PORT = parseInt(process.env.PORT || '8080', 10);
-const BROADCAST_INTERVAL = 1000 / 20; // 20 FPS to reduce bandwidth
+const BROADCAST_INTERVAL = 1000 / 15; // 15 FPS to reduce bandwidth (25% reduction from 20 FPS)
 const NONCE_TTL_MS = parseInt(process.env.SIWS_NONCE_TTL_MS || '60000', 10);
 const AUTH_GRACE_MS = parseInt(process.env.AUTH_GRACE_MS || '60000', 10);
 const UNAUTH_MAX = parseInt(process.env.WS_UNAUTH_MAX || '3', 10);
@@ -67,12 +67,12 @@ if (IS_PRODUCTION) {
 // Single HTTP server hosting both API and WebSocket (path /ws)
 const app = express();
 const server = http.createServer(app);
-const WS_PERMESSAGE_DEFLATE = (process.env.WS_PERMESSAGE_DEFLATE || (IS_PRODUCTION ? '0' : '1')).toLowerCase();
+const WS_PERMESSAGE_DEFLATE = (process.env.WS_PERMESSAGE_DEFLATE || (IS_PRODUCTION ? '1' : '1')).toLowerCase();
 const enableWsDeflate = WS_PERMESSAGE_DEFLATE === '1' || WS_PERMESSAGE_DEFLATE === 'true' || WS_PERMESSAGE_DEFLATE === 'yes';
 const wss = new WebSocketServer({
   server,
   path: '/ws',
-  perMessageDeflate: enableWsDeflate ? { threshold: 1024 } : false
+  perMessageDeflate: enableWsDeflate ? { threshold: 512 } : false
 });
 
 const smartContractService = new SmartContractService();
@@ -1572,6 +1572,45 @@ function safeSend(ws: WebSocket, data: string, kind: 'game' | 'generic', topic?:
   } catch { }
 }
 
+// Helper function to quantize coordinates to reduce JSON size
+function quantizeCoord(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+// Helper function to optimize player data for transmission
+function optimizePlayerData(p: any, includeTrail: boolean): any {
+  const optimized: any = {
+    id: p.id,
+    sperm: {
+      position: { x: quantizeCoord(p.sperm.position.x), y: quantizeCoord(p.sperm.position.y) },
+      velocity: { x: quantizeCoord(p.sperm.velocity.x), y: quantizeCoord(p.sperm.velocity.y) },
+      angle: Math.round(p.sperm.angle * 100) / 100,
+      angularVelocity: quantizeCoord(p.sperm.angularVelocity),
+      color: p.sperm.color,
+    },
+    isAlive: p.isAlive,
+  };
+
+  // Only include status if it exists and has meaningful data (skip if mostly empty)
+  if (p.status && (p.status.boostActive || p.status.boostEndTimeMs)) {
+    optimized.status = {
+      boostActive: p.status.boostActive,
+      boostEndTimeMs: p.status.boostEndTimeMs,
+    };
+  }
+
+  // Only include trail if requested (trailDelta clients get separate trail updates)
+  if (includeTrail && p.trail && p.trail.length > 0) {
+    optimized.trail = p.trail.map((tp: any) => ({
+      x: quantizeCoord(tp.x),
+      y: quantizeCoord(tp.y),
+      expiresAt: tp.expiresAt,
+    }));
+  }
+
+  return optimized;
+}
+
 function broadcastGameState(): void {
   for (const match of matchesById.values()) {
     const gameState = match.gameWorld.gameState;
@@ -1593,12 +1632,7 @@ function broadcastGameState(): void {
         payload: {
           timestamp,
           goAtMs: (gameState as any).goAtMs,
-          players: playersArray.map((p: any) => ({
-            id: p.id,
-            sperm: p.sperm,
-            isAlive: p.isAlive,
-            status: p.status,
-          })),
+          players: playersArray.map((p: any) => optimizePlayerData(p, false)),
           world,
           aliveCount,
           objective,
@@ -1614,13 +1648,7 @@ function broadcastGameState(): void {
         payload: {
           timestamp,
           goAtMs: (gameState as any).goAtMs,
-          players: playersArray.map((p: any) => ({
-            id: p.id,
-            sperm: p.sperm,
-            isAlive: p.isAlive,
-            trail: p.trail,
-            status: p.status,
-          })),
+          players: playersArray.map((p: any) => optimizePlayerData(p, true)),
           world,
           aliveCount,
           objective,
@@ -1683,7 +1711,12 @@ function broadcastTrailDelta(): void {
 
       if (startIdx >= trail.length) continue;
 
-      const newPoints = trail.slice(startIdx).map((pt: any) => ({ x: pt.x, y: pt.y, expiresAt: pt.expiresAt, createdAt: pt.createdAt }));
+      const newPoints = trail.slice(startIdx).map((pt: any) => ({
+        x: quantizeCoord(pt.x),
+        y: quantizeCoord(pt.y),
+        expiresAt: pt.expiresAt,
+        createdAt: pt.createdAt
+      }));
       if (newPoints.length === 0) continue;
 
       const last = trail[trail.length - 1];
@@ -1706,7 +1739,7 @@ function broadcastTrailDelta(): void {
   }
 }
 
-setInterval(broadcastTrailDelta, BROADCAST_INTERVAL);
+setInterval(broadcastTrailDelta, BROADCAST_INTERVAL * 2); // Send trail deltas at half frequency (7.5 FPS)
 
 // =================================================================================================
 // Global error handling
