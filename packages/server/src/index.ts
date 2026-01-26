@@ -77,12 +77,13 @@ const wss = new WebSocketServer({
 });
 
 const smartContractService = new SmartContractService();
-const lobbyManager = new LobbyManager(smartContractService);
 
 // Database for leaderboards and player stats
 const DB_PATH = process.env.DB_PATH || './packages/server/data/spermrace.db';
 const db = new DatabaseService(DB_PATH);
 log.info(`[DB] Using database: ${DB_PATH}`);
+
+const lobbyManager = new LobbyManager(smartContractService, db);
 const BUILD_SHA = (process.env.GIT_SHA || process.env.COMMIT_SHA || process.env.VERCEL_GIT_COMMIT_SHA || process.env.RENDER_GIT_COMMIT || '').toString() || undefined;
 const AUDIT_DIR = process.env.AUDIT_DIR || './packages/server/data/audit';
 const audit = new AuditLogger({ dir: AUDIT_DIR, build: BUILD_SHA });
@@ -267,6 +268,7 @@ type Match = {
   startedAtMs: number;
   cleanupTimer?: NodeJS.Timeout;
   lastTrailCreatedAtByPlayerId: Map<string, number>;
+  eliminationOrder: string[]; // Track elimination order for ELO calculation
 };
 const matchesById = new Map<string, Match>();
 const playerToMatchId = new Map<string, string>();
@@ -316,6 +318,7 @@ function createAndStartMatch(lobby: Lobby): Match {
     gameWorld,
     startedAtMs: Date.now(),
     lastTrailCreatedAtByPlayerId: new Map(),
+    eliminationOrder: [],
   };
   matchesById.set(matchId, match);
   for (const pid of entrants) playerToMatchId.set(pid, matchId);
@@ -347,6 +350,11 @@ function createAndStartMatch(lobby: Lobby): Match {
 
   // Per-match eliminations and debug events
   (gameWorld as any).onPlayerEliminatedExt = (victimId: string, killerId?: string, debug?: any) => {
+    // Track elimination order for ELO calculation
+    if (!match.eliminationOrder.includes(victimId)) {
+      match.eliminationOrder.push(victimId);
+    }
+
     const message: ServerToClientMessage = { type: 'playerEliminated', payload: { playerId: victimId, eliminatorId: killerId } } as any;
     broadcastToPlayers(match.entrants, message);
     try {
@@ -362,6 +370,20 @@ function createAndStartMatch(lobby: Lobby): Match {
     const message: ServerToClientMessage = { type: 'roundEnd', payload: { winnerId, prizeAmount, txSignature } } as any;
     broadcastToPlayers(match.entrants, message);
 
+    // Build player rankings: winner first, then elimination order
+    const playerRankings: string[] = [winnerId];
+    for (const eliminatedId of match.eliminationOrder) {
+      if (eliminatedId !== winnerId) {
+        playerRankings.push(eliminatedId);
+      }
+    }
+    // Add any remaining players (disconnected, etc.) at the end
+    for (const entrant of match.entrants) {
+      if (!playerRankings.includes(entrant)) {
+        playerRankings.push(entrant);
+      }
+    }
+
     // Record game result in database (async, fire-and-forget)
     try {
       if (prizeAmount > 0) {
@@ -370,6 +392,12 @@ function createAndStartMatch(lobby: Lobby): Match {
         for (const wallet of match.entrants) killsMap[wallet] = 0;
         db.recordGameResult(winnerId, prizeLamports, match.entrants.length, killsMap);
         log.info(`[DB] Recorded game result for ${match.entrants.length} players`);
+      }
+
+      // Update ELO ratings for all players (tournament mode only)
+      if (match.mode === 'tournament') {
+        db.updateMatchEloRatings(winnerId, match.entrants, playerRankings);
+        log.info(`[ELO] Updated ELO ratings for ${match.entrants.length} players, winner: ${winnerId.slice(0, 8)}`);
       }
     } catch (error) {
       log.error('[DB] Failed to record game result:', error);

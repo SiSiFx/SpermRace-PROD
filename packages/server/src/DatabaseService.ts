@@ -152,8 +152,8 @@ export class DatabaseService {
   // Ensure player exists (upsert)
   ensurePlayer(walletAddress: string): void {
     const stmt = this.db.prepare(`
-      INSERT INTO players (wallet_address)
-      VALUES (?)
+      INSERT INTO players (wallet_address, skill_rating)
+      VALUES (?, 1200)
       ON CONFLICT(wallet_address) DO NOTHING
     `);
     stmt.run(walletAddress);
@@ -383,6 +383,109 @@ export class DatabaseService {
       console.error('[DB] Failed to update username:', error);
       return false;
     }
+  }
+
+  // Get player ELO rating
+  getPlayerElo(walletAddress: string): number {
+    this.ensurePlayer(walletAddress);
+    const stmt = this.db.prepare(`
+      SELECT skill_rating FROM players WHERE wallet_address = ?
+    `);
+    const result = stmt.get(walletAddress) as { skill_rating: number } | undefined;
+    return result?.skill_rating ?? 1200;
+  }
+
+  // Get multiple players' ELO ratings
+  getPlayersElo(walletAddresses: string[]): Map<string, number> {
+    const eloMap = new Map<string, number>();
+    if (walletAddresses.length === 0) return eloMap;
+
+    const placeholders = walletAddresses.map(() => '?').join(',');
+    const stmt = this.db.prepare(`
+      SELECT wallet_address, skill_rating FROM players
+      WHERE wallet_address IN (${placeholders})
+    `);
+    const results = stmt.all(...walletAddresses) as Array<{ wallet_address: string; skill_rating: number }>;
+
+    for (const result of results) {
+      eloMap.set(result.wallet_address, result.skill_rating);
+    }
+
+    // Ensure all players have an ELO (default 1200 for new players)
+    for (const address of walletAddresses) {
+      if (!eloMap.has(address)) {
+        this.ensurePlayer(address);
+        eloMap.set(address, 1200);
+      }
+    }
+
+    return eloMap;
+  }
+
+  // Update player ELO rating
+  updatePlayerElo(walletAddress: string, newElo: number): void {
+    this.ensurePlayer(walletAddress);
+    const stmt = this.db.prepare(`
+      UPDATE players
+      SET skill_rating = ?
+      WHERE wallet_address = ?
+    `);
+    stmt.run(newElo, walletAddress);
+  }
+
+  // Update ELO ratings for multiple players after a match
+  updateMatchEloRatings(
+    winnerWallet: string,
+    playerWallets: string[],
+    playerRankings: string[] // ordered from winner (1st) to last place
+  ): void {
+    // Ensure all players exist
+    for (const wallet of playerWallets) {
+      this.ensurePlayer(wallet);
+    }
+
+    // Get current ELOs
+    const currentElos = this.getPlayersElo(playerWallets);
+
+    // Calculate new ELOs using standard ELO formula
+    const K_FACTOR = 32; // Standard K-factor for ELO calculations
+    const newElos = new Map<string, number>();
+
+    for (const playerWallet of playerWallets) {
+      const playerElo = currentElos.get(playerWallet) ?? 1200;
+      const playerRank = playerRankings.indexOf(playerWallet);
+      const expectedScore = this.calculateExpectedScore(playerElo, currentElos, playerWallets, playerWallet);
+      const actualScore = playerRank === 0 ? 1 : 0; // Winner gets 1, others get 0
+
+      const newElo = Math.round(playerElo + K_FACTOR * (actualScore - expectedScore));
+      newElos.set(playerWallet, newElo);
+    }
+
+    // Update all ELOs
+    for (const [wallet, elo] of newElos) {
+      this.updatePlayerElo(wallet, elo);
+    }
+
+    console.log(`[DB] ✅ Updated ELO ratings for ${playerWallets.length} players, winner: ${winnerWallet.slice(0, 8)}`);
+  }
+
+  private calculateExpectedScore(
+    playerElo: number,
+    allElos: Map<string, number>,
+    allPlayers: string[],
+    currentPlayer: string
+  ): number {
+    let expectedSum = 0;
+    for (const otherPlayer of allPlayers) {
+      if (otherPlayer === currentPlayer) continue;
+      const otherElo = allElos.get(otherPlayer) ?? 1200;
+      expectedSum += this.calculateExpectedScoreVs(playerElo, otherElo);
+    }
+    return expectedSum / (allPlayers.length - 1);
+  }
+
+  private calculateExpectedScoreVs(playerElo: number, opponentElo: number): number {
+    return 1 / (1 + Math.pow(10, (opponentElo - playerElo) / 400));
   }
 
   // Get total stats
