@@ -35,6 +35,7 @@ import { Leaderboard } from './Leaderboard';
 import { WarningCircle, CreditCard, LinkSimple } from 'phosphor-react';
 import { Modes } from './components/Modes';
 import './leaderboard.css';
+import './hero-effects.css';
 
 type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
 
@@ -322,6 +323,13 @@ function Landing({
 }) {
   return (
     <div className="screen active" id="landing-screen">
+      {/* Massive Neon Glow Backgrounds */}
+      <div className="hero-neon-glow" aria-hidden="true" />
+      <div className="hero-neon-glow-secondary" aria-hidden="true" />
+
+      {/* Scanline Overlay */}
+      <div className="hero-scanlines" aria-hidden="true" />
+
       <div
         className="landing-container"
         style={{
@@ -335,10 +343,11 @@ function Landing({
           gap: 32,
         }}
       >
-        {/* Hero Title */}
-        <header style={{ textAlign: 'center' }}>
+        {/* Hero Title with Glitch Effect */}
+        <header style={{ textAlign: 'center', position: 'relative', zIndex: 2 }}>
           <h1
             className="brand-title"
+            data-text="SPERM RACE"
             style={{
               fontSize: 'clamp(3rem, 10vw, 5.4rem)',
               letterSpacing: '0.3em',
