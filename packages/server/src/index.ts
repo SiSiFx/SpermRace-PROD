@@ -612,6 +612,17 @@ app.get('/api/leaderboard/kills', limiterSensitive, (req, res) => {
   }
 });
 
+// Get top players by skill rating
+app.get('/api/leaderboard/skill-rating', limiterSensitive, (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string || '100'), 100);
+    const leaderboard = db.getTopSkillRating(limit);
+    res.json({ leaderboard, type: 'skillRating', count: leaderboard.length });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || String(e) });
+  }
+});
+
 // Get player stats by wallet
 app.get('/api/player/:wallet/stats', limiterSensitive, (req, res) => {
   try {
