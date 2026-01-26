@@ -5,8 +5,8 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['test/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts}'],
-    testTimeout: 10000,
+    include: ['test/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts}', 'src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts}'],
+    testTimeout: 40000,
     hookTimeout: 10000,
     teardownTimeout: 5000,
     isolate: true,
@@ -17,7 +17,7 @@ export default defineConfig({
         maxForks: 1,
         minForks: 1
       }
-    },
+    }
   },
   resolve: {
     alias: {
@@ -26,5 +26,5 @@ export default defineConfig({
       'shared/dist/constants.js': path.resolve(__dirname, '../shared/src/constants.ts'),
       'shared/dist/index.js': path.resolve(__dirname, '../shared/src/index.ts'),
     }
-  },
+  }
 });
