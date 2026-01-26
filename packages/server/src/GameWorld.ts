@@ -2,6 +2,7 @@ import { GameState, PlayerInput, EntryFeeTier, Player, GameItem, GameMode } from
 import { PlayerEntity } from './Player.js';
 import { BotController } from './BotController.js';
 import { CollisionSystem } from './CollisionSystem.js';
+import { LatencyCompensation } from './LatencyCompensation.js';
 import { SmartContractService } from './SmartContractService.js';
 import type { DatabaseService } from './DatabaseService.js';
 import { WORLD as S_WORLD, TICK as S_TICK, COLLISION as S_COLLISION, PHYSICS as S_PHYSICS } from 'shared/dist/constants.js';
@@ -100,10 +101,15 @@ export class GameWorld {
   private roundGoAtMs: number | null = null;
 
   constructor(smartContractService: SmartContractService, db?: DatabaseService) {
-    this.collisionSystem = new CollisionSystem(WORLD_WIDTH, WORLD_HEIGHT);
+    const latencyCompensation = new LatencyCompensation();
+    this.collisionSystem = new CollisionSystem(WORLD_WIDTH, WORLD_HEIGHT, latencyCompensation);
     this.smartContractService = smartContractService;
     this.db = db || null;
     this.gameState = this.createInitialGameState();
+  }
+
+  getLatencyCompensation(): LatencyCompensation {
+    return this.collisionSystem.getLatencyCompensation();
   }
 
   private createInitialGameState(): GameState {
@@ -394,10 +400,32 @@ export class GameWorld {
     }
 
     // 1. Update all players (pass shrink factor for trail lifetime logic)
+    const latencyComp = this.getLatencyCompensation();
     this.players.forEach(player => {
       player.update(deltaTime, this.shrinkFactor);
       player.cleanExpiredTrails();
+      // Record position snapshot for latency compensation
+      if (player.isAlive) {
+        latencyComp.recordPositionSnapshot(player.id, player.sperm.position, player.sperm.angle);
+      }
     });
+
+    // 1.1. Send pings for latency measurement
+    const playersNeedingPings = latencyComp.getPlayersNeedingPings();
+    for (const playerId of playersNeedingPings) {
+      const ping = latencyComp.generatePing(playerId);
+      if (ping) {
+        // Send ping via WebSocket (will be handled by lobby manager)
+        try {
+          (this as any).sendPing?.(playerId, ping.pingId, ping.timestamp);
+        } catch { }
+      }
+    }
+
+    // Cleanup expired pings for all players
+    for (const playerId of this.players.keys()) {
+      latencyComp.cleanupExpiredPings(playerId);
+    }
 
     // 1.5. Resolve player-vs-player collisions (bump/bounce logic)
     this.collisionSystem.checkPlayerCollisions(this.players);
@@ -494,13 +522,17 @@ export class GameWorld {
 
   addPlayer(playerId: string): void {
     if (this.players.has(playerId)) return;
+    // Add to latency compensation system
+    this.getLatencyCompensation().addPlayer(playerId);
     this.spawnPlayer(playerId);
   }
 
   removePlayer(playerId: string): void {
     this.players.delete(playerId);
-     this.bots.delete(playerId);
+    this.bots.delete(playerId);
     this.disconnectedAtByPlayerId.delete(playerId);
+    // Remove from latency compensation system
+    this.getLatencyCompensation().removePlayer(playerId);
     this.syncGameState();
   }
 
@@ -531,6 +563,10 @@ export class GameWorld {
     }
     try { this.onAuditEvent?.('player_disconnect_elim', { roundId: this.gameState.roundId, playerId }); } catch { }
     this.syncGameState();
+  }
+
+  handlePong(playerId: string, pingId: number, clientTimestamp: number): void {
+    this.getLatencyCompensation().processPong(playerId, pingId, clientTimestamp);
   }
 
   handlePlayerInput(playerId: string, input: PlayerInput): void {
