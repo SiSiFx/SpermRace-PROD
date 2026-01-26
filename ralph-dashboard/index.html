@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Ralph Monitor</title>
+  <style>
+    :root {
+      --bg-color: #050508;
+      --header-bg: rgba(5, 5, 8, 0.95);
+      --sidebar-bg: rgba(10, 10, 15, 0.8);
+      --card-bg: rgba(20, 20, 25, 0.7);
+      --accent-color: #00f5ff;
+      --text-color: #e6edf3;
+      --success-color: #39ff14;
+      --error-color: #ff003c;
+      --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    
+    body {
+      background: var(--bg-color);
+      color: var(--text-color);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* HEADER */
+    header {
+      padding: 12px 16px;
+      background: var(--header-bg);
+      border-bottom: 1px solid rgba(0, 245, 255, 0.2);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      backdrop-filter: blur(10px);
+      z-index: 100;
+      height: 50px;
+      flex-shrink: 0;
+    }
+    header h1 { 
+      font-size: 16px; 
+      font-weight: 700; 
+      letter-spacing: 0.05em; 
+      text-transform: uppercase; 
+      display: flex; 
+      align-items: center; 
+      gap: 8px; 
+    }
+    header h1 span { color: var(--accent-color); text-shadow: 0 0 10px rgba(0, 245, 255, 0.5); }
+    
+    .status-bar { display: flex; align-items: center; gap: 12px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success-color); box-shadow: 0 0 8px var(--success-color); transition: 0.3s; }
+    .dot.off { background: var(--error-color); box-shadow: 0 0 8px var(--error-color); }
+    
+    .agents-count {
+      background: rgba(0, 245, 255, 0.1);
+      border: 1px solid rgba(0, 245, 255, 0.3);
+      padding: 4px 8px;
+      border-radius: 4px;
+      color: var(--accent-color);
+      font-weight: 600;
+      font-size: 10px;
+    }
+
+    /* LAYOUT */
+    .container {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      background-image: 
+        linear-gradient(rgba(0, 245, 255, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 245, 255, 0.02) 1px, transparent 1px);
+      background-size: 20px 20px;
+    }
+
+    /* SIDEBAR (Orchestrator) */
+    .sidebar {
+      width: 350px;
+      border-right: 1px solid rgba(255, 255, 255, 0.08);
+      background: var(--sidebar-bg);
+      display: flex;
+      flex-direction: column;
+      backdrop-filter: blur(5px);
+      transition: transform 0.3s ease;
+    }
+
+    .sidebar-header {
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.03);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      font-weight: 700;
+      color: #bf00ff;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+    }
+    
+    .sidebar-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      font-size: 11px;
+      line-height: 1.4;
+      color: #a0a0a0;
+      scrollbar-width: thin;
+    }
+
+    /* MAIN CONTENT (Agents) */
+    .agents {
+      flex: 1;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      grid-auto-rows: min-content; /* Don't stretch rows */
+      gap: 12px;
+      padding: 16px;
+      overflow-y: auto;
+      align-content: start;
+    }
+
+    /* AGENT CARD */
+    .agent {
+      background: var(--card-bg);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: transform 0.2s;
+      max-height: 300px; /* Limit height */
+    }
+
+    .agent-header {
+      padding: 8px 12px;
+      background: rgba(255, 255, 255, 0.03);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .agent-name { color: var(--accent-color); font-weight: 700; }
+    .agent-status { font-size: 9px; padding: 2px 6px; border-radius: 8px; border: 1px solid currentColor; text-transform: uppercase; }
+    .agent-status.active { color: var(--success-color); background: rgba(57, 255, 20, 0.1); }
+    
+    .agent-files {
+      padding: 8px 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      font-size: 10px;
+      color: #888;
+      max-height: 60px;
+      overflow-y: auto;
+    }
+    .file { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 1px 0; }
+    .file.modified { color: #facc15; }
+
+    .agent-logs {
+      flex: 1;
+      padding: 8px 12px;
+      overflow-y: auto;
+      background: rgba(0, 0, 0, 0.3);
+      font-size: 10px;
+      min-height: 100px;
+    }
+
+    .log-line { display: flex; gap: 6px; margin-bottom: 3px; }
+    .log-time { color: #555; min-width: 35px; }
+    .log-text { color: #ccc; word-break: break-word; }
+
+    /* MOBILE RESPONSIVENESS */
+    @media (max-width: 768px) {
+      .container { flex-direction: column; }
+      
+      /* Collapsible Sidebar on Mobile */
+      .sidebar {
+        width: 100%;
+        height: auto;
+        border-right: none;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        flex: 0 0 auto;
+        max-height: 40vh; /* Limit height */
+      }
+      
+      .sidebar.collapsed .sidebar-content { display: none; }
+      .sidebar-header::after { content: '▼'; font-size: 9px; transition: 0.3s; }
+      .sidebar.collapsed .sidebar-header::after { transform: rotate(-90deg); }
+
+      .agents {
+        padding: 10px;
+        grid-template-columns: 1fr; /* Full width cards */
+      }
+
+      .agent { max-height: none; } /* Allow agents to expand */
+      
+      /* Make touch targets bigger */
+      .agent-header, .sidebar-header { padding: 12px; }
+      header { height: 60px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🤖 <span>Ralph</span></h1>
+    <div class="status-bar">
+      <span class="agents-count" id="agentCount">0</span>
+      <div class="dot" id="dot"></div>
+    </div>
+  </header>
+
+  <div class="container">
+    <!-- Orchestrator Log (Collapsible on mobile) -->
+    <div class="sidebar collapsed" id="sidebar">
+      <div class="sidebar-header" onclick="toggleSidebar()">
+        🧠 Orchestrator Log
+      </div>
+      <div class="sidebar-content" id="orchLogs"></div>
+    </div>
+
+    <!-- Agent Grid -->
+    <div class="agents" id="agents"></div>
+  </div>
+
+  <script>
+    const agentsEl = document.getElementById('agents');
+    const orchEl = document.getElementById('orchLogs');
+    const dot = document.getElementById('dot');
+    const agentCountEl = document.getElementById('agentCount');
+    const sidebar = document.getElementById('sidebar');
+
+    const agents = {};
+
+    function toggleSidebar() {
+      sidebar.classList.toggle('collapsed');
+    }
+
+    function addOrchLog(text) {
+      const div = document.createElement('div');
+      div.className = 'log-line';
+      div.innerText = text; // Safer than innerHTML
+      orchEl.appendChild(div);
+      orchEl.scrollTop = orchEl.scrollHeight;
+      if (orchEl.children.length > 200) orchEl.removeChild(orchEl.firstChild);
+    }
+
+    function renderAgent(id) {
+      const a = agents[id];
+      // Create or update existing element
+      let el = document.getElementById(`agent-${id}`);
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'agent';
+        el.id = `agent-${id}`;
+        // Insert in order
+        const others = [...agentsEl.children];
+        const next = others.find(c => parseInt(c.id.split('-')[1]) > parseInt(id));
+        if (next) agentsEl.insertBefore(el, next);
+        else agentsEl.appendChild(el);
+      }
+
+      const filesHtml = a.files.length ? a.files.map(f => `<span class="file ${f.startsWith('M')?'modified':''}">${f}</span>`).join('') : '<em>No changes</em>';
+      
+      const logsHtml = a.logs.slice(-20).map(l => 
+        `<div class="log-line">
+           <span class="log-time">${l.time}</span>
+           <span class="log-text" style="color:${getColor(l.level)}">${l.text}</span>
+         </div>`
+      ).join('');
+
+      el.innerHTML = `
+        <div class="agent-header">
+          <span class="agent-name">Agent ${id}</span>
+          <span class="agent-status ${a.status}">${a.status}</span>
+        </div>
+        <div class="agent-files">${filesHtml}</div>
+        <div class="agent-logs">${logsHtml}</div>
+      `;
+    }
+
+    function getColor(level) {
+      if (level === 'error') return '#ff003c';
+      if (level === 'result') return '#39ff14';
+      if (level === 'tool') return '#bf00ff';
+      return '#ccc';
+    }
+
+    function connect() {
+      const ws = new WebSocket(`ws://${location.host}`);
+      ws.onopen = () => { dot.classList.remove('off'); };
+      ws.onclose = () => { dot.classList.add('off'); setTimeout(connect, 2000); };
+      
+      ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        
+        if (msg.type === 'orchestrator_log') {
+          addOrchLog(msg.text);
+        } else if (msg.type === 'agent_log') {
+          if (!agents[msg.agent]) agents[msg.agent] = { logs: [], files: [], status: 'active' };
+          const time = new Date().toLocaleTimeString('en-GB', {hour12:false});
+          agents[msg.agent].logs.push({ time, level: msg.level, text: msg.text });
+          renderAgent(msg.agent);
+        } else if (msg.type === 'agent_files') {
+           if (!agents[msg.agent]) agents[msg.agent] = { logs: [], files: [], status: 'active' };
+           agents[msg.agent].files = msg.files;
+           renderAgent(msg.agent);
+        } else if (msg.type === 'agent_status') {
+           if (!agents[msg.agent]) return;
+           agents[msg.agent].status = msg.status;
+           renderAgent(msg.agent);
+        }
+        
+        agentCountEl.textContent = Object.keys(agents).length;
+      };
+    }
+
+    // Auto-expand sidebar on desktop
+    if (window.innerWidth > 768) {
+      sidebar.classList.remove('collapsed');
+    }
+
+    connect();
+  </script>
+</body>
+</html>
