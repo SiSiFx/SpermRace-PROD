@@ -19,6 +19,8 @@ interface Sperm {
   angle: number; // Direction angle
   turnSpeed: number; // How fast it turns
   turnTimer: number; // Timer for direction changes
+  depth: number; // Parallax depth (0.1 = far/slow, 1.0 = near/fast)
+  baseSpeed: number; // Base movement speed for this depth layer
 }
 
 export function startSpermBackground(): void {
@@ -154,29 +156,34 @@ function resizeCanvas(): void {
 }
 
 function createSperm(): Sperm {
-  const size = Math.random() * 3 + 5;
+  const depth = Math.random() * 0.9 + 0.1; // Depth from 0.1 (far) to 1.0 (near)
+  const size = (Math.random() * 3 + 5) * depth; // Size scales with depth
   const angle = (Math.random() - 0.5) * 0.8;
-  const speed = Math.random() * 1.5 + 2.0;
+  const baseSpeed = Math.random() * 1.5 + 2.0;
+  const speed = baseSpeed * (0.5 + depth * 0.5); // Speed scales with depth (0.5x to 1.0x)
+
   return {
     x: -80,
     y: Math.random() * window.innerHeight,
     vx: Math.cos(angle) * speed,
     vy: Math.sin(angle) * speed,
     size,
-    opacity: Math.random() * 0.3 + 0.5,
+    opacity: (Math.random() * 0.3 + 0.5) * (0.4 + depth * 0.6), // Far particles are more transparent
     tailLength: size * 15,
     wiggleOffset: Math.random() * Math.PI * 2,
     wiggleSpeed: Math.random() * 0.08 + 0.05,
     angle,
     turnSpeed: Math.random() * 0.03 + 0.01,
     turnTimer: Math.random() * 3,
+    depth,
+    baseSpeed,
   };
 }
 
 function drawSperm(sperm: Sperm, time: number): void {
   if (!ctx) return;
 
-  const { x, y, size, opacity, tailLength, wiggleOffset, wiggleSpeed } = sperm;
+  const { x, y, size, opacity, tailLength, wiggleOffset, wiggleSpeed, depth } = sperm;
   const waveSpeed = 6 + wiggleSpeed * 10;
   const isMobile = window.innerWidth < 768;
 
@@ -188,33 +195,38 @@ function drawSperm(sperm: Sperm, time: number): void {
   const headX = x;
   const headY = y;
 
+  // Apply parallax offset to y position based on mouse movement
+  // Far particles (low depth) move less than near particles (high depth)
+  const parallaxY = (mouseY - window.innerHeight / 2) * depth * 0.05;
+  const parallaxX = (mouseX - window.innerWidth / 2) * depth * 0.03;
+
   // NO SHADOWS - Shadows are the #1 cause of perf issues on mobile canvas
   // We simulate glow with semi-transparent strokes in multiple passes instead if needed,
   // but for raw speed we keep it simple.
 
-  // Draw tail 
+  // Draw tail
   // Mobile: 1 pass. Desktop: 2 passes (removed 3rd pass).
   const passes = isMobile ? 1 : 2;
 
   for (let pass = 0; pass < passes; pass++) {
     ctx.beginPath();
-    ctx.moveTo(headX - size * 1.1, headY);
+    ctx.moveTo(headX - size * 1.1 + parallaxX, headY + parallaxY);
 
     for (let i = 1; i <= segments; i++) {
       const t = i / segments;
       const dist = tailLength * t;
-      const px = headX - size * 1.1 - dist;
+      const px = headX - size * 1.1 - dist + parallaxX;
       const wave = Math.sin((t * Math.PI * 4) - (time * waveSpeed) + wiggleOffset) * amplitude * (1 - t);
-      const py = headY + wave;
+      const py = headY + wave + parallaxY;
 
       if (i === 1) {
         ctx.lineTo(px, py);
       } else {
         const prevT = (i - 1) / segments;
         const prevDist = tailLength * prevT;
-        const prevX = headX - size * 1.1 - prevDist;
+        const prevX = headX - size * 1.1 - prevDist + parallaxX;
         const prevWave = Math.sin((prevT * Math.PI * 4) - (time * waveSpeed) + wiggleOffset) * amplitude * (1 - prevT);
-        const prevY = headY + prevWave;
+        const prevY = headY + prevWave + parallaxY;
         ctx.quadraticCurveTo(prevX, prevY, (prevX + px) / 2, (prevY + py) / 2);
       }
     }
@@ -246,14 +258,14 @@ function drawSperm(sperm: Sperm, time: number): void {
   // Simple ellipse, no complex gradients
   ctx.fillStyle = isMobile ? 'rgba(0, 245, 255, 0.9)' : 'rgba(200, 255, 255, 0.9)';
   ctx.beginPath();
-  ctx.ellipse(headX, headY, size * 1.8, size * 1.3, 0, 0, Math.PI * 2);
+  ctx.ellipse(headX + parallaxX, headY + parallaxY, size * 1.8, size * 1.3, 0, 0, Math.PI * 2);
   ctx.fill();
 
   if (!isMobile) {
     // Simple glow overlay on PC
     ctx.fillStyle = 'rgba(0, 245, 255, 0.4)';
     ctx.beginPath();
-    ctx.ellipse(headX, headY, size * 2.2, size * 1.6, 0, 0, Math.PI * 2);
+    ctx.ellipse(headX + parallaxX, headY + parallaxY, size * 2.2, size * 1.6, 0, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -295,7 +307,9 @@ function animate(): void {
     if (sperm.x > canvas!.width + sperm.tailLength) {
       sperm.x = -sperm.tailLength - Math.random() * 100;
       sperm.y = Math.random() * canvas!.height;
-      sperm.vx = Math.random() * 1.5 + 1.5;
+      // Reset speed based on depth
+      const speed = sperm.baseSpeed * (0.5 + sperm.depth * 0.5);
+      sperm.vx = speed;
       sperm.vy = (Math.random() - 0.5) * 0.3;
     }
 
