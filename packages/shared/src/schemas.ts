@@ -8,6 +8,8 @@ export const playerInputSchema = z.object({
   accelerate: z.boolean(),
   boost: z.boolean().optional(),
   drift: z.boolean().optional(),
+  // Optional client timestamp for RTT measurement and lag compensation
+  clientTimestamp: z.number().optional(),
 });
 
 export const entryFeeTierSchema = z.union([
