@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { isPortrait } from './deviceDetection';
-import { DeviceMobile, ArrowClockwise } from 'phosphor-react';
+import { DeviceMobile, ArrowClockwise, CaretRight } from 'phosphor-react';
 
 export function OrientationWarning() {
   const [showWarning, setShowWarning] = useState(false);
@@ -29,15 +29,47 @@ export function OrientationWarning() {
 
   return (
     <div className="orientation-warning">
-      <div className="orientation-icon">
-        <DeviceMobile size={20} weight="fill" style={{ marginRight: 4 }} />
-        <ArrowClockwise size={18} weight="bold" />
-      </div>
-      <div className="orientation-message">
-        Please rotate to portrait
-      </div>
-      <div className="orientation-subtitle">
-        This game is designed for vertical (portrait) mode
+      <div className="orientation-warning-content">
+        {/* Animated icon container */}
+        <div className="orientation-icon-wrapper">
+          <div className="orientation-icon-glow"></div>
+          <div className="orientation-icon">
+            <DeviceMobile size={48} weight="fill" />
+            <div className="rotation-arrows">
+              <ArrowClockwise size={24} weight="bold" className="rotate-arrow-1" />
+              <ArrowClockwise size={24} weight="bold" className="rotate-arrow-2" />
+            </div>
+          </div>
+        </div>
+
+        {/* Message content */}
+        <div className="orientation-text-content">
+          <div className="orientation-message">
+            <span className="orientation-message-line">Please rotate your device</span>
+            <span className="orientation-message-line">to portrait mode</span>
+          </div>
+
+          <div className="orientation-subtitle">
+            This game is optimized for vertical gameplay
+          </div>
+
+          {/* Visual indicator */}
+          <div className="orientation-visual-guide">
+            <div className="guide-line"></div>
+            <div className="guide-text">
+              <CaretRight size={16} weight="bold" />
+              <span>Portrait</span>
+            </div>
+            <div className="guide-indicators">
+              <div className="indicator active"></div>
+              <div className="indicator"></div>
+            </div>
+          </div>
+        </div>
+
+        {/* Decorative elements */}
+        <div className="orientation-warning-border"></div>
+        <div className="orientation-warning-scanline"></div>
       </div>
     </div>
   );
