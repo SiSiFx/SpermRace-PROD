@@ -1,0 +1,536 @@
+/* ==========================================
+   Player Card Grid System
+   ========================================== */
+
+.player-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 8px;
+}
+
+/* Responsive breakpoints */
+@media (max-width: 768px) {
+  .player-cards-grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .player-cards-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}
+
+/* ==========================================
+   Player Card Component
+   ========================================== */
+
+.player-card {
+  position: relative;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-dim);
+  border-radius: 12px;
+  padding: 0;
+  overflow: hidden;
+  cursor: default;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: card-entrance 0.6s cubic-bezier(0.4, 0, 0.2, 1) backwards;
+  animation-delay: var(--animation-delay, 0s);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Card entrance animation */
+@keyframes card-entrance {
+  0% {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Hover effects */
+.player-card:hover {
+  transform: translateY(-4px) scale(1.02);
+  border-color: var(--border-bright);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.4),
+    0 0 30px rgba(0, 240, 255, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.player-card:hover .player-card-border {
+  opacity: 1;
+  transform: scale(1.02);
+}
+
+.player-card:hover .corner-accent {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Animated border gradient */
+.player-card-border {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    var(--player-color, #00F0FF) 0%,
+    transparent 50%,
+    var(--player-color, #00F0FF) 100%
+  );
+  opacity: 0;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Card content wrapper */
+.player-card-content {
+  position: relative;
+  z-index: 2;
+  background: var(--bg-glass);
+  border-radius: 11px;
+  padding: 16px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ==========================================
+   Avatar Section
+   ========================================== */
+
+.player-card-avatar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.player-avatar-circle {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  border: 2px solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.player-avatar-circle::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.1), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.player-card:hover .player-avatar-circle::before {
+  opacity: 1;
+}
+
+.player-avatar-text {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  letter-spacing: 0.5px;
+}
+
+/* Status indicator dot */
+.player-status-dot {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-secondary);
+  box-shadow: 0 0 8px currentColor;
+  transition: all 0.3s ease;
+  animation: status-pulse 2s ease-in-out infinite;
+}
+
+.player-status-dot.me {
+  box-shadow:
+    0 0 8px currentColor,
+    0 0 16px currentColor,
+    0 0 24px rgba(0, 245, 255, 0.4);
+}
+
+.player-status-dot.ready {
+  animation: status-pulse-ready 2s ease-in-out infinite;
+}
+
+.player-status-dot.waiting {
+  animation: status-pulse-waiting 2s ease-in-out infinite;
+}
+
+@keyframes status-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.8;
+  }
+}
+
+@keyframes status-pulse-ready {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 8px currentColor;
+  }
+  50% {
+    transform: scale(1.15);
+    box-shadow: 0 0 16px currentColor, 0 0 24px currentColor;
+  }
+}
+
+@keyframes status-pulse-waiting {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.9;
+  }
+}
+
+/* ==========================================
+   Player Info Section
+   ========================================== */
+
+.player-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.player-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.player-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-family: 'JetBrains Mono', monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  word-break: break-word;
+}
+
+/* Player badges */
+.player-badge {
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  animation: badge-glow 2s ease-in-out infinite;
+}
+
+.player-badge-me {
+  background: linear-gradient(135deg, #00F0FF, #00D4AA);
+  color: #000;
+  box-shadow: 0 2px 8px rgba(0, 240, 255, 0.4);
+}
+
+.player-badge-bot {
+  background: rgba(138, 138, 155, 0.2);
+  color: var(--text-secondary);
+  border: 1px solid rgba(138, 138, 155, 0.3);
+}
+
+@keyframes badge-glow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+/* Stats row */
+.player-stats-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.player-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stat-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-value {
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', monospace;
+  transition: color 0.3s ease;
+}
+
+.stat-value.ready {
+  animation: text-glow 2s ease-in-out infinite;
+}
+
+@keyframes text-glow {
+  0%, 100% {
+    text-shadow: 0 0 4px currentColor;
+  }
+  50% {
+    text-shadow: 0 0 8px currentColor, 0 0 12px currentColor;
+  }
+}
+
+/* ==========================================
+   Corner Accents
+   ========================================== */
+
+.corner-accent {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--player-color, #00F0FF);
+  opacity: 0;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
+}
+
+.corner-tl {
+  top: 4px;
+  left: 4px;
+  border-right: none;
+  border-bottom: none;
+  transform: scale(0);
+}
+
+.corner-tr {
+  top: 4px;
+  right: 4px;
+  border-left: none;
+  border-bottom: none;
+  transform: scale(0);
+}
+
+.corner-bl {
+  bottom: 4px;
+  left: 4px;
+  border-right: none;
+  border-top: none;
+  transform: scale(0);
+}
+
+.corner-br {
+  bottom: 4px;
+  right: 4px;
+  border-left: none;
+  border-top: none;
+  transform: scale(0);
+}
+
+/* Animate corners on hover with stagger */
+.player-card:hover .corner-tl {
+  transform: scale(1);
+  transition-delay: 0s;
+}
+
+.player-card:hover .corner-tr {
+  transform: scale(1);
+  transition-delay: 0.05s;
+}
+
+.player-card:hover .corner-bl {
+  transform: scale(1);
+  transition-delay: 0.1s;
+}
+
+.player-card:hover .corner-br {
+  transform: scale(1);
+  transition-delay: 0.15s;
+}
+
+/* ==========================================
+   Scanning Line Animation
+   ========================================== */
+
+.player-card-scan {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--player-color, #00F0FF),
+    transparent
+  );
+  opacity: 0;
+  animation: scan-line 3s ease-in-out infinite;
+  animation-delay: var(--animation-delay, 0s);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.player-card:hover .player-card-scan {
+  opacity: 0.6;
+}
+
+@keyframes scan-line {
+  0% {
+    top: 0;
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.6;
+  }
+  90% {
+    opacity: 0.6;
+  }
+  100% {
+    top: 100%;
+    opacity: 0;
+  }
+}
+
+/* ==========================================
+   Mobile Optimizations
+   ========================================== */
+
+@media (max-width: 480px) {
+  .player-card {
+    min-height: 100px;
+  }
+
+  .player-card-content {
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .player-avatar-circle {
+    width: 40px;
+    height: 40px;
+  }
+
+  .player-avatar-text {
+    font-size: 14px;
+  }
+
+  .player-name {
+    font-size: 13px;
+  }
+
+  .player-status-dot {
+    width: 12px;
+    height: 12px;
+  }
+
+  .corner-accent {
+    width: 6px;
+    height: 6px;
+  }
+}
+
+/* ==========================================
+   Loading / Skeleton State
+   ========================================== */
+
+.player-card.skeleton {
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    var(--bg-glass) 0%,
+    var(--bg-glass-hover) 50%,
+    var(--bg-glass) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s ease-in-out infinite;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* ==========================================
+   Special States
+   ========================================== */
+
+/* Eliminated player */
+.player-card.eliminated {
+  opacity: 0.5;
+  filter: grayscale(0.8);
+}
+
+.player-card.eliminated .player-avatar-circle {
+  filter: grayscale(1);
+}
+
+/* Winner highlight */
+.player-card.winner {
+  border-color: var(--gold);
+  box-shadow:
+    0 12px 40px rgba(255, 215, 0, 0.3),
+    0 0 30px rgba(255, 215, 0, 0.2);
+  animation: winner-pulse 2s ease-in-out infinite;
+}
+
+@keyframes winner-pulse {
+  0%, 100% {
+    box-shadow:
+      0 12px 40px rgba(255, 215, 0, 0.3),
+      0 0 30px rgba(255, 215, 0, 0.2);
+  }
+  50% {
+    box-shadow:
+      0 12px 50px rgba(255, 215, 0, 0.5),
+      0 0 50px rgba(255, 215, 0, 0.4);
+  }
+}
+
+.player-card.winner .corner-accent {
+  opacity: 1;
+  border-color: var(--gold);
+}

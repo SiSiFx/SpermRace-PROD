@@ -34,7 +34,9 @@ import NewGameView from './NewGameView';
 import { Leaderboard } from './Leaderboard';
 import { WarningCircle, CreditCard, LinkSimple } from 'phosphor-react';
 import { Modes } from './components/Modes';
+import { PlayerCard } from './components/PlayerCard';
 import './leaderboard.css';
+import './components/PlayerCard.css';
 
 type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
 
@@ -459,6 +461,25 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
         <div className="lobby-container">
           <div className="lobby-header"><div className="lobby-title">Lobby</div><div className="lobby-status">{players.length}/{maxPlayers}</div></div>
           <div className="queue-bar"><div className="queue-left"><span className="queue-dot" /><span>{players.length}</span></div><div className="queue-center"><span>Queued</span></div><div className="queue-right"><span>Target</span><span>{maxPlayers}</span></div></div>
+
+          {/* Player Cards Grid for Practice Mode */}
+          <div className="player-cards-grid" style={{ marginBottom: '16px' }}>
+            {players.map((pid: string, index: number) => {
+              const name = pid.startsWith('BOT_') ? `Bot ${index}` : pid;
+              const isMe = pid === meId;
+              return (
+                <PlayerCard
+                  key={pid}
+                  playerId={pid}
+                  playerName={name}
+                  isMe={isMe}
+                  isReady={true}
+                  index={index}
+                />
+              );
+            })}
+          </div>
+
           <div className="lobby-orbit">
             <div className="orbit-center" />
             <div className="orbit-ring">
@@ -547,34 +568,20 @@ function Lobby({ onStart: _onStart, onBack }: { onStart: () => void; onBack: () 
         ) : null}
         <div className="queue-bar"><div className="queue-left"><span className="queue-dot" /><span>{players.length}</span></div><div className="queue-center"><span>Queued</span></div><div className="queue-right"><span>Target</span><span>{state.lobby?.maxPlayers ?? 16}</span></div></div>
         
-        {/* Player List */}
-        <div style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "8px",
-          justifyContent: "center",
-          margin: "16px 0",
-          maxHeight: "100px",
-          overflowY: "auto",
-          padding: "4px"
-        }}>
-          {players.map((pid: string) => {
+        {/* Player Cards Grid */}
+        <div className="player-cards-grid">
+          {players.map((pid: string, index: number) => {
             const name = state.lobby?.playerNames?.[pid] || (pid.startsWith("guest-") ? "Guest" : pid.slice(0, 4) + "…" + pid.slice(-4));
             const isMe = pid === state.playerId;
             return (
-              <div key={pid} style={{
-                fontSize: "11px",
-                padding: "4px 10px",
-                borderRadius: "6px",
-                background: isMe ? "rgba(0, 245, 255, 0.15)" : "rgba(255, 255, 255, 0.05)",
-                border: isMe ? "1px solid rgba(0, 245, 255, 0.3)" : "1px solid rgba(255, 255, 255, 0.1)",
-                color: isMe ? "#00f5ff" : "rgba(255, 255, 255, 0.7)",
-                fontWeight: isMe ? 800 : 500,
-                textTransform: "uppercase",
-                letterSpacing: "0.05em"
-              }}>
-                {name}
-              </div>
+              <PlayerCard
+                key={pid}
+                playerId={pid}
+                playerName={name}
+                isMe={isMe}
+                isReady={true}
+                index={index}
+              />
             );
           })}
         </div>
