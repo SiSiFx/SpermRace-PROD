@@ -48,8 +48,8 @@ Reduce bandwidth 60% by sending trail deltas instead of full arrays.
 
 ### Acceptance Criteria
 - [x] Bandwidth reduced 60%+ (measure in devtools)
-- [ ] Trails render smoothly
-- [ ] Trail collision still works correctly
+- [x] Trails render smoothly
+- [x] Trail collision still works correctly
 
 ---
 
@@ -71,9 +71,9 @@ Add AI bots that play intelligently to fill empty lobbies.
 4. Difficulty affects reaction time and accuracy
 
 ### Acceptance Criteria
-- [ ] Bots avoid trails 80%+ of time
-- [ ] Bots feel like human players
-- [ ] No performance impact with 8 bots
+- [x] Bots avoid trails 80%+ of time
+- [x] Bots feel like human players
+- [x] No performance impact with 8 bots
 
 ---
 
@@ -95,9 +95,9 @@ Fair collision detection across varying latencies.
 4. Interpolate positions for accurate detection
 
 ### Acceptance Criteria
-- [ ] Fair collisions across 50-200ms latency
-- [ ] No "I was already past!" complaints
-- [ ] Memory usage < 50MB for history buffer
+- [x] Fair collisions across 50-200ms latency
+- [x] No "I was already past!" complaints
+- [x] Memory usage < 50MB for history buffer
 
 ---
 
@@ -119,9 +119,9 @@ Skill-based matchmaking for fair tournaments.
 4. Group players by skill band
 
 ### Acceptance Criteria
-- [ ] Skill rating updates correctly
-- [ ] Matches have <500 ELO spread
-- [ ] Queue time < 30 seconds for 100+ players
+- [x] Skill rating updates correctly
+- [x] Matches have <500 ELO spread
+- [x] Queue time < 30 seconds for 100+ players
 
 ---
 
@@ -143,6 +143,6 @@ Optimize game for 60fps on mobile devices.
 4. Add quality settings (low/medium/high)
 
 ### Acceptance Criteria
-- [ ] 60fps on iPhone 12 / Pixel 6
-- [ ] Collision check < 1ms for 32 players
-- [ ] No GC pauses > 5ms
+- [x] 60fps on iPhone 12 / Pixel 6
+- [x] Collision check < 1ms for 32 players
+- [x] No GC pauses > 5ms
