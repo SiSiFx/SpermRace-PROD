@@ -140,12 +140,10 @@ export class PlayerEntity implements Player {
     const nowMs = Date.now();
     const isBoostingNow = this.boostUntil !== null && nowMs < this.boostUntil && this.boostEnergy > 0;
     if (this.input.accelerate) {
-      const accelerationVector: Vector2 = {
-        x: Math.cos(this.sperm.angle) * PHYSICS_CONSTANTS.ACCELERATION * (isBoostingNow ? BOOST.MULTIPLIER : 1),
-        y: Math.sin(this.sperm.angle) * PHYSICS_CONSTANTS.ACCELERATION * (isBoostingNow ? BOOST.MULTIPLIER : 1),
-      };
-      this.sperm.velocity.x += accelerationVector.x * deltaTime;
-      this.sperm.velocity.y += accelerationVector.y * deltaTime;
+      // Inline acceleration calculation to avoid creating Vector2 object
+      const accelMagnitude = PHYSICS_CONSTANTS.ACCELERATION * (isBoostingNow ? BOOST.MULTIPLIER : 1);
+      this.sperm.velocity.x += Math.cos(this.sperm.angle) * accelMagnitude * deltaTime;
+      this.sperm.velocity.y += Math.sin(this.sperm.angle) * accelMagnitude * deltaTime;
     }
     
     // --- 3. Apply Anisotropic Drag (swimming feel) ---
@@ -227,10 +225,24 @@ export class PlayerEntity implements Player {
 
   /**
    * Cleans up expired trail points. Should be called periodically.
+   * Uses two-pointer technique to avoid creating new arrays (reduces GC).
    */
   cleanExpiredTrails(): void {
     const now = Date.now();
-    this.trail = this.trail.filter(point => now < point.expiresAt);
+    const trail = this.trail;
+    let writeIdx = 0;
+
+    for (let readIdx = 0; readIdx < trail.length; readIdx++) {
+      if (now < trail[readIdx].expiresAt) {
+        if (writeIdx !== readIdx) {
+          trail[writeIdx] = trail[readIdx];
+        }
+        writeIdx++;
+      }
+    }
+
+    // Truncate array in place
+    trail.length = writeIdx;
   }
 
   private updateTrail(): void {
@@ -246,13 +258,14 @@ export class PlayerEntity implements Player {
       const worldFactor = this.shrinkFactor;
       const baseLifetime = TRAIL_CONSTANTS.BASE_LIFETIME;
       const finalLifetime = TRAIL_CONSTANTS.FINAL_CIRCLE_LIFETIME;
-      const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
       // Map shrinkFactor 1..0.5 to t 0..1
       const t = Math.min(1, Math.max(0, (1 - worldFactor) / 0.5));
-      const lifetime = Math.floor(lerp(baseLifetime, finalLifetime, t));
+      const lifetime = Math.floor(baseLifetime + (finalLifetime - baseLifetime) * t);
 
+      // Avoid object spread operator - directly assign properties to reduce GC
       const newPoint: TrailPoint = {
-        ...this.sperm.position,
+        x: this.sperm.position.x,
+        y: this.sperm.position.y,
         expiresAt: now + lifetime + (boosting ? BOOST.TRAIL_LIFETIME_BONUS_MS : 0),
         createdAt: now,
       };

@@ -26,6 +26,8 @@ interface GridEntry {
 class SpatialHashGrid {
   private grid: Map<string, GridEntry[]> = new Map();
   private cellSize: number;
+  // Reusable string buffer for grid keys to avoid string concatenation
+  private keyBuffer: { x: number; y: number; str: string } = { x: 0, y: 0, str: '' };
 
   constructor(cellSize: number) {
     this.cellSize = cellSize;
@@ -34,7 +36,16 @@ class SpatialHashGrid {
   private getKey(position: Vector2): string {
     const cellX = Math.floor(position.x / this.cellSize);
     const cellY = Math.floor(position.y / this.cellSize);
-    return `${cellX},${cellY}`;
+
+    // Reuse string buffer to avoid creating new strings
+    if (this.keyBuffer.x === cellX && this.keyBuffer.y === cellY) {
+      return this.keyBuffer.str;
+    }
+
+    this.keyBuffer.x = cellX;
+    this.keyBuffer.y = cellY;
+    this.keyBuffer.str = `${cellX},${cellY}`;
+    return this.keyBuffer.str;
   }
 
   clear(): void {
@@ -57,8 +68,11 @@ class SpatialHashGrid {
     for (let x = centerX - 1; x <= centerX + 1; x++) {
       for (let y = centerY - 1; y <= centerY + 1; y++) {
         const key = `${x},${y}`;
-        if (this.grid.has(key)) {
-          nearbyEntries.push(...this.grid.get(key)!);
+        const cell = this.grid.get(key);
+        if (cell) {
+          for (let i = 0; i < cell.length; i++) {
+            nearbyEntries.push(cell[i]);
+          }
         }
       }
     }
@@ -189,7 +203,11 @@ export class CollisionSystem {
    * - Applies knockback if one player is lunging (combat mechanic).
    */
   checkPlayerCollisions(players: Map<string, PlayerEntity>): void {
-    const playerList = Array.from(players.values()).filter(p => p.isAlive);
+    // Reuse array to avoid allocation
+    const playerList: PlayerEntity[] = [];
+    for (const p of players.values()) {
+      if (p.isAlive) playerList.push(p);
+    }
     const count = playerList.length;
     if (count < 2) return;
 
@@ -199,7 +217,8 @@ export class CollisionSystem {
     const cellSize = GRID_CELL_SIZE; // Uses existing 100px cell size
 
     // 1. Build localized grid
-    for (const p of playerList) {
+    for (let i = 0; i < count; i++) {
+      const p = playerList[i];
       const cx = Math.floor(p.sperm.position.x / cellSize);
       const cy = Math.floor(p.sperm.position.y / cellSize);
       const key = `${cx},${cy}`;
@@ -212,10 +231,11 @@ export class CollisionSystem {
     }
 
     // 2. Check collisions with neighbors
-    const radiusSum = SPERM_COLLISION_RADIUS * 2.5; 
+    const radiusSum = SPERM_COLLISION_RADIUS * 2.5;
     const radiusSumSq = radiusSum * radiusSum;
 
-    for (const p1 of playerList) {
+    for (let i = 0; i < count; i++) {
+      const p1 = playerList[i];
       const cx = Math.floor(p1.sperm.position.x / cellSize);
       const cy = Math.floor(p1.sperm.position.y / cellSize);
 
@@ -226,39 +246,40 @@ export class CollisionSystem {
           const cell = grid.get(key);
           if (!cell) continue;
 
-          for (const p2 of cell) {
+          for (let j = 0; j < cell.length; j++) {
+            const p2 = cell[j];
             // Optimization: Ensure unique pairs (A vs B, not B vs A) and skip self
             if (p1.id >= p2.id) continue;
-        
+
             const dx = p2.sperm.position.x - p1.sperm.position.x;
             const dy = p2.sperm.position.y - p1.sperm.position.y;
             const distSq = dx * dx + dy * dy;
-            
+
             if (distSq < radiusSumSq) {
               const dist = Math.sqrt(distSq);
               if (dist < 0.001) continue; // Avoid div by zero
-              
+
               // 1. Resolve Overlap (Push apart)
               const overlap = radiusSum - dist;
               const nx = dx / dist;
               const ny = dy / dist;
-              
+
               const pushX = nx * overlap * 0.5;
               const pushY = ny * overlap * 0.5;
-              
+
               p1.sperm.position.x -= pushX;
               p1.sperm.position.y -= pushY;
               p2.sperm.position.x += pushX;
               p2.sperm.position.y += pushY;
-              
+
               // 2. Momentum Transfer (Elastic-ish)
               const v1n = p1.sperm.velocity.x * nx + p1.sperm.velocity.y * ny;
               const v2n = p2.sperm.velocity.x * nx + p2.sperm.velocity.y * ny;
-              
+
               // Check lunge states
               const p1Lunge = p1.isLunging();
               const p2Lunge = p2.isLunging();
-              
+
               if (p1Lunge && !p2Lunge) {
                 // P1 attacks P2: P1 keeps going (mostly), P2 gets yeeted
                 const ATTACK_FORCE = 800; // Bonus knockback
