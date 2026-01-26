@@ -675,14 +675,6 @@ class SpermRaceGame {
     // Setup the game world immediately
     this.setupWorld();
 
-    // Initialize performance settings
-    const perfSettings = getPerformanceSettings();
-    this.performanceTier = perfSettings.targetFPS === 60 ? 'high' : perfSettings.targetFPS === 45 ? 'medium' : 'low';
-    this.frameInterval = 1000 / perfSettings.targetFPS;
-
-    // Log performance tier for debugging
-    console.log('[GAME] Performance tier:', this.performanceTier, 'Target FPS:', perfSettings.targetFPS);
-
     this.dbg('setupWorld: done, stageChildren=', (this.app as any)?.stage?.children?.length);
     this.dbg('setupWorld: done, stageChildren=', (this.app as any)?.stage?.children?.length);
     try { this.updateCamera(); } catch {}
