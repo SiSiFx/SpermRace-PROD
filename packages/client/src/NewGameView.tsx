@@ -4052,9 +4052,19 @@ class SpermRaceGame {
           if (distance < hitboxSize) {
             // EXPLOSION when WE crash (not when we kill others)
             this.createExplosion(car.x, car.y, car.color);
-            
+
+            // Mark car as destroyed FIRST to ensure immediate HUD update
+            car.destroyed = true;
+            car.elimAtMs = Date.now();
+
             // Attribute kill to trail owner
             this.recordKill(trail.car, car);
+
+            // IMMEDIATE HUD update: Ensure alive count and kill feed refresh right away
+            this.updateAliveCount();
+            this.renderKillFeed();
+
+            // Complete destruction (visual cleanup, etc.)
             this.destroyCar(car);
             break;
           }
@@ -4278,8 +4288,11 @@ class SpermRaceGame {
   destroyCar(car: Car) {
     if (car.destroyed) return;
 
-    car.destroyed = true;
-    car.elimAtMs = Date.now();
+    // Note: destroyed flag and elimAtMs may already be set by caller (checkTrailCollisions)
+    // to ensure immediate HUD updates before full destruction
+    if (!car.elimAtMs) {
+      car.elimAtMs = Date.now();
+    }
     car.sprite.visible = false;
     
     let playerDistance = Infinity;
