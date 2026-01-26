@@ -1,7 +1,10 @@
 /**
  * HUD Manager - Clean, unified HUD system
  * Single source of truth for all UI elements
+ * Supports multiple themes: default, tactical
  */
+
+export type HudTheme = 'default' | 'tactical';
 
 export class HudManager {
   private container: HTMLElement;
@@ -9,9 +12,13 @@ export class HudManager {
   private zoneTimerEl: HTMLElement | null = null;
   private boostBarFillEl: HTMLElement | null = null;
   private aliveCountEl: HTMLElement | null = null;
+  private theme: HudTheme = 'default';
+  private tacticalElements: HTMLElement[] = [];
+  private tacticalStylesLoaded: boolean = false;
 
-  constructor(container: HTMLElement) {
+  constructor(container: HTMLElement, theme: HudTheme = 'default') {
     this.container = container;
+    this.theme = theme;
   }
 
   /**
@@ -21,11 +28,20 @@ export class HudManager {
     // Clear any existing HUD
     this.clearHUD();
 
+    // Load tactical styles if needed
+    if (this.theme === 'tactical' && !this.tacticalStylesLoaded) {
+      this.loadTacticalStyles();
+    }
+
     const isMobile = window.innerWidth <= 768;
 
     // Create unified top bar
     this.topBar = document.createElement('div');
     this.topBar.id = 'unified-top-bar';
+    if (this.theme === 'tactical') {
+      this.topBar.classList.add('tactical-hud');
+    }
+
     Object.assign(this.topBar.style, {
       position: 'absolute',
       top: 'calc(10px + env(safe-area-inset-top, 0px))',
@@ -34,20 +50,24 @@ export class HudManager {
       display: 'flex',
       alignItems: 'center',
       gap: isMobile ? '8px' : '12px',
-      background: 'rgba(0, 0, 0, 0.85)',
+      background: this.theme === 'tactical' ? 'rgba(0, 20, 0, 0.85)' : 'rgba(0, 0, 0, 0.85)',
       padding: isMobile ? '6px 12px' : '10px 20px',
-      borderRadius: '24px',
-      border: '1px solid rgba(0, 255, 255, 0.2)',
+      borderRadius: this.theme === 'tactical' ? '4px' : '24px',
+      border: this.theme === 'tactical' ? '2px solid rgba(0, 255, 65, 0.5)' : '1px solid rgba(0, 255, 255, 0.2)',
       zIndex: '100',
       backdropFilter: 'blur(10px)',
-      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.5)',
+      boxShadow: this.theme === 'tactical' ? '0 0 10px rgba(0, 255, 65, 0.5)' : '0 4px 12px rgba(0, 0, 0, 0.5)',
       fontSize: isMobile ? '12px' : '14px',
-      fontWeight: '700',
-      color: '#ffffff'
+      fontWeight: this.theme === 'tactical' ? 'bold' : '700',
+      color: '#ffffff',
+      fontFamily: this.theme === 'tactical' ? "'Courier New', monospace" : 'inherit',
+      letterSpacing: this.theme === 'tactical' ? '2px' : 'normal',
+      textTransform: this.theme === 'tactical' ? 'uppercase' : 'none'
     });
 
     // Zone timer section
     const zoneSection = document.createElement('div');
+    zoneSection.className = 'zone-timer';
     Object.assign(zoneSection.style, {
       display: 'flex',
       alignItems: 'center',
@@ -56,9 +76,11 @@ export class HudManager {
 
     this.zoneTimerEl = document.createElement('div');
     this.zoneTimerEl.textContent = 'TIME 1:30';
+    const timerColor = this.theme === 'tactical' ? '#00ff41' : '#22d3ee';
     Object.assign(this.zoneTimerEl.style, {
-      color: '#22d3ee',
-      whiteSpace: 'nowrap'
+      color: timerColor,
+      whiteSpace: 'nowrap',
+      textShadow: this.theme === 'tactical' ? '0 0 5px rgba(0, 255, 65, 0.8)' : 'none'
     });
     zoneSection.appendChild(this.zoneTimerEl);
 
@@ -70,6 +92,7 @@ export class HudManager {
 
     // Boost section
     const boostSection = document.createElement('div');
+    boostSection.className = 'boost-section';
     Object.assign(boostSection.style, {
       display: 'flex',
       alignItems: 'center',
@@ -79,9 +102,11 @@ export class HudManager {
     const boostIcon = document.createElement('div');
     boostIcon.id = 'boost-icon';
     boostIcon.textContent = 'BOOST';
+    const boostColor = this.theme === 'tactical' ? '#00ff41' : '#22d3ee';
     Object.assign(boostIcon.style, {
       fontSize: isMobile ? '14px' : '16px',
-      color: '#22d3ee'
+      color: boostColor,
+      textShadow: this.theme === 'tactical' ? '0 0 5px rgba(0, 255, 65, 0.8)' : 'none'
     });
     boostSection.appendChild(boostIcon);
 
@@ -89,21 +114,28 @@ export class HudManager {
     Object.assign(boostBarContainer.style, {
       width: isMobile ? '60px' : '100px',
       height: '6px',
-      background: 'rgba(34, 211, 238, 0.15)',
+      background: this.theme === 'tactical' ? 'rgba(0, 255, 65, 0.1)' : 'rgba(34, 211, 238, 0.15)',
       borderRadius: '3px',
       overflow: 'hidden',
-      position: 'relative'
+      position: 'relative',
+      border: this.theme === 'tactical' ? '1px solid rgba(0, 255, 65, 0.5)' : 'none'
     });
 
     this.boostBarFillEl = document.createElement('div');
     this.boostBarFillEl.id = 'boost-bar-fill';
+    const boostGradient = this.theme === 'tactical'
+      ? 'linear-gradient(90deg, #00d926 0%, #00ff41 100%)'
+      : 'linear-gradient(90deg, #22d3ee 0%, #06b6d4 100%)';
+    const boostGlow = this.theme === 'tactical'
+      ? '0 0 10px rgba(0, 255, 65, 0.5)'
+      : '0 0 8px rgba(34, 211, 238, 0.6)';
     Object.assign(this.boostBarFillEl.style, {
       height: '100%',
       width: '100%',
-      background: 'linear-gradient(90deg, #22d3ee 0%, #06b6d4 100%)',
+      background: boostGradient,
       borderRadius: '3px',
       transition: 'width 0.1s ease-out, background 0.2s ease',
-      boxShadow: '0 0 8px rgba(34, 211, 238, 0.6)'
+      boxShadow: boostGlow
     });
     boostBarContainer.appendChild(this.boostBarFillEl);
     boostSection.appendChild(boostBarContainer);
@@ -116,6 +148,7 @@ export class HudManager {
 
     // Alive count section
     const aliveSection = document.createElement('div');
+    aliveSection.className = 'alive-counter';
     Object.assign(aliveSection.style, {
       display: 'flex',
       alignItems: 'center',
@@ -124,9 +157,11 @@ export class HudManager {
 
     this.aliveCountEl = document.createElement('div');
     this.aliveCountEl.textContent = '8 ALIVE';
+    const aliveColor = this.theme === 'tactical' ? '#00ff41' : '#10b981';
     Object.assign(this.aliveCountEl.style, {
-      color: '#10b981',
-      whiteSpace: 'nowrap'
+      color: aliveColor,
+      whiteSpace: 'nowrap',
+      textShadow: this.theme === 'tactical' ? '0 0 5px rgba(0, 255, 65, 0.8)' : 'none'
     });
     aliveSection.appendChild(this.aliveCountEl);
 
@@ -134,6 +169,11 @@ export class HudManager {
 
     // Add to container
     this.container.appendChild(this.topBar);
+
+    // Add tactical overlay elements if tactical theme
+    if (this.theme === 'tactical') {
+      this.createTacticalOverlays();
+    }
   }
 
   /**
@@ -141,12 +181,113 @@ export class HudManager {
    */
   private createSeparator(): HTMLElement {
     const sep = document.createElement('div');
-    Object.assign(sep.style, {
-      width: '1px',
-      height: '16px',
-      background: 'rgba(255, 255, 255, 0.15)'
-    });
+    sep.className = 'separator';
+    if (this.theme === 'tactical') {
+      Object.assign(sep.style, {
+        width: '2px',
+        height: '16px',
+        background: 'linear-gradient(to bottom, transparent, rgba(0, 255, 65, 0.5), transparent)',
+        boxShadow: '0 0 10px rgba(0, 255, 65, 0.5)'
+      });
+    } else {
+      Object.assign(sep.style, {
+        width: '1px',
+        height: '16px',
+        background: 'rgba(255, 255, 255, 0.15)'
+      });
+    }
     return sep;
+  }
+
+  /**
+   * Load tactical CSS styles
+   */
+  private loadTacticalStyles(): void {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = '/src/tactical-hud.css';
+    link.id = 'tactical-hud-styles';
+    document.head.appendChild(link);
+    this.tacticalStylesLoaded = true;
+
+    // Add scanline overlay to body
+    const scanlines = document.createElement('div');
+    scanlines.className = 'tactical-scanlines';
+    scanlines.id = 'tactical-scanlines';
+    document.body.appendChild(scanlines);
+    this.tacticalElements.push(scanlines);
+  }
+
+  /**
+   * Create tactical overlay elements (corners, grid, readouts)
+   */
+  private createTacticalOverlays(): void {
+    // Grid overlay
+    const gridOverlay = document.createElement('div');
+    gridOverlay.className = 'tactical-grid-overlay';
+    gridOverlay.id = 'tactical-grid';
+    this.container.appendChild(gridOverlay);
+    this.tacticalElements.push(gridOverlay);
+
+    // Corner brackets
+    const corners = ['tl', 'tr', 'bl', 'br'];
+    corners.forEach(corner => {
+      const cornerEl = document.createElement('div');
+      cornerEl.className = `tactical-corner ${corner}`;
+      this.container.appendChild(cornerEl);
+      this.tacticalElements.push(cornerEl);
+    });
+
+    // Technical readout panel
+    const readout = document.createElement('div');
+    readout.className = 'tactical-readout';
+    readout.id = 'tactical-readout';
+    readout.innerHTML = `
+      <div class="tactical-readout-row">
+        <span class="tactical-readout-label">SYS:</span>
+        <span class="tactical-readout-value">NOMINAL</span>
+      </div>
+      <div class="tactical-readout-row">
+        <span class="tactical-readout-label">PWR:</span>
+        <span class="tactical-readout-value">100%</span>
+      </div>
+      <div class="tactical-readout-row">
+        <span class="tactical-readout-label">SPD:</span>
+        <span class="tactical-readout-value" id="tactical-speed">200</span>
+      </div>
+    `;
+    this.container.appendChild(readout);
+    this.tacticalElements.push(readout);
+
+    // Compass/heading indicator
+    const compass = document.createElement('div');
+    compass.className = 'tactical-compass';
+    compass.id = 'tactical-compass';
+    compass.innerHTML = `
+      <div class="tactical-compass-value" id="tactical-heading">000°</div>
+      <div class="tactical-compass-ticks">
+        <div class="tactical-compass-tick"></div>
+        <div class="tactical-compass-tick"></div>
+        <div class="tactical-compass-tick"></div>
+      </div>
+    `;
+    this.container.appendChild(compass);
+    this.tacticalElements.push(compass);
+
+    // Targeting reticle (center screen)
+    const reticle = document.createElement('div');
+    reticle.className = 'tactical-reticle';
+    reticle.id = 'tactical-reticle';
+    this.container.appendChild(reticle);
+    this.tacticalElements.push(reticle);
+
+    // Alert banner
+    const alertBanner = document.createElement('div');
+    alertBanner.className = 'tactical-alert-banner';
+    alertBanner.id = 'tactical-alert';
+    alertBanner.textContent = '⚠ WARNING ⚠';
+    this.container.appendChild(alertBanner);
+    this.tacticalElements.push(alertBanner);
   }
 
   /**
@@ -162,23 +303,31 @@ export class HudManager {
       ? `${mins}:${String(secs).padStart(2, '0')}`
       : `${secs}s`;
 
+    const alertColor = this.theme === 'tactical' ? '#ff3333' : '#ef4444';
+    const normalColor = this.theme === 'tactical' ? '#00ff41' : '#22d3ee';
+
     if (clampedSeconds === 0) {
       this.zoneTimerEl.innerHTML = 'ZONE COLLAPSE';
-      this.zoneTimerEl.style.color = '#ef4444';
-      this.zoneTimerEl.style.textShadow = '0 0 10px rgba(239, 68, 68, 0.9)';
-      this.zoneTimerEl.style.animation = '';
+      this.zoneTimerEl.style.color = alertColor;
+      this.zoneTimerEl.style.textShadow = `0 0 10px rgba(${this.theme === 'tactical' ? '255, 51, 51' : '239, 68, 68'}, 0.9)`;
+      this.zoneTimerEl.className = this.theme === 'tactical' ? 'zone-timer alert' : '';
       return;
     }
 
     if (clampedSeconds < 30) {
       this.zoneTimerEl.innerHTML = `SHRINKING: <span>${timeLabel}</span>`;
-      this.zoneTimerEl.style.color = '#ef4444';
-      this.zoneTimerEl.style.textShadow = '0 0 10px rgba(239, 68, 68, 0.9)';
-      this.zoneTimerEl.style.animation = 'blink 1s ease-in-out infinite';
+      this.zoneTimerEl.style.color = alertColor;
+      this.zoneTimerEl.style.textShadow = `0 0 10px rgba(${this.theme === 'tactical' ? '255, 51, 51' : '239, 68, 68'}, 0.9)`;
+      if (this.theme === 'tactical') {
+        this.zoneTimerEl.className = 'zone-timer alert';
+      } else {
+        this.zoneTimerEl.style.animation = 'blink 1s ease-in-out infinite';
+      }
     } else {
       this.zoneTimerEl.innerHTML = `SAFE TIME: <span>${timeLabel}</span>`;
-      this.zoneTimerEl.style.color = '#22d3ee';
-      this.zoneTimerEl.style.textShadow = '0 0 6px rgba(34, 211, 238, 0.6)';
+      this.zoneTimerEl.style.color = normalColor;
+      this.zoneTimerEl.style.textShadow = `0 0 6px rgba(${this.theme === 'tactical' ? '0, 255, 65' : '34, 211, 238'}, 0.6)`;
+      this.zoneTimerEl.className = 'zone-timer';
       this.zoneTimerEl.style.animation = '';
     }
   }
@@ -190,28 +339,53 @@ export class HudManager {
     if (!this.boostBarFillEl) return;
 
     const boostIcon = document.getElementById('boost-icon');
-    
+
     // Update width
     this.boostBarFillEl.style.width = `${Math.max(0, Math.min(100, percentage))}%`;
 
     // Update colors based on state
     if (isBoosting) {
-      this.boostBarFillEl.style.background = 'linear-gradient(90deg, #00ff88 0%, #22d3ee 100%)';
+      const boostGradient = this.theme === 'tactical'
+        ? 'linear-gradient(90deg, #00ffff 0%, #00ff41 100%)'
+        : 'linear-gradient(90deg, #00ff88 0%, #22d3ee 100%)';
+      const boostColor = this.theme === 'tactical' ? '#00ffff' : '#00ff88';
+      const glowColor = this.theme === 'tactical' ? '0, 255, 255' : '0, 255, 136';
+
+      this.boostBarFillEl.style.background = boostGradient;
+      if (this.theme === 'tactical') {
+        this.boostBarFillEl.className = 'boosting';
+      }
       if (boostIcon) {
-        boostIcon.style.color = '#00ff88';
-        boostIcon.style.textShadow = '0 0 10px rgba(0, 255, 136, 0.8)';
+        boostIcon.style.color = boostColor;
+        boostIcon.style.textShadow = `0 0 10px rgba(${glowColor}, 0.8)`;
       }
     } else if (isLow) {
-      this.boostBarFillEl.style.background = 'linear-gradient(90deg, #ef4444 0%, #dc2626 100%)';
+      const lowGradient = this.theme === 'tactical'
+        ? 'linear-gradient(90deg, #ff3333 0%, #ff6666 100%)'
+        : 'linear-gradient(90deg, #ef4444 0%, #dc2626 100%)';
+      const lowColor = this.theme === 'tactical' ? '#ff3333' : '#ef4444';
+      const glowColor = this.theme === 'tactical' ? '255, 51, 51' : '239, 68, 68';
+
+      this.boostBarFillEl.style.background = lowGradient;
+      if (this.theme === 'tactical') {
+        this.boostBarFillEl.className = 'low';
+      }
       if (boostIcon) {
-        boostIcon.style.color = '#ef4444';
-        boostIcon.style.textShadow = '0 0 8px rgba(239, 68, 68, 0.6)';
+        boostIcon.style.color = lowColor;
+        boostIcon.style.textShadow = `0 0 8px rgba(${glowColor}, 0.6)`;
       }
     } else {
-      this.boostBarFillEl.style.background = 'linear-gradient(90deg, #22d3ee 0%, #06b6d4 100%)';
+      const normalGradient = this.theme === 'tactical'
+        ? 'linear-gradient(90deg, #00d926 0%, #00ff41 100%)'
+        : 'linear-gradient(90deg, #22d3ee 0%, #06b6d4 100%)';
+      const normalColor = this.theme === 'tactical' ? '#00ff41' : '#22d3ee';
+      const glowColor = this.theme === 'tactical' ? '0, 255, 65' : '34, 211, 238';
+
+      this.boostBarFillEl.style.background = normalGradient;
+      this.boostBarFillEl.className = '';
       if (boostIcon) {
-        boostIcon.style.color = '#22d3ee';
-        boostIcon.style.textShadow = '0 0 8px rgba(34, 211, 238, 0.6)';
+        boostIcon.style.color = normalColor;
+        boostIcon.style.textShadow = `0 0 8px rgba(${glowColor}, 0.6)`;
       }
     }
   }
@@ -226,11 +400,55 @@ export class HudManager {
 
     // Color based on count
     if (count <= 2) {
-      this.aliveCountEl.style.color = '#ef4444'; // Red
+      const color = this.theme === 'tactical' ? '#ff3333' : '#ef4444';
+      this.aliveCountEl.style.color = color;
+      this.aliveCountEl.className = this.theme === 'tactical' ? 'alive-counter critical' : '';
     } else if (count <= 4) {
-      this.aliveCountEl.style.color = '#fbbf24'; // Yellow
+      const color = this.theme === 'tactical' ? '#ffaa00' : '#fbbf24';
+      this.aliveCountEl.style.color = color;
+      this.aliveCountEl.className = this.theme === 'tactical' ? 'alive-counter warning' : '';
     } else {
-      this.aliveCountEl.style.color = '#10b981'; // Green
+      const color = this.theme === 'tactical' ? '#00ff41' : '#10b981';
+      this.aliveCountEl.style.color = color;
+      this.aliveCountEl.className = 'alive-counter';
+    }
+  }
+
+  /**
+   * Update tactical-specific elements (speed, heading, etc.)
+   */
+  updateTacticalReadouts(speed: number, heading: number): void {
+    if (this.theme !== 'tactical') return;
+
+    // Update speed display
+    const speedEl = document.getElementById('tactical-speed');
+    if (speedEl) {
+      speedEl.textContent = Math.round(speed).toString();
+    }
+
+    // Update heading display
+    const headingEl = document.getElementById('tactical-heading');
+    if (headingEl) {
+      const degrees = Math.round((heading * 180) / Math.PI) % 360;
+      const normalizedDegrees = degrees < 0 ? degrees + 360 : degrees;
+      headingEl.textContent = String(normalizedDegrees).padStart(3, '0') + '°';
+    }
+  }
+
+  /**
+   * Show tactical alert banner
+   */
+  showTacticalAlert(message: string, duration: number = 3000): void {
+    if (this.theme !== 'tactical') return;
+
+    const alertEl = document.getElementById('tactical-alert');
+    if (alertEl) {
+      alertEl.textContent = message;
+      alertEl.classList.add('active');
+
+      setTimeout(() => {
+        alertEl.classList.remove('active');
+      }, duration);
     }
   }
 
@@ -248,13 +466,23 @@ export class HudManager {
       'game-boost-fill',
       'game-alive-counter',
       'round-indicator',
-      'game-trail-status'
+      'game-trail-status',
+      'tactical-grid',
+      'tactical-readout',
+      'tactical-compass',
+      'tactical-reticle',
+      'tactical-alert',
+      'tactical-scanlines'
     ];
 
     oldElements.forEach(id => {
       const el = document.getElementById(id);
       if (el) el.remove();
     });
+
+    // Remove tactical corner elements
+    this.tacticalElements.forEach(el => el.remove());
+    this.tacticalElements = [];
 
     this.topBar = null;
     this.zoneTimerEl = null;
@@ -267,6 +495,13 @@ export class HudManager {
    */
   destroy() {
     this.clearHUD();
+
+    // Remove tactical CSS if loaded
+    const tacticalStyles = document.getElementById('tactical-hud-styles');
+    if (tacticalStyles) {
+      tacticalStyles.remove();
+    }
+    this.tacticalStylesLoaded = false;
   }
 }
 

@@ -1,0 +1,513 @@
+/**
+ * TACTICAL PILOT DISPLAY HUD
+ * Military/aviation-themed heads-up display with technical readouts and targeting systems
+ */
+
+:root {
+  /* Tactical Color Palette */
+  --tactical-primary: #00ff41;      /* Classic CRT green */
+  --tactical-secondary: #00d926;    /* Darker green for inactive states */
+  --tactical-alert: #ff3333;        /* Warning red */
+  --tactical-warning: #ffaa00;      /* Caution orange */
+  --tactical-info: #00ffff;         /* Cyan for information */
+  --tactical-bg: rgba(0, 20, 0, 0.85);  /* Dark green-tinted background */
+  --tactical-grid: rgba(0, 255, 65, 0.1);  /* Grid lines */
+  --tactical-border: rgba(0, 255, 65, 0.5);  /* Border color */
+
+  /* Typography */
+  --tactical-font: 'Courier New', 'Consolas', 'Monaco', monospace;
+
+  /* Effects */
+  --tactical-glow: 0 0 10px rgba(0, 255, 65, 0.5);
+  --tactical-glow-strong: 0 0 20px rgba(0, 255, 65, 0.8);
+  --tactical-text-shadow: 0 0 5px rgba(0, 255, 65, 0.8);
+}
+
+/* Scanline overlay effect */
+.tactical-scanlines::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.15),
+    rgba(0, 0, 0, 0.15) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+  opacity: 0.3;
+}
+
+/* Unified Top Bar - Tactical Style */
+#unified-top-bar.tactical-hud {
+  background: var(--tactical-bg);
+  border: 2px solid var(--tactical-border);
+  border-radius: 4px;
+  box-shadow:
+    var(--tactical-glow),
+    inset 0 0 20px rgba(0, 255, 65, 0.1);
+  font-family: var(--tactical-font);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+
+  /* Corner accents */
+  position: relative;
+}
+
+#unified-top-bar.tactical-hud::before,
+#unified-top-bar.tactical-hud::after {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-color: var(--tactical-primary);
+  border-style: solid;
+  pointer-events: none;
+}
+
+#unified-top-bar.tactical-hud::before {
+  top: -2px;
+  left: -2px;
+  border-width: 3px 0 0 3px;
+}
+
+#unified-top-bar.tactical-hud::after {
+  bottom: -2px;
+  right: -2px;
+  border-width: 0 3px 3px 0;
+}
+
+/* Zone Timer - Tactical Style */
+#unified-top-bar.tactical-hud .zone-timer {
+  color: var(--tactical-primary);
+  text-shadow: var(--tactical-text-shadow);
+  font-weight: bold;
+  position: relative;
+  padding: 0 10px;
+}
+
+#unified-top-bar.tactical-hud .zone-timer::before {
+  content: '[T]';
+  position: absolute;
+  left: -15px;
+  font-size: 0.8em;
+  opacity: 0.7;
+}
+
+#unified-top-bar.tactical-hud .zone-timer.alert {
+  color: var(--tactical-alert);
+  animation: tactical-blink 0.5s ease-in-out infinite;
+  text-shadow: 0 0 10px rgba(255, 51, 51, 0.9);
+}
+
+/* Boost Bar - Tactical Style */
+#unified-top-bar.tactical-hud .boost-section {
+  position: relative;
+}
+
+#unified-top-bar.tactical-hud #boost-icon {
+  color: var(--tactical-primary);
+  text-shadow: var(--tactical-text-shadow);
+  font-size: 0.9em;
+}
+
+#unified-top-bar.tactical-hud #boost-bar-fill {
+  background: linear-gradient(90deg, var(--tactical-secondary) 0%, var(--tactical-primary) 100%);
+  box-shadow: var(--tactical-glow);
+  border: 1px solid var(--tactical-primary);
+  position: relative;
+  overflow: hidden;
+}
+
+#unified-top-bar.tactical-hud #boost-bar-fill::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  animation: tactical-shine 2s ease-in-out infinite;
+}
+
+#unified-top-bar.tactical-hud #boost-bar-fill.boosting {
+  background: linear-gradient(90deg, var(--tactical-info) 0%, var(--tactical-primary) 100%);
+  animation: tactical-pulse 0.5s ease-in-out infinite;
+}
+
+#unified-top-bar.tactical-hud #boost-bar-fill.low {
+  background: linear-gradient(90deg, var(--tactical-alert) 0%, #ff6666 100%);
+  animation: tactical-blink 1s ease-in-out infinite;
+}
+
+/* Alive Counter - Tactical Style */
+#unified-top-bar.tactical-hud .alive-counter {
+  color: var(--tactical-primary);
+  text-shadow: var(--tactical-text-shadow);
+  font-weight: bold;
+  position: relative;
+  padding: 0 10px;
+}
+
+#unified-top-bar.tactical-hud .alive-counter::after {
+  content: ']';
+  position: absolute;
+  right: -10px;
+  font-size: 0.8em;
+  opacity: 0.7;
+}
+
+#unified-top-bar.tactical-hud .alive-counter.warning {
+  color: var(--tactical-warning);
+  text-shadow: 0 0 10px rgba(255, 170, 0, 0.8);
+}
+
+#unified-top-bar.tactical-hud .alive-counter.critical {
+  color: var(--tactical-alert);
+  animation: tactical-blink 0.3s ease-in-out infinite;
+  text-shadow: 0 0 15px rgba(255, 51, 51, 0.9);
+}
+
+/* Separators - Tactical Style */
+#unified-top-bar.tactical-hud .separator {
+  width: 2px;
+  background: linear-gradient(to bottom, transparent, var(--tactical-border), transparent);
+  box-shadow: var(--tactical-glow);
+}
+
+/* Tactical Corner Brackets */
+.tactical-corner {
+  position: absolute;
+  width: 60px;
+  height: 60px;
+  border-color: var(--tactical-primary);
+  border-style: solid;
+  pointer-events: none;
+  opacity: 0.8;
+  z-index: 100;
+}
+
+.tactical-corner.tl {
+  top: 20px;
+  left: 20px;
+  border-width: 3px 0 0 3px;
+}
+
+.tactical-corner.tr {
+  top: 20px;
+  right: 20px;
+  border-width: 3px 3px 0 0;
+}
+
+.tactical-corner.bl {
+  bottom: 20px;
+  left: 20px;
+  border-width: 0 0 3px 3px;
+}
+
+.tactical-corner.br {
+  bottom: 20px;
+  right: 20px;
+  border-width: 0 3px 3px 0;
+}
+
+/* Tactical Grid Overlay */
+.tactical-grid-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.15;
+  background-image:
+    linear-gradient(var(--tactical-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--tactical-grid) 1px, transparent 1px);
+  background-size: 100px 100px;
+}
+
+/* Technical Readout Panel */
+.tactical-readout {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  padding: 10px 15px;
+  background: var(--tactical-bg);
+  border: 1px solid var(--tactical-border);
+  border-radius: 2px;
+  font-family: var(--tactical-font);
+  font-size: 11px;
+  color: var(--tactical-primary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  box-shadow: var(--tactical-glow);
+  pointer-events: none;
+  z-index: 100;
+  min-width: 150px;
+}
+
+.tactical-readout::before {
+  content: 'SYSTEM STATUS';
+  display: block;
+  font-size: 9px;
+  opacity: 0.7;
+  margin-bottom: 5px;
+  border-bottom: 1px solid var(--tactical-border);
+  padding-bottom: 3px;
+}
+
+.tactical-readout-row {
+  display: flex;
+  justify-content: space-between;
+  margin: 3px 0;
+  white-space: nowrap;
+}
+
+.tactical-readout-label {
+  opacity: 0.8;
+}
+
+.tactical-readout-value {
+  font-weight: bold;
+  text-shadow: var(--tactical-text-shadow);
+}
+
+/* Compass/Heading Indicator */
+.tactical-compass {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  width: 120px;
+  height: 40px;
+  background: var(--tactical-bg);
+  border: 1px solid var(--tactical-border);
+  border-radius: 2px;
+  font-family: var(--tactical-font);
+  font-size: 10px;
+  color: var(--tactical-primary);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  box-shadow: var(--tactical-glow);
+  pointer-events: none;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.tactical-compass::before {
+  content: 'HEADING';
+  position: absolute;
+  top: 2px;
+  left: 5px;
+  font-size: 7px;
+  opacity: 0.6;
+}
+
+.tactical-compass-value {
+  font-weight: bold;
+  font-size: 14px;
+  text-shadow: var(--tactical-text-shadow);
+}
+
+.tactical-compass-ticks {
+  position: absolute;
+  bottom: 2px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  display: flex;
+  justify-content: space-around;
+  padding: 0 10px;
+}
+
+.tactical-compass-tick {
+  width: 1px;
+  height: 100%;
+  background: var(--tactical-primary);
+  opacity: 0.5;
+}
+
+/* Targeting Reticle */
+.tactical-reticle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100px;
+  height: 100px;
+  border: 2px solid var(--tactical-primary);
+  border-radius: 50%;
+  opacity: 0.3;
+  pointer-events: none;
+  z-index: 99;
+  box-shadow: var(--tactical-glow);
+}
+
+.tactical-reticle::before,
+.tactical-reticle::after {
+  content: '';
+  position: absolute;
+  background: var(--tactical-primary);
+  box-shadow: var(--tactical-glow);
+}
+
+.tactical-reticle::before {
+  top: 50%;
+  left: -10px;
+  right: -10px;
+  height: 2px;
+  transform: translateY(-50%);
+}
+
+.tactical-reticle::after {
+  left: 50%;
+  top: -10px;
+  bottom: -10px;
+  width: 2px;
+  transform: translateX(-50%);
+}
+
+/* Animations */
+@keyframes tactical-blink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@keyframes tactical-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scaleY(1.1);
+  }
+}
+
+@keyframes tactical-shine {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 200%;
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .tactical-corner {
+    width: 40px;
+    height: 40px;
+  }
+
+  .tactical-corner.tl {
+    top: 10px;
+    left: 10px;
+  }
+
+  .tactical-corner.tr {
+    top: 10px;
+    right: 10px;
+  }
+
+  .tactical-corner.bl {
+    bottom: 10px;
+    left: 10px;
+  }
+
+  .tactical-corner.br {
+    bottom: 10px;
+    right: 10px;
+  }
+
+  .tactical-readout {
+    font-size: 9px;
+    padding: 8px 10px;
+    min-width: 120px;
+  }
+
+  .tactical-compass {
+    width: 100px;
+    height: 35px;
+    font-size: 9px;
+  }
+
+  .tactical-compass-value {
+    font-size: 12px;
+  }
+
+  .tactical-reticle {
+    width: 80px;
+    height: 80px;
+  }
+
+  #unified-top-bar.tactical-hud {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+}
+
+/* CRT Flicker Effect (subtle) */
+@keyframes tactical-flicker {
+  0% {
+    opacity: 0.97;
+  }
+  5% {
+    opacity: 0.95;
+  }
+  10% {
+    opacity: 0.9;
+  }
+  15% {
+    opacity: 0.95;
+  }
+  20% {
+    opacity: 0.98;
+  }
+  100% {
+    opacity: 0.97;
+  }
+}
+
+.tactical-scanlines {
+  animation: tactical-flicker 0.15s infinite;
+}
+
+/* Alert Banner */
+.tactical-alert-banner {
+  position: absolute;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 20px;
+  background: var(--tactical-bg);
+  border: 2px solid var(--tactical-alert);
+  color: var(--tactical-alert);
+  font-family: var(--tactical-font);
+  font-size: 14px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  box-shadow: 0 0 20px rgba(255, 51, 51, 0.6);
+  animation: tactical-blink 0.5s ease-in-out infinite;
+  z-index: 200;
+  pointer-events: none;
+  display: none;
+}
+
+.tactical-alert-banner.active {
+  display: block;
+}
