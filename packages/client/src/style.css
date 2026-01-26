@@ -57,8 +57,21 @@
 body {
   background-color: var(--bg-primary);
   color: var(--text-primary);
-  font-family: 'Inter', sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   /* Ensure fonts are loaded in index.html if possible */
+}
+
+/* Headers use Orbitron font */
+h1, h2, h3, h4, h5, h6,
+.brand-title,
+.modal-title,
+.lobby-title,
+.tournament-title,
+.mode-title,
+.leaderboard h2,
+.brand-punchline {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 700;
 }
 
 * {
