@@ -1436,6 +1436,11 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
 
   return (
     <div className="screen active pc-results" id="round-end">
+      {isWinner && (
+        <div className="god-ray-container active">
+          <div className="god-ray"></div>
+        </div>
+      )}
       <div className="modal-card pc-results-card">
         <div className="modal-header">
           <h2 className={`round-result ${isWinner ? 'victory' : 'defeat'}`}>

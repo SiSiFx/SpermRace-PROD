@@ -902,6 +902,11 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
   
   return (
     <div className="screen active mobile-results-screen">
+      {isWinner && (
+        <div className="god-ray-container active">
+          <div className="god-ray"></div>
+        </div>
+      )}
       <div className="mobile-results-container">
         <div className="mobile-result-header">
           <h1 className={`mobile-result-title ${isWinner ? 'win' : 'lose'}`}>
@@ -914,18 +919,18 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
             <div className="mobile-prize-won">{prize.toFixed(4)} SOL</div>
           )}
         </div>
-        
+
         {solscan && (
           <a href={solscan} target="_blank" rel="noreferrer" className="mobile-solscan-btn">
             View on Solscan
           </a>
         )}
-        
+
         <div className="mobile-result-stats">
           {rankText && <div className="stat">Rank: {rankText}</div>}
           <div className="stat">Kills: {wsState.kills?.[selfId] || 0}</div>
         </div>
-        
+
         <div className="mobile-result-actions">
           <button className="mobile-btn-primary" onClick={handlePlayAgain} disabled={playAgainBusy}>
             {playAgainBusy ? 'Joining…' : 'Play Again'}
