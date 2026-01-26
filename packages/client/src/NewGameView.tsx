@@ -417,7 +417,17 @@ class SpermRaceGame {
     const texts = distance < 15 ? 'INSANE DODGE' : distance < 25 ? 'CLOSE CALL' : 'DODGED';
     this.nearMisses.push({ text: texts, time: Date.now(), x, y });
     this.hapticFeedback('light');
-    
+
+    // Visual feedback for near-miss
+    this.gameEffects?.showFloatingText(
+      x,
+      y - 30,
+      texts,
+      distance < 15 ? '#fbbf24' : '#22d3ee',
+      0.9,
+      1000
+    );
+
     // CLOSE CALL BOOST: Subtle speed bump as reward for skillful dodging
     if (this.player && !this.player.destroyed) {
       const boostAmount = distance < 15 ? 1.05 : 1.03; // Much subtler boost
@@ -3173,7 +3183,8 @@ class SpermRaceGame {
     // Update HUD elements: nameplates and leaderboard
     try { this.updateNameplates(); } catch { }
     try { this.updateLeaderboard(); } catch { }
-    // Kill feed removed - clutters mobile screen
+    // Kill feed re-enabled for better gameplay feedback
+    try { this.renderKillFeed(); } catch { }
     // Combo notifications removed - too cluttered
 
     // Render debug collision overlays (short TTL)
@@ -3399,7 +3410,16 @@ class SpermRaceGame {
     if (!this.killFeedContainer) return;
     const now = Date.now();
     const KILL_LIFETIME = 6000;
-    
+    const isMobile = window.innerWidth <= 768;
+
+    // Hide on mobile to reduce clutter
+    if (isMobile) {
+      this.killFeedContainer.style.display = 'none';
+      return;
+    }
+
+    this.killFeedContainer.style.display = 'flex';
+
     // Merge local and server kill feed (server preferred when active)
     let feed: Array<{ killer: string; victim: string; time: number }> = [];
     if (this.wsHud?.active && Array.isArray(this.wsHud.killFeed)) {
@@ -3413,17 +3433,17 @@ class SpermRaceGame {
       this.recentKills = this.recentKills.filter(k => now - k.time < KILL_LIFETIME);
       feed = this.recentKills;
     }
-    
+
     // Only show last 6 kills, most recent at bottom
     const items = feed.slice(-6);
-    
+
     // Build HTML in one go to prevent flickering
     const html = items.map(k => {
       const age = now - k.time;
       const alpha = Math.max(0, 1 - (age / KILL_LIFETIME));
       const slideIn = age < 300; // Slide in animation for first 300ms
       const translateY = slideIn ? `translateY(${(1 - age / 300) * 20}px)` : 'translateY(0)';
-      
+
       return `<div class="killfeed-item" style="
         display: flex;
         gap: 8px;
@@ -3445,7 +3465,7 @@ class SpermRaceGame {
         <span style="color:#fbbf24;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;">${k.victim}</span>
       </div>`;
     }).join('');
-    
+
     // Only update if content changed to prevent glitching
     if (this.killFeedContainer.innerHTML !== html) {
       this.killFeedContainer.innerHTML = html;
@@ -4050,8 +4070,8 @@ class SpermRaceGame {
         if (car.destroyed) break;
       }
       
-      // Show near-miss notification if player had a close call (reduced frequency)
-      if (car === this.player && closestMiss < 25 && Math.random() < 0.08) { // 8% chance, tighter radius
+      // Show near-miss notification if player had a close call (increased frequency for better feedback)
+      if (car === this.player && closestMiss < 25 && Math.random() < 0.20) { // 20% chance for better feedback
         this.showNearMiss(missX, missY, closestMiss);
       }
     }
@@ -4164,11 +4184,24 @@ class SpermRaceGame {
       this.killStreak++;
       this.lastKillTime = now;
 
-      // Simple haptic feedback
+      // Enhanced haptic feedback
       this.hapticFeedback('heavy');
-      
-      // Mild screen shake
-      this.screenShake(0.3);
+
+      // Stronger screen shake for kills
+      this.screenShake(0.6);
+
+      // Visual reward - flash screen with cyan color
+      this.gameEffects?.flashScreen('rgba(34, 211, 238, 0.3)', 100);
+
+      // Show kill notification text
+      this.gameEffects?.showFloatingText(
+        this.player.x,
+        this.player.y - 40,
+        'ELIMINATED!',
+        '#22d3ee',
+        1.2,
+        1200
+      );
     }
   }
 
@@ -4269,7 +4302,10 @@ class SpermRaceGame {
     // Haptic feedback on death (mobile)
     if (car === this.player) {
       this.hapticFeedback('heavy');
-      
+
+      // Red flash effect for player death
+      this.gameEffects?.flashScreen('rgba(255, 0, 0, 0.5)', 150);
+
       // RESET KILL STREAK WHEN PLAYER DIES
       this.killStreak = 0;
       this.lastKillTime = 0;
@@ -4491,12 +4527,12 @@ class SpermRaceGame {
     const allCars = [this.player, this.bot, ...this.extraBots].filter((car): car is Car => car !== null);
     const aliveCars = allCars.filter(car => !car.destroyed);
     const winner = aliveCars[0];
-    
+
     // AAA Victory Moment: Slow-mo + zoom on winner
     if (winner) {
       this.triggerVictorySlowMo(winner);
     }
-    
+
     // Calculate player rank (8 - current alive count + 1 if player is alive)
     let playerRank;
     if (this.player && !this.player.destroyed) {
@@ -4505,14 +4541,14 @@ class SpermRaceGame {
       // Player died - rank is based on when they died
       playerRank = this.alivePlayers + 1;
     }
-    
+
     // Practice-only overlay; tournament shows App-level Results
     if (!(this.wsHud && this.wsHud.active)) {
-    this.showGameOverScreen(winner === this.player, playerRank);
+    this.showGameOverScreen(winner === this.player, playerRank, winner);
     }
   }
 
-  showGameOverScreen(isVictory: boolean, rank: number) {
+  showGameOverScreen(isVictory: boolean, rank: number, winner?: Car) {
     // Save player stats
     const totalPlayersCount = (this.wsHud && this.wsHud.active)
       ? (Object.keys(this.wsHud.idToName || {}).length || 0)
@@ -4574,7 +4610,7 @@ class SpermRaceGame {
     const rankDisplay = document.createElement('div');
     rankDisplay.style.cssText = `
       font-size: 24px;
-      margin: 8px 0 20px 0;
+      margin: 8px 0 12px 0;
       color: #ffffff;
       font-weight: 700;
     `;
@@ -4582,6 +4618,20 @@ class SpermRaceGame {
     rankDisplay.textContent = isVictory
       ? 'Champion'
       : `Rank #${rank} / ${totalPlayersCount}`;
+
+    // Winner display (only show if player didn't win and we have winner info)
+    let winnerDisplay: HTMLElement | null = null;
+    if (!isVictory && winner) {
+      winnerDisplay = document.createElement('div');
+      winnerDisplay.style.cssText = `
+        font-size: 18px;
+        margin: 4px 0 20px 0;
+        color: #22d3ee;
+        font-weight: 600;
+        opacity: 0.9;
+      `;
+      winnerDisplay.textContent = `Winner: ${winner.name || 'Unknown'}`;
+    }
 
     // Stats container
     const stats = document.createElement('div');
@@ -4680,9 +4730,12 @@ class SpermRaceGame {
     // Assemble the overlay
     buttonsContainer.appendChild(replayBtn);
     buttonsContainer.appendChild(menuBtn);
-    
+
     content.appendChild(title);
     content.appendChild(rankDisplay);
+    if (winnerDisplay) {
+      content.appendChild(winnerDisplay);
+    }
     content.appendChild(stats);
     content.appendChild(buttonsContainer);
     
