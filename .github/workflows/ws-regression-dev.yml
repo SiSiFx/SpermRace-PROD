@@ -1,0 +1,47 @@
+name: WS Regression (dev)
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+    inputs:
+      ws_url:
+        description: "WebSocket URL to test (e.g. wss://dev.spermrace.io/ws)"
+        required: false
+        type: string
+
+concurrency:
+  group: ws-regression-dev
+  cancel-in-progress: true
+
+jobs:
+  ws:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Show WebSocket global
+        run: node -e "console.log('node', process.version, 'WebSocket', typeof WebSocket)"
+
+      - name: Run WS regression (practice)
+        env:
+          DEV_WS_URL: ${{ vars.DEV_WS_URL }}
+          INPUT_WS_URL: ${{ inputs.ws_url }}
+        run: |
+          set -euo pipefail
+          WS_URL="${INPUT_WS_URL:-${DEV_WS_URL:-wss://dev.spermrace.io/ws}}"
+          echo "Testing WS_URL=$WS_URL"
+          node scripts/loadtest/ws-regression-test.js \
+            --url "$WS_URL" \
+            --clients 20 \
+            --seconds 45 \
+            --mode practice \
+            --tier 0 \
+            --trailDelta true

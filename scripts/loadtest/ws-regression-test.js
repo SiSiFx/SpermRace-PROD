@@ -14,6 +14,7 @@
 /* eslint-disable no-console */
 
 import { setTimeout as sleep } from 'timers/promises';
+import { createRequire } from 'module';
 
 function parseArgs(argv) {
   const args = {
@@ -93,12 +94,18 @@ function safeJsonParse(s) {
 
 async function getWebSocketCtorOrThrow() {
   if (typeof globalThis.WebSocket === 'function') return globalThis.WebSocket;
+  const loadFrom = async (baseUrl) => {
+    const req = createRequire(baseUrl);
+    const mod = req('ws');
+    return mod?.WebSocket || mod?.default || mod;
+  };
+  try { return await loadFrom(new URL('../../packages/server/package.json', import.meta.url)); } catch {}
+  try { return await loadFrom(new URL('../../packages/core/package.json', import.meta.url)); } catch {}
   try {
-    const mod = await import(new URL('../../packages/server/node_modules/ws/index.js', import.meta.url));
-    return mod.default || mod.WebSocket || mod;
-  } catch {
-    throw new Error('WebSocket not available (need Node global WebSocket or server dependency ws).');
-  }
+    const mod = await import('ws');
+    return mod?.WebSocket || mod?.default || mod;
+  } catch {}
+  throw new Error('WebSocket not available (need Node global WebSocket or workspace dependency ws).');
 }
 
 function on(ws, event, handler) {

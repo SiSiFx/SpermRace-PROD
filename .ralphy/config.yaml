@@ -1,0 +1,41 @@
+# Ralphy Configuration
+# https://github.com/michaelshimeles/ralphy
+
+project:
+  name: "spermrace.io"
+  language: "TypeScript"
+  framework: "Node.js/Vite"
+  description: "Drift-based battle royale car game with cryptocurrency tournaments"
+
+commands:
+  test: "pnpm test"
+  lint: "pnpm lint"
+  build: "pnpm build"
+
+rules:
+  - "This is a pnpm monorepo - use pnpm commands"
+  - "Client code in packages/client/, server in packages/server/, shared in packages/shared/"
+  - "Game loop must run at 60fps - optimize for performance"
+  - "Use TypeScript strict mode"
+  - "All network messages must be type-safe in packages/shared/"
+  - "Follow existing code patterns - read before writing"
+  - "Test all new functions"
+  - "Use conventional commits: feat:, fix:, refactor:, test:"
+  - "Performance-critical code must use spatial partitioning"
+  - "WebSocket messages defined in shared/protocol"
+  - "Read CLAUDE.md and ARCHITECTURE.md for context"
+
+boundaries:
+  never_touch:
+    - "*.lock"
+    - "pnpm-lock.yaml"
+    - "node_modules/**"
+    - "dist/**"
+    - ".git/**"
+    - "audits/**"
+    - ".vercel/**"
+
+parallel:
+  max_agents: 8
+  branch_per_task: true
+  base_branch: "master"

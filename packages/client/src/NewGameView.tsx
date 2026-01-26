@@ -215,6 +215,7 @@ class SpermRaceGame {
   public echoPings: RadarPing[] = [];
   public alivePlayers: number = 0;
   public gamePhase: 'waiting' | 'active' | 'finished' = 'active';
+  private spectateTarget: Car | null = null; // Camera follows this when player is dead
   public gameStartTime: number = Date.now();
   public pickupsUnlocked: boolean = false;
   public artifactsUnlocked: boolean = false;
@@ -298,6 +299,9 @@ class SpermRaceGame {
     aliveSet: Set<string>;
     eliminationOrder: string[];
   } | null = null;
+  public serverGoAtMs: number = 0;
+  public serverMode: 'practice' | 'tournament' | null = null;
+  private lastElimToastKey: string | null = null;
   public debugCollisions: Array<{
     victimId: string;
     killerId?: string;
@@ -414,7 +418,17 @@ class SpermRaceGame {
     const texts = distance < 15 ? 'INSANE DODGE' : distance < 25 ? 'CLOSE CALL' : 'DODGED';
     this.nearMisses.push({ text: texts, time: Date.now(), x, y });
     this.hapticFeedback('light');
-    
+
+    // Visual feedback for near-miss
+    this.gameEffects?.showFloatingText(
+      x,
+      y - 30,
+      texts,
+      distance < 15 ? '#fbbf24' : '#22d3ee',
+      0.9,
+      1000
+    );
+
     // CLOSE CALL BOOST: Subtle speed bump as reward for skillful dodging
     if (this.player && !this.player.destroyed) {
       const boostAmount = distance < 15 ? 1.05 : 1.03; // Much subtler boost
@@ -671,14 +685,6 @@ class SpermRaceGame {
     
     // Setup the game world immediately
     this.setupWorld();
-
-    // Initialize performance settings
-    const perfSettings = getPerformanceSettings();
-    this.performanceTier = perfSettings.targetFPS === 60 ? 'high' : perfSettings.targetFPS === 45 ? 'medium' : 'low';
-    this.frameInterval = 1000 / perfSettings.targetFPS;
-
-    // Log performance tier for debugging
-    console.log('[GAME] Performance tier:', this.performanceTier, 'Target FPS:', perfSettings.targetFPS);
 
     this.dbg('setupWorld: done, stageChildren=', (this.app as any)?.stage?.children?.length);
     this.dbg('setupWorld: done, stageChildren=', (this.app as any)?.stage?.children?.length);
@@ -2563,9 +2569,10 @@ class SpermRaceGame {
       const crowdFactor = Math.min(1, nearbyCount / 8);
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       const baseZoom = isMobile ? 0.55 : 0.75; // Wider for better tactical view
-      
-      // BOOST ZOOM: Zoom IN when boosting for speed sensation
-      if (this.player.isBoosting) {
+
+      // BOOST ZOOM: Zoom IN when boosting for speed sensation (only if player is alive)
+      const playerAlive = this.player && !this.player.destroyed;
+      if (playerAlive && this.player.isBoosting) {
         const boostZoom = isMobile ? 0.65 : 0.85; // Tighter view = feels faster
         this.camera.targetZoom = boostZoom;
       } else {
@@ -2584,9 +2591,14 @@ class SpermRaceGame {
       this.camera.zoom += (this.camera.targetZoom - this.camera.zoom) * zoomSpeed;
     }
     
-    // Center camera on player, or on average player position during overview
-    let desiredCenterX = this.player.x;
-    let desiredCenterY = this.player.y;
+    // Center camera on player, or on spectate target if player is dead
+    let cameraTarget = this.player && !this.player.destroyed ? this.player : this.spectateTarget;
+    if (!cameraTarget) {
+      // Fallback to player position if no spectate target
+      cameraTarget = this.player;
+    }
+    let desiredCenterX = cameraTarget.x;
+    let desiredCenterY = cameraTarget.y;
     if (this.preStart) {
       const totalDuration = this.preStart.durationMs;
       const overviewEnd = totalDuration * 0.65;
@@ -3101,17 +3113,47 @@ class SpermRaceGame {
     } else {
       // Hide local safe-zone overlay during online matches.
       try { if (this.zoneGraphics) this.zoneGraphics.visible = false; } catch {}
-      // Drive HUD timer from the server-side shrink schedule (best-effort).
+      // Drive HUD timer from server GO time (stable; avoids countdown jitter).
       try {
-        if (!(this as any).onlineRoundStartAtMs) (this as any).onlineRoundStartAtMs = Date.now();
-        const elapsedMs = Date.now() - (this as any).onlineRoundStartAtMs;
-        const startMs = Math.max(0, Number(S_WORLD.ARENA_SHRINK_START_S || 0)) * 1000;
-        const durMs = Math.max(0, Number(S_WORLD.ARENA_SHRINK_DURATION_S || 0)) * 1000;
+        const mode = this.serverMode || (this.wsHud as any)?.mode || null;
+        // Mirror server defaults (GameWorld.startRound) so the timer matches what players feel.
+        const startS = mode === 'practice' ? 8 : mode === 'tournament' ? 12 : Number(S_WORLD.ARENA_SHRINK_START_S || 0);
+        const durS = mode === 'practice' ? 30 : mode === 'tournament' ? 45 : Number(S_WORLD.ARENA_SHRINK_DURATION_S || 0);
+        const startMs = Math.max(0, startS) * 1000;
+        const durMs = Math.max(0, durS) * 1000;
         const totalMs = startMs + durMs;
+        const srvNow = (this.lastServerTimeMs > 0 ? this.lastServerTimeMs : Date.now());
+        const goAt = Number(this.serverGoAtMs || 0) || 0;
+        const elapsedMs = (goAt > 0 && srvNow > 0) ? Math.max(0, srvNow - goAt) : 0;
         const remainMs = Math.max(0, totalMs - elapsedMs);
         if (this.hudManager) this.hudManager.updateZoneTimer(Math.ceil(remainMs / 1000));
       } catch {}
     }
+
+    // Online-only: surface eliminations (mobile kill feed is hidden, so deaths look "silent").
+    try {
+      if (isOnline && this.wsHud?.playerId && Array.isArray(this.wsHud.killFeed) && this.wsHud.killFeed.length) {
+        const ev = this.wsHud.killFeed[0];
+        if (ev && ev.victimId === this.wsHud.playerId) {
+          const key = `${String(ev.ts || 0)}:${String(ev.killerId || '')}:${String(ev.victimId || '')}`;
+          if (this.lastElimToastKey !== key) {
+            this.lastElimToastKey = key;
+            const killerId = ev.killerId;
+            const killerName = killerId
+              ? (this.wsHud.idToName?.[killerId] || `${killerId.slice(0, 4)}…${killerId.slice(-4)}`)
+              : 'ZONE';
+            const el = document.getElementById('game-toast');
+            if (el) {
+              el.textContent = `ELIMINATED BY ${killerName}`;
+              (el as any).style.borderColor = 'rgba(239,68,68,0.45)';
+              (el as any).style.color = '#fee2e2';
+              (el as any).style.opacity = '1';
+              setTimeout(() => { try { (el as any).style.opacity = '0'; } catch {} }, 2400);
+            }
+          }
+        }
+      }
+    } catch {}
     
     // Update sonar radar + compass (never let UI exceptions freeze the whole match)
     try { this.radarAngle = (this.radarAngle + deltaTime * 2) % (Math.PI * 2); } catch { }
@@ -3148,7 +3190,8 @@ class SpermRaceGame {
     // Update HUD elements: nameplates and leaderboard
     try { this.updateNameplates(); } catch { }
     try { this.updateLeaderboard(); } catch { }
-    // Kill feed removed - clutters mobile screen
+    // Kill feed re-enabled for better gameplay feedback
+    try { this.renderKillFeed(); } catch { }
     // Combo notifications removed - too cluttered
 
     // Render debug collision overlays (short TTL)
@@ -3374,7 +3417,16 @@ class SpermRaceGame {
     if (!this.killFeedContainer) return;
     const now = Date.now();
     const KILL_LIFETIME = 6000;
-    
+    const isMobile = window.innerWidth <= 768;
+
+    // Hide on mobile to reduce clutter
+    if (isMobile) {
+      this.killFeedContainer.style.display = 'none';
+      return;
+    }
+
+    this.killFeedContainer.style.display = 'flex';
+
     // Merge local and server kill feed (server preferred when active)
     let feed: Array<{ killer: string; victim: string; time: number }> = [];
     if (this.wsHud?.active && Array.isArray(this.wsHud.killFeed)) {
@@ -3388,17 +3440,17 @@ class SpermRaceGame {
       this.recentKills = this.recentKills.filter(k => now - k.time < KILL_LIFETIME);
       feed = this.recentKills;
     }
-    
+
     // Only show last 6 kills, most recent at bottom
     const items = feed.slice(-6);
-    
+
     // Build HTML in one go to prevent flickering
     const html = items.map(k => {
       const age = now - k.time;
       const alpha = Math.max(0, 1 - (age / KILL_LIFETIME));
       const slideIn = age < 300; // Slide in animation for first 300ms
       const translateY = slideIn ? `translateY(${(1 - age / 300) * 20}px)` : 'translateY(0)';
-      
+
       return `<div class="killfeed-item" style="
         display: flex;
         gap: 8px;
@@ -3420,7 +3472,7 @@ class SpermRaceGame {
         <span style="color:#fbbf24;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;">${k.victim}</span>
       </div>`;
     }).join('');
-    
+
     // Only update if content changed to prevent glitching
     if (this.killFeedContainer.innerHTML !== html) {
       this.killFeedContainer.innerHTML = html;
@@ -4007,9 +4059,27 @@ class SpermRaceGame {
           if (distance < hitboxSize) {
             // EXPLOSION when WE crash (not when we kill others)
             this.createExplosion(car.x, car.y, car.color);
-            
+
+            // Mark car as destroyed FIRST to ensure immediate HUD update
+            car.destroyed = true;
+            car.elimAtMs = Date.now();
+
             // Attribute kill to trail owner
             this.recordKill(trail.car, car);
+
+            // IMMEDIATE HUD update: Ensure alive count and kill feed refresh right away
+            this.updateAliveCount();
+            this.renderKillFeed();
+
+            // If player died, set spectate target to a random alive bot
+            if (car === this.player) {
+              const allBots = [this.bot, ...this.extraBots].filter((b): b is Car => b !== null && !b.destroyed);
+              if (allBots.length > 0) {
+                this.spectateTarget = allBots[Math.floor(Math.random() * allBots.length)];
+              }
+            }
+
+            // Complete destruction (visual cleanup, etc.)
             this.destroyCar(car);
             break;
           }
@@ -4025,8 +4095,8 @@ class SpermRaceGame {
         if (car.destroyed) break;
       }
       
-      // Show near-miss notification if player had a close call (reduced frequency)
-      if (car === this.player && closestMiss < 25 && Math.random() < 0.08) { // 8% chance, tighter radius
+      // Show near-miss notification if player had a close call (increased frequency for better feedback)
+      if (car === this.player && closestMiss < 25 && Math.random() < 0.20) { // 20% chance for better feedback
         this.showNearMiss(missX, missY, closestMiss);
       }
     }
@@ -4139,11 +4209,24 @@ class SpermRaceGame {
       this.killStreak++;
       this.lastKillTime = now;
 
-      // Simple haptic feedback
+      // Enhanced haptic feedback
       this.hapticFeedback('heavy');
-      
-      // Mild screen shake
-      this.screenShake(0.3);
+
+      // Stronger screen shake for kills
+      this.screenShake(0.6);
+
+      // Visual reward - flash screen with cyan color
+      this.gameEffects?.flashScreen('rgba(34, 211, 238, 0.3)', 100);
+
+      // Show kill notification text
+      this.gameEffects?.showFloatingText(
+        this.player.x,
+        this.player.y - 40,
+        'ELIMINATED!',
+        '#22d3ee',
+        1.2,
+        1200
+      );
     }
   }
 
@@ -4220,8 +4303,11 @@ class SpermRaceGame {
   destroyCar(car: Car) {
     if (car.destroyed) return;
 
-    car.destroyed = true;
-    car.elimAtMs = Date.now();
+    // Note: destroyed flag and elimAtMs may already be set by caller (checkTrailCollisions)
+    // to ensure immediate HUD updates before full destruction
+    if (!car.elimAtMs) {
+      car.elimAtMs = Date.now();
+    }
     car.sprite.visible = false;
     
     let playerDistance = Infinity;
@@ -4244,7 +4330,13 @@ class SpermRaceGame {
     // Haptic feedback on death (mobile)
     if (car === this.player) {
       this.hapticFeedback('heavy');
-      
+
+      // Red flash effect for player death
+      this.gameEffects?.flashScreen('rgba(255, 0, 0, 0.5)', 150);
+
+      // Strong screen shake for player death
+      this.screenShake(0.8);
+
       // RESET KILL STREAK WHEN PLAYER DIES
       this.killStreak = 0;
       this.lastKillTime = 0;
@@ -4305,18 +4397,10 @@ class SpermRaceGame {
     
     // Update alive count and handle elimination flow
     this.updateAliveCount();
-    
-    // If player died, show death screen immediately (practice only; tournament uses App Results)
-    if (car === this.player && this.gamePhase === 'active' && !(this.wsHud && this.wsHud.active)) {
-      // Calculate player's rank at time of death
-      const playerRank = this.alivePlayers + 1;
-      setTimeout(() => {
-        this.showGameOverScreen(false, playerRank);
-      }, 1000); // Short delay to see explosion
-      this.gamePhase = 'finished';
-    }
-    // Check for game end (only if player is still alive)
-    else if (this.alivePlayers <= 1 && this.gamePhase === 'active' && this.player && !this.player.destroyed) {
+
+    // Check for game end (regardless of whether player is alive or dead)
+    // This allows spectating after death until a winner is determined
+    if (this.alivePlayers <= 1 && this.gamePhase === 'active') {
       this.endGame();
     }
   }
@@ -4466,12 +4550,12 @@ class SpermRaceGame {
     const allCars = [this.player, this.bot, ...this.extraBots].filter((car): car is Car => car !== null);
     const aliveCars = allCars.filter(car => !car.destroyed);
     const winner = aliveCars[0];
-    
+
     // AAA Victory Moment: Slow-mo + zoom on winner
     if (winner) {
       this.triggerVictorySlowMo(winner);
     }
-    
+
     // Calculate player rank (8 - current alive count + 1 if player is alive)
     let playerRank;
     if (this.player && !this.player.destroyed) {
@@ -4480,14 +4564,14 @@ class SpermRaceGame {
       // Player died - rank is based on when they died
       playerRank = this.alivePlayers + 1;
     }
-    
+
     // Practice-only overlay; tournament shows App-level Results
     if (!(this.wsHud && this.wsHud.active)) {
-    this.showGameOverScreen(winner === this.player, playerRank);
+    this.showGameOverScreen(winner === this.player, playerRank, winner);
     }
   }
 
-  showGameOverScreen(isVictory: boolean, rank: number) {
+  showGameOverScreen(isVictory: boolean, rank: number, winner?: Car) {
     // Save player stats
     const totalPlayersCount = (this.wsHud && this.wsHud.active)
       ? (Object.keys(this.wsHud.idToName || {}).length || 0)
@@ -4549,7 +4633,7 @@ class SpermRaceGame {
     const rankDisplay = document.createElement('div');
     rankDisplay.style.cssText = `
       font-size: 24px;
-      margin: 8px 0 20px 0;
+      margin: 8px 0 12px 0;
       color: #ffffff;
       font-weight: 700;
     `;
@@ -4557,6 +4641,109 @@ class SpermRaceGame {
     rankDisplay.textContent = isVictory
       ? 'Champion'
       : `Rank #${rank} / ${totalPlayersCount}`;
+
+    // Winner display (show info about who won)
+    let winnerDisplay: HTMLElement | null = null;
+    if (isVictory) {
+      // Player won - show victory stats
+      winnerDisplay = document.createElement('div');
+      winnerDisplay.style.cssText = `
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        margin: 16px 0 24px 0;
+        padding: 16px 20px;
+        background: linear-gradient(135deg, rgba(34,211,238,0.15), rgba(99,102,241,0.15));
+        border: 2px solid rgba(34,211,238,0.5);
+        border-radius: 16px;
+        backdrop-filter: blur(8px);
+      `;
+
+      const winnerTitle = document.createElement('div');
+      winnerTitle.style.cssText = `
+        font-size: 26px;
+        color: #22d3ee;
+        font-weight: 800;
+        text-shadow: 0 0 20px rgba(34,211,238,0.6), 0 2px 8px rgba(0,0,0,0.4);
+        letter-spacing: -0.01em;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      `;
+      winnerTitle.innerHTML = `👑 You are the Champion!`;
+
+      const playerStats = document.createElement('div');
+      playerStats.style.cssText = `
+        display: flex;
+        gap: 20px;
+        font-size: 15px;
+        color: rgba(255,255,255,0.9);
+        font-weight: 600;
+      `;
+      playerStats.innerHTML = `
+        <span style="display: flex; align-items: center; gap: 6px;">
+          💥 ${kills} KO${kills !== 1 ? 's' : ''}
+        </span>
+        <span style="display: flex; align-items: center; gap: 6px;">
+          🏆 #1 / ${totalPlayersCount}
+        </span>
+      `;
+
+      winnerDisplay.appendChild(winnerTitle);
+      winnerDisplay.appendChild(playerStats);
+    } else if (winner) {
+      // Opponent won - show who beat you
+      winnerDisplay = document.createElement('div');
+      winnerDisplay.style.cssText = `
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        margin: 16px 0 24px 0;
+        padding: 16px 20px;
+        background: linear-gradient(135deg, rgba(244,63,94,0.12), rgba(251,146,60,0.08));
+        border: 2px solid rgba(244,63,94,0.3);
+        border-radius: 16px;
+        backdrop-filter: blur(8px);
+      `;
+
+      // Winner name with trophy icon
+      const winnerName = document.createElement('div');
+      winnerName.style.cssText = `
+        font-size: 26px;
+        color: #f43f5e;
+        font-weight: 800;
+        text-shadow: 0 0 20px rgba(244,63,94,0.6), 0 2px 8px rgba(0,0,0,0.4);
+        letter-spacing: -0.01em;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      `;
+      const winnerKills = winner.kills || 0;
+      winnerName.innerHTML = `🏆 Winner: ${winner.name || 'Unknown'}`;
+
+      // Winner stats row
+      const winnerStats = document.createElement('div');
+      winnerStats.style.cssText = `
+        display: flex;
+        gap: 20px;
+        font-size: 15px;
+        color: rgba(255,255,255,0.9);
+        font-weight: 600;
+      `;
+      winnerStats.innerHTML = `
+        <span style="display: flex; align-items: center; gap: 6px;">
+          💥 ${winnerKills} KO${winnerKills !== 1 ? 's' : ''}
+        </span>
+        <span style="display: flex; align-items: center; gap: 6px;">
+          🎯 ${winner.type === 'player' ? 'Player' : 'Bot'}
+        </span>
+      `;
+
+      winnerDisplay.appendChild(winnerName);
+      winnerDisplay.appendChild(winnerStats);
+    }
 
     // Stats container
     const stats = document.createElement('div');
@@ -4573,7 +4760,6 @@ class SpermRaceGame {
     const minutes = Math.floor(survivalTime / 60);
     const seconds = survivalTime % 60;
 
-    const eliminated = Math.max(0, (totalPlayersCount - this.alivePlayers - (this.player?.destroyed ? 0 : 1)));
     stats.innerHTML = `
       <div style="color:#ffffff; font-size: 16px; font-weight:700; margin-bottom: 12px;">BATTLE STATS</div>
       <div style="display: flex; justify-content: space-between; margin: 8px 0;">
@@ -4582,7 +4768,7 @@ class SpermRaceGame {
       </div>
       <div style="display: flex; justify-content: space-between; margin: 8px 0;">
         <span style="color:rgba(255,255,255,0.8); font-size: 14px;">Knockouts</span>
-        <span style="color:#ffffff; font-size: 14px; font-weight:600;">${eliminated}</span>
+        <span style="color:#ffffff; font-size: 14px; font-weight:600;">${kills}</span>
       </div>
       <div style="display: flex; justify-content: space-between; margin: 8px 0;">
         <span style="color:rgba(255,255,255,0.8); font-size: 14px;">Placement</span>
@@ -4655,9 +4841,12 @@ class SpermRaceGame {
     // Assemble the overlay
     buttonsContainer.appendChild(replayBtn);
     buttonsContainer.appendChild(menuBtn);
-    
+
     content.appendChild(title);
     content.appendChild(rankDisplay);
+    if (winnerDisplay) {
+      content.appendChild(winnerDisplay);
+    }
     content.appendChild(stats);
     content.appendChild(buttonsContainer);
     
@@ -6101,6 +6290,8 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
         try { game.applyServerWorld(wsState.game.world as any); } catch {}
         try { (game as any).objective = (wsState.game as any).objective || null; } catch {}
         try { (game as any).lastServerTimeMs = Number((wsState.game as any).timestamp || 0) || 0; } catch {}
+        try { (game as any).serverGoAtMs = Number((wsState.game as any).goAtMs || 0) || 0; } catch {}
+        try { (game as any).serverMode = mode; } catch {}
         // Align the pre-start zoom/countdown to the server's GO time using *server-relative* time
         // (robust against device clock skew so we never get stuck frozen with no movement).
         try {

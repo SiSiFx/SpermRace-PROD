@@ -36,6 +36,7 @@
 		"test:mobile:coverage": "bash scripts/test-mobile.sh --coverage",
 		"test:mobile:ui": "bash scripts/test-mobile.sh --ui",
 		"test:mobile:client": "pnpm --filter client test:mobile",
+		"test:e2e:dev": "cross-env PLAYWRIGHT_BASE_URL=https://dev.spermrace.io pnpm exec playwright test -c playwright.remote.config.ts",
 		"diagnose": "node frontend-diagnostic.js",
 		"menu": "node interactive-menu.js",
 		"install-all": "pnpm install && pnpm --filter @skidr/core install && pnpm --filter @skidr/shared install && pnpm --filter @skidr/env-development install && pnpm --filter @skidr/env-demo install && pnpm --filter @skidr/env-production install && pnpm --filter @skidr/frontend-development install && pnpm --filter @skidr/frontend-demo install && pnpm --filter @skidr/frontend-production install",
