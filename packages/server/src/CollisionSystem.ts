@@ -1,6 +1,7 @@
 import { PlayerEntity } from './Player.js';
 import { Vector2, TrailPoint } from 'shared';
 import { COLLISION as S_COLLISION } from 'shared/dist/constants.js';
+import { LatencyCompensation } from './LatencyCompensation.js';
 
 // =================================================================================================
 // CONSTANTS
@@ -73,10 +74,16 @@ class SpatialHashGrid {
 export class CollisionSystem {
   private grid: SpatialHashGrid;
   private worldBounds: { width: number; height: number };
+  private latencyCompensation: LatencyCompensation;
 
-  constructor(worldWidth: number, worldHeight: number) {
+  constructor(worldWidth: number, worldHeight: number, latencyCompensation?: LatencyCompensation) {
     this.grid = new SpatialHashGrid(GRID_CELL_SIZE);
     this.worldBounds = { width: worldWidth, height: worldHeight };
+    this.latencyCompensation = latencyCompensation || new LatencyCompensation();
+  }
+
+  getLatencyCompensation(): LatencyCompensation {
+    return this.latencyCompensation;
   }
 
   setWorldBounds(width: number, height: number): void {
@@ -164,7 +171,11 @@ export class CollisionSystem {
           (player.sperm.position.y - entry.point.y) ** 2
         );
 
-        if (distance < SPERM_COLLISION_RADIUS + TRAIL_COLLISION_RADIUS) {
+        // Use latency-compensated collision radius for fairness
+        // High-latency players get slightly larger hitboxes to compensate
+        const compensatedRadius = this.latencyCompensation.getCompensatedCollisionRadius(player.id, SPERM_COLLISION_RADIUS + TRAIL_COLLISION_RADIUS);
+
+        if (distance < compensatedRadius) {
           const killerId = entry.playerId !== player.id ? entry.playerId : undefined;
           // Build debug segment if we can locate the neighbor point in killer's trail
           let segment: { from: { x: number; y: number }; to: { x: number; y: number } } | undefined = undefined;

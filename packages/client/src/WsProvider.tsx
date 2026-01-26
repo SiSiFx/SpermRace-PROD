@@ -800,6 +800,20 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
               setState(s => ({ ...s, debugCollisions: [entry, ...(s.debugCollisions || [])].slice(0, 12) }));
               break;
             }
+            case 'ping': {
+              // Respond to server ping for RTT measurement
+              const pingId = msg.payload?.pingId;
+              const timestamp = msg.payload?.timestamp;
+              if (typeof pingId === 'number' && typeof timestamp === 'number') {
+                try {
+                  sock.send(JSON.stringify({
+                    type: 'pong',
+                    payload: { pingId, timestamp }
+                  }));
+                } catch { }
+              }
+              break;
+            }
             case 'soloPlayerWarning': {
               console.log('[LOBBY] Solo player warning:', msg.payload?.secondsUntilRefund, 'seconds until refund');
               const seconds = msg.payload?.secondsUntilRefund || 0;

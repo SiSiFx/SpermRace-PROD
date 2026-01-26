@@ -152,13 +152,22 @@ export interface EntryFeeSignatureMessage {
   };
 }
 
+export interface PongMessage {
+  type: 'pong';
+  payload: {
+    pingId: number;
+    timestamp: number;
+  };
+}
+
 export type ClientToServerMessage =
   | AuthenticateMessage
   | GuestLoginMessage
   | JoinLobbyMessage
   | LeaveLobbyMessage
   | PlayerInputMessage
-  | EntryFeeSignatureMessage;
+  | EntryFeeSignatureMessage
+  | PongMessage;
 
 // -------------------------------------------------------------------------------------------------
 // Server -> Client Messages
@@ -272,6 +281,14 @@ export interface ErrorMessage {
   };
 }
 
+export interface PingMessage {
+  type: 'ping';
+  payload: {
+    pingId: number;
+    timestamp: number;
+  };
+}
+
 export type ServerToClientMessage =
   | AuthenticatedMessage
   | LobbyStateMessage
@@ -284,7 +301,8 @@ export type ServerToClientMessage =
   | LobbyCountdownMessage
   | SiwsChallengeMessage
   | EntryFeeTransactionMessage
-  | EntryFeeVerifiedMessage;
+  | EntryFeeVerifiedMessage
+  | PingMessage;
 // =================================================================================================
 // RUNTIME SCHEMAS (zod)
 // =================================================================================================
