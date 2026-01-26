@@ -11,7 +11,8 @@
     "start:devnet": "cross-env SOLANA_RPC_ENDPOINT=https://api.devnet.solana.com node dist/index.js",
     "start": "node dist/index.js",
     "build": "pnpm --filter shared build && tsc",
-    "test": "echo \"No tests yet\" && exit 0"
+    "test": "node --test test/**/*.test.ts",
+    "test:collision": "node --test test/collisionPerformance.test.ts"
   },
   "dependencies": {
     "@jup-ag/api": "^6.0.20",

@@ -21,6 +21,7 @@ const POST_BOUNCE_GRACE_MS = S_COLLISION.POST_BOUNCE_GRACE_MS; // longer grace a
 interface GridEntry {
   playerId: string;
   point: TrailPoint;
+  pointIndex: number; // Track the index to avoid expensive indexOf calls
 }
 
 class SpatialHashGrid {
@@ -41,12 +42,12 @@ class SpatialHashGrid {
     this.grid.clear();
   }
 
-  insert(playerId: string, point: TrailPoint): void {
+  insert(playerId: string, point: TrailPoint, pointIndex: number): void {
     const key = this.getKey(point);
     if (!this.grid.has(key)) {
       this.grid.set(key, []);
     }
-    this.grid.get(key)!.push({ playerId, point });
+    this.grid.get(key)!.push({ playerId, point, pointIndex });
   }
 
   getNearby(position: Vector2): GridEntry[] {
@@ -96,7 +97,7 @@ export class CollisionSystem {
     this.grid.clear();
     for (const player of players.values()) {
       if (!player.isAlive) continue;
-      player.trail.forEach(point => this.grid.insert(player.id, point));
+      player.trail.forEach((point, index) => this.grid.insert(player.id, point, index));
     }
 
     // 2. Check for collisions for each player
@@ -125,54 +126,60 @@ export class CollisionSystem {
 
       // b. Trail collision
       const nearbyTrailPoints = this.grid.getNearby(player.sperm.position);
+      const playerTrailLength = player.trail.length;
+      const now = Date.now();
+      const playerSpawnAt = player.spawnAtMs;
+      const playerLastBounceAt = player.lastBounceAt;
+
+      // Pre-calculate collision threshold squared to avoid sqrt
+      const collisionThreshold = SPERM_COLLISION_RADIUS + TRAIL_COLLISION_RADIUS;
+      const collisionThresholdSq = collisionThreshold * collisionThreshold;
+
       for (const entry of nearbyTrailPoints) {
-        // Self-collision check
+        // Self-collision check (optimized with tracked index)
         if (entry.playerId === player.id) {
-            const playerTrail = player.trail;
-            const pointIndex = playerTrail.indexOf(entry.point);
-            if (pointIndex >= playerTrail.length - SELF_COLLISION_BUFFER) {
+            const pointIndex = entry.pointIndex;
+            if (pointIndex >= playerTrailLength - SELF_COLLISION_BUFFER) {
                 continue; // Ignore recent self-trail points
             }
             // Additional fairness tolerances
-            const now = Date.now();
             const createdAt = (entry.point as TrailPoint).createdAt || 0;
             if (createdAt && (now - createdAt) < SELF_IGNORE_RECENT_MS) {
               continue;
             }
-            if ((now - player.spawnAtMs) < SPAWN_SELF_COLLISION_GRACE_MS) {
+            if ((now - playerSpawnAt) < SPAWN_SELF_COLLISION_GRACE_MS) {
               continue;
             }
-            if (player.lastBounceAt && (now - player.lastBounceAt) < POST_BOUNCE_GRACE_MS) {
+            if (playerLastBounceAt && (now - playerLastBounceAt) < POST_BOUNCE_GRACE_MS) {
               continue;
             }
         }
 
-        const distance = Math.sqrt(
-          (player.sperm.position.x - entry.point.x) ** 2 +
-          (player.sperm.position.y - entry.point.y) ** 2
-        );
+        // Use squared distance to avoid expensive sqrt operation
+        const dx = player.sperm.position.x - entry.point.x;
+        const dy = player.sperm.position.y - entry.point.y;
+        const distanceSq = dx * dx + dy * dy;
 
-        if (distance < SPERM_COLLISION_RADIUS + TRAIL_COLLISION_RADIUS) {
+        if (distanceSq < collisionThresholdSq) {
           const killerId = entry.playerId !== player.id ? entry.playerId : undefined;
+
           // Build debug segment if we can locate the neighbor point in killer's trail
+          // Only compute debug info if actually needed (not in hot path for collision detection)
           let segment: { from: { x: number; y: number }; to: { x: number; y: number } } | undefined = undefined;
           if (killerId && players.has(killerId)) {
             try {
               const killer = players.get(killerId)!;
-              const idx = killer.trail.indexOf(entry.point);
-              if (idx >= 0) {
-                const prev = killer.trail[Math.max(0, idx - 1)];
-                const from = prev || entry.point;
-                const to = entry.point;
-                segment = { from: { x: from.x, y: from.y }, to: { x: to.x, y: to.y } };
-              }
+              const idx = entry.pointIndex;
+              const prev = killer.trail[Math.max(0, idx - 1)];
+              const from = prev || entry.point;
+              const to = entry.point;
+              segment = { from: { x: from.x, y: from.y }, to: { x: to.x, y: to.y } };
             } catch {}
           }
+
           // Compute collision normal and relative speed for debug telemetry
-          const nxRaw = player.sperm.position.x - entry.point.x;
-          const nyRaw = player.sperm.position.y - entry.point.y;
-          const nLen = Math.hypot(nxRaw, nyRaw) || 1;
-          const normal = { x: nxRaw / nLen, y: nyRaw / nLen };
+          const distance = Math.sqrt(distanceSq) || 1;
+          const normal = { x: dx / distance, y: dy / distance };
           const relSpeed = Math.hypot(player.sperm.velocity.x, player.sperm.velocity.y);
           eliminated.push({ victimId: player.id, killerId, debug: { type: 'trail', hit: { x: player.sperm.position.x, y: player.sperm.position.y }, ...(segment ? { segment } : {}), normal, relSpeed } });
           break; // No need to check other points for this player
