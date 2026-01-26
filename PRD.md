@@ -1,82 +1,18 @@
-# SpermRace.io - Design System Overhaul & Visual Polish
+# SpermRace.io - The "High-Fidelity" Redesign
 
-## Overview
-We are executing a complete visual overhaul of SpermRace.io to align with a **High-Fidelity Bio-Cyberpunk** aesthetic. The goal is to make the game feel like a premium, AA-quality indie title.
+**Objective:** Transform SpermRace.io into a world-class, visually stunning Bio-Cyberpunk experience. Every pixel should feel high-end, futuristic, and "alive".
 
-**Core Aesthetic:**
-*   **Theme:** "Neon Biological Warfare"
-*   **Colors:** Deep Void Black (#030712), Electric Cyan (#00f5ff), Toxic Green (#00ff88), Warning Yellow (#facc15).
-*   **Style:** Glassmorphism, glowing borders, glitch effects, scanlines, and crisp typography.
+**The Vibe:**
+*   **Bio-Cyberpunk:** A mix of sleek futuristic technology and organic, biological elements.
+*   **High-Stakes:** The UI should feel like a high-tech combat interface (HUD).
+*   **Colors:** Deep blacks, electric cyans, neon greens, and warning ambers.
 
----
+**Focus Areas:**
+1.  **First Impression:** The landing page and main menu need to look like a premium game. High-quality typography, glowing effects, and a sense of depth.
+2.  **Combat Interface (HUD):** Reskin the in-game UI to look like a tactical pilot's display. It should be minimal but packed with "cool" tech details (scanlines, glass effects, slick animations).
+3.  **The Wait (Lobby):** The lobby and matchmaking experience should build anticipation. Make the player list and tournament selection look like high-tech data panels.
+4.  **Victory/Defeat:** Make the end-of-match results feel cinematic. Victory should feel like a glorious success; defeat should feel like a critical system failure.
+5.  **Fluidity:** Ensure all animations are smooth and the UI is perfectly responsive on both Desktop and Mobile.
 
-## Task 1: Typography & Design Tokens
-**Branch: design/tokens**
-
-Establish the visual foundation.
-
-### Requirements
-*   **Fonts:** Implement `Orbitron` (Headers) and `Inter/JetBrains Mono` (UI/Data) globally.
-*   **Variables:** Define CSS variables for all neon colors, glow effects, and glass panels.
-*   **Global Reset:** Ensure all buttons, inputs, and modals use the new "Tech" style (angled corners, borders).
-
----
-
-## Task 2: Main Menu & Landing Experience
-**Branch: design/landing**
-
-The first impression must be striking.
-
-### Requirements
-*   **Hero Section:** Redesign the "SPERM RACE" logo with a massive, animated neon glow and "glitch" entry effect.
-*   **Buttons:** Replace standard buttons with "Cyber-Buttons" (clip-path corners, hover slide effects, sound on hover).
-*   **Background:** Enhance the particle background to feel deeper (parallax layers).
-
----
-
-## Task 3: HUD & In-Game UI Reskin
-**Branch: design/hud**
-
-The interface player sees 90% of the time.
-
-### Requirements
-*   **Top Bar:** Convert the HUD bar into a "floating tech capsule" with a blurred glass background.
-*   **Minimap/Radar:** Give it a circular "sonar" look with a scanning sweep animation.
-*   **Boost Bar:** Replace the simple bar with a segmented, glowing energy meter that "surges" when full.
-*   **Kill Feed:** Style it like a terminal log (monospaced font, fade-in lines).
-
----
-
-## Task 4: Lobby & Matchmaking UI
-**Branch: design/lobby**
-
-The anticipation phase.
-
-### Requirements
-*   **Player List:** Display players as "Data Cards" in a grid, not just a text list.
-*   **Countdown:** The pre-game countdown should be a massive, screen-filling typographic animation (3... 2... 1... GO!).
-*   **Tournament Select:** Redesign the tier selection cards to look like "Holographic Keycards" with 3D tilt effects on hover.
-
----
-
-## Task 5: Post-Game Results Screen
-**Branch: design/results**
-
-Celebrating victory (or defeat).
-
-### Requirements
-*   **Victory:** If won, trigger a "God Ray" effect behind the results card. Gold/Neon text.
-*   **Defeat:** Red/Glitch aesthetic. "SYSTEM FAILURE" style text.
-*   **Stats:** Display stats (Kills, Time) in tech-styled progress bars.
-
----
-
-## Task 6: Mobile Optimizations
-**Branch: design/mobile**
-
-Ensure the new design sings on small screens.
-
-### Requirements
-*   **Touch Controls:** Style the virtual joysticks to look like HUD elements, not generic circles.
-*   **Scaling:** Ensure text and buttons remain tap-friendly but use the new aesthetic.
-*   **Orientation:** Polish the "Rotate Device" warning screen with the new theme.
+**Ralph's Task:**
+Analyze the current codebase and execute a complete visual overhaul across all components. You have full creative control to implement the best designs, animations, and layouts that fit the "Bio-Cyberpunk" theme. Do not just change colors—rethink the shapes, the animations, and the user flow to make it truly "AA" quality.

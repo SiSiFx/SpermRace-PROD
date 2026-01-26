@@ -43,38 +43,43 @@ const TIERS: Tier[] = [
   { id: 'championship', name: 'Championship', usd: 100, maxPlayers: 16, duration: '5–8 min' },
 ];
 
-// Tier-specific styling
+// Tier-specific styling - Updated to match design system
 const getTierTheme = (tierId: string) => {
   switch (tierId) {
     case 'micro':
       return {
-        accent: '#10b981', // Emerald - beginner friendly
-        glow: 'rgba(16, 185, 129, 0.35)',
-        border: 'rgba(16, 185, 129, 0.8)',
+        accent: '#39ff14', // Toxic Green - biological success
+        glow: 'rgba(57, 255, 20, 0.5)',
+        border: 'rgba(57, 255, 20, 0.8)',
+        gradient: 'linear-gradient(135deg, rgba(57, 255, 20, 0.15) 0%, rgba(57, 255, 20, 0.05) 100%)',
       };
     case 'nano':
       return {
-        accent: '#00F0FF', // Electric Cyan - recommended 
-        glow: 'rgba(0, 240, 255, 0.35)',
-        border: 'rgba(0, 240, 255, 0.8)',
+        accent: '#00ffff', // Electric Cyan - tech energy (recommended)
+        glow: 'rgba(0, 255, 255, 0.5)',
+        border: 'rgba(0, 255, 255, 0.8)',
+        gradient: 'linear-gradient(135deg, rgba(0, 255, 255, 0.15) 0%, rgba(0, 255, 255, 0.05) 100%)',
       };
     case 'mega':
       return {
-        accent: '#a855f7', // Purple - mid-stakes
-        glow: 'rgba(168, 85, 247, 0.35)',
-        border: 'rgba(168, 85, 247, 0.8)',
+        accent: '#ffd700', // Winner Gold - premium tier
+        glow: 'rgba(255, 215, 0, 0.5)',
+        border: 'rgba(255, 215, 0, 0.8)',
+        gradient: 'linear-gradient(135deg, rgba(255, 215, 0, 0.15) 0%, rgba(255, 215, 0, 0.05) 100%)',
       };
     case 'championship':
       return {
-        accent: '#f59e0b', // Amber - high roller
-        glow: 'rgba(245, 158, 11, 0.35)',
-        border: 'rgba(245, 158, 11, 0.8)',
+        accent: '#bf00ff', // Plasma Purple - high roller exclusive
+        glow: 'rgba(191, 0, 255, 0.5)',
+        border: 'rgba(191, 0, 255, 0.8)',
+        gradient: 'linear-gradient(135deg, rgba(191, 0, 255, 0.15) 0%, rgba(255, 215, 0, 0.1) 50%, rgba(0, 255, 255, 0.05) 100%)',
       };
     default:
       return {
-        accent: '#00F0FF',
-        glow: 'rgba(0, 240, 255, 0.35)',
-        border: 'rgba(0, 240, 255, 0.8)',
+        accent: '#39ff14',
+        glow: 'rgba(57, 255, 20, 0.5)',
+        border: 'rgba(57, 255, 20, 0.8)',
+        gradient: 'linear-gradient(135deg, rgba(57, 255, 20, 0.15) 0%, rgba(57, 255, 20, 0.05) 100%)',
       };
   }
 };

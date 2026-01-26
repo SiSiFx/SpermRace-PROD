@@ -35,6 +35,7 @@ import { Leaderboard } from './Leaderboard';
 import { WarningCircle, CreditCard, LinkSimple } from 'phosphor-react';
 import { Modes } from './components/Modes';
 import './leaderboard.css';
+import './style-enhancements.css';
 
 type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
 
@@ -322,6 +323,10 @@ function Landing({
 }) {
   return (
     <div className="screen active" id="landing-screen">
+      {/* Premium animated background */}
+      <div className="bio-bg-gradient" />
+      <div className="bio-grid-overlay" />
+
       <div
         className="landing-container"
         style={{
@@ -333,85 +338,144 @@ function Landing({
           justifyContent: 'center',
           minHeight: '100vh',
           gap: 32,
+          position: 'relative',
         }}
       >
-        {/* Hero Title */}
-        <header style={{ textAlign: 'center' }}>
-          <h1
-            className="brand-title"
-            style={{
-              fontSize: 'clamp(3rem, 10vw, 5.4rem)',
-              letterSpacing: '0.3em',
-              textTransform: 'uppercase',
-            }}
-          >
-            <span style={{ color: 'var(--text-primary)' }}>SPERM</span>
-            <span
+        {/* Multi-layered border system with depth */}
+        <div className="border-layer-1" />
+        <div className="border-layer-2" />
+        <div className="border-layer-3" />
+
+        {/* Enhanced Bio-Cyberpunk Glow Effects */}
+        <div className="bio-glow-sphere glow-primary" />
+        <div className="bio-glow-sphere glow-secondary" />
+        <div className="bio-glow-sphere glow-tertiary" />
+
+        {/* Enhanced DNA Particle System with more sophisticated motion */}
+        <div className="dna-particle-system">
+          {[...Array(12)].map((_, i) => (
+            <div
+              key={i}
+              className="dna-particle"
               style={{
-                marginLeft: 16,
-                color: 'transparent',
-                WebkitTextStroke: '1px rgba(255,255,255,0.7)',
-              }}
-            >
-              RACE
-            </span>
+                '--delay': `${i * 0.3}s`,
+                '--x': `${Math.sin(i * 0.5) * 15}%`,
+                '--y': `${(i * 8) % 100}%`,
+                '--size': `${Math.random() * 4 + 2}px`,
+                '--color': i % 3 === 0 ? 'var(--accent)' : i % 3 === 1 ? 'var(--accent-cyan)' : 'var(--accent-purple)',
+              } as any}
+            />
+          ))}
+        </div>
+
+        {/* Premium Hero Title with sophisticated typography */}
+        <header className="landing-header">
+          {/* Multi-layered chromatic aberration */}
+          <div className="title-chromatic-layer chromatic-red" />
+          <div className="title-chromatic-layer chromatic-cyan" />
+          <div className="title-chromatic-layer chromatic-green" />
+
+          {/* Main title with enhanced gradient and depth */}
+          <h1 className="brand-title-premium">
+            <span className="title-word">SPERM</span>
+            <span className="title-separator" />
+            <span className="title-word">RACE</span>
+            <span className="title-underline" />
           </h1>
-          <p
-            style={{
-              marginTop: 16,
-              fontSize: 13,
-              textTransform: 'uppercase',
-              letterSpacing: 6,
-              color: 'var(--text-secondary)',
-            }}
-          >
-            BIO-ARENA PROTOCOL
-          </p>
+
+          {/* Premium subtitle with animated decorations */}
+          <div className="subtitle-container">
+            <span className="subtitle-line" />
+            <p className="subtitle-text">
+              <span className="subtitle-char" style={{ '--delay': '0s' }}>B</span>
+              <span className="subtitle-char" style={{ '--delay': '0.05s' }}>I</span>
+              <span className="subtitle-char" style={{ '--delay': '0.1s' }}>O</span>
+              <span className="subtitle-char" style={{ '--delay': '0.15s' }}>-</span>
+              <span className="subtitle-char" style={{ '--delay': '0.2s' }}>A</span>
+              <span className="subtitle-char" style={{ '--delay': '0.25s' }}>R</span>
+              <span className="subtitle-char" style={{ '--delay': '0.3s' }}>E</span>
+              <span className="subtitle-char" style={{ '--delay': '0.35s' }}>N</span>
+              <span className="subtitle-char" style={{ '--delay': '0.4s' }}>A</span>
+              <span className="subtitle-char" style={{ '--delay': '0.45s' }}>&nbsp;</span>
+              <span className="subtitle-char" style={{ '--delay': '0.5s' }}>P</span>
+              <span className="subtitle-char" style={{ '--delay': '0.55s' }}>R</span>
+              <span className="subtitle-char" style={{ '--delay': '0.6s' }}>O</span>
+              <span className="subtitle-char" style={{ '--delay': '0.65s' }}>T</span>
+              <span className="subtitle-char" style={{ '--delay': '0.7s' }}>O</span>
+              <span className="subtitle-char" style={{ '--delay': '0.75s' }}>C</span>
+              <span className="subtitle-char" style={{ '--delay': '0.8s' }}>O</span>
+              <span className="subtitle-char" style={{ '--delay': '0.85s' }}>L</span>
+            </p>
+            <span className="subtitle-line" />
+          </div>
+
+          {/* Decorative tech elements */}
+          <div className="header-decorations">
+            <div className="tech-corner corner-tl">
+              <span className="corner-line" />
+              <span className="corner-dot" />
+            </div>
+            <div className="tech-corner corner-tr">
+              <span className="corner-line" />
+              <span className="corner-dot" />
+            </div>
+            <div className="tech-corner corner-bl">
+              <span className="corner-line" />
+              <span className="corner-dot" />
+            </div>
+            <div className="tech-corner corner-br">
+              <span className="corner-line" />
+              <span className="corner-dot" />
+            </div>
+          </div>
         </header>
 
         {/* Modes Grid */}
-        <Modes />
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <Modes />
+        </div>
 
-        {/* Footer */}
-        <footer
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 8,
-            marginTop: 16,
-          }}
-        >
-          <div style={{ display: 'flex', gap: 16 }}>
+        {/* Premium Footer */}
+        <footer className="landing-footer">
+          <nav className="footer-nav">
             <button
               type="button"
-              className="btn-secondary"
-              style={{ background: 'transparent', border: 'none', padding: 0 }}
+              className="footer-link"
               onClick={onPractice}
             >
-              Practice
+              <span className="link-icon">▶</span>
+              <span className="link-text">Practice</span>
             </button>
+            <span className="footer-divider" />
             <button
               type="button"
-              className="btn-secondary"
-              style={{ background: 'transparent', border: 'none', padding: 0 }}
+              className="footer-link"
               onClick={onWallet}
             >
-              Wallet
+              <span className="link-icon">◆</span>
+              <span className="link-text">Wallet</span>
             </button>
             {onLeaderboard && (
-              <button
-                type="button"
-                className="btn-secondary"
-                style={{ background: 'transparent', border: 'none', padding: 0 }}
-                onClick={onLeaderboard}
-              >
-                Leaderboard
-              </button>
+              <>
+                <span className="footer-divider" />
+                <button
+                  type="button"
+                  className="footer-link"
+                  onClick={onLeaderboard}
+                >
+                  <span className="link-icon">▽</span>
+                  <span className="link-text">Leaderboard</span>
+                </button>
+              </>
             )}
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-            SOL: {solPrice != null ? `$${solPrice.toFixed(2)}` : '--'}
+          </nav>
+          <div className="footer-sol">
+            <span className="sol-label">SOL</span>
+            <span className="sol-divider">:</span>
+            <span className="sol-value">
+              {solPrice != null ? `$${solPrice.toFixed(2)}` : '--'}
+            </span>
+            <span className="sol-indicator" />
           </div>
         </footer>
       </div>
@@ -533,53 +597,107 @@ function Lobby({ onStart: _onStart, onBack }: { onStart: () => void; onBack: () 
   return (
     <div className="screen active" id="lobby-screen">
       <div className="lobby-container">
-        <div className="lobby-header"><div className="lobby-title">Lobby</div><div className="lobby-status">{players.length}/{state.lobby?.maxPlayers ?? 16}</div></div>
+        {/* Animated Border Effects */}
+        <div className="lobby-border-glow" />
+        <div className="lobby-scanline" />
+
+        <div className="lobby-header">
+          <div className="lobby-title">
+            <span className="title-icon">◈</span>
+            <span>COMMAND CENTER</span>
+            <div className="title-pulse" />
+          </div>
+          <div className="lobby-status">
+            <span className="status-label">ROSTER</span>
+            <span className="status-value">{players.length}/{state.lobby?.maxPlayers ?? 16}</span>
+            <div className="status-indicator" />
+          </div>
+        </div>
+
         {state.lobby && (
-          <div className="lobby-prize" style={{ margin: '8px 0 12px 0', opacity: 0.9 }}>
-            <span>Estimated Prize:</span> <strong>${estimatedPrizeUsd}</strong> <span style={{ opacity: 0.75 }}>(85% of entries)</span>
+          <div className="lobby-prize-panel">
+            <div className="prize-glow" />
+            <div className="prize-content">
+              <span className="prize-label">ESTIMATED PRIZE POOL</span>
+              <div className="prize-amount">
+                <span className="currency-symbol">$</span>
+                <span className="amount-value">{estimatedPrizeUsd}</span>
+                <span className="prize-pulse" />
+              </div>
+              <span className="prize-note">85% winner distribution</span>
+            </div>
           </div>
         )}
+
         {state.phase === 'connecting' || state.phase === 'authenticating' ? (
           <div className="loading-overlay" style={{ display: 'flex' }}>
             <div className="loading-spinner"></div>
             <div className="loading-text">{state.phase === 'connecting' ? 'Connecting…' : 'Authenticating…'}</div>
           </div>
         ) : null}
-        <div className="queue-bar"><div className="queue-left"><span className="queue-dot" /><span>{players.length}</span></div><div className="queue-center"><span>Queued</span></div><div className="queue-right"><span>Target</span><span>{state.lobby?.maxPlayers ?? 16}</span></div></div>
-        
-        {/* Player List */}
-        <div style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "8px",
-          justifyContent: "center",
-          margin: "16px 0",
-          maxHeight: "100px",
-          overflowY: "auto",
-          padding: "4px"
-        }}>
-          {players.map((pid: string) => {
-            const name = state.lobby?.playerNames?.[pid] || (pid.startsWith("guest-") ? "Guest" : pid.slice(0, 4) + "…" + pid.slice(-4));
-            const isMe = pid === state.playerId;
-            return (
-              <div key={pid} style={{
-                fontSize: "11px",
-                padding: "4px 10px",
-                borderRadius: "6px",
-                background: isMe ? "rgba(0, 245, 255, 0.15)" : "rgba(255, 255, 255, 0.05)",
-                border: isMe ? "1px solid rgba(0, 245, 255, 0.3)" : "1px solid rgba(255, 255, 255, 0.1)",
-                color: isMe ? "#00f5ff" : "rgba(255, 255, 255, 0.7)",
-                fontWeight: isMe ? 800 : 500,
-                textTransform: "uppercase",
-                letterSpacing: "0.05em"
-              }}>
-                {name}
-              </div>
-            );
-          })}
+
+        {/* Enhanced Queue Bar with Data Flow */}
+        <div className="queue-bar">
+          <div className="queue-data-stream" />
+          <div className="queue-left">
+            <span className="queue-dot" />
+            <span className="queue-value">{players.length}</span>
+            <span className="queue-label">ACTIVE</span>
+          </div>
+          <div className="queue-center">
+            <span className="queue-status">QUEUED</span>
+            <div className="queue-particles">
+              {[...Array(5)].map((_, i) => (
+                <span key={i} className="particle" style={{ '--delay': `${i * 0.2}s` } as any} />
+              ))}
+            </div>
+          </div>
+          <div className="queue-right">
+            <span className="queue-label">TARGET</span>
+            <span className="queue-value">{state.lobby?.maxPlayers ?? 16}</span>
+          </div>
         </div>
+
+        {/* Holographic Player List */}
+        <div className="player-hologrid">
+          <div className="hologrid-header">
+            <span className="hologrid-title">ACTIVE OPERATORS</span>
+            <div className="hologrid-line" />
+            <span className="hologrid-count">{players.length} UNITS</span>
+          </div>
+          <div className="hologrid-content">
+            {players.map((pid: string) => {
+              const name = state.lobby?.playerNames?.[pid] || (pid.startsWith("guest-") ? "Guest" : pid.slice(0, 4) + "…" + pid.slice(-4));
+              const isMe = pid === state.playerId;
+              return (
+                <div key={pid} className={`hologram-player ${isMe ? 'player-highlight' : ''}`}>
+                  <div className="player-scan" />
+                  <span className="player-name">{name}</span>
+                  <div className="player-data-bits">
+                    {[...Array(3)].map((_, i) => (
+                      <span key={i} className="data-bit" style={{ '--delay': `${i * 0.15}s` } as any} />
+                    ))}
+                  </div>
+                  {isMe && <div className="player-indicator">YOU</div>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Enhanced Orbit with Bio-Tech Aesthetics */}
         <div className="lobby-orbit">
-          <div className="orbit-center" />
+          <div className="orbit-particles">
+            {[...Array(12)].map((_, i) => (
+              <div key={i} className="orbit-particle" style={{ '--angle': `${i * 30}deg`, '--delay': `${i * 0.1}s` } as any} />
+            ))}
+          </div>
+          <div className="orbit-center">
+            <div className="center-core" />
+            <div className="center-ring-1" />
+            <div className="center-ring-2" />
+            <div className="center-pulse" />
+          </div>
           <div className="orbit-ring">
             {players.map((p: string, i: number) => (
               <div key={p} className="orbit-sperm" style={{ '--i': i, '--n': players.length } as any} />
@@ -587,12 +705,23 @@ function Lobby({ onStart: _onStart, onBack }: { onStart: () => void; onBack: () 
           </div>
           {state.countdown && (
             <div className="countdown-halo">
-              <div className="halo-ring" />
+              <div className="halo-ring">
+                <div className="halo-segment-1" />
+                <div className="halo-segment-2" />
+                <div className="halo-segment-3" />
+              </div>
               <div className="halo-timer">{state.countdown.remaining}s</div>
+              <div className="halo-warning">LAUNCH SEQUENCE</div>
             </div>
           )}
         </div>
-        <div className="lobby-footer"><button className="btn-secondary" onClick={onBack}>Back</button></div>
+
+        <div className="lobby-footer">
+          <button className="btn-secondary" onClick={onBack}>
+            <span className="btn-icon">◀</span>
+            <span>ABORT MISSION</span>
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -636,6 +765,16 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
   const selfId = wsState.playerId || publicKey || '';
   const isWinner = !!winner && winner === selfId;
   const [playAgainBusy, setPlayAgainBusy] = useState(false);
+  const [showResult, setShowResult] = useState(false);
+  const [showParticles, setShowParticles] = useState(false);
+
+  // Trigger cinematic entrance animation
+  useEffect(() => {
+    const timer1 = setTimeout(() => setShowResult(true), 100);
+    const timer2 = setTimeout(() => setShowParticles(true), 400);
+    return () => { clearTimeout(timer1); clearTimeout(timer2); };
+  }, []);
+
   const handlePlayAgain = async () => {
     if (playAgainBusy) return;
     if (wsState.phase !== 'ended') { onPlayAgain(); return; }
@@ -676,20 +815,114 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
       if (myRank) rankText = `Your rank: #${myRank}`;
     }
   } catch {}
+
   return (
     <div className="screen active" id="round-end">
-      <div className="modal-card">
-        <div className="modal-header"><h2 className={`round-result ${isWinner ? 'victory' : 'defeat'}`}>{isWinner ? 'Fertilization!' : 'Eliminated'}</h2><p className="round-description">Winner: {winner ? `${winner.slice(0,4)}…${winner.slice(-4)}` : '—'}{typeof prize === 'number' ? ` • Prize: ${prize.toFixed(4)} SOL` : ''}</p></div>
-        {solscan && (
-          <div className="modal-subtitle"><a href={solscan} target="_blank" rel="noreferrer">View payout on Solscan</a></div>
-        )}
-        {rankText && (
-          <div className="modal-subtitle">{rankText} • Kills: {wsState.kills?.[selfId] || 0}</div>
-        )}
-        <div className="round-actions">
-          <button className="btn-primary" onClick={handlePlayAgain} disabled={playAgainBusy}>{playAgainBusy ? 'Joining…' : 'Replay'}</button>
-          <button className="btn-secondary" onClick={onChangeTier}>Quit</button>
+      {/* Cinematic scanline sweep overlay */}
+      <div className={`cinematic-scanline ${isWinner ? 'victory-scan' : 'defeat-scan'}`} />
+
+      {/* Particle explosion effect for victory */}
+      {isWinner && showParticles && (
+        <div className="victory-particles">
+          {[...Array(20)].map((_, i) => (
+            <div key={i} className="particle" style={{
+              '--delay': `${Math.random() * 0.5}s`,
+              '--x': `${(Math.random() - 0.5) * 200}px`,
+              '--y': `${(Math.random() - 0.5) * 200}px`,
+              '--size': `${Math.random() * 8 + 4}px`
+            } as React.CSSProperties} />
+          ))}
         </div>
+      )}
+
+      {/* DNA Helix animation for victory */}
+      {isWinner && (
+        <div className="dna-helix-container">
+          <div className="dna-strand strand-1"></div>
+          <div className="dna-strand strand-2"></div>
+        </div>
+      )}
+
+      {/* Screen shake for defeat */}
+      {!isWinner && <div className="screen-shake"></div>}
+
+      <div className={`modal-card ${isWinner ? 'victory-modal' : 'defeat-modal'} ${showResult ? 'result-visible' : ''}`}>
+        {/* Victory header */}
+        {isWinner ? (
+          <div className="modal-header">
+            <div className="victory-icon">🧬</div>
+            <h2 className="round-result victory">
+              <span className="result-text">FERTILIZATION!</span>
+              <span className="result-glow"></span>
+            </h2>
+            <p className="round-description victory-desc">
+              Winner: {winner ? `${winner.slice(0,4)}…${winner.slice(-4)}` : '—'}
+              {typeof prize === 'number' && (
+                <span className="prize-amount">
+                  {' '}• Prize: <span className="prize-number">{prize.toFixed(4)}</span> SOL
+                </span>
+              )}
+            </p>
+          </div>
+        ) : (
+          /* Defeat header */
+          <div className="modal-header">
+            <div className="defeat-icon">⚠</div>
+            <h2 className="round-result defeat">
+              <span className="result-text">ELIMINATED</span>
+              <span className="glitch-overlay"></span>
+            </h2>
+            <p className="round-description defeat-desc">
+              Winner: {winner ? `${winner.slice(0,4)}…${winner.slice(-4)}` : '—'}
+              {typeof prize === 'number' && ` • Prize: ${prize.toFixed(4)} SOL`}
+            </p>
+          </div>
+        )}
+
+        {/* Stats display with holographic effect */}
+        <div className="stats-hologram">
+          {solscan && (
+            <div className="stat-line">
+              <a href={solscan} target="_blank" rel="noreferrer" className="hologram-link">
+                <span className="stat-label">TRANSACTION</span>
+                <span className="stat-value external">View on Solscan ↗</span>
+              </a>
+            </div>
+          )}
+          {rankText && (
+            <div className="stat-line">
+              <span className="stat-label">RANK</span>
+              <span className="stat-value">{rankText}</span>
+            </div>
+          )}
+          <div className="stat-line">
+            <span className="stat-label">KILLS</span>
+            <span className="stat-value">{wsState.kills?.[selfId] || 0}</span>
+          </div>
+        </div>
+
+        {/* Action buttons with bio-glow */}
+        <div className="round-actions">
+          <button
+            className={`action-btn ${isWinner ? 'victory-btn' : 'defeat-btn'}`}
+            onClick={handlePlayAgain}
+            disabled={playAgainBusy}
+          >
+            <span className="btn-bg"></span>
+            <span className="btn-text">{playAgainBusy ? 'JOINING...' : 'REPLAY'}</span>
+            <span className="btn-glow"></span>
+          </button>
+          <button className="action-btn secondary-btn" onClick={onChangeTier}>
+            <span className="btn-bg"></span>
+            <span className="btn-text">QUIT</span>
+          </button>
+        </div>
+
+        {/* Decorative tech elements */}
+        <div className="tech-corner corner-tl"></div>
+        <div className="tech-corner corner-tr"></div>
+        <div className="tech-corner corner-bl"></div>
+        <div className="tech-corner corner-br"></div>
       </div>
     </div>
   );

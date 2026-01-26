@@ -1,5 +1,5 @@
 /**
- * HUD Manager - Clean, unified HUD system
+ * HUD Manager - Tactical Bio-Cyberpunk Combat Interface
  * Single source of truth for all UI elements
  */
 
@@ -9,6 +9,10 @@ export class HudManager {
   private zoneTimerEl: HTMLElement | null = null;
   private boostBarFillEl: HTMLElement | null = null;
   private aliveCountEl: HTMLElement | null = null;
+  private killFeedEl: HTMLElement | null = null;
+  private performanceMetricsEl: HTMLElement | null = null;
+  private minimapEl: HTMLElement | null = null;
+  private warningSystemEl: HTMLElement | null = null;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -23,7 +27,7 @@ export class HudManager {
 
     const isMobile = window.innerWidth <= 768;
 
-    // Create unified top bar
+    // Create unified top bar with tactical styling
     this.topBar = document.createElement('div');
     this.topBar.id = 'unified-top-bar';
     Object.assign(this.topBar.style, {
@@ -34,17 +38,22 @@ export class HudManager {
       display: 'flex',
       alignItems: 'center',
       gap: isMobile ? '8px' : '12px',
-      background: 'rgba(0, 0, 0, 0.85)',
+      background: 'linear-gradient(135deg, rgba(5, 5, 8, 0.95) 0%, rgba(10, 10, 15, 0.9) 50%, rgba(5, 5, 8, 0.95) 100%)',
       padding: isMobile ? '6px 12px' : '10px 20px',
       borderRadius: '24px',
-      border: '1px solid rgba(0, 255, 255, 0.2)',
+      border: '1px solid rgba(57, 255, 20, 0.3)',
       zIndex: '100',
-      backdropFilter: 'blur(10px)',
-      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.5)',
+      backdropFilter: 'blur(20px)',
+      boxShadow: '0 4px 20px rgba(0, 0, 0, 0.6), 0 0 30px rgba(57, 255, 20, 0.15), inset 0 1px 0 rgba(57, 255, 20, 0.1), inset 0 -1px 0 rgba(0, 0, 0, 0.5)',
       fontSize: isMobile ? '12px' : '14px',
       fontWeight: '700',
-      color: '#ffffff'
+      color: '#ffffff',
+      position: 'relative',
+      overflow: 'hidden'
     });
+
+    // Add tactical corner brackets
+    this.addCornerBrackets(this.topBar);
 
     // Zone timer section
     const zoneSection = document.createElement('div');
