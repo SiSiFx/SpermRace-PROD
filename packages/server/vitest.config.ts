@@ -22,9 +22,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      'shared': path.resolve(__dirname, '../shared'),
-      'shared/dist/constants.js': path.resolve(__dirname, '../shared/src/constants.ts'),
-      'shared/dist/index.js': path.resolve(__dirname, '../shared/src/index.ts'),
+      'shared': path.resolve(__dirname, '../shared/src'),
     }
   }
 });
