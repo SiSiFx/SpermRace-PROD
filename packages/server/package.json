@@ -11,8 +11,8 @@
     "start:devnet": "cross-env SOLANA_RPC_ENDPOINT=https://api.devnet.solana.com node dist/index.js",
     "start": "node dist/index.js",
     "build": "pnpm --filter shared build && tsc",
-    "test": "node --test test/**/*.test.ts",
-    "test:collision": "node --test test/collisionPerformance.test.ts"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@jup-ag/api": "^6.0.20",
@@ -40,6 +40,7 @@
     "@types/ws": "^8.5.10",
     "cross-env": "^7.0.3",
     "ts-node-dev": "^2.0.0",
-    "typescript": "~5.5.3"
+    "typescript": "~5.5.3",
+    "vitest": "^2.0.0"
   }
 }
