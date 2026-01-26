@@ -3,6 +3,7 @@ import * as PIXI from 'pixi.js';
 import GameEffects from './GameEffects';
 import { startSpermBackground, stopSpermBackground } from './spermBackground';
 import type { PlayerInput, GameStateUpdateMessage, TrailPoint } from 'shared';
+import { TRAIL } from 'shared';
 import { VersionedTransaction, Connection } from '@solana/web3.js';
 import bs58 from 'bs58';
 
@@ -156,10 +157,119 @@ type Snapshot = { time: number; state: GameStateUpdateMessage['payload'] };
 const snapshots: Snapshot[] = [];
 let INTERPOLATION_DELAY_MS = 80; // Reduced for more responsive movement
 
+// Trail interpolation cache for smooth rendering
+interface TrailCache {
+  trail: TrailPoint[];
+  timestamp: number;
+}
+const trailCache: Map<string, TrailCache> = new Map();
+
 function bufferSnapshot(state: GameStateUpdateMessage['payload']): void {
   // Use server timestamp for consistent interpolation
   snapshots.push({ time: state.timestamp, state });
   if (snapshots.length > 120) snapshots.shift();
+}
+
+/**
+ * Interpolate between two trail arrays based on parameter t (0-1).
+ * Creates smooth transitions between snapshots by blending trail points.
+ */
+function interpolateTrails(
+  fromTrail: TrailPoint[] | undefined,
+  toTrail: TrailPoint[] | undefined,
+  t: number,
+  timestamp: number
+): TrailPoint[] {
+  // If no trails in either snapshot, return empty
+  if (!toTrail || toTrail.length === 0) return [];
+  if (!fromTrail || fromTrail.length === 0) return toTrail;
+
+  // Filter out expired points from both trails
+  const now = timestamp;
+  const validFrom = fromTrail.filter(p => p.expiresAt > now);
+  const validTo = toTrail.filter(p => p.expiresAt > now);
+
+  if (validTo.length === 0) return [];
+
+  // For very short trails or near endpoints, just return the target
+  if (validTo.length <= 2 || t >= 0.95) return validTo;
+
+  // Build interpolated trail by sampling and blending
+  const result: TrailPoint[] = [];
+  const maxLength = Math.max(validFrom.length, validTo.length);
+
+  // Sample points at regular intervals
+  const sampleCount = Math.min(maxLength, 64); // Limit for performance
+  for (let i = 0; i < sampleCount; i++) {
+    const normPos = i / (sampleCount - 1); // 0 to 1 along trail
+
+    // Find corresponding points in both trails (from tail to head)
+    const fromIdx = Math.floor(normPos * (validFrom.length - 1));
+    const toIdx = Math.floor(normPos * (validTo.length - 1));
+
+    const fromPoint = validFrom[fromIdx];
+    const toPoint = validTo[toIdx];
+
+    if (!toPoint) continue;
+
+    // Interpolate position
+    const ix = fromPoint ? fromPoint.x + (toPoint.x - fromPoint.x) * t : toPoint.x;
+    const iy = fromPoint ? fromPoint.y + (toPoint.y - fromPoint.y) * t : toPoint.y;
+
+    // Use expiration from target trail (authoritative)
+    const interpolatedPoint: TrailPoint = {
+      x: ix,
+      y: iy,
+      expiresAt: toPoint.expiresAt,
+      createdAt: toPoint.createdAt
+    };
+
+    result.push(interpolatedPoint);
+  }
+
+  return result;
+}
+
+/**
+ * Get interpolated trail for a player, using cached trails for smoothness.
+ */
+function getInterpolatedTrail(
+  playerId: string,
+  leftSnapshot: Snapshot,
+  rightSnapshot: Snapshot,
+  t: number,
+  timestamp: number
+): TrailPoint[] {
+  // Check cache first
+  const cached = trailCache.get(playerId);
+  if (cached && cached.timestamp === timestamp) {
+    return cached.trail;
+  }
+
+  // Get trails from both snapshots
+  const leftPlayer = leftSnapshot.state.players.find(p => p.id === playerId);
+  const rightPlayer = rightSnapshot.state.players.find(p => p.id === playerId);
+
+  const fromTrail = leftPlayer?.trail;
+  const toTrail = rightPlayer?.trail;
+
+  // Interpolate
+  const interpolated = interpolateTrails(fromTrail, toTrail, t, timestamp);
+
+  // Cache result
+  trailCache.set(playerId, { trail: interpolated, timestamp });
+
+  // Clean old cache entries periodically
+  if (trailCache.size > 32) {
+    const oldestTimestamp = timestamp - 5000; // 5 seconds old
+    for (const [id, entry] of trailCache) {
+      if (entry.timestamp < oldestTimestamp) {
+        trailCache.delete(id);
+      }
+    }
+  }
+
+  return interpolated;
 }
 
 function startInterpolatedRender(): void {
@@ -208,11 +318,15 @@ function startInterpolatedRender(): void {
       // Simple angle lerp
       let da = to.sperm.angle - from.sperm.angle; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
       const ia = from.sperm.angle + da * t;
+
+      // Interpolate trails for smooth rendering
+      const interpolatedTrail = getInterpolatedTrail(id, left, right, t, right.state.timestamp);
+
       interpPlayers.push({
         id,
         sperm: { position: { x: ix, y: iy }, velocity: to.sperm.velocity, angle: ia, angularVelocity: to.sperm.angularVelocity, color: to.sperm.color },
         isAlive: to.isAlive,
-        trail: to.trail, // draw latest trail without interpolation
+        trail: interpolatedTrail, // Use interpolated trails for smooth rendering
         status: (to as any).status,
       } as any);
     });
@@ -1501,6 +1615,32 @@ function updatePlayerGroup(group: PlayerRenderGroup, player: GameStateUpdateMess
     const maxPoints = points.length;
     const srcLen = Math.min(trailHistory.length, maxPoints);
 
+    // Get current timestamp for fade calculations
+    const now = Date.now();
+
+    // Calculate fade-out based on trail point expiration
+    // Find the earliest expiration time in the trail
+    let earliestExpiration = Infinity;
+    let latestExpiration = 0;
+    for (const point of trailHistory) {
+      if (point.expiresAt < earliestExpiration) earliestExpiration = point.expiresAt;
+      if (point.expiresAt > latestExpiration) latestExpiration = point.expiresAt;
+    }
+
+    // Calculate overall trail alpha based on expiration
+    let trailAlpha = 1.0;
+    if (earliestExpiration !== Infinity) {
+      const timeUntilExpiration = earliestExpiration - now;
+      const totalLifetime = latestExpiration - earliestExpiration + TRAIL.FADE_OUT_DURATION_MS;
+
+      // Fade out starts 2 seconds before expiration
+      if (timeUntilExpiration < TRAIL.FADE_OUT_DURATION_MS) {
+        trailAlpha = Math.max(0, timeUntilExpiration / TRAIL.FADE_OUT_DURATION_MS);
+      }
+    }
+
+    rope.alpha = trailAlpha;
+
     // Sample from latest trail points backwards into the rope geometry
     const step = (trailHistory.length - 1) / Math.max(1, srcLen - 1);
     const offset = maxPoints - srcLen;
@@ -1518,7 +1658,7 @@ function updatePlayerGroup(group: PlayerRenderGroup, player: GameStateUpdateMess
     }
 
     // Apply lightweight sine-wave wiggle along the rope for organic motion
-    const now = performance.now() * 0.004;
+    const nowTime = performance.now() * 0.004;
     const speedFactor = 1.0 + Math.min(1.5, speed / 280);
     for (let i = 1; i < maxPoints - 1; i++) {
       const prev = points[i - 1];
@@ -1531,7 +1671,7 @@ function updatePlayerGroup(group: PlayerRenderGroup, player: GameStateUpdateMess
       const tNorm = i / (maxPoints - 1); // 0 at head → 1 at tail
       const ampBase = isSelf ? 6 : 4;
       const amp = ampBase * tNorm;
-      const wave = Math.sin(now + tNorm * 5.0) * amp * speedFactor;
+      const wave = Math.sin(nowTime + tNorm * 5.0) * amp * speedFactor;
       curr.x += nx * wave;
       curr.y += ny * wave;
     }
@@ -1539,7 +1679,7 @@ function updatePlayerGroup(group: PlayerRenderGroup, player: GameStateUpdateMess
     if (glowRope) {
       glowRope.visible = isSelf && boosting;
       glowRope.tint = color;
-      glowRope.alpha = boosting ? 0.22 : 0;
+      glowRope.alpha = boosting ? 0.22 * trailAlpha : 0;
     }
   }
 
