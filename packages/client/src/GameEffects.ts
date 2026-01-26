@@ -157,6 +157,58 @@ export class GameEffects {
   }
 
   /**
+   * Show critical system failure effect on player death
+   */
+  showCriticalFailure() {
+    if (typeof document === 'undefined') return;
+
+    // Create red flash overlay
+    this.flashScreen('rgba(255, 0, 0, 0.4)', 150);
+
+    // Create glitch text effect
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      pointer-events: none;
+      z-index: 9999;
+      font-family: 'Orbitron', monospace;
+      animation: critical-glitch 0.3s ease-in-out, screen-shake 0.5s ease-out;
+    `;
+
+    const title = document.createElement('div');
+    title.textContent = 'CRITICAL FAILURE';
+    title.style.cssText = `
+      font-size: 72px;
+      font-weight: 900;
+      color: #ff0000;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      text-shadow:
+        2px 0 #ff0000,
+        -2px 0 #00ffff,
+        0 0 30px rgba(255, 0, 0, 0.8);
+      animation: rgb-split 0.2s ease-in-out infinite;
+    `;
+
+    wrapper.appendChild(title);
+    document.body.appendChild(wrapper);
+
+    // Fade out and remove
+    setTimeout(() => {
+      wrapper.style.transition = 'opacity 0.3s ease-out';
+      wrapper.style.opacity = '0';
+    }, 800);
+
+    setTimeout(() => {
+      try { wrapper.remove(); } catch {}
+    }, 1200);
+  }
+
+  /**
    * Show cinematic zone warning when the arena begins collapsing.
    * Early stages are yellow; late stages red.
    */

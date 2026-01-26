@@ -5124,15 +5124,129 @@ a,
     transparent,
     transparent 2px,
     rgba(57, 255, 20, 0.02) 2px,
-    rgba(57, 255, 0.02) 4px
+    rgba(57, 255, 20, 0.02) 4px
   );
   animation: hologram-scan 4s linear infinite;
   pointer-events: none;
 }
 
-@keyframes hologram-scan {
+/* ============================
+   Critical System Failure Glitch Effects
+   ============================ */
+
+/* Main glitch animation for text */
+@keyframes critical-glitch {
+  0% {
+    transform: translate(0);
+    text-shadow: none;
+    filter: none;
+  }
+  20% {
+    transform: translate(-2px, 2px);
+    text-shadow:
+      2px 0 #ff0000,
+      -2px 0 #00ffff;
+    filter: blur(0.5px);
+  }
+  40% {
+    transform: translate(-2px, -2px);
+    text-shadow:
+      2px 0 #ff0000,
+      -2px 0 #00ffff;
+    filter: blur(0.5px);
+  }
+  60% {
+    transform: translate(2px, 2px);
+    text-shadow:
+      2px 0 #ff0000,
+      -2px 0 #00ffff;
+    filter: blur(1px);
+  }
+  80% {
+    transform: translate(2px, -2px);
+    text-shadow:
+      2px 0 #ff0000,
+      -2px 0 #00ffff;
+    filter: blur(0.5px);
+  }
+  100% {
+    transform: translate(0);
+    text-shadow: none;
+    filter: none;
+  }
+}
+
+/* RGB split effect */
+@keyframes rgb-split {
+  0%, 100% {
+    text-shadow:
+      -2px 0 #ff0000,
+      2px 0 #00ffff,
+      0 0 10px rgba(255, 0, 0, 0.5);
+  }
+  50% {
+    text-shadow:
+      2px 0 #ff0000,
+      -2px 0 #00ffff,
+      0 0 20px rgba(255, 0, 0, 0.8);
+  }
+}
+
+/* Screen shake animation */
+@keyframes screen-shake {
+  0%, 100% { transform: translate(0, 0); }
+  10% { transform: translate(-5px, -5px); }
+  20% { transform: translate(5px, 5px); }
+  30% { transform: translate(-5px, 5px); }
+  40% { transform: translate(5px, -5px); }
+  50% { transform: translate(-3px, -3px); }
+  60% { transform: translate(3px, 3px); }
+  70% { transform: translate(-2px, 2px); }
+  80% { transform: translate(2px, -2px); }
+  90% { transform: translate(-1px, -1px); }
+}
+
+/* Static noise overlay */
+@keyframes static-noise {
   0% { background-position: 0 0; }
-  100% { background-position: 0 100px; }
+  100% { background-position: 100% 100%; }
+}
+
+/* Flicker effect */
+@keyframes glitch-flicker {
+  0%, 100% { opacity: 1; }
+  41.99% { opacity: 1; }
+  42% { opacity: 0; }
+  43% { opacity: 1; }
+  45.99% { opacity: 1; }
+  46% { opacity: 0; }
+  46.99% { opacity: 1; }
+}
+
+/* Defeat overlay specific styles */
+#game-over-overlay.defeat-glitch {
+  background: radial-gradient(ellipse at center, rgba(20, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.98) 100%);
+  animation: screen-shake 0.5s ease-out;
+}
+
+/* Scanlines effect */
+.defeat-scanlines::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.15),
+    rgba(0, 0, 0, 0.15) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+  pointer-events: none;
+  z-index: 1;
+  animation: scanline-move 8s linear infinite;
 }
 
 .stat-line {
@@ -6150,4 +6264,168 @@ a,
 
 .lobby-footer .btn-secondary:hover .btn-icon {
   transform: translateX(-4px);
+}
+
+/* Glitch text effect for defeat title */
+.defeat-title-glitch {
+  animation:
+    critical-glitch 0.3s ease-in-out infinite,
+    rgb-split 0.5s ease-in-out infinite alternate,
+    glitch-flicker 3s linear infinite;
+  position: relative;
+}
+
+/* Static noise overlay for defeat screen */
+.defeat-static-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="3" stitchTiles="stitch"/></filter><rect width="200" height="200" filter="url(%23n)" opacity="0.4"/></svg>');
+  opacity: 0.15;
+  pointer-events: none;
+  z-index: 2;
+  animation: static-noise 2s steps(10) infinite;
+}
+
+/* Error code display */
+.defeat-error-code {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #ff0000;
+  opacity: 0.6;
+  text-align: right;
+  line-height: 1.4;
+  animation: glitch-flicker 4s linear infinite;
+  z-index: 3;
+}
+
+/* Critical warning banner */
+.defeat-critical-banner {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: repeating-linear-gradient(
+    45deg,
+    #ff0000,
+    #ff0000 10px,
+    #ffff00 10px,
+    #ffff00 20px
+  );
+  color: #000;
+  padding: 8px 24px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  border: 2px solid #fff;
+  animation:
+    critical-glitch 0.2s ease-in-out infinite,
+    blink-warning 0.8s ease-in-out infinite;
+  z-index: 4;
+  text-transform: uppercase;
+}
+
+/* Glitch border effect */
+.defeat-glitch-border {
+  position: relative;
+  border: 3px solid #ff0000;
+  animation: rgb-split 1s ease-in-out infinite alternate;
+  box-shadow:
+    0 0 20px rgba(255, 0, 0, 0.5),
+    inset 0 0 20px rgba(255, 0, 0, 0.2);
+}
+
+/* Glitch button styles */
+.defeat-glitch-button {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.defeat-glitch-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 0, 0, 0.4),
+    transparent
+  );
+  transition: left 0.5s ease;
+}
+
+.defeat-glitch-button:hover::before {
+  left: 100%;
+}
+
+.defeat-glitch-button:hover {
+  animation: critical-glitch 0.2s ease-in-out;
+}
+
+/* Chromatic aberration for stats */
+.defeat-stats-glitch {
+  position: relative;
+}
+
+.defeat-stats-glitch::after {
+  content: attr(data-text);
+  position: absolute;
+  left: 2px;
+  top: 0;
+  color: #ff0000;
+  opacity: 0.7;
+  clip-path: polygon(0 0, 100% 0, 100% 45%, 0 45%);
+  animation: rgb-split 0.3s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+/* Pulse red glow for defeat container */
+@keyframes defeat-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 20px rgba(255, 0, 0, 0.3),
+      inset 0 0 20px rgba(255, 0, 0, 0.1);
+  }
+  50% {
+    box-shadow:
+      0 0 40px rgba(255, 0, 0, 0.6),
+      inset 0 0 30px rgba(255, 0, 0, 0.2);
+  }
+}
+
+/* Glitch particles */
+.defeat-glitch-particle {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: #ff0000;
+  animation: particle-fall 1s linear infinite;
+  opacity: 0.6;
+}
+
+@keyframes particle-fall {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.6;
+  }
+  90% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateY(100vh);
+    opacity: 0;
+  }
 }
