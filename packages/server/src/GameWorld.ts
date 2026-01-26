@@ -6,6 +6,7 @@ import { SmartContractService } from './SmartContractService.js';
 import type { DatabaseService } from './DatabaseService.js';
 import { WORLD as S_WORLD, TICK as S_TICK, COLLISION as S_COLLISION, PHYSICS as S_PHYSICS } from 'shared/dist/constants.js';
 import { v4 as uuidv4 } from 'uuid';
+import { StateHistory } from './StateHistory.js';
 
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 // Constants
@@ -98,12 +99,15 @@ export class GameWorld {
   public onAuditEvent: ((type: string, payload?: any) => void) | null = null;
   private lastWinReason: 'last_alive' | 'extraction' | 'draw' | null = null;
   private roundGoAtMs: number | null = null;
+  private stateHistory: StateHistory;
 
   constructor(smartContractService: SmartContractService, db?: DatabaseService) {
     this.collisionSystem = new CollisionSystem(WORLD_WIDTH, WORLD_HEIGHT);
     this.smartContractService = smartContractService;
     this.db = db || null;
     this.gameState = this.createInitialGameState();
+    // Initialize state history with 200ms buffer for lag compensation
+    this.stateHistory = new StateHistory(200, TICK_INTERVAL);
   }
 
   private createInitialGameState(): GameState {
@@ -152,6 +156,7 @@ export class GameWorld {
     this.items.clear();
     this.lastItemSpawnTime = 0;
     this.currentLobby = { players, entryFee, mode };
+    this.stateHistory.clear(); // Clear history buffer for new round
 
     // Reset arena sizing for this round based on expected player count.
     const roundSize = pickRoundWorldSize(players.length, mode);
@@ -488,7 +493,10 @@ export class GameWorld {
       });
     }
 
-    // 7. Sync game state for broadcasting
+    // 7. Record state snapshot for lag compensation (memory-efficient, <50MB)
+    this.stateHistory.addSnapshot(this.players);
+
+    // 8. Sync game state for broadcasting
     this.syncGameState();
   }
 
@@ -737,5 +745,22 @@ export class GameWorld {
       itemsState[id] = item;
     });
     this.gameState.items = itemsState;
+  }
+
+  /**
+   * Get state history statistics for monitoring memory usage.
+   * Useful for ensuring the history buffer stays under 50MB.
+   */
+  getStateHistoryStats() {
+    return this.stateHistory.getStats();
+  }
+
+  /**
+   * Get player state at a specific point in time for lag compensation.
+   * @param playerId Player ID to look up
+   * @param timestamp Target timestamp in milliseconds
+   */
+  getPlayerStateAt(playerId: string, timestamp: number) {
+    return this.stateHistory.getPlayerStateAt(playerId, timestamp);
   }
 }
