@@ -1,5 +1,6 @@
 /* =================================================================
    MOBILE TOUCH CONTROLS - Virtual Joystick + Boost Button
+   TACTICAL HUD STYLE - Bio-Cyberpunk Pilot Interface
    ================================================================= */
 
 /* DYNAMIC Joystick Area - Left Side (full touch zone) */
@@ -35,21 +36,61 @@
   width: 80px;
   height: 80px;
   border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, rgba(34, 211, 238, 0.15), rgba(34, 211, 238, 0.08));
-  border: 2px solid rgba(34, 211, 238, 0.5);
+  background: radial-gradient(circle at 30% 30%, rgba(34, 211, 238, 0.12), rgba(34, 211, 238, 0.05));
+  border: 2px solid rgba(34, 211, 238, 0.4);
   box-shadow:
-    0 0 20px rgba(34, 211, 238, 0.3),
-    inset 0 0 15px rgba(34, 211, 238, 0.1);
+    0 0 20px rgba(34, 211, 238, 0.25),
+    inset 0 0 15px rgba(34, 211, 238, 0.08),
+    inset 0 0 30px rgba(0, 0, 0, 0.3);
   transition: all 0.2s ease;
   position: relative;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  overflow: hidden;
+}
+
+/* Tactical scanline effect for joystick */
+.joystick-ring::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(34, 211, 238, 0.03) 2px,
+    rgba(34, 211, 238, 0.03) 4px
+  );
+  pointer-events: none;
+  border-radius: 50%;
+  animation: scanline-move 8s linear infinite;
+}
+
+/* Tech corners decoration */
+.joystick-ring::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  right: 4px;
+  bottom: 4px;
+  border: 1px solid rgba(34, 211, 238, 0.2);
+  border-radius: 50%;
+  pointer-events: none;
 }
 
 .joystick-base.active .joystick-ring {
-  border-color: rgba(34, 211, 238, 0.9);
+  border-color: rgba(34, 211, 238, 0.8);
   box-shadow:
-    0 0 25px rgba(34, 211, 238, 0.5),
-    inset 0 0 20px rgba(34, 211, 238, 0.2);
+    0 0 30px rgba(34, 211, 238, 0.4),
+    0 0 60px rgba(34, 211, 238, 0.2),
+    inset 0 0 25px rgba(34, 211, 238, 0.15),
+    inset 0 0 40px rgba(0, 0, 0, 0.4);
   transform: scale(1.05);
+  animation: tactical-pulse 2s ease-in-out infinite;
 }
 
 .joystick-stick {
@@ -61,21 +102,41 @@
   margin-left: -20px;
   margin-top: -20px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, rgba(99, 102, 241, 0.95), rgba(99, 102, 241, 0.75));
-  border: 2px solid rgba(255, 255, 255, 0.8);
+  background: radial-gradient(circle at 35% 35%, rgba(34, 211, 238, 0.9), rgba(6, 182, 212, 0.7));
+  border: 2px solid rgba(255, 255, 255, 0.6);
   box-shadow:
-    0 4px 15px rgba(0, 0, 0, 0.4),
-    inset 0 2px 8px rgba(255, 255, 255, 0.4);
+    0 4px 15px rgba(0, 0, 0, 0.5),
+    0 0 20px rgba(34, 211, 238, 0.4),
+    inset 0 2px 8px rgba(255, 255, 255, 0.3),
+    inset 0 0 15px rgba(34, 211, 238, 0.2);
   pointer-events: none;
   z-index: 10;
-  will-change: transform; /* GPU acceleration */
+  will-change: transform;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+/* Tech crosshair in stick center */
+.joystick-stick::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(34, 211, 238, 0.6);
 }
 
 .joystick-base.active .joystick-stick {
-  background: radial-gradient(circle at 35% 35%, rgba(34, 211, 238, 1), rgba(34, 211, 238, 0.85));
+  background: radial-gradient(circle at 35% 35%, rgba(34, 211, 238, 1), rgba(6, 182, 212, 0.9));
   box-shadow:
-    0 4px 12px rgba(34, 211, 238, 0.5),
+    0 6px 20px rgba(34, 211, 238, 0.6),
+    0 0 30px rgba(34, 211, 238, 0.4),
     inset 0 2px 6px rgba(255, 255, 255, 0.4);
+  animation: stick-active-pulse 1.5s ease-in-out infinite;
 }
 
 .joystick-hint {
@@ -85,24 +146,28 @@
   transform: translateX(-50%);
   font-size: 14px;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.5);
-  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+  color: rgba(34, 211, 238, 0.7);
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9), 0 0 10px rgba(34, 211, 238, 0.4);
   letter-spacing: 1.5px;
   white-space: nowrap;
   pointer-events: none;
   opacity: 0.6;
+  text-transform: uppercase;
 }
 
-/* Add steering arrows on joystick */
-.joystick-ring::before {
-  content: '↖';
+/* Add tech markers to joystick ring corners */
+.joystick-ring .tech-corner {
   position: absolute;
-  top: 8px;
-  left: 8px;
-  font-size: 16px;
-  color: rgba(255, 255, 255, 0.4);
-  font-weight: bold;
+  width: 8px;
+  height: 8px;
+  border: 1px solid rgba(34, 211, 238, 0.3);
+  pointer-events: none;
 }
+
+.joystick-ring .tech-corner.tl { top: 6px; left: 6px; border-right: none; border-bottom: none; }
+.joystick-ring .tech-corner.tr { top: 6px; right: 6px; border-left: none; border-bottom: none; }
+.joystick-ring .tech-corner.bl { bottom: 6px; left: 6px; border-right: none; border-top: none; }
+.joystick-ring .tech-corner.br { bottom: 6px; right: 6px; border-left: none; border-top: none; }
 
 /* Removed duplicate STEER text - using joystick-hint instead */
 
@@ -129,35 +194,73 @@
   pointer-events: auto;
 }
 
-/* Visual button inside touch area - Smaller */
+/* Visual button inside touch area - Tactical HUD style */
 .mobile-boost-button::before {
   content: '';
   position: absolute;
   width: 60px;
   height: 60px;
   border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, rgba(251, 146, 60, 0.3), rgba(251, 146, 60, 0.15));
-  border: 2px solid rgba(251, 146, 60, 0.6);
+  background: radial-gradient(circle at 30% 30%, rgba(251, 146, 60, 0.2), rgba(251, 146, 60, 0.1));
+  border: 2px solid rgba(251, 146, 60, 0.5);
   box-shadow:
-    0 4px 20px rgba(251, 146, 60, 0.3),
-    inset 0 2px 8px rgba(255, 255, 255, 0.1);
+    0 4px 20px rgba(251, 146, 60, 0.25),
+    inset 0 2px 8px rgba(255, 255, 255, 0.08),
+    inset 0 0 20px rgba(0, 0, 0, 0.3);
   pointer-events: none;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  overflow: hidden;
+}
+
+/* Scanline effect for boost button */
+.mobile-boost-button::after {
+  content: '';
+  position: absolute;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(251, 146, 60, 0.03) 2px,
+    rgba(251, 146, 60, 0.03) 4px
+  );
+  pointer-events: none;
+  animation: scanline-move 8s linear infinite;
 }
 
 .mobile-boost-button.ready::before {
-  background: radial-gradient(circle at 30% 30%, rgba(34, 211, 238, 0.4), rgba(34, 211, 238, 0.2));
-  border-color: rgba(34, 211, 238, 0.8);
+  background: radial-gradient(circle at 30% 30%, rgba(34, 211, 238, 0.35), rgba(34, 211, 238, 0.15));
+  border-color: rgba(34, 211, 238, 0.7);
   box-shadow:
-    0 6px 24px rgba(34, 211, 238, 0.5),
-    inset 0 2px 8px rgba(255, 255, 255, 0.2);
+    0 6px 30px rgba(34, 211, 238, 0.4),
+    0 0 50px rgba(34, 211, 238, 0.2),
+    inset 0 2px 8px rgba(255, 255, 255, 0.15),
+    inset 0 0 20px rgba(34, 211, 238, 0.1);
+}
+
+.mobile-boost-button.ready::after {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(34, 211, 238, 0.04) 2px,
+    rgba(34, 211, 238, 0.04) 4px
+  );
 }
 
 .mobile-boost-button.pressed::before,
 .mobile-boost-button.ready:active::before {
   transform: scale(1.08);
+  background: radial-gradient(circle at 30% 30%, rgba(0, 255, 136, 0.5), rgba(34, 211, 238, 0.3));
+  border-color: rgba(0, 255, 136, 0.9);
   box-shadow:
-    0 6px 24px rgba(34, 211, 238, 0.8),
-    inset 0 3px 12px rgba(255, 255, 255, 0.3);
+    0 8px 35px rgba(0, 255, 136, 0.5),
+    0 0 60px rgba(0, 255, 136, 0.3),
+    inset 0 3px 12px rgba(255, 255, 255, 0.25);
+  animation: boost-activate 0.3s ease-out;
 }
 
 .mobile-boost-button:disabled {
@@ -353,6 +456,81 @@
   100% {
     opacity: 0;
     display: none;
+  }
+}
+
+/* =================================================================
+   TACTICAL HUD ANIMATIONS
+   ================================================================= */
+
+/* Scanline movement effect */
+@keyframes scanline-move {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 0 100px;
+  }
+}
+
+/* Tactical pulse for active elements */
+@keyframes tactical-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 30px rgba(34, 211, 238, 0.4),
+      0 0 60px rgba(34, 211, 238, 0.2),
+      inset 0 0 25px rgba(34, 211, 238, 0.15);
+  }
+  50% {
+    box-shadow:
+      0 0 40px rgba(34, 211, 238, 0.5),
+      0 0 80px rgba(34, 211, 238, 0.3),
+      inset 0 0 35px rgba(34, 211, 238, 0.2);
+  }
+}
+
+/* Stick active pulse */
+@keyframes stick-active-pulse {
+  0%, 100% {
+    box-shadow:
+      0 6px 20px rgba(34, 211, 238, 0.6),
+      0 0 30px rgba(34, 211, 238, 0.4),
+      inset 0 2px 6px rgba(255, 255, 255, 0.4);
+  }
+  50% {
+    box-shadow:
+      0 8px 25px rgba(34, 211, 238, 0.8),
+      0 0 45px rgba(34, 211, 238, 0.5),
+      inset 0 2px 8px rgba(255, 255, 255, 0.5);
+  }
+}
+
+/* Boost activation effect */
+@keyframes boost-activate {
+  0% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.12);
+    filter: brightness(1.3);
+  }
+  100% {
+    transform: scale(1.08);
+    filter: brightness(1);
+  }
+}
+
+/* Tech shimmer effect */
+@keyframes tech-shimmer {
+  0% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.6;
+  }
+  100% {
+    opacity: 0.3;
   }
 }
 
