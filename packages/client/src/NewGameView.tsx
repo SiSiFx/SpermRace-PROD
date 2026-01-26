@@ -686,6 +686,8 @@ class SpermRaceGame {
     // Setup the game world immediately
     this.setupWorld();
 
+    // Performance settings already initialized above (line 501)
+    // No need to reinitialize here
     this.dbg('setupWorld: done, stageChildren=', (this.app as any)?.stage?.children?.length);
     this.dbg('setupWorld: done, stageChildren=', (this.app as any)?.stage?.children?.length);
     try { this.updateCamera(); } catch {}
