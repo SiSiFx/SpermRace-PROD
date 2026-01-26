@@ -1,7 +1,9 @@
 /**
  * HUD Manager - Clean, unified HUD system
- * Single source of truth for all UI elements
+ * Single source of truth for all UI elements with perfect scaling
  */
+
+import { getMobileControlsScale, responsiveFontSize, getSafeAreaInsets } from './uiScalingUtils';
 
 export class HudManager {
   private container: HTMLElement;
@@ -9,9 +11,25 @@ export class HudManager {
   private zoneTimerEl: HTMLElement | null = null;
   private boostBarFillEl: HTMLElement | null = null;
   private aliveCountEl: HTMLElement | null = null;
+  private currentScale: number = 1;
 
   constructor(container: HTMLElement) {
     this.container = container;
+    this.currentScale = getMobileControlsScale();
+  }
+
+  /**
+   * Get responsive padding based on viewport
+   */
+  private getResponsivePadding(): { vertical: string; horizontal: string; gap: string } {
+    const width = window.innerWidth;
+    if (width <= 374) {
+      return { vertical: '6px', horizontal: '10px', gap: '6px' };
+    } else if (width <= 767) {
+      return { vertical: '6px', horizontal: '12px', gap: '8px' };
+    } else {
+      return { vertical: '10px', horizontal: '20px', gap: '12px' };
+    }
   }
 
   /**
@@ -22,20 +40,21 @@ export class HudManager {
     this.clearHUD();
 
     const isMobile = window.innerWidth <= 768;
+    const padding = this.getResponsivePadding();
 
-    // Create unified top bar
+    // Create unified top bar with responsive sizing
     this.topBar = document.createElement('div');
     this.topBar.id = 'unified-top-bar';
     Object.assign(this.topBar.style, {
       position: 'absolute',
-      top: 'calc(10px + env(safe-area-inset-top, 0px))',
+      top: `calc(10px + ${getSafeAreaInsets().top})`,
       left: '50%',
       transform: 'translateX(-50%)',
       display: 'flex',
       alignItems: 'center',
-      gap: isMobile ? '8px' : '12px',
+      gap: padding.gap,
       background: 'rgba(0, 0, 0, 0.85)',
-      padding: isMobile ? '6px 12px' : '10px 20px',
+      padding: `${padding.vertical} ${padding.horizontal}`,
       borderRadius: '24px',
       border: '1px solid rgba(0, 255, 255, 0.2)',
       zIndex: '100',
@@ -43,7 +62,10 @@ export class HudManager {
       boxShadow: '0 4px 12px rgba(0, 0, 0, 0.5)',
       fontSize: isMobile ? '12px' : '14px',
       fontWeight: '700',
-      color: '#ffffff'
+      color: '#ffffff',
+      // Ensure minimum touch target size
+      minHeight: isMobile ? '36px' : '44px',
+      minWidth: 'min-content',
     });
 
     // Zone timer section
@@ -87,12 +109,15 @@ export class HudManager {
 
     const boostBarContainer = document.createElement('div');
     Object.assign(boostBarContainer.style, {
-      width: isMobile ? '60px' : '100px',
+      width: isMobile ? 'clamp(50px, 12vw, 60px)' : 'clamp(80px, 8vw, 100px)',
       height: '6px',
+      minHeight: '6px',
       background: 'rgba(34, 211, 238, 0.15)',
       borderRadius: '3px',
       overflow: 'hidden',
-      position: 'relative'
+      position: 'relative',
+      // Ensure minimum touch target
+      minWidth: '44px',
     });
 
     this.boostBarFillEl = document.createElement('div');

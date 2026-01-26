@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, memo } from 'react';
 import { Lightning } from 'phosphor-react';
 import './mobile-controls.css';
+import { getMobileControlsScale, TOUCH_TARGETS } from './uiScalingUtils';
 
 interface TouchPosition {
   x: number;
@@ -17,6 +18,7 @@ interface MobileTouchControlsProps {
 export const MobileTouchControls = memo(function MobileTouchControls({ onTouch, onBoost, canBoost, boostCooldownPct }: MobileTouchControlsProps) {
   const [joystickActive, setJoystickActive] = useState(false);
   const [joystickPosition, setJoystickPosition] = useState({ x: 0, y: 0 });
+  const [controlsScale, setControlsScale] = useState(() => getMobileControlsScale());
 
   const joystickStart = useRef<TouchPosition>({ x: 0, y: 0 });
   const joystickCurrent = useRef<TouchPosition>({ x: 0, y: 0 });
@@ -26,20 +28,29 @@ export const MobileTouchControls = memo(function MobileTouchControls({ onTouch, 
   const stickElement = useRef<HTMLDivElement>(null);
   const boostTouchId = useRef<number | null>(null);
 
-  // Dynamic joystick recentering logic
+  // Update scale on resize
+  useEffect(() => {
+    const handleResize = () => {
+      setControlsScale(getMobileControlsScale());
+    };
+    window.addEventListener('resize', handleResize, { passive: true });
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Dynamic joystick recentering logic with responsive radius
   const updateStickPosition = (touchX: number, touchY: number, centerX: number, centerY: number) => {
     if (!stickElement.current) return;
-    
-    const maxRadius = 50; // Increased radius for better precision
+
+    const maxRadius = 50 * controlsScale; // Scale radius based on device
     let dx = touchX - centerX;
     let dy = touchY - centerY;
     const distance = Math.sqrt(dx * dx + dy * dy);
-    
+
     if (distance > maxRadius) {
       dx = (dx / distance) * maxRadius;
       dy = (dy / distance) * maxRadius;
     }
-    
+
     stickElement.current.style.transform = `translate(${dx}px, ${dy}px)`;
   };
 
@@ -220,9 +231,16 @@ export const MobileTouchControls = memo(function MobileTouchControls({ onTouch, 
         ref={boostRef}
         className={`mobile-boost-button ${canBoost ? 'ready' : 'cooldown'}`}
         disabled={!canBoost}
+        style={{
+          // Ensure minimum touch target size is maintained
+          minWidth: `${TOUCH_TARGETS.MIN}px`,
+          minHeight: `${TOUCH_TARGETS.MIN}px`,
+          // Apply responsive scaling
+          transform: `scale(${controlsScale})`,
+        }}
       >
         <div className="boost-icon">
-          <Lightning size={24} weight="fill" />
+          <Lightning size={24 * controlsScale} weight="fill" />
         </div>
         <svg className="boost-cooldown-ring" viewBox="0 0 100 100">
           <circle cx="50" cy="50" r="45" className="cooldown-bg" />
