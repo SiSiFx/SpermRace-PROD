@@ -113,6 +113,16 @@ let matchTimerStartMs: number | null = null;
 let gotGameStarting = false;
 let lastHeartbeatVibrationAt = 0;
 
+// Smooth position correction for local player
+type SmoothCorrection = {
+  currentPos: { x: number; y: number };
+  targetPos: { x: number; y: number };
+  startTime: number;
+  duration: number;
+};
+const smoothCorrections: Map<string, SmoothCorrection> = new Map();
+const CORRECTION_DURATION_MS = 100;
+
 // Simple SFX via Web Audio API
 let audioCtx: AudioContext | null = null;
 function ensureAudio(): AudioContext {
@@ -1235,6 +1245,15 @@ function renderGame(gameState: GameStateUpdateMessage['payload']): void {
       trailsLayer.removeChild(group.trailGlow);
       vfxLayer.removeChild(group.boostGlow);
       playerGroups.delete(id);
+      smoothCorrections.delete(id); // Clean up corrections
+    }
+  }
+
+  // Clean up expired smooth corrections
+  const now = performance.now();
+  for (const [id, correction] of smoothCorrections) {
+    if (now - correction.startTime > correction.duration) {
+      smoothCorrections.delete(id);
     }
   }
   
@@ -1524,12 +1543,47 @@ function updatePlayerGroup(group: PlayerRenderGroup, player: GameStateUpdateMess
     }
   }
 
-  // Player container/spermatozoide
-  group.container.position.set(player.sperm.position.x, player.sperm.position.y);
-  group.container.rotation = player.sperm.angle;
+  // Player container/spermatozoide - with smooth correction for local player
   const isOwnPlayer = player.id === state.playerId;
   const spermColor = isOwnPlayer ? 0x00ff88 : 0xff6b6b;
   group.sperm.tint = spermColor;
+
+  // Apply smooth position correction for local player
+  let renderX = player.sperm.position.x;
+  let renderY = player.sperm.position.y;
+
+  if (isOwnPlayer) {
+    const currentPos = group.container.position;
+    const dist = Math.hypot(renderX - currentPos.x, renderY - currentPos.y);
+
+    // If position difference is significant, start smooth correction
+    if (dist > 2) {
+      const existing = smoothCorrections.get(player.id);
+      if (!existing || performance.now() - existing.startTime > existing.duration) {
+        // Start new smooth correction
+        smoothCorrections.set(player.id, {
+          currentPos: { x: currentPos.x, y: currentPos.y },
+          targetPos: { x: renderX, y: renderY },
+          startTime: performance.now(),
+          duration: CORRECTION_DURATION_MS
+        });
+      }
+    }
+
+    // Apply smooth correction if active
+    const correction = smoothCorrections.get(player.id);
+    if (correction && performance.now() - correction.startTime < correction.duration) {
+      const elapsed = performance.now() - correction.startTime;
+      const t = Math.min(1, elapsed / correction.duration);
+      // Smooth easing function (ease-out)
+      const easeT = 1 - Math.pow(1 - t, 3);
+      renderX = correction.currentPos.x + (correction.targetPos.x - correction.currentPos.x) * easeT;
+      renderY = correction.currentPos.y + (correction.targetPos.y - correction.currentPos.y) * easeT;
+    }
+  }
+
+  group.container.position.set(renderX, renderY);
+  group.container.rotation = player.sperm.angle;
 
   // Propulsion glow (small Graphics triangle behind head)
   group.boostGlow.clear();
