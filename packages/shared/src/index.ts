@@ -2,7 +2,7 @@
 // CORE GAME TYPES
 // =================================================================================================
 
-export { WORLD, PHYSICS, TRAIL, COLLISION, TICK } from './constants';
+export { WORLD, PHYSICS, TRAIL, COLLISION, TICK, INPUT } from './constants';
 
 /** Represents a 2D vector. */
 export interface Vector2 {
