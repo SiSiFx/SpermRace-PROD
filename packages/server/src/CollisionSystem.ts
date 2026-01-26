@@ -72,6 +72,12 @@ class SpatialHashGrid {
 // COLLISION SYSTEM
 // =================================================================================================
 
+// Position override for lag compensation
+interface PositionOverride {
+  x: number;
+  y: number;
+}
+
 export class CollisionSystem {
   private grid: SpatialHashGrid;
   private worldBounds: { width: number; height: number };
@@ -93,11 +99,34 @@ export class CollisionSystem {
   }
 
   /**
+   * Get a player's position, optionally using a lag-compensated override.
+   */
+  private getPlayerPosition(player: PlayerEntity, positionOverride?: PositionOverride): { x: number; y: number } {
+    if (positionOverride) {
+      return { x: positionOverride.x, y: positionOverride.y };
+    }
+    return { x: player.sperm.position.x, y: player.sperm.position.y };
+  }
+
+  /**
    * Updates the collision system with the current player states and detects collisions.
    * @param players A map of all players in the game.
    * @returns A set of player IDs that were eliminated in this frame.
    */
   update(players: Map<string, PlayerEntity>): Array<{ victimId: string; killerId?: string; debug?: { type: 'trail'; hit: { x: number; y: number }; segment?: { from: { x: number; y: number }; to: { x: number; y: number } }; normal?: { x: number; y: number }; relSpeed?: number } }> {
+    return this.updateWithLagCompensation(players, new Map());
+  }
+
+  /**
+   * Updates the collision system with lag compensation support.
+   * @param players A map of all players in the game.
+   * @param lagCompensatedPositions A map of player IDs to their lag-compensated positions.
+   * @returns A set of player IDs that were eliminated in this frame.
+   */
+  updateWithLagCompensation(
+    players: Map<string, PlayerEntity>,
+    lagCompensatedPositions: Map<string, PositionOverride>
+  ): Array<{ victimId: string; killerId?: string; debug?: { type: 'trail'; hit: { x: number; y: number }; segment?: { from: { x: number; y: number }; to: { x: number; y: number } }; normal?: { x: number; y: number }; relSpeed?: number } }> {
     const eliminated: Array<{ victimId: string; killerId?: string; debug?: { type: 'trail'; hit: { x: number; y: number }; segment?: { from: { x: number; y: number }; to: { x: number; y: number } }; normal?: { x: number; y: number }; relSpeed?: number } }> = [];
 
     // 1. Build the spatial grid from player trails
@@ -123,28 +152,31 @@ export class CollisionSystem {
     for (const player of players.values()) {
       if (!player.isAlive) continue;
 
+      // Get the player's position (using lag compensation if available)
+      const playerPos = this.getPlayerPosition(player, lagCompensatedPositions.get(player.id));
+
       // a. World boundary collision -> bounce back with softer damping
-      if (player.sperm.position.x < 0) {
+      if (playerPos.x < 0) {
         player.sperm.position.x = 0;
         player.sperm.velocity.x = Math.abs(player.sperm.velocity.x) * 0.65;
         player.lastBounceAt = Date.now();
-      } else if (player.sperm.position.x > this.worldBounds.width) {
+      } else if (playerPos.x > this.worldBounds.width) {
         player.sperm.position.x = this.worldBounds.width;
         player.sperm.velocity.x = -Math.abs(player.sperm.velocity.x) * 0.65;
         player.lastBounceAt = Date.now();
       }
-      if (player.sperm.position.y < 0) {
+      if (playerPos.y < 0) {
         player.sperm.position.y = 0;
         player.sperm.velocity.y = Math.abs(player.sperm.velocity.y) * 0.65;
         player.lastBounceAt = Date.now();
-      } else if (player.sperm.position.y > this.worldBounds.height) {
+      } else if (playerPos.y > this.worldBounds.height) {
         player.sperm.position.y = this.worldBounds.height;
         player.sperm.velocity.y = -Math.abs(player.sperm.velocity.y) * 0.65;
         player.lastBounceAt = Date.now();
       }
 
       // b. Trail collision
-      const nearbyTrailPoints = this.grid.getNearby(player.sperm.position);
+      const nearbyTrailPoints = this.grid.getNearby(playerPos);
       const playerTrailLength = player.trail.length;
       const now = Date.now();
       const playerSpawnAt = player.spawnAtMs;
@@ -175,8 +207,8 @@ export class CollisionSystem {
         }
 
         // Use squared distance to avoid expensive sqrt operation
-        const dx = player.sperm.position.x - entry.point.x;
-        const dy = player.sperm.position.y - entry.point.y;
+        const dx = playerPos.x - entry.point.x;
+        const dy = playerPos.y - entry.point.y;
         const distanceSq = dx * dx + dy * dy;
 
         // Use latency-compensated collision radius for fairness
@@ -205,7 +237,7 @@ export class CollisionSystem {
           const distance = Math.sqrt(distanceSq) || 1;
           const normal = { x: dx / distance, y: dy / distance };
           const relSpeed = Math.hypot(player.sperm.velocity.x, player.sperm.velocity.y);
-          eliminated.push({ victimId: player.id, killerId, debug: { type: 'trail', hit: { x: player.sperm.position.x, y: player.sperm.position.y }, ...(segment ? { segment } : {}), normal, relSpeed } });
+          eliminated.push({ victimId: player.id, killerId, debug: { type: 'trail', hit: { x: playerPos.x, y: playerPos.y }, ...(segment ? { segment } : {}), normal, relSpeed } });
           break; // No need to check other points for this player
         }
       }

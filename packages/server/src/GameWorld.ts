@@ -117,6 +117,9 @@ export class GameWorld {
     lastLogMs: 0,
   };
 
+  // Lag compensation: Track RTT per player
+  private playerRttMs: Map<string, number> = new Map();
+
   constructor(smartContractService: SmartContractService, db?: DatabaseService) {
     const latencyCompensation = new LatencyCompensation();
     this.collisionSystem = new CollisionSystem(WORLD_WIDTH, WORLD_HEIGHT, latencyCompensation);
@@ -485,9 +488,31 @@ export class GameWorld {
     // 1.5. Resolve player-vs-player collisions (bump/bounce logic)
     this.collisionSystem.checkPlayerCollisions(this.players);
 
-    // 2. Detect collisions (walls & trails)
-    const eliminated = this.collisionSystem.update(this.players);
-    eliminated.forEach(({ victimId, killerId, debug }) => {
+    // 2. Detect collisions (walls & trails) with lag compensation
+    // Build lag-compensated positions for all players
+    const lagCompensatedPositions = new Map<string, { x: number; y: number }>();
+    const now = Date.now();
+
+    for (const player of this.players.values()) {
+      if (!player.isAlive) continue;
+
+      // Get this player's RTT
+      const rtt = this.getPlayerRtt(player.id);
+
+      // Rewind time by half the RTT (one-way latency approximation)
+      const rewindTime = now - Math.floor(rtt / 2);
+
+      // Get the player's position at the rewound time
+      const pastPosition = this.getPlayerPositionAtTime(player.id, rewindTime);
+
+      if (pastPosition) {
+        lagCompensatedPositions.set(player.id, { x: pastPosition.x, y: pastPosition.y });
+      }
+    }
+
+    // Use lag-compensated positions for collision detection
+    const eliminated = (this.collisionSystem as any).updateWithLagCompensation(this.players, lagCompensatedPositions);
+    eliminated.forEach(({ victimId, killerId, debug }: { victimId: string; killerId?: string; debug?: any }) => {
       if (this.players.has(victimId)) {
         if ((process.env.NODE_ENV || '').toLowerCase() !== 'production') {
           try { console.debug(`[DEV][ELIM] victim=${victimId.startsWith('BOT_')?victimId:`${victimId.slice(0,6)}…${victimId.slice(-4)}`} killer=${killerId? (killerId.startsWith('BOT_')?killerId:`${killerId.slice(0,6)}…${killerId.slice(-4)}`) : 'arena/self/trail'}`); } catch {}
@@ -630,6 +655,12 @@ export class GameWorld {
   handlePlayerInput(playerId: string, input: PlayerInput): void {
     // Ignore inputs before the round starts (server-authoritative countdown).
     if (this.roundGoAtMs && Date.now() < this.roundGoAtMs) return;
+
+    // Update RTT tracking if client timestamp is provided
+    if ((input as any).clientTimestamp) {
+      this.updatePlayerRtt(playerId, (input as any).clientTimestamp);
+    }
+
     const player = this.players.get(playerId);
     if (player && player.isAlive) {
       // Sanity-check pointer target: ignore obviously invalid coordinates that would break physics.
@@ -848,5 +879,39 @@ export class GameWorld {
    */
   getPlayerStateAt(playerId: string, timestamp: number) {
     return this.stateHistory.getPlayerStateAt(playerId, timestamp);
+  }
+
+  /**
+   * Update the estimated RTT for a player based on client input timestamps.
+   */
+  public updatePlayerRtt(playerId: string, clientTimestamp: number): void {
+    const now = Date.now();
+    const rtt = now - clientTimestamp;
+
+    // Smooth the RTT value (exponential moving average)
+    const currentRtt = this.playerRttMs.get(playerId) || 0;
+    const smoothedRtt = currentRtt * 0.7 + rtt * 0.3;
+
+    // Clamp to reasonable values (10ms to 500ms)
+    this.playerRttMs.set(playerId, Math.max(10, Math.min(500, smoothedRtt)));
+  }
+
+  /**
+   * Get the RTT for a specific player.
+   */
+  public getPlayerRtt(playerId: string): number {
+    return this.playerRttMs.get(playerId) || 100; // Default to 100ms if unknown
+  }
+
+  /**
+   * Get a player's position at a specific point in time for lag compensation.
+   * This method wraps the StateHistory functionality.
+   */
+  private getPlayerPositionAtTime(playerId: string, targetTime: number): { x: number; y: number; angle: number } | null {
+    const state = this.stateHistory.getPlayerStateAt(playerId, targetTime);
+    if (state) {
+      return { x: state.x, y: state.y, angle: state.angle };
+    }
+    return null;
   }
 }
