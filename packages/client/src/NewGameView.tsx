@@ -6392,46 +6392,48 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
     gameRef.current = game;
     // Initialize the game using the modular SpermRaceGame's init() method
     game.init().catch(console.error);
+
+    // If we mounted while WS is already in game phase, pre-enable online mode immediately.
+    try {
+      const s = initialWsStateRef.current as any;
+      if (s?.phase === 'game') {
+        const lobbyAny: any = s?.lobby || null;
+        const mode = lobbyAny?.mode ?? ((Number(lobbyAny?.entryFee || 0) === 0) ? 'practice' : 'tournament');
+        const entryFee = lobbyAny?.entryFee ?? null;
+        game.wsHud = {
+          active: true,
+          kills: s?.kills || {},
+          killFeed: s?.killFeed || [],
+          playerId: s?.playerId || null,
+          idToName: {},
+          aliveSet: new Set<string>(),
+          eliminationOrder: s?.eliminationOrder || [],
+          mode,
+          entryFee
+        };
+      }
+    } catch {}
+
     return () => {
       try { game.destroy(); } catch (error) { console.error('Error destroying game:', error); }
     };
   }, []);
 
-  // NOTE: onReplay/onExit callbacks are not currently supported by modular SpermRaceGame
-  // Keep onReplay/onExit current without re-creating the Pixi app
-  /*
+  // Wire WS input sending into the Pixi game loop (online matches).
   useEffect(() => {
     const game = gameRef.current;
-    if (game) {
-      game.onReplay = onReplay;
-      game.onExit = onExit;
-    }
-  }, [onReplay, onExit]);
-  */
-
-  // NOTE: WebSocket input sending not currently supported by modular SpermRaceGame
-  // Wire WS input sending into the Pixi game loop (online matches).
-  /*
-  useEffect(() => {
-    const game = gameRef.current as any;
     if (game) game.wsSendInput = sendInput;
   }, [sendInput]);
-  */
 
-  // NOTE: The following WebSocket integration code is for the legacy game class.
-  // The modular SpermRaceGame does not yet support online multiplayer mode.
-  // To enable online play, switch to using LegacySpermRaceGame or extend the modular class.
-  /*
   // Bind WsProvider state into HUD when in tournament mode
   useEffect(() => {
     const game = gameRef.current;
     if (!game) return;
     if (wsState?.phase === 'game') {
-      // Important: `gameStarting` arrives before the first `gameStateUpdate`.
-      // Treat that window as online so we don't run local/offline physics during the server countdown.
       const lobbyAny: any = wsState.lobby || null;
       const mode = lobbyAny?.mode ?? ((Number(lobbyAny?.entryFee || 0) === 0) ? 'practice' : 'tournament');
       const entryFee = lobbyAny?.entryFee ?? null;
+      
       const placeholderHud = {
         active: true,
         kills: wsState.kills || {},
@@ -6443,46 +6445,13 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
         mode,
         entryFee
       };
-      try { (game as any).wsHud = placeholderHud as any; } catch {}
+      
+      try { game.wsHud = placeholderHud as any; } catch {}
 
-      // If we don't have a server state yet, run a one-shot local countdown and wait.
-      if (!wsState.game) {
-        try {
-          if (!(game as any).__srPlaceholderPrestartArmed && !(game as any).preStart) {
-            (game as any).__srPlaceholderPrestartArmed = true;
-            (game as any).preStart = { startAt: Date.now(), durationMs: 3000 };
-          }
-        } catch {}
-        return;
-      }
+      if (!wsState.game) return;
 
       try {
-        try { game.applyServerWorld(wsState.game.world as any); } catch {}
-        try { (game as any).objective = (wsState.game as any).objective || null; } catch {}
-        try { (game as any).lastServerTimeMs = Number((wsState.game as any).timestamp || 0) || 0; } catch {}
-        try { (game as any).serverGoAtMs = Number((wsState.game as any).goAtMs || 0) || 0; } catch {}
-        try { (game as any).serverMode = mode; } catch {}
-        // Align the pre-start zoom/countdown to the server's GO time using *server-relative* time
-        // (robust against device clock skew so we never get stuck frozen with no movement).
-        try {
-          const goAtMs = Number((wsState.game as any).goAtMs || 0) || 0;
-          const srvNow = Number((wsState.game as any).timestamp || 0) || 0;
-          if (goAtMs > 0 && srvNow > 0) {
-            const msUntilGo = goAtMs - srvNow;
-            const preMs = 3000;
-            if (msUntilGo <= 0) {
-              (game as any).preStart = null;
-            } else {
-              // If we join late, shorten the countdown instead of freezing longer than needed.
-              const durationMs = Math.max(0, Math.min(preMs, msUntilGo));
-              const startAt = Date.now() + (msUntilGo - durationMs);
-              (game as any).preStart = { startAt, durationMs };
-            }
-          } else if (wsState.hasFirstGameState) {
-            // If server doesn't provide GO timing, never loop a local countdown after the first tick.
-            (game as any).preStart = null;
-          }
-        } catch { }
+        game.applyServerWorld(wsState.game.world as any);
         const players = wsState.game.players || [];
         const aliveSet = new Set<string>(players.filter(p => p.isAlive).map(p => p.id));
         const idToName: Record<string, string> = {};
@@ -6496,26 +6465,14 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
           idToName,
           aliveSet
         } as any;
-        try {
-          if (!(game as any).srOnlineHintShown && mode === 'practice') {
-            (game as any).srOnlineHintShown = true;
-            const el = document.getElementById('game-toast');
-            if (el) {
-              el.textContent = 'Follow HUNT + edge arrows to find rivals fast';
-              el.style.opacity = '1';
-              setTimeout(() => { try { el.style.opacity = '0'; } catch {} }, 1600);
-            }
-          }
-        } catch {}
         game.syncServerPlayers(wsState.game.players);
-      } catch {
-        game.wsHud = { active: false, kills: {}, killFeed: [], playerId: null, idToName: {}, aliveSet: new Set(), eliminationOrder: [] } as any;
+      } catch (err) {
+        console.error('Modular engine sync error:', err);
       }
       return;
     }
     game.wsHud = { active: false, kills: {}, killFeed: [], playerId: null, idToName: {}, aliveSet: new Set(), eliminationOrder: [] } as any;
   }, [wsState.phase, wsState.game, wsState.lobby, wsState.kills, wsState.killFeed, wsState.playerId, wsState.eliminationOrder]);
-  */
 
   return (
     <div

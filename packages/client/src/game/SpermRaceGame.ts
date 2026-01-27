@@ -30,6 +30,10 @@ export class SpermRaceGame {
   private world!: GameWorld;
   private ui!: UISystem;
 
+  public wsHud: any = null;
+  public wsSendInput: ((target: { x: number; y: number }, accelerate: boolean, boost: boolean) => void) | null = null;
+  private serverPlayers: Map<string, Car> = new Map();
+
   constructor(container: HTMLElement) {
     this.container = container;
   }
@@ -175,18 +179,34 @@ export class SpermRaceGame {
       if (input.boost && this.player.boostEnergy >= this.player.minBoostEnergy) {
         this.player.isBoosting = true;
       }
+
+      // Online: Send input to server
+      if (this.wsHud?.active && this.wsSendInput) {
+        this.wsSendInput(
+          { x: input.targetX, y: input.targetY },
+          input.accelerate,
+          input.boost
+        );
+      }
     }
 
     // Update physics
     if (this.player) {
       this.physics.updateCar(this.player, deltaTime, this.world.boostPads);
     }
-    for (const bot of this.bots) {
-      this.physics.updateBot(bot, deltaTime, this.world.boostPads);
+    
+    // Only update bots locally if NOT in an online match
+    if (!this.wsHud?.active) {
+      for (const bot of this.bots) {
+        this.physics.updateBot(bot, deltaTime, this.world.boostPads);
+      }
     }
 
     // Update trails
-    const allCars = [this.player, ...this.bots].filter(c => c && !c.destroyed) as Car[];
+    const localCars = [this.player, ...this.bots].filter(c => c && !c.destroyed) as Car[];
+    const onlineCars = Array.from(this.serverPlayers.values()).filter(c => !c.destroyed);
+    const allCars = [...localCars, ...onlineCars];
+
     for (const car of allCars) {
       this.trails.addPoint(car);
     }
@@ -288,5 +308,48 @@ export class SpermRaceGame {
 
   getArena(): ArenaBounds {
     return this.arena;
+  }
+
+  applyServerWorld(world: { width: number; height: number }): void {
+    if (!world || !world.width || !world.height) return;
+    this.arena = { width: world.width, height: world.height };
+    // Re-initialize world grid/bounds
+    if (this.world) {
+      this.world.arena = this.arena;
+      this.world.drawGrid();
+    }
+  }
+
+  syncServerPlayers(players: any[]): void {
+    if (!players) return;
+    const myId = this.wsHud?.playerId;
+
+    for (const p of players) {
+      if (myId && p.id === myId) {
+        // Sync local player stats from server if needed
+        continue;
+      }
+
+      let car = this.serverPlayers.get(p.id);
+      if (!car) {
+        car = this.createCar(false); // Create as bot-style car
+        car.id = p.id;
+        car.name = this.wsHud?.idToName?.[p.id] || p.id.slice(0, 8);
+        this.serverPlayers.set(p.id, car);
+      }
+
+      // Update position/angle
+      car.x = p.sperm.position.x;
+      car.y = p.sperm.position.y;
+      car.angle = p.sperm.angle;
+      car.isBoosting = p.status?.boosting || false;
+      car.destroyed = !p.isAlive;
+      car.sprite.visible = p.isAlive;
+
+      // Sync trails if present in message
+      if (p.trail) {
+        car.trailPoints = p.trail;
+      }
+    }
   }
 }
