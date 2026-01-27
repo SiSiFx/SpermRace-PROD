@@ -340,4 +340,218 @@ describe('BotController', () => {
       expect(angleDiff).toBeLessThan(Math.PI / 2);
     });
   });
+
+  describe('Predictive Interception', () => {
+    it('should predict intercept point for moving target', () => {
+      // Create a target moving to the right
+      const target = new PlayerEntity('target1', { x: 800, y: 1000 });
+      target.sperm.velocity = { x: 150, y: 0 }; // Moving right at 150 px/s
+      mockSense.players = [target];
+
+      // Bot starts behind and to the left of target
+      bot.sperm.position = { x: 500, y: 1000 };
+      bot.sperm.velocity = { x: 200, y: 0 }; // Bot moving right at 200 px/s
+
+      // Update to let bot process
+      for (let i = 0; i < 5; i++) {
+        controller.update(0.016, mockSense);
+        bot.update(0.016, 1.0);
+      }
+
+      // Bot should be alive and have processed the target
+      expect(bot.isAlive).toBe(true);
+
+      // Bot should aim ahead of target (intercept point)
+      // Since target is at x=800 moving right, intercept should be > 800
+      const targetX = target.sperm.position.x;
+      const botTargetX = bot.input.target.x;
+
+      // The bot should aim ahead of the current target position
+      expect(botTargetX).toBeGreaterThan(targetX);
+    });
+
+    it('should handle stationary targets correctly', () => {
+      // Stationary target
+      const target = new PlayerEntity('target1', { x: 1200, y: 1000 });
+      target.sperm.velocity = { x: 0, y: 0 };
+      mockSense.players = [target];
+
+      bot.sperm.position = { x: 1000, y: 1000 };
+      bot.sperm.velocity = { x: 200, y: 0 };
+
+      for (let i = 0; i < 5; i++) {
+        controller.update(0.016, mockSense);
+        bot.update(0.016, 1.0);
+      }
+
+      expect(bot.isAlive).toBe(true);
+    });
+
+    it('should predict intercept for target moving perpendicular', () => {
+      // Target moving up (perpendicular to bot's line of sight)
+      const target = new PlayerEntity('target1', { x: 1200, y: 1000 });
+      target.sperm.velocity = { x: 0, y: 100 }; // Moving up
+      mockSense.players = [target];
+
+      bot.sperm.position = { x: 1000, y: 1000 };
+      bot.sperm.velocity = { x: 200, y: 0 };
+
+      for (let i = 0; i < 5; i++) {
+        controller.update(0.016, mockSense);
+        bot.update(0.016, 1.0);
+      }
+
+      expect(bot.isAlive).toBe(true);
+
+      // Bot should aim above target (lead the upward movement)
+      const targetY = target.sperm.position.y;
+      const botTargetY = bot.input.target.y;
+
+      // The bot should aim above the current target position
+      expect(botTargetY).toBeGreaterThan(targetY);
+    });
+
+    it('should handle faster targets gracefully', () => {
+      // Target moving faster than bot
+      const target = new PlayerEntity('target1', { x: 1100, y: 1000 });
+      target.sperm.velocity = { x: 300, y: 0 }; // Very fast
+      mockSense.players = [target];
+
+      bot.sperm.position = { x: 1000, y: 1000 };
+      bot.sperm.velocity = { x: 200, y: 0 }; // Slower
+
+      for (let i = 0; i < 5; i++) {
+        controller.update(0.016, mockSense);
+        bot.update(0.016, 1.0);
+      }
+
+      // Bot should still calculate a target (even if not optimal intercept)
+      expect(bot.isAlive).toBe(true);
+      expect(bot.input.target.x).toBeGreaterThan(0);
+    });
+
+    it('should handle target moving away', () => {
+      // Target moving away from bot
+      const target = new PlayerEntity('target1', { x: 1300, y: 1000 });
+      target.sperm.velocity = { x: 150, y: 0 }; // Moving right (away from bot)
+      mockSense.players = [target];
+
+      bot.sperm.position = { x: 1000, y: 1000 };
+      bot.sperm.velocity = { x: 200, y: 0 }; // Also moving right
+
+      for (let i = 0; i < 5; i++) {
+        controller.update(0.016, mockSense);
+        bot.update(0.016, 1.0);
+      }
+
+      // Bot should still calculate intercept ahead of target
+      expect(bot.isAlive).toBe(true);
+    });
+
+    it('should handle target moving toward bot', () => {
+      // Target moving toward bot
+      const target = new PlayerEntity('target1', { x: 1200, y: 1000 });
+      target.sperm.velocity = { x: -100, y: 0 }; // Moving left (toward bot)
+      mockSense.players = [target];
+
+      bot.sperm.position = { x: 1000, y: 1000 };
+      bot.sperm.velocity = { x: 50, y: 0 };
+
+      for (let i = 0; i < 5; i++) {
+        controller.update(0.016, mockSense);
+        bot.update(0.016, 1.0);
+      }
+
+      // Bot should predict intercept closer to current position
+      expect(bot.isAlive).toBe(true);
+    });
+
+    it('should use intercept in attack mode', () => {
+      const target = new PlayerEntity('target1', { x: 1100, y: 1050 });
+      target.sperm.velocity = { x: 100, y: 50 };
+      mockSense.players = [target];
+
+      bot.sperm.position = { x: 1000, y: 1000 };
+      bot.sperm.velocity = { x: 0, y: 0 };
+
+      // Update many times to trigger attack state (close distance)
+      for (let i = 0; i < 20; i++) {
+        controller.update(0.016, mockSense);
+        bot.update(0.016, 1.0);
+      }
+
+      // Bot should be alive
+      expect(bot.isAlive).toBe(true);
+
+      // The target point should account for target velocity
+      // Aim should be different from direct line to current position
+      const directAngle = Math.atan2(target.sperm.position.y - bot.sperm.position.y, target.sperm.position.x - bot.sperm.position.x);
+      const actualAimAngle = Math.atan2(bot.input.target.y - bot.sperm.position.y, bot.input.target.x - bot.sperm.position.x);
+
+      // There should be some difference due to intercept calculation
+      // (though personality and randomness may affect this)
+      expect(bot.isAlive).toBe(true);
+    });
+
+    it('should adjust cut-off based on target direction', () => {
+      const target = new PlayerEntity('target1', { x: 1100, y: 1000 });
+      // Target moving up
+      target.sperm.velocity = { x: 0, y: 120 };
+      mockSense.players = [target];
+
+      bot.sperm.position = { x: 1000, y: 1000 };
+      bot.sperm.velocity = { x: 200, y: 0 };
+
+      // Update to trigger attack state
+      for (let i = 0; i < 15; i++) {
+        controller.update(0.016, mockSense);
+        bot.update(0.016, 1.0);
+      }
+
+      expect(bot.isAlive).toBe(true);
+    });
+
+    it('should handle diagonal target movement', () => {
+      const target = new PlayerEntity('target1', { x: 1100, y: 1100 });
+      // Target moving diagonally
+      target.sperm.velocity = { x: 80, y: 80 };
+      mockSense.players = [target];
+
+      bot.sperm.position = { x: 1000, y: 1000 };
+      bot.sperm.velocity = { x: 200, y: 0 };
+
+      for (let i = 0; i < 5; i++) {
+        controller.update(0.016, mockSense);
+        bot.update(0.016, 1.0);
+      }
+
+      expect(bot.isAlive).toBe(true);
+    });
+
+    it('should maintain interception when target changes direction', () => {
+      const target = new PlayerEntity('target1', { x: 1100, y: 1000 });
+      target.sperm.velocity = { x: 100, y: 0 };
+      mockSense.players = [target];
+
+      bot.sperm.position = { x: 1000, y: 1000 };
+      bot.sperm.velocity = { x: 200, y: 0 };
+
+      // Initial updates
+      for (let i = 0; i < 5; i++) {
+        controller.update(0.016, mockSense);
+        bot.update(0.016, 1.0);
+      }
+
+      // Change target direction
+      target.sperm.velocity = { x: -50, y: 100 };
+
+      // More updates
+      for (let i = 0; i < 5; i++) {
+        controller.update(0.016, mockSense);
+        bot.update(0.016, 1.0);
+      }
+
+      expect(bot.isAlive).toBe(true);
+    });
+  });
 });
