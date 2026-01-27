@@ -189,3 +189,13 @@ Players who win a match will now see:
 - **Professional polish** matching the premium gaming aesthetic
 
 The effect is subtle yet impactful, adding visual reward for winning without overwhelming the UI or affecting performance.
+- [✗] 2026-01-26 23:06 - **Hitboxes:** visualize and tighten player hitboxes. Ensure "Head-to-Trail" collisions are pixel-perfect.
+- [✗] 2026-01-26 23:06 - **Wall Sliding:** Prevent sticky collisions. Players should slide/glance off walls, not stop dead.
+- [✗] 2026-01-26 23:06 - **Momentum:** Adjust friction/drag. Drifting should feel heavy but responsive (Mario Kart style).
+- [✗] 2026-01-26 23:06 - **Input Latency:** Audit input handling path. Ensure <16ms response time.
+- [✗] 2026-01-26 23:06 - **Turning Radius:** Implement "Drift Boost" mechanics (sharper turn = speed loss unless boosting).
+- [✗] 2026-01-26 23:06 - **Mobile Touch:** Fix virtual joystick deadzones. Ensure no "stuck" inputs on release.
+- [✗] 2026-01-26 23:06 - **Dynamic Zoom:** Camera zooms out at high speed (to see ahead) and in during combat/slow speed.
+- [✗] 2026-01-26 23:06 - **Look-Ahead:** Offset camera in direction of travel so players can see where they are going.
+- [✗] 2026-01-26 23:13 - Task 1.1: Refactor longitudinal/lateral drag scalars in NewGameView.tsx
+- [✓] 2026-01-26 23:14 - Create a file named GLM_READY.md with the text 'READY' inside.
