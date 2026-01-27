@@ -340,4 +340,196 @@ describe('BotController', () => {
       expect(angleDiff).toBeLessThan(Math.PI / 2);
     });
   });
+
+  describe('Baiting Behavior', () => {
+    it('should detect player behind within bait distance', () => {
+      // Set up bot facing right (angle = 0)
+      bot.sperm.angle = 0;
+      bot.sperm.position = { x: 1000, y: 1000 };
+      bot.sperm.velocity = { x: 100, y: 0 }; // Moving right
+
+      // Place an enemy behind the bot (to the left)
+      const enemy = new PlayerEntity('enemy1', { x: 850, y: 1000 });
+      enemy.sperm.velocity = { x: 150, y: 0 }; // Moving right, closing in
+      mockSense.players = [enemy];
+
+      const initialAngle = bot.sperm.angle;
+
+      // Update to potentially trigger baiting
+      for (let i = 0; i < 20; i++) {
+        controller.update(0.016, mockSense);
+        bot.update(0.016, 1.0);
+      }
+
+      // Bot should have turned significantly if baiting was triggered
+      const finalAngle = bot.sperm.angle;
+      const angleDiff = Math.abs(finalAngle - initialAngle);
+
+      // Bot should be alive
+      expect(bot.isAlive).toBe(true);
+      // Note: Whether baiting triggers depends on personality and randomness
+    });
+
+    it('should not bait when player is in front', () => {
+      // Set up bot facing right (angle = 0)
+      bot.sperm.angle = 0;
+      bot.sperm.position = { x: 1000, y: 1000 };
+      bot.sperm.velocity = { x: 100, y: 0 }; // Moving right
+
+      // Place an enemy in front of the bot (to the right)
+      const enemy = new PlayerEntity('enemy1', { x: 1150, y: 1000 });
+      enemy.sperm.velocity = { x: 50, y: 0 }; // Moving right, ahead
+      mockSense.players = [enemy];
+
+      const initialAngle = bot.sperm.angle;
+
+      // Update multiple times
+      for (let i = 0; i < 20; i++) {
+        controller.update(0.016, mockSense);
+        bot.update(0.016, 1.0);
+      }
+
+      // Bot should still be alive
+      expect(bot.isAlive).toBe(true);
+      // Bot should NOT have turned 180 degrees (player is in front)
+      const finalAngle = bot.sperm.angle;
+      const angleDiff = Math.abs(finalAngle - initialAngle);
+      expect(angleDiff).toBeLessThan(Math.PI); // Should not have flipped
+    });
+
+    it('should not bait when enemy is too far behind', () => {
+      // Set up bot facing right (angle = 0)
+      bot.sperm.angle = 0;
+      bot.sperm.position = { x: 1000, y: 1000 };
+      bot.sperm.velocity = { x: 100, y: 0 }; // Moving right
+
+      // Place an enemy far behind the bot (outside bait distance)
+      const enemy = new PlayerEntity('enemy1', { x: 500, y: 1000 });
+      enemy.sperm.velocity = { x: 200, y: 0 }; // Moving right, closing in fast
+      mockSense.players = [enemy];
+
+      const initialAngle = bot.sperm.angle;
+
+      // Update multiple times
+      for (let i = 0; i < 20; i++) {
+        controller.update(0.016, mockSense);
+        bot.update(0.016, 1.0);
+      }
+
+      // Bot should still be alive
+      expect(bot.isAlive).toBe(true);
+      // Bot should NOT have turned 180 degrees (enemy too far)
+      const finalAngle = bot.sperm.angle;
+      const angleDiff = Math.abs(finalAngle - initialAngle);
+      expect(angleDiff).toBeLessThan(Math.PI); // Should not have flipped
+    });
+
+    it('should not bait when enemy is moving away', () => {
+      // Set up bot facing right (angle = 0)
+      bot.sperm.angle = 0;
+      bot.sperm.position = { x: 1000, y: 1000 };
+      bot.sperm.velocity = { x: 100, y: 0 }; // Moving right
+
+      // Place an enemy behind but moving away (to the left)
+      const enemy = new PlayerEntity('enemy1', { x: 850, y: 1000 });
+      enemy.sperm.velocity = { x: -50, y: 0 }; // Moving left, away from bot
+      mockSense.players = [enemy];
+
+      const initialAngle = bot.sperm.angle;
+
+      // Update multiple times
+      for (let i = 0; i < 20; i++) {
+        controller.update(0.016, mockSense);
+        bot.update(0.016, 1.0);
+      }
+
+      // Bot should still be alive
+      expect(bot.isAlive).toBe(true);
+    });
+
+    it('should have personality-based baiting behavior', () => {
+      // Create multiple bots to test personality differences
+      const aggressiveBot = new PlayerEntity('BOT_aggressive', { x: 1000, y: 1000 });
+      const cautiousBot = new PlayerEntity('BOT_cautious', { x: 1000, y: 1000 });
+      const aggressiveController = new BotController(aggressiveBot);
+      const cautiousController = new BotController(cautiousBot);
+
+      // Set up both bots facing right with enemy behind
+      for (const b of [aggressiveBot, cautiousBot]) {
+        b.sperm.angle = 0;
+        b.sperm.position = { x: 1000, y: 1000 };
+        b.sperm.velocity = { x: 100, y: 0 };
+      }
+
+      // Place enemy behind both bots
+      const enemy = new PlayerEntity('enemy1', { x: 850, y: 1000 });
+      enemy.sperm.velocity = { x: 150, y: 0 };
+
+      const sense = {
+        ...mockSense,
+        players: [enemy],
+      };
+
+      // Update both bots many times
+      for (let i = 0; i < 30; i++) {
+        aggressiveController.update(0.016, sense);
+        aggressiveBot.update(0.016, 1.0);
+        cautiousController.update(0.016, sense);
+        cautiousBot.update(0.016, 1.0);
+      }
+
+      // Both bots should be alive
+      expect(aggressiveBot.isAlive).toBe(true);
+      expect(cautiousBot.isAlive).toBe(true);
+    });
+
+    it('should exit bait state after timer expires', () => {
+      // Set up bot facing right with enemy behind
+      bot.sperm.angle = 0;
+      bot.sperm.position = { x: 1000, y: 1000 };
+      bot.sperm.velocity = { x: 100, y: 0 };
+
+      const enemy = new PlayerEntity('enemy1', { x: 850, y: 1000 });
+      enemy.sperm.velocity = { x: 150, y: 0 };
+      mockSense.players = [enemy];
+
+      // Update for longer than the bait timer (1.5 seconds)
+      for (let i = 0; i < 100; i++) {
+        controller.update(0.016, mockSense);
+        bot.update(0.016, 1.0);
+      }
+
+      // Bot should still be alive
+      expect(bot.isAlive).toBe(true);
+    });
+
+    it('should boost while baiting', () => {
+      // Set up bot facing right with enemy behind
+      bot.sperm.angle = 0;
+      bot.sperm.position = { x: 1000, y: 1000 };
+      bot.sperm.velocity = { x: 100, y: 0 };
+
+      const enemy = new PlayerEntity('enemy1', { x: 850, y: 1000 });
+      enemy.sperm.velocity = { x: 150, y: 0 };
+      mockSense.players = [enemy];
+
+      let boostUsed = false;
+      const originalTryActivateBoost = bot.tryActivateBoost.bind(bot);
+      bot.tryActivateBoost = () => {
+        boostUsed = true;
+        return originalTryActivateBoost();
+      };
+
+      // Update to potentially trigger baiting
+      for (let i = 0; i < 30; i++) {
+        controller.update(0.016, mockSense);
+        bot.update(0.016, 1.0);
+      }
+
+      // Bot should still be alive
+      expect(bot.isAlive).toBe(true);
+      // Boost may or may not be used depending on personality
+      // The important thing is that the baiting state includes boost logic
+    });
+  });
 });

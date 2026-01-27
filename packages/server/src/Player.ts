@@ -1,5 +1,5 @@
 import { Player, SpermState, PlayerInput, Vector2, TrailPoint } from 'shared';
-import { PHYSICS as S_PHYSICS, TRAIL as S_TRAIL, TICK as S_TICK } from 'shared/dist/constants.js';
+import { PHYSICS as S_PHYSICS, TRAIL as S_TRAIL, TICK as S_TICK } from 'shared/constants.js';
 
 // =================================================================================================
 // GAME CONSTANTS
