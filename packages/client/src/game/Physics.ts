@@ -7,6 +7,13 @@ function normalizeAngle(a: number): number {
   return a;
 }
 
+// Burst: Speed boost when releasing a turn
+const BURST = {
+  MULTIPLIER: 1.3, // 1.3x speed boost on turn release
+  DURATION_MS: 600, // 0.6 second burst duration
+  TURN_THRESHOLD: 0.05, // Minimum angle change (radians) to count as turning
+};
+
 export class Physics {
   updateCar(car: Car, deltaTime: number, boostPads: BoostPad[]): void {
     if (car.destroyed) return;
@@ -62,13 +69,27 @@ export class Physics {
     const turnRate = car.turnResponsiveness ?? 7.0;
     car.angle += angleDiff * Math.min(1.0, turnRate * deltaTime);
 
+    // Burst: Detect turn release and apply speed boost
+    const now = Date.now();
+    const isTurning = Math.abs(angleDiff) > BURST.TURN_THRESHOLD;
+    const isBursting = car.burstUntil !== undefined && now < car.burstUntil;
+
+    // Trigger burst when releasing a turn
+    if (car.wasTurning && !isTurning && !isBursting) {
+      car.burstUntil = now + BURST.DURATION_MS;
+    }
+    car.wasTurning = isTurning;
+
     // Velocity calculation with drift
     const forwardX = Math.cos(car.angle);
     const forwardY = Math.sin(car.angle);
     const driftAngle = car.angle + Math.PI / 2;
-    const driftIntensity = car.driftFactor * car.speed * 0.4 * Math.abs(angleDiff);
-    car.vx = forwardX * car.speed + Math.cos(driftAngle) * driftIntensity;
-    car.vy = forwardY * car.speed + Math.sin(driftAngle) * driftIntensity;
+    // Apply burst multiplier to effective speed
+    const burstMultiplier = isBursting ? BURST.MULTIPLIER : 1;
+    const effectiveSpeed = car.speed * burstMultiplier;
+    const driftIntensity = car.driftFactor * effectiveSpeed * 0.4 * Math.abs(angleDiff);
+    car.vx = forwardX * effectiveSpeed + Math.cos(driftAngle) * driftIntensity;
+    car.vy = forwardY * effectiveSpeed + Math.sin(driftAngle) * driftIntensity;
 
     // Position update
     car.x += car.vx * deltaTime;

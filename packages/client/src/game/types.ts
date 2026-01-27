@@ -46,6 +46,9 @@ export interface Car {
   hotspotBuffExpiresAt?: number;
   spotlightUntil?: number;
   killBoostUntil?: number;
+  // Burst: Speed boost when releasing a turn
+  burstUntil?: number;
+  wasTurning?: boolean;
 }
 
 export interface TrailPoint {

@@ -137,6 +137,8 @@ export class SpermRaceGame {
       turnTimer: 1,
       boostAITimer: 2,
       currentTrailId: null,
+      burstUntil: undefined,
+      wasTurning: false,
       sprite
     };
   }

@@ -1821,6 +1821,223 @@ The system enhances player engagement by providing detailed performance feedback
 
 ---
 
+# Burst: Release Turn to Gain 1.3x Speed for 0.6s - Implementation Complete
+
+## Overview
+Implemented a burst mechanic that grants a speed boost when a player releases a turn. This rewards precise movement control and creates an engaging risk-reward dynamic where players can strategically release turns to gain temporary speed advantages.
+
+## Implementation Details
+
+### 1. Shared Constants
+**Location:** `packages/shared/src/constants.ts`
+
+**Added BURST constants:**
+```typescript
+export const BURST = {
+  MULTIPLIER: 1.3, // 1.3x speed boost on turn release
+  DURATION_MS: 600, // 0.6 second burst duration
+  TURN_THRESHOLD: 0.05, // Minimum angle change (radians) to count as turning
+};
+```
+
+### 2. Server Implementation
+**Location:** `packages/server/src/Player.ts`
+
+**Changes:**
+- Added `burstUntil: number | null` - Timestamp when burst expires
+- Added `wasTurning: boolean` - Track if player was turning in previous frame
+- Added import for `BURST as S_BURST` from shared constants
+- Created local `BURST` constant using shared values
+
+**Burst Logic in `update()` method:**
+```typescript
+// --- 1.5. Burst: Detect turn release and apply speed boost ---
+const nowMs = Date.now();
+const isTurning = Math.abs(angleDiff) > BURST.TURN_THRESHOLD;
+const isBursting = this.burstUntil !== null && nowMs < this.burstUntil;
+
+// Trigger burst when releasing a turn
+if (this.wasTurning && !isTurning && !isBursting) {
+  this.burstUntil = nowMs + BURST.DURATION_MS;
+}
+this.wasTurning = isTurning;
+```
+
+**Speed Modification:**
+- Applied `BURST.MULTIPLIER` to acceleration during burst
+- Applied `BURST.MULTIPLIER` to max speed during burst
+- Burst stacks with existing boost mechanics multiplicatively
+
+### 3. Client Implementation
+**Location:** `packages/client/src/game/Physics.ts`
+
+**Changes:**
+- Added local `BURST` constants matching shared values
+- Added burst detection logic in `updateCar()` method
+- Applied burst multiplier to effective speed calculation
+
+**Burst Logic:**
+```typescript
+// Burst: Detect turn release and apply speed boost
+const now = Date.now();
+const isTurning = Math.abs(angleDiff) > BURST.TURN_THRESHOLD;
+const isBursting = car.burstUntil !== undefined && now < car.burstUntil;
+
+// Trigger burst when releasing a turn
+if (car.wasTurning && !isTurning && !isBursting) {
+  car.burstUntil = now + BURST.DURATION_MS;
+}
+car.wasTurning = isTurning;
+```
+
+**Velocity Calculation:**
+```typescript
+const burstMultiplier = isBursting ? BURST.MULTIPLIER : 1;
+const effectiveSpeed = car.speed * burstMultiplier;
+```
+
+### 4. Type Definitions
+**Location:** `packages/client/src/game/types.ts`
+
+**Added to Car interface:**
+```typescript
+// Burst: Speed boost when releasing a turn
+burstUntil?: number;
+wasTurning?: boolean;
+```
+
+**Location:** `packages/client/src/game/SpermRaceGame.ts`
+
+**Car initialization updated:**
+```typescript
+burstUntil: undefined,
+wasTurning: false,
+```
+
+### 5. Test Coverage
+
+**Server Tests:**
+**Location:** `packages/server/test/burst.test.ts`
+
+**Test suites created:**
+1. Burst Trigger on Turn Release (2 tests)
+   - Should trigger burst when player stops turning
+   - Should not trigger burst when player was not turning
+
+2. Burst Duration (2 tests)
+   - Should apply burst multiplier for the specified duration
+   - Should stop applying burst multiplier after duration expires
+
+3. Burst Multiplier (3 tests)
+   - Should have correct burst multiplier value (1.3)
+   - Should have correct burst duration (600ms)
+   - Should have correct turn threshold (0.05 radians)
+
+4. Burst State Tracking (1 test)
+   - Should track wasTurning state correctly
+
+**Client Tests:**
+**Location:** `packages/client/src/test/burst.test.ts`
+
+**Test suites created:**
+1. Burst Trigger on Turn Release (2 tests)
+   - Should trigger burst when car stops turning
+   - Should not trigger burst when car was not turning
+
+2. Burst Duration and Multiplier (3 tests)
+   - Should apply burst speed multiplier during burst
+   - Should not apply burst multiplier after burst expires
+   - Should use correct burst duration (600ms)
+
+3. Turn Threshold (2 tests)
+   - Should detect turning when angle diff exceeds threshold
+   - Should not detect turning when angle diff is below threshold
+
+4. Burst State Management (1 test)
+   - Should correctly set wasTurning state
+
+**Total: 16 tests created**
+
+## Design Decisions
+
+### Why 1.3x Multiplier?
+- Noticeable but not game-breaking speed increase
+- Complements existing boost mechanics (1.8x) without overlapping
+- Creates tactical decision between using burst vs saving boost energy
+
+### Why 0.6 Second Duration?
+- Long enough to be impactful for tactical positioning
+- Short enough to require good timing
+- Matches the "quick burst" feel for turn-release gameplay
+
+### Why 0.05 Radian Threshold?
+- Approximately 2.86 degrees of turn
+- Prevents micro-movements from triggering burst
+- Ensures intentional turns are required for burst activation
+
+## Gameplay Impact
+
+### Tactical Use Cases
+1. **Cornering**: Release turn at corner exit for burst acceleration
+2. **Escape**: Quick turn adjustments followed by burst to escape danger
+3. **Chasing**: Release aim adjustment to gain burst on target
+
+### Risk-Reward Dynamic
+- **Risk**: Must commit to turns to build burst potential
+- **Reward**: Temporary speed advantage for precise control
+- **Strategy**: Players must decide when to use burst vs save for critical moments
+
+## Performance Considerations
+
+### Server Impact
+- Minimal: Simple boolean checks and timestamp comparisons
+- O(1) burst state updates per player per tick
+- No additional allocations (reuses existing velocity logic)
+
+### Client Impact
+- Minimal: Burst detection integrated into existing physics update
+- Visual feedback through existing speed indicators
+- No additional rendering required
+
+## Files Modified
+1. `packages/shared/src/constants.ts` - Added BURST constants
+2. `packages/shared/src/index.ts` - Export BURST constants
+3. `packages/server/src/Player.ts` - Burst state and logic
+4. `packages/client/src/game/Physics.ts` - Burst detection and application
+5. `packages/client/src/game/types.ts` - Added burst state properties
+6. `packages/client/src/game/SpermRaceGame.ts` - Initialize burst state
+7. `packages/server/test/burst.test.ts` - Server tests (8 tests)
+8. `packages/client/src/test/burst.test.ts` - Client tests (8 tests)
+
+## Technical Notes
+
+### Burst Activation Flow
+1. Player is turning (angle difference > threshold)
+2. Player releases turn (angle difference <= threshold)
+3. Burst triggered: `burstUntil = now + 600ms`
+4. For 600ms: speed multiplier = 1.3x
+5. After 600ms: speed returns to normal
+
+### Edge Cases Handled
+- Burst cannot be re-triggered while already bursting
+- Micro-movements below threshold don't count as turning
+- Burst stacks with boost (1.3x × boost multiplier)
+- Burst state resets on player spawn
+
+## Conclusion
+
+Successfully implemented a burst mechanic that:
+✓ Rewards precise movement control with turn-release speed boost
+✓ Provides 1.3x speed for 0.6 seconds on turn release
+✓ Includes comprehensive test coverage (16 tests)
+✓ Minimal performance overhead (simple state tracking)
+✓ Synced implementation on server and client
+✓ Integrates cleanly with existing boost mechanics
+
+The burst feature adds a new layer of skill expression to the game, allowing players to gain temporary speed advantages through precise movement control.
+
+---
+
 # Fair Collisions Across 50-200ms Latency - Implementation Complete
 
 [Previous implementation details preserved...]
