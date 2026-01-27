@@ -5,7 +5,6 @@ import { useWs } from './WsProvider';
 import { HudManager } from './HudManager';
 import { WORLD as S_WORLD } from 'shared';
 import { getPerformanceSettings, isHighPerformanceMobile } from './deviceDetection';
-import { SpermRaceGame as ModularSpermRaceGame } from './game/SpermRaceGame';
 
 interface Car {
   x: number;
@@ -131,8 +130,7 @@ interface Hotspot {
   hasSpawnedLoot: boolean;
 }
 
-// Legacy embedded game class - kept as fallback
-class LegacySpermRaceGame {
+class SpermRaceGame {
   public app: PIXI.Application | null = null;
   public arena = (() => {
     // Portrait mobile: Match iPhone aspect ratio better
@@ -2371,7 +2369,6 @@ class LegacySpermRaceGame {
       sprite: new PIXI.Container(),
       headGraphics: new PIXI.Graphics(),
       tailGraphics: this.smallTailEnabled ? new PIXI.Graphics() : null,
-      chargeRingGraphics: type === 'player' ? new PIXI.Graphics() : undefined,
       tailWaveT: 0,
       tailLength: 34,
       tailSegments: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 6 : 10, // Fewer segments on mobile for performance
@@ -2403,12 +2400,6 @@ class LegacySpermRaceGame {
       car.tailGraphics!.clear();
       (car.tailGraphics as any).zIndex = 1;
       car.sprite.addChild(car.tailGraphics!);
-    }
-    // Charge ring for player - shows boost energy level
-    if (car.chargeRingGraphics) {
-      car.chargeRingGraphics.clear();
-      (car.chargeRingGraphics as any).zIndex = 1.5;
-      car.sprite.addChild(car.chargeRingGraphics);
     }
     (car.headGraphics as any).zIndex = 2;
     car.sprite.addChild(car.headGraphics!);
@@ -3683,63 +3674,6 @@ class LegacySpermRaceGame {
       }
       if (buffActive) {
         car.headGraphics.ellipse(0, 0, rx + 5, ry + 4).stroke({ width: 2, color: 0xfacc15, alpha: 0.9 });
-      }
-    }
-
-    // Draw charge ring for player showing boost energy level
-    if (car.chargeRingGraphics && car.type === 'player') {
-      const chargeRing = car.chargeRingGraphics;
-      chargeRing.clear();
-
-      const energyPercent = car.boostEnergy / car.maxBoostEnergy;
-      const ringRadius = 14 * sizeMul;
-      const ringThickness = 2.5;
-      const startAngle = -Math.PI * 0.75; // Start at 9 o'clock position (offset)
-      const fullArc = Math.PI * 1.5; // 270 degrees total arc
-      const endAngle = startAngle + fullArc * energyPercent;
-
-      // Draw background ring (dim)
-      const bgSteps = 30;
-      for (let i = 0; i < bgSteps; i++) {
-        const t1 = i / bgSteps;
-        const t2 = (i + 1) / bgSteps;
-        const a1 = startAngle + fullArc * t1;
-        const a2 = startAngle + fullArc * t2;
-        const x1 = Math.cos(a1) * ringRadius;
-        const y1 = Math.sin(a1) * ringRadius;
-        const x2 = Math.cos(a2) * ringRadius;
-        const y2 = Math.sin(a2) * ringRadius;
-        chargeRing.moveTo(x1, y1).lineTo(x2, y2).stroke({
-          width: ringThickness,
-          color: car.color,
-          alpha: 0.15
-        });
-      }
-
-      // Draw charge level arc (bright, varies with energy)
-      if (energyPercent > 0.01) {
-        const steps = Math.max(3, Math.floor(30 * energyPercent));
-        // Color gradient from red (low) to yellow (medium) to cyan (high)
-        const hue = energyPercent < 0.5
-          ? 0 + energyPercent * 60  // Red to yellow
-          : 60 + (energyPercent - 0.5) * 180; // Yellow to cyan
-        const chargeColor = (hue * 0x010000) | ((60 + Math.abs(hue - 60)) * 0x000100) | 0xff;
-
-        for (let i = 0; i < steps; i++) {
-          const t1 = i / steps;
-          const t2 = (i + 1) / steps;
-          const a1 = startAngle + fullArc * t1;
-          const a2 = startAngle + fullArc * t2;
-          const x1 = Math.cos(a1) * ringRadius;
-          const y1 = Math.sin(a1) * ringRadius;
-          const x2 = Math.cos(a2) * ringRadius;
-          const y2 = Math.sin(a2) * ringRadius;
-          chargeRing.moveTo(x1, y1).lineTo(x2, y2).stroke({
-            width: ringThickness,
-            color: car.color,
-            alpha: 0.5 + energyPercent * 0.5 // Brighter when more charged
-          });
-        }
       }
     }
   }
@@ -6348,7 +6282,7 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
   onExit?: () => void 
 }) {
   const mountRef = useRef<HTMLDivElement | null>(null);
-  const gameRef = useRef<ModularSpermRaceGame | null>(null);
+  const gameRef = useRef<SpermRaceGame | null>(null);
   const { state: wsState, sendInput } = useWs();
   const initialWsStateRef = useRef<any>(wsState);
   // Keep latest WS state available without re-creating the Pixi app.
@@ -6357,13 +6291,7 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
   // Initialize Pixi only once on mount; update callbacks via a separate effect
   useEffect(() => {
     if (!mountRef.current) return;
-    // Use the modular SpermRaceGame class
-    const game = new ModularSpermRaceGame(mountRef.current);
-
-    // NOTE: The modular SpermRaceGame is designed for offline practice mode.
-    // For online multiplayer with WebSocket integration, use LegacySpermRaceGame instead.
-    // The following WebSocket-specific code is preserved for reference when integrating:
-    /*
+    const game = new SpermRaceGame(mountRef.current, onReplay, onExit);
     // If we mounted while WS is already in game phase, pre-enable online mode immediately.
     // This avoids a short window where local/offline physics can run during server countdown on mobile.
     try {
@@ -6387,41 +6315,25 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
         if (!(game as any).preStart) (game as any).preStart = { startAt: Date.now(), durationMs: 3000 };
       }
     } catch {}
-    */
-
     gameRef.current = game;
-    // Initialize the game using the modular SpermRaceGame's init() method
     game.init().catch(console.error);
-
-    // If we mounted while WS is already in game phase, pre-enable online mode immediately.
-    try {
-      const s = initialWsStateRef.current as any;
-      if (s?.phase === 'game') {
-        const lobbyAny: any = s?.lobby || null;
-        const mode = lobbyAny?.mode ?? ((Number(lobbyAny?.entryFee || 0) === 0) ? 'practice' : 'tournament');
-        const entryFee = lobbyAny?.entryFee ?? null;
-        game.wsHud = {
-          active: true,
-          kills: s?.kills || {},
-          killFeed: s?.killFeed || [],
-          playerId: s?.playerId || null,
-          idToName: {},
-          aliveSet: new Set<string>(),
-          eliminationOrder: s?.eliminationOrder || [],
-          mode,
-          entryFee
-        };
-      }
-    } catch {}
-
     return () => {
       try { game.destroy(); } catch (error) { console.error('Error destroying game:', error); }
     };
   }, []);
 
-  // Wire WS input sending into the Pixi game loop (online matches).
+  // Keep onReplay/onExit current without re-creating the Pixi app
   useEffect(() => {
     const game = gameRef.current;
+    if (game) {
+      game.onReplay = onReplay;
+      game.onExit = onExit;
+    }
+  }, [onReplay, onExit]);
+
+  // Wire WS input sending into the Pixi game loop (online matches).
+  useEffect(() => {
+    const game = gameRef.current as any;
     if (game) game.wsSendInput = sendInput;
   }, [sendInput]);
 
@@ -6430,10 +6342,11 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
     const game = gameRef.current;
     if (!game) return;
     if (wsState?.phase === 'game') {
+      // Important: `gameStarting` arrives before the first `gameStateUpdate`.
+      // Treat that window as online so we don't run local/offline physics during the server countdown.
       const lobbyAny: any = wsState.lobby || null;
       const mode = lobbyAny?.mode ?? ((Number(lobbyAny?.entryFee || 0) === 0) ? 'practice' : 'tournament');
       const entryFee = lobbyAny?.entryFee ?? null;
-      
       const placeholderHud = {
         active: true,
         kills: wsState.kills || {},
@@ -6445,13 +6358,46 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
         mode,
         entryFee
       };
-      
-      try { game.wsHud = placeholderHud as any; } catch {}
+      try { (game as any).wsHud = placeholderHud as any; } catch {}
 
-      if (!wsState.game) return;
+      // If we don't have a server state yet, run a one-shot local countdown and wait.
+      if (!wsState.game) {
+        try {
+          if (!(game as any).__srPlaceholderPrestartArmed && !(game as any).preStart) {
+            (game as any).__srPlaceholderPrestartArmed = true;
+            (game as any).preStart = { startAt: Date.now(), durationMs: 3000 };
+          }
+        } catch {}
+        return;
+      }
 
       try {
-        game.applyServerWorld(wsState.game.world as any);
+        try { game.applyServerWorld(wsState.game.world as any); } catch {}
+        try { (game as any).objective = (wsState.game as any).objective || null; } catch {}
+        try { (game as any).lastServerTimeMs = Number((wsState.game as any).timestamp || 0) || 0; } catch {}
+        try { (game as any).serverGoAtMs = Number((wsState.game as any).goAtMs || 0) || 0; } catch {}
+        try { (game as any).serverMode = mode; } catch {}
+        // Align the pre-start zoom/countdown to the server's GO time using *server-relative* time
+        // (robust against device clock skew so we never get stuck frozen with no movement).
+        try {
+          const goAtMs = Number((wsState.game as any).goAtMs || 0) || 0;
+          const srvNow = Number((wsState.game as any).timestamp || 0) || 0;
+          if (goAtMs > 0 && srvNow > 0) {
+            const msUntilGo = goAtMs - srvNow;
+            const preMs = 3000;
+            if (msUntilGo <= 0) {
+              (game as any).preStart = null;
+            } else {
+              // If we join late, shorten the countdown instead of freezing longer than needed.
+              const durationMs = Math.max(0, Math.min(preMs, msUntilGo));
+              const startAt = Date.now() + (msUntilGo - durationMs);
+              (game as any).preStart = { startAt, durationMs };
+            }
+          } else if (wsState.hasFirstGameState) {
+            // If server doesn't provide GO timing, never loop a local countdown after the first tick.
+            (game as any).preStart = null;
+          }
+        } catch { }
         const players = wsState.game.players || [];
         const aliveSet = new Set<string>(players.filter(p => p.isAlive).map(p => p.id));
         const idToName: Record<string, string> = {};
@@ -6465,9 +6411,20 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
           idToName,
           aliveSet
         } as any;
+        try {
+          if (!(game as any).srOnlineHintShown && mode === 'practice') {
+            (game as any).srOnlineHintShown = true;
+            const el = document.getElementById('game-toast');
+            if (el) {
+              el.textContent = 'Follow HUNT + edge arrows to find rivals fast';
+              el.style.opacity = '1';
+              setTimeout(() => { try { el.style.opacity = '0'; } catch {} }, 1600);
+            }
+          }
+        } catch {}
         game.syncServerPlayers(wsState.game.players);
-      } catch (err) {
-        console.error('Modular engine sync error:', err);
+      } catch {
+        game.wsHud = { active: false, kills: {}, killFeed: [], playerId: null, idToName: {}, aliveSet: new Set(), eliminationOrder: [] } as any;
       }
       return;
     }
