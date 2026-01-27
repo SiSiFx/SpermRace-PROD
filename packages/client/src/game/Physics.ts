@@ -94,7 +94,6 @@ export class Physics {
     }
 
     // Burst: Detect turn release and apply speed boost
-    const now = Date.now();
     const isTurning = Math.abs(angleDiff) > BURST.TURN_THRESHOLD;
     const isBursting = car.burstUntil !== undefined && now < car.burstUntil;
 
