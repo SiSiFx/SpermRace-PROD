@@ -1,7 +1,7 @@
 import { PlayerInput, GameItem } from 'shared';
 import { PlayerEntity } from './Player.js';
 
-type BotState = 'search' | 'hunt' | 'panic' | 'attack';
+type BotState = 'search' | 'hunt' | 'panic' | 'attack' | 'bait';
 
 type BotPersonality = 'aggressive' | 'cautious' | 'balanced';
 
@@ -21,6 +21,8 @@ interface BotPersonalityTraits {
   panicThreshold: number;      // Distance at which they panic (pixels)
   aggressionDistance: number;  // Distance to engage enemies (pixels)
   predictionSkill: number;     // Accuracy of movement prediction (0-1)
+  baitDistance: number;        // Distance behind to trigger baiting (pixels)
+  baitFrequency: number;       // How often they use baiting behavior (0-1)
 }
 
 interface PredictedPosition {
@@ -36,6 +38,7 @@ interface PredictedPosition {
  * HUNT (Chase player from distance)
  * ATTACK (Strategic cut-off maneuvers)
  * PANIC (Evade walls and trails)
+ * BAIT (Turn 180 degrees when player is close behind to force head-on collision)
  *
  * Each bot has a personality that affects their decision-making, reaction times,
  * and tendency to make mistakes - making them feel more like human players.
@@ -60,6 +63,7 @@ export class BotController {
   private hesitationChance: number = 0;
   private targetPredictionHistory: PredictedPosition[] = [];
   private lastPredictionUpdate: number = 0;
+  private baitTimer: number = 0;
 
   constructor(player: PlayerEntity) {
     this.player = player;
@@ -89,11 +93,15 @@ export class BotController {
     // Decrement panic timer
     this.panicTimer = Math.max(0, this.panicTimer - deltaTime);
 
+    // Decrement bait timer
+    this.baitTimer = Math.max(0, this.baitTimer - deltaTime);
+
     const enemies = sense.players.filter(p => p.isAlive && p.id !== self.id);
     const nearestEnemy = this.findNearestEnemy(enemies);
     const nearestDNA = this.findNearestDNA(sense.items, pos);
 
     const panicDetected = this.detectPanic(sense, deltaTime);
+    const playerBehind = this.findPlayerBehindMe(enemies);
 
     // STATE TRANSITION LOGIC with human-like delays and personality
     if (panicDetected && this.stateChangeTimer <= 0) {
@@ -103,6 +111,19 @@ export class BotController {
       }
       this.state = 'panic';
       this.panicTimer = Math.max(this.panicTimer, 0.8);
+      this.stateChangeTimer = 0.3;
+    } else if (playerBehind && this.baitTimer <= 0 && this.stateChangeTimer <= 0 && this.state !== 'panic') {
+      // Baiting behavior: turn 180 degrees when player is close behind
+      // Only bait if the bot personality allows it
+      if (Math.random() < this.traits.baitFrequency) {
+        this.state = 'bait';
+        this.baitTimer = 1.5; // Minimum time to stay in bait state
+        this.stateChangeTimer = 0.1;
+        this.reactionTimer = this.traits.reactionTime * 0.5; // Faster reaction for baiting
+      }
+    } else if (this.baitTimer <= 0 && this.state === 'bait' && this.stateChangeTimer <= 0) {
+      // Exit bait state when timer expires
+      this.state = 'hunt';
       this.stateChangeTimer = 0.3;
     } else if (this.panicTimer <= 0 && this.stateChangeTimer <= 0) {
       if (nearestEnemy) {
@@ -143,6 +164,9 @@ export class BotController {
     switch (this.state) {
       case 'panic':
         input = this.buildPanicInput(pos, sense);
+        break;
+      case 'bait':
+        input = this.buildBaitInput(pos, nearestEnemy, sense);
         break;
       case 'attack':
         input = this.buildAttackInput(pos, nearestEnemy, sense);
@@ -545,6 +569,77 @@ export class BotController {
   }
 
   /**
+   * Baiting behavior: When a player is close behind, turn 180 degrees
+   * to force a head-on collision. This is a high-risk, high-reward move.
+   */
+  private buildBaitInput(pos: { x: number; y: number }, nearestEnemy: any, sense: BotSense): PlayerInput {
+    const currentAngle = this.player.sperm.angle;
+    const behindAngle = currentAngle + Math.PI; // 180 degrees
+
+    // Add some randomness to the target angle to make it less predictable
+    const angleVariation = (Math.random() - 0.5) * 0.3;
+    const baitAngle = behindAngle + angleVariation;
+
+    const targetDistance = 500;
+    const target = {
+      x: pos.x + Math.cos(baitAngle) * targetDistance,
+      y: pos.y + Math.sin(baitAngle) * targetDistance,
+    };
+
+    return {
+      target,
+      accelerate: true,
+      boost: true,  // Always boost when baiting for maximum speed
+      drift: false,
+    };
+  }
+
+  /**
+   * Finds a player close behind the bot for baiting behavior.
+   * Returns the player info if found, null otherwise.
+   */
+  private findPlayerBehindMe(enemies: PlayerEntity[]): { player: PlayerEntity; distance: number } | null {
+    if (enemies.length === 0) return null;
+
+    const selfPos = this.player.sperm.position;
+    const currentAngle = this.player.sperm.angle;
+    const baitDistance = this.traits.baitDistance;
+
+    // Check each enemy to see if they're behind us and close enough
+    for (const enemy of enemies) {
+      const enemyPos = enemy.sperm.position;
+      const dx = enemyPos.x - selfPos.x;
+      const dy = enemyPos.y - selfPos.y;
+      const distance = Math.hypot(dx, dy);
+
+      if (distance > baitDistance) continue;
+
+      // Calculate angle to the enemy
+      const angleToEnemy = Math.atan2(dy, dx);
+      let angleDiff = angleToEnemy - currentAngle;
+      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+
+      // Enemy is behind if angle difference is around 180 degrees (PI radians)
+      // Allow a window of +/- 60 degrees
+      const behindThreshold = Math.PI * 0.67; // 120 degrees (60 degrees on either side)
+      if (Math.abs(Math.abs(angleDiff) - Math.PI) < behindThreshold) {
+        // Also check if enemy is moving toward us (relative velocity)
+        const relativeVelX = enemy.sperm.velocity.x - this.player.sperm.velocity.x;
+        const relativeVelY = enemy.sperm.velocity.y - this.player.sperm.velocity.y;
+        const closingSpeed = -(relativeVelX * dx + relativeVelY * dy) / distance;
+
+        // Only bait if the enemy is closing in
+        if (closingSpeed > 50) {
+          return { player: enemy, distance };
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Enhanced panic detection using multi-ray casting.
    * Checks multiple directions at multiple distances to detect trail collisions early.
    * Returns true if any of the probe rays detect danger within safety margins.
@@ -884,6 +979,8 @@ export class BotController {
           panicThreshold: 120,                            // Panics later
           aggressionDistance: 700,                       // Engages from further
           predictionSkill: 0.55 + Math.random() * 0.15,  // Moderate prediction (overcommits)
+          baitDistance: 200,                             // Triggers bait from further
+          baitFrequency: 0.7,                            // Baits often (high risk)
         };
 
       case 'cautious':
@@ -896,6 +993,8 @@ export class BotController {
           panicThreshold: 180,                            // Panics earlier
           aggressionDistance: 500,                       // Engages from closer
           predictionSkill: 0.75 + Math.random() * 0.15,  // Good prediction (careful calculation)
+          baitDistance: 120,                             // Only baits when very close
+          baitFrequency: 0.2,                            // Rarely baits (too risky)
         };
 
       case 'balanced':
@@ -909,6 +1008,8 @@ export class BotController {
           panicThreshold: 150,                           // Average panic distance
           aggressionDistance: 600,                       // Average engagement
           predictionSkill: 0.65 + Math.random() * 0.2,  // Above average prediction
+          baitDistance: 150,                             // Moderate bait distance
+          baitFrequency: 0.4,                            // Moderate bait usage
         };
     }
   }

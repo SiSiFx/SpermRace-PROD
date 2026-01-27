@@ -24,6 +24,7 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
       'shared': path.resolve(__dirname, '../shared/src'),
       'shared/dist': path.resolve(__dirname, '../shared/dist'),
+      'shared/dist/constants.js': path.resolve(__dirname, '../shared/dist/constants.js'),
     },
   },
   // Allow reading from parent directories
