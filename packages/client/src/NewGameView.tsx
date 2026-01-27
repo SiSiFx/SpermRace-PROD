@@ -2369,6 +2369,7 @@ class SpermRaceGame {
       sprite: new PIXI.Container(),
       headGraphics: new PIXI.Graphics(),
       tailGraphics: this.smallTailEnabled ? new PIXI.Graphics() : null,
+      chargeRingGraphics: type === 'player' ? new PIXI.Graphics() : undefined,
       tailWaveT: 0,
       tailLength: 34,
       tailSegments: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 6 : 10, // Fewer segments on mobile for performance
@@ -2400,6 +2401,12 @@ class SpermRaceGame {
       car.tailGraphics!.clear();
       (car.tailGraphics as any).zIndex = 1;
       car.sprite.addChild(car.tailGraphics!);
+    }
+    // Charge ring for player - shows boost energy level
+    if (car.chargeRingGraphics) {
+      car.chargeRingGraphics.clear();
+      (car.chargeRingGraphics as any).zIndex = 1.5;
+      car.sprite.addChild(car.chargeRingGraphics);
     }
     (car.headGraphics as any).zIndex = 2;
     car.sprite.addChild(car.headGraphics!);
@@ -3674,6 +3681,63 @@ class SpermRaceGame {
       }
       if (buffActive) {
         car.headGraphics.ellipse(0, 0, rx + 5, ry + 4).stroke({ width: 2, color: 0xfacc15, alpha: 0.9 });
+      }
+    }
+
+    // Draw charge ring for player showing boost energy level
+    if (car.chargeRingGraphics && car.type === 'player') {
+      const chargeRing = car.chargeRingGraphics;
+      chargeRing.clear();
+
+      const energyPercent = car.boostEnergy / car.maxBoostEnergy;
+      const ringRadius = 14 * sizeMul;
+      const ringThickness = 2.5;
+      const startAngle = -Math.PI * 0.75; // Start at 9 o'clock position (offset)
+      const fullArc = Math.PI * 1.5; // 270 degrees total arc
+      const endAngle = startAngle + fullArc * energyPercent;
+
+      // Draw background ring (dim)
+      const bgSteps = 30;
+      for (let i = 0; i < bgSteps; i++) {
+        const t1 = i / bgSteps;
+        const t2 = (i + 1) / bgSteps;
+        const a1 = startAngle + fullArc * t1;
+        const a2 = startAngle + fullArc * t2;
+        const x1 = Math.cos(a1) * ringRadius;
+        const y1 = Math.sin(a1) * ringRadius;
+        const x2 = Math.cos(a2) * ringRadius;
+        const y2 = Math.sin(a2) * ringRadius;
+        chargeRing.moveTo(x1, y1).lineTo(x2, y2).stroke({
+          width: ringThickness,
+          color: car.color,
+          alpha: 0.15
+        });
+      }
+
+      // Draw charge level arc (bright, varies with energy)
+      if (energyPercent > 0.01) {
+        const steps = Math.max(3, Math.floor(30 * energyPercent));
+        // Color gradient from red (low) to yellow (medium) to cyan (high)
+        const hue = energyPercent < 0.5
+          ? 0 + energyPercent * 60  // Red to yellow
+          : 60 + (energyPercent - 0.5) * 180; // Yellow to cyan
+        const chargeColor = (hue * 0x010000) | ((60 + Math.abs(hue - 60)) * 0x000100) | 0xff;
+
+        for (let i = 0; i < steps; i++) {
+          const t1 = i / steps;
+          const t2 = (i + 1) / steps;
+          const a1 = startAngle + fullArc * t1;
+          const a2 = startAngle + fullArc * t2;
+          const x1 = Math.cos(a1) * ringRadius;
+          const y1 = Math.sin(a1) * ringRadius;
+          const x2 = Math.cos(a2) * ringRadius;
+          const y2 = Math.sin(a2) * ringRadius;
+          chargeRing.moveTo(x1, y1).lineTo(x2, y2).stroke({
+            width: ringThickness,
+            color: car.color,
+            alpha: 0.5 + energyPercent * 0.5 // Brighter when more charged
+          });
+        }
       }
     }
   }
