@@ -38,4 +38,5 @@ boundaries:
 parallel:
   max_agents: 8
   branch_per_task: true
-  base_branch: "master"
+  base_branch: "dev"
+  auto_push: true

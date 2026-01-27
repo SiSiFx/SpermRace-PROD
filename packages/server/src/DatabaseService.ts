@@ -510,14 +510,6 @@ export class DatabaseService {
   // =================================================================================================
 
   /**
-   * Calculate expected score using ELO formula
-   * Returns a value between 0 and 1
-   */
-  private calculateExpectedScore(playerRating: number, opponentRating: number): number {
-    return 1 / (1 + Math.pow(10, (opponentRating - playerRating) / 400));
-  }
-
-  /**
    * Get K-factor based on player experience
    * New players get higher K-factor for faster adjustment
    */
@@ -543,8 +535,8 @@ export class DatabaseService {
     loserGames: number
   ): { winnerNewRating: number; loserNewRating: number } {
     // Calculate expected scores
-    const winnerExpected = this.calculateExpectedScore(winnerRating, loserRating);
-    const loserExpected = this.calculateExpectedScore(loserRating, winnerRating);
+    const winnerExpected = this.calculateExpectedScoreVs(winnerRating, loserRating);
+    const loserExpected = this.calculateExpectedScoreVs(loserRating, winnerRating);
 
     // Get K-factors
     const winnerK = this.getKFactor(winnerGames);

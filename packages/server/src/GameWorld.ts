@@ -543,22 +543,22 @@ export class GameWorld {
     });
 
     // 3. Check for a winner (reuse cached array and filter in place to avoid allocation)
-    let aliveCount = 0;
+    let finalAliveCount = 0;
     let lastAlivePlayer: PlayerEntity | null = null;
     for (let i = 0; i < playersArray.length; i++) {
       if (playersArray[i].isAlive) {
-        aliveCount++;
+        finalAliveCount++;
         lastAlivePlayer = playersArray[i];
       }
     }
     if ((process.env.NODE_ENV || '').toLowerCase() !== 'production') {
       const now = Date.now();
       if (now - this.lastDevAliveLogMs > 1000) {
-        try { console.debug(`[DEV][ALIVE] ${aliveCount}/${this.players.size}`); } catch {}
+        try { console.debug(`[DEV][ALIVE] ${finalAliveCount}/${this.players.size}`); } catch {}
         this.lastDevAliveLogMs = now;
       }
     }
-    if (this.players.size > 1 && aliveCount === 1 && lastAlivePlayer) {
+    if (this.players.size > 1 && finalAliveCount === 1 && lastAlivePlayer) {
       if ((process.env.NODE_ENV || '').toLowerCase() !== 'production') {
         try {
           const id = lastAlivePlayer.id;
@@ -567,7 +567,7 @@ export class GameWorld {
       }
       this.lastWinReason = 'last_alive';
       this.endRound(lastAlivePlayer.id);
-    } else if (this.players.size > 0 && aliveCount === 0) {
+    } else if (this.players.size > 0 && finalAliveCount === 0) {
       // Handle case where all players are eliminated simultaneously (draw)
       if ((process.env.NODE_ENV || '').toLowerCase() !== 'production') {
         try { console.debug('[DEV][WIN] draw → all eliminated'); } catch {}

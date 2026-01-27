@@ -3,8 +3,7 @@ import * as PIXI from 'pixi.js';
 import GameEffects from './GameEffects';
 import { startSpermBackground, stopSpermBackground } from './spermBackground';
 import type { PlayerInput, GameStateUpdateMessage, TrailPoint } from 'shared';
-import { TRAIL } from 'shared';
-import { INPUT } from 'shared/constants';
+import { TRAIL, INPUT } from 'shared';
 import { VersionedTransaction, Connection } from '@solana/web3.js';
 import bs58 from 'bs58';
 
