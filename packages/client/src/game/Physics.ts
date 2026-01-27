@@ -1,5 +1,7 @@
 import { Car, InputState, BoostPad } from './types';
 
+const HARD_TURN_THRESHOLD = 30 * (Math.PI / 180); // 30 degrees in radians
+
 // Normalize angle to [-PI, PI]
 function normalizeAngle(a: number): number {
   while (a > Math.PI) a -= 2 * Math.PI;
@@ -11,6 +13,12 @@ export class Physics {
   updateCar(car: Car, deltaTime: number, boostPads: BoostPad[]): void {
     if (car.destroyed) return;
     const now = Date.now();
+
+    // Initialize drift charge properties if not set
+    if (car.driftCharge === undefined) car.driftCharge = 0;
+    if (car.maxDriftCharge === undefined) car.maxDriftCharge = 100;
+    if (car.hardTurnTime === undefined) car.hardTurnTime = 0;
+    if (car.requiredHardTurnDuration === undefined) car.requiredHardTurnDuration = 1.0;
 
     // Hotspot buff check
     if (car.hotspotBuffExpiresAt && car.hotspotBuffExpiresAt <= now) {
@@ -61,6 +69,22 @@ export class Physics {
     const angleDiff = normalizeAngle(car.targetAngle - car.angle);
     const turnRate = car.turnResponsiveness ?? 7.0;
     car.angle += angleDiff * Math.min(1.0, turnRate * deltaTime);
+
+    // Drift Charge: builds when turning > 30 degrees for 1+ seconds
+    const absAngleDiff = Math.abs(angleDiff);
+    if (absAngleDiff > HARD_TURN_THRESHOLD) {
+      // Car is turning sharply (> 30 degrees)
+      car.hardTurnTime = (car.hardTurnTime ?? 0) + deltaTime;
+      // Only build charge after the required duration (1 second)
+      if (car.hardTurnTime >= car.requiredHardTurnDuration!) {
+        // Build drift charge based on how sharply we're turning
+        const chargeRate = (absAngleDiff - HARD_TURN_THRESHOLD) * 20; // More charge for sharper turns
+        car.driftCharge = Math.min(car.maxDriftCharge!, car.driftCharge! + chargeRate * deltaTime);
+      }
+    } else {
+      // Not turning sharply enough, reset the timer
+      car.hardTurnTime = 0;
+    }
 
     // Velocity calculation with drift
     const forwardX = Math.cos(car.angle);

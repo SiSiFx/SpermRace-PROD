@@ -46,6 +46,11 @@ export interface Car {
   hotspotBuffExpiresAt?: number;
   spotlightUntil?: number;
   killBoostUntil?: number;
+  // Drift Charge: builds when turning > 30 degrees for 1+ seconds
+  driftCharge?: number;
+  maxDriftCharge?: number;
+  hardTurnTime?: number; // Time spent turning > 30 degrees
+  requiredHardTurnDuration?: number; // Seconds required to build charge
 }
 
 export interface TrailPoint {
