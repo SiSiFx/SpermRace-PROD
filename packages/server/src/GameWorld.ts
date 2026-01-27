@@ -407,16 +407,16 @@ export class GameWorld {
 
     // Only compute schooling for alive players
     const alivePlayers = playersArray.filter(p => p.isAlive);
-    const aliveCount = alivePlayers.length;
+    const schoolingAliveCount = alivePlayers.length;
 
     // Skip expensive calculation if very few players
-    if (aliveCount > 1 && aliveCount < 50) {
+    if (schoolingAliveCount > 1 && schoolingAliveCount < 50) {
       // Use simple spatial grid for schooling optimization
       const gridSize = SCHOOL_RADIUS;
       const grid = new Map<string, number[]>();
 
       // Build grid
-      for (let i = 0; i < aliveCount; i++) {
+      for (let i = 0; i < schoolingAliveCount; i++) {
         const p = alivePlayers[i];
         const cellX = Math.floor(p.sperm.position.x / gridSize);
         const cellY = Math.floor(p.sperm.position.y / gridSize);
@@ -426,7 +426,7 @@ export class GameWorld {
       }
 
       // Check only nearby cells
-      for (let i = 0; i < aliveCount; i++) {
+      for (let i = 0; i < schoolingAliveCount; i++) {
         const p1 = alivePlayers[i];
         const pos1 = p1.sperm.position;
         const angle1 = p1.sperm.angle;
