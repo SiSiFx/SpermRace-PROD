@@ -5,6 +5,9 @@ export class UISystem {
   private radarCanvas: HTMLCanvasElement | null = null;
   private radarCtx: CanvasRenderingContext2D | null = null;
   private boostBarEl: HTMLDivElement | null = null;
+  private boostBarInner: HTMLDivElement | null = null;
+  private boostBarGlow: HTMLDivElement | null = null;
+  private boostTextEl: HTMLDivElement | null = null;
   private aliveCountEl: HTMLDivElement | null = null;
   private killFeedEl: HTMLDivElement | null = null;
   private recentKills: Array<{ killer: string; victim: string; time: number }> = [];
@@ -28,10 +31,25 @@ export class UISystem {
     ui.appendChild(this.radarCanvas);
     this.radarCtx = this.radarCanvas.getContext('2d');
 
-    // Boost bar
+    // Boost bar container
     this.boostBarEl = document.createElement('div');
-    this.boostBarEl.style.cssText = 'position:absolute;bottom:20px;left:50%;transform:translateX(-50%);width:200px;height:8px;background:rgba(0,0,0,0.5);border-radius:4px;overflow:hidden;';
-    this.boostBarEl.innerHTML = '<div style="height:100%;background:linear-gradient(90deg,#22d3ee,#6366f1);width:100%;transition:width 0.1s;"></div>';
+    this.boostBarEl.style.cssText = 'position:absolute;bottom:40px;left:50%;transform:translateX(-50%);width:220px;height:24px;background:rgba(0,0,0,0.6);border-radius:12px;border:2px solid rgba(34,211,238,0.3);overflow:hidden;box-shadow:0 0 20px rgba(34,211,238,0.2);';
+
+    // Inner boost bar with gradient
+    this.boostBarInner = document.createElement('div');
+    this.boostBarInner.style.cssText = 'height:100%;background:linear-gradient(90deg,#22d3ee,#6366f1);width:100%;transition:width 0.1s;border-radius:10px;position:relative;';
+    this.boostBarEl.appendChild(this.boostBarInner);
+
+    // Boost bar glow effect
+    this.boostBarGlow = document.createElement('div');
+    this.boostBarGlow.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;background:linear-gradient(90deg,rgba(34,211,238,0.4),rgba(99,102,241,0.4));opacity:0;transition:opacity 0.2s;border-radius:10px;';
+    this.boostBarInner.appendChild(this.boostBarGlow);
+
+    // Boost text
+    this.boostTextEl = document.createElement('div');
+    this.boostTextEl.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:12px;font-weight:bold;color:white;text-shadow:0 1px 2px rgba(0,0,0,0.8);white-space:nowrap;';
+    this.boostBarInner.appendChild(this.boostTextEl);
+
     ui.appendChild(this.boostBarEl);
 
     // Alive count
@@ -96,11 +114,42 @@ export class UISystem {
     }
   }
 
-  updateBoostBar(energy: number, maxEnergy: number): void {
-    if (!this.boostBarEl) return;
-    const bar = this.boostBarEl.firstElementChild as HTMLDivElement;
-    if (bar) {
-      bar.style.width = `${(energy / maxEnergy) * 100}%`;
+  updateBoostBar(energy: number, maxEnergy: number, isBoosting: boolean): void {
+    if (!this.boostBarInner || !this.boostBarGlow || !this.boostTextEl) return;
+
+    const percentage = energy / maxEnergy;
+    this.boostBarInner.style.width = `${percentage * 100}%`;
+
+    // Update text and visual state based on energy level
+    if (isBoosting) {
+      // Active boost state
+      this.boostTextEl.textContent = 'BOOSTING!';
+      this.boostBarGlow.style.opacity = '1';
+      this.boostBarEl!.style.borderColor = 'rgba(99,102,241,0.9)';
+      this.boostBarEl!.style.boxShadow = '0 0 40px rgba(99,102,241,0.6)';
+      this.boostBarInner.style.background = 'linear-gradient(90deg,#6366f1,#818cf8)';
+    } else if (percentage >= 1) {
+      // Full - ready state
+      this.boostTextEl.textContent = 'BOOST READY';
+      this.boostBarGlow.style.opacity = '0.8';
+      this.boostBarEl!.style.borderColor = 'rgba(34,211,238,0.8)';
+      this.boostBarEl!.style.boxShadow = '0 0 30px rgba(34,211,238,0.4)';
+      this.boostBarInner.style.background = 'linear-gradient(90deg,#22d3ee,#6366f1)';
+    } else if (percentage >= 0.2) {
+      // Available but not full
+      this.boostTextEl.textContent = `${Math.floor(percentage * 100)}%`;
+      this.boostBarGlow.style.opacity = '0';
+      this.boostBarEl!.style.borderColor = 'rgba(34,211,238,0.3)';
+      this.boostBarEl!.style.boxShadow = '0 0 20px rgba(34,211,238,0.2)';
+      this.boostBarInner.style.background = 'linear-gradient(90deg,#22d3ee,#6366f1)';
+    } else {
+      // Low energy - warning state
+      this.boostTextEl.textContent = 'LOW';
+      this.boostBarGlow.style.opacity = '0';
+      this.boostBarEl!.style.borderColor = 'rgba(239,68,68,0.6)';
+      this.boostBarEl!.style.boxShadow = '0 0 20px rgba(239,68,68,0.3)';
+      // Change bar color to red when low
+      this.boostBarInner.style.background = 'linear-gradient(90deg,#ef4444,#f87171)';
     }
   }
 

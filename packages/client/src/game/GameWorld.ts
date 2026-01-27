@@ -15,6 +15,9 @@ export class GameWorld {
   private zoneStartTime = 0;
   private zoneDuration = 90000;
 
+  // Track pad animation state
+  private padAnimationTime = 0;
+
   constructor(container: PIXI.Container, arena: ArenaBounds) {
     this.worldContainer = container;
     this.arena = arena;
@@ -67,7 +70,11 @@ export class GameWorld {
       const x = (Math.random() - 0.5) * halfW * 2;
       const y = (Math.random() - 0.5) * halfH * 2;
       const g = new PIXI.Graphics();
-      g.circle(0, 0, 30).fill({ color: 0x22d3ee, alpha: 0.3 });
+      // Base pad appearance
+      g.circle(0, 0, 30).fill({ color: 0x22d3ee, alpha: 0.2 });
+      g.circle(0, 0, 25).stroke({ width: 2, color: 0x22d3ee, alpha: 0.5 });
+      // Inner ring
+      g.circle(0, 0, 15).stroke({ width: 1, color: 0x6366f1, alpha: 0.4 });
       g.x = x;
       g.y = y;
       this.worldContainer.addChild(g);
@@ -79,6 +86,49 @@ export class GameWorld {
         lastTriggeredAt: 0,
         graphics: g
       });
+    }
+  }
+
+  /**
+   * Update boost pad visuals - call this every frame
+   */
+  updateBoostPads(): void {
+    this.padAnimationTime += 1/60;
+    const now = Date.now();
+
+    for (const pad of this.boostPads) {
+      const g = pad.graphics;
+      g.clear();
+
+      const isOnCooldown = (now - pad.lastTriggeredAt) < pad.cooldownMs;
+      const cooldownProgress = Math.min(1, (now - pad.lastTriggeredAt) / pad.cooldownMs);
+
+      if (isOnCooldown) {
+        // Cooldown state - dimmer, smaller
+        const alpha = 0.1 + cooldownProgress * 0.2;
+        const pulseSize = 15 + cooldownProgress * 15;
+        g.circle(0, 0, pulseSize).fill({ color: 0x22d3ee, alpha: alpha * 0.3 });
+        g.circle(0, 0, pulseSize * 0.8).stroke({ width: 1, color: 0x22d3ee, alpha: alpha });
+        // Show cooldown progress ring
+        g.arc(0, 0, 35, -Math.PI/2, -Math.PI/2 + (Math.PI * 2 * cooldownProgress))
+          .stroke({ width: 2, color: 0x6366f1, alpha: 0.3 });
+      } else {
+        // Ready state - pulsing, bright
+        const pulse = Math.sin(this.padAnimationTime * 3 + pad.x) * 0.5 + 0.5;
+        const alpha = 0.3 + pulse * 0.3;
+        const outerRadius = 28 + pulse * 4;
+        const innerRadius = 12 + pulse * 3;
+
+        // Outer glow
+        g.circle(0, 0, outerRadius).fill({ color: 0x22d3ee, alpha: alpha * 0.4 });
+        // Main ring
+        g.circle(0, 0, 25).stroke({ width: 2, color: 0x22d3ee, alpha: alpha + 0.2 });
+        // Inner pulsing circle
+        g.circle(0, 0, innerRadius).fill({ color: 0x6366f1, alpha: alpha * 0.5 });
+        // Crosshair effect
+        g.moveTo(-8, 0).lineTo(8, 0).stroke({ width: 1, color: 0xffffff, alpha: alpha * 0.5 });
+        g.moveTo(0, -8).lineTo(0, 8).stroke({ width: 1, color: 0xffffff, alpha: alpha * 0.5 });
+      }
     }
   }
 

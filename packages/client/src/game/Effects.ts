@@ -33,6 +33,43 @@ export class Effects {
     }
   }
 
+  /**
+   * Create exhaust particles when boosting/drifting
+   * Creates a trail of particles behind the car
+   */
+  createBoostExhaust(x: number, y: number, angle: number, color: number): void {
+    const count = 2; // Particles per frame
+    for (let i = 0; i < count; i++) {
+      // Emit in opposite direction of car movement (behind the car)
+      const spread = (Math.random() - 0.5) * 0.5; // Slight spread
+      const emitAngle = angle + Math.PI + spread;
+      const speed = 30 + Math.random() * 50;
+
+      const g = this.getParticle();
+      g.clear();
+
+      // Exhaust particles are smaller and have different colors
+      const exhaustColor = Math.random() < 0.5 ? 0x22d3ee : 0x6366f1;
+      const size = 2 + Math.random() * 2;
+      g.circle(0, 0, size).fill({ color: exhaustColor, alpha: 0.7 });
+
+      // Offset slightly behind the car
+      g.x = x - Math.cos(angle) * 15;
+      g.y = y - Math.sin(angle) * 15;
+      this.container.addChild(g);
+
+      this.particles.push({
+        x: g.x,
+        y: g.y,
+        vx: Math.cos(emitAngle) * speed,
+        vy: Math.sin(emitAngle) * speed,
+        life: 0.3 + Math.random() * 0.2,
+        color: exhaustColor,
+        graphics: g
+      });
+    }
+  }
+
   update(deltaTime: number): void {
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];

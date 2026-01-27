@@ -97,6 +97,13 @@ export class SpermRaceGame {
     const head = new PIXI.Graphics();
     head.circle(0, 0, 12).fill({ color });
     sprite.addChild(head);
+
+    // Add boost glow effect (hidden by default)
+    const boostGlow = new PIXI.Graphics();
+    boostGlow.circle(0, 0, 20).fill({ color: 0x22d3ee, alpha: 0 });
+    boostGlow.visible = false;
+    sprite.addChild(boostGlow);
+
     sprite.x = spawn.x;
     sprite.y = spawn.y;
     sprite.rotation = spawn.angle;
@@ -137,7 +144,9 @@ export class SpermRaceGame {
       turnTimer: 1,
       boostAITimer: 2,
       currentTrailId: null,
-      sprite
+      sprite,
+      headGraphics: head,
+      boostGlow: boostGlow
     };
   }
 
@@ -191,8 +200,36 @@ export class SpermRaceGame {
     // Update zone
     this.world.updateZone(allCars);
 
+    // Update boost pad visuals
+    this.world.updateBoostPads();
+
     // Update effects
     this.effects.update(deltaTime);
+
+    // Update boost glow effects for all cars
+    for (const car of allCars) {
+      if (car.boostGlow) {
+        if (car.isBoosting) {
+          car.boostGlow.visible = true;
+          // Pulse the glow
+          const pulse = 0.3 + Math.sin(Date.now() / 50) * 0.15;
+          car.boostGlow.clear();
+          car.boostGlow.circle(0, 0, 18 + Math.sin(Date.now() / 80) * 3).fill({ color: 0x22d3ee, alpha: pulse });
+        } else {
+          car.boostGlow.visible = false;
+        }
+      }
+
+      // Create boost exhaust for boosting cars
+      if (car.isBoosting) {
+        this.effects.createBoostExhaust(
+          car.x,
+          car.y,
+          car.angle,
+          car.color
+        );
+      }
+    }
 
     // Update camera
     this.camera.update(this.player, this.worldContainer, screenW, screenH);
@@ -202,7 +239,7 @@ export class SpermRaceGame {
     this.ui.updateAliveCount(aliveCount);
     this.ui.updateRadar(this.player, this.bots, this.arena, this.world.zone);
     if (this.player) {
-      this.ui.updateBoostBar(this.player.boostEnergy, this.player.maxBoostEnergy);
+      this.ui.updateBoostBar(this.player.boostEnergy, this.player.maxBoostEnergy, this.player.isBoosting);
     }
 
     // Check win/lose
