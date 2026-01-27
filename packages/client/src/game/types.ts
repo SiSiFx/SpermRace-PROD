@@ -39,6 +39,7 @@ export interface Car {
   headGraphics?: PIXI.Graphics;
   tailGraphics?: PIXI.Graphics | null;
   boostGlow?: PIXI.Graphics;
+  chargeRingGraphics?: PIXI.Graphics;
   tailWaveT?: number;
   nameplate?: HTMLDivElement;
   outZoneTime?: number;
