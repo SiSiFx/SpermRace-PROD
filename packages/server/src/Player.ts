@@ -1,4 +1,4 @@
-import { Player, SpermState, PlayerInput, Vector2, TrailPoint, PHYSICS as S_PHYSICS, TRAIL as S_TRAIL, TICK as S_TICK } from 'shared';
+import { Player, SpermState, PlayerInput, Vector2, TrailPoint, PHYSICS as S_PHYSICS, TRAIL as S_TRAIL, TICK as S_TICK, BURST as S_BURST } from 'shared';
 
 // =================================================================================================
 // GAME CONSTANTS
@@ -24,6 +24,9 @@ const BOOST = {
   ENERGY_CONSUME_PER_S: 55,   // Slightly higher consumption while boosting
   MIN_START_ENERGY: 20,
 };
+
+// Burst: Speed boost when releasing a turn (use shared constants)
+const BURST = { ...S_BURST } as const;
 
 const CAR_COLORS = [
     '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57',
@@ -57,6 +60,9 @@ export class PlayerEntity implements Player {
   private speedMultiplier: number = 1;
   // Last raw input-derived aim angle for anti-cheat smoothing
   private lastInputAngle: number | null = null;
+  // Burst state: speed boost when releasing a turn
+  private burstUntil: number | null = null;
+  private wasTurning: boolean = false;
 
   constructor(id: string, spawnPosition: Vector2, spawnAngle?: number) {
     this.id = id;
@@ -135,12 +141,24 @@ export class PlayerEntity implements Player {
     const appliedChange = Math.max(-maxChange, Math.min(maxChange, desiredChange));
     this.sperm.angle += appliedChange;
 
-    // --- 2. Apply Acceleration (forward thrust only) ---
+    // --- 1.5. Burst: Detect turn release and apply speed boost ---
     const nowMs = Date.now();
+    const isTurning = Math.abs(angleDiff) > BURST.TURN_THRESHOLD;
+    const isBursting = this.burstUntil !== null && nowMs < this.burstUntil;
+
+    // Trigger burst when releasing a turn
+    if (this.wasTurning && !isTurning && !isBursting) {
+      this.burstUntil = nowMs + BURST.DURATION_MS;
+    }
+    this.wasTurning = isTurning;
+
+    // --- 2. Apply Acceleration (forward thrust only) ---
     const isBoostingNow = this.boostUntil !== null && nowMs < this.boostUntil && this.boostEnergy > 0;
     if (this.input.accelerate) {
       // Inline acceleration calculation to avoid creating Vector2 object
-      const accelMagnitude = PHYSICS_CONSTANTS.ACCELERATION * (isBoostingNow ? BOOST.MULTIPLIER : 1);
+      // Apply burst multiplier on top of boost multiplier
+      const burstMultiplier = isBursting ? BURST.MULTIPLIER : 1;
+      const accelMagnitude = PHYSICS_CONSTANTS.ACCELERATION * (isBoostingNow ? BOOST.MULTIPLIER : 1) * burstMultiplier;
       this.sperm.velocity.x += Math.cos(this.sperm.angle) * accelMagnitude * deltaTime;
       this.sperm.velocity.y += Math.sin(this.sperm.angle) * accelMagnitude * deltaTime;
     }
@@ -161,7 +179,8 @@ export class PlayerEntity implements Player {
 
     // --- 4. Clamp to Max Speed (recompute after accel/drag) ---
     const speedNow = Math.hypot(this.sperm.velocity.x, this.sperm.velocity.y);
-    const maxSpeed = PHYSICS_CONSTANTS.MAX_SPEED * (this.speedMultiplier || 1) * BOOST.MULTIPLIER;
+    const burstMultiplier = isBursting ? BURST.MULTIPLIER : 1;
+    const maxSpeed = PHYSICS_CONSTANTS.MAX_SPEED * (this.speedMultiplier || 1) * (isBoostingNow ? BOOST.MULTIPLIER : 1) * burstMultiplier;
     if (speedNow > maxSpeed) {
       const ratio = maxSpeed / speedNow;
       this.sperm.velocity.x *= ratio;

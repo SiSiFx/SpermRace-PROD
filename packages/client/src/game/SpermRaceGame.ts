@@ -146,7 +146,9 @@ export class SpermRaceGame {
       currentTrailId: null,
       sprite,
       headGraphics: head,
-      boostGlow: boostGlow
+      boostGlow: boostGlow,
+      burstUntil: undefined,
+      wasTurning: false
     };
   }
 

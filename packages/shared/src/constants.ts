@@ -45,3 +45,10 @@ export const INPUT = {
   MAX_BURST_INTERVAL_MS: 16, // Maximum time between inputs for burst limiting
 };
 
+// Burst: Speed boost when releasing a turn
+export const BURST = {
+  MULTIPLIER: 1.3, // 1.3x speed boost on turn release
+  DURATION_MS: 600, // 0.6 second burst duration
+  TURN_THRESHOLD: 0.05, // Minimum angle change (radians) to count as turning
+};
+

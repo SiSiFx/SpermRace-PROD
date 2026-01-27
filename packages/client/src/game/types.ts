@@ -53,6 +53,9 @@ export interface Car {
   maxDriftCharge?: number;
   hardTurnTime?: number; // Time spent turning > 30 degrees
   requiredHardTurnDuration?: number; // Seconds required to build charge
+  // Burst: Speed boost when releasing a turn
+  burstUntil?: number;
+  wasTurning?: boolean;
 }
 
 export interface TrailPoint {
