@@ -5,6 +5,7 @@ import { useWs } from './WsProvider';
 import { HudManager } from './HudManager';
 import { WORLD as S_WORLD } from 'shared';
 import { getPerformanceSettings, isHighPerformanceMobile } from './deviceDetection';
+import { SpermRaceGame as ModularSpermRaceGame } from './game/SpermRaceGame';
 
 interface Car {
   x: number;
