@@ -36,7 +36,7 @@ boundaries:
     - ".vercel/**"
 
 parallel:
-  max_agents: 8
+  max_agents: 6
   branch_per_task: true
   base_branch: "dev"
   auto_push: true

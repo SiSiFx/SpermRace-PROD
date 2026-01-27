@@ -1,0 +1,44 @@
+{
+  "tasks": {
+    "markdown:PRD.md:59": {
+      "count": 1,
+      "last": "2026-01-26T23:07:31.441Z",
+      "title": "**Shake:** Refine screen shake (don't overdo it). Only shake on impacts/kills."
+    },
+    "markdown:PRD.md:68": {
+      "count": 1,
+      "last": "2026-01-26T23:07:31.441Z",
+      "title": "**Navigation Mesh:** Implement a dynamic grid/mesh to detect \"traps\" (areas surrounded by trails)."
+    },
+    "markdown:PRD.md:69": {
+      "count": 1,
+      "last": "2026-01-26T23:07:31.441Z",
+      "title": "**Wall Hugging:** Teach bots to safely drift near walls to bait enemies."
+    },
+    "markdown:PRD.md:70": {
+      "count": 1,
+      "last": "2026-01-26T23:07:31.442Z",
+      "title": "**Trail Awareness:** Bots must predict *future* trail closures, not just react to current ones."
+    },
+    "markdown:PRD.md:74": {
+      "count": 1,
+      "last": "2026-01-26T23:07:31.442Z",
+      "title": "**Interception:** Calculate interception vectors to cut off enemies, not just chase them."
+    },
+    "markdown:PRD.md:75": {
+      "count": 1,
+      "last": "2026-01-26T23:07:31.442Z",
+      "title": "**Baiting:** Bots should feign retreat, then turn 180° to encircle a chaser."
+    },
+    "markdown:PRD.md:76": {
+      "count": 1,
+      "last": "2026-01-26T23:07:31.442Z",
+      "title": "**Boost Management:** Bots only boost to *kill* or *escape*, never randomly."
+    },
+    "markdown:PRD.md:80": {
+      "count": 1,
+      "last": "2026-01-26T23:07:31.442Z",
+      "title": "**Reaction Delay:** 150-300ms variable delay based on \"focus\"."
+    }
+  }
+}

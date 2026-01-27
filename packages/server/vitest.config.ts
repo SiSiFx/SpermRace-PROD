@@ -17,12 +17,23 @@ export default defineConfig({
         maxForks: 1,
         minForks: 1
       }
-    }
+    },
   },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
       'shared': path.resolve(__dirname, '../shared/src'),
-    }
-  }
+      'shared/dist': path.resolve(__dirname, '../shared/dist'),
+      'shared/dist/constants.js': path.resolve(__dirname, '../shared/dist/constants.js'),
+    },
+  },
+  // Allow reading from parent directories
+  server: {
+    fs: {
+      allow: [
+        path.resolve(__dirname, '../..'),
+        path.resolve(__dirname, '.'),
+      ],
+    },
+  },
 });

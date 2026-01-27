@@ -245,31 +245,44 @@
     }
 
     function addOrchLog(text) {
-      const div = document.createElement('div');
-      div.className = 'log-line';
-      div.innerText = text; // Safer than innerHTML
-      orchEl.appendChild(div);
-      orchEl.scrollTop = orchEl.scrollHeight;
-      if (orchEl.children.length > 200) orchEl.removeChild(orchEl.firstChild);
+      if (!text || !text.trim()) return;
+      const lines = text.split('\n');
+      // Append lines to the bottom (Croissant/Ascending order)
+      lines.forEach(line => {
+        if (!line.trim()) return;
+        const div = document.createElement('div');
+        div.className = 'log-line';
+        div.innerText = line;
+        orchEl.appendChild(div);
+      });
+      
+      orchEl.scrollTop = orchEl.scrollHeight; // Auto-scroll to newest
+      // Keep last 500 lines for deep history
+      while (orchEl.children.length > 500) orchEl.removeChild(orchEl.firstChild);
     }
 
     function renderAgent(id) {
       const a = agents[id];
-      // Create or update existing element
+      a.lastUpdate = Date.now();
+      
       let el = document.getElementById(`agent-${id}`);
       if (!el) {
         el = document.createElement('div');
         el.className = 'agent';
         el.id = `agent-${id}`;
-        // Insert in order
+        
+        // Insert in ID order (Croissant)
         const others = [...agentsEl.children];
         const next = others.find(c => parseInt(c.id.split('-')[1]) > parseInt(id));
         if (next) agentsEl.insertBefore(el, next);
         else agentsEl.appendChild(el);
       }
+      
+      el.style.display = 'flex'; 
 
       const filesHtml = a.files.length ? a.files.map(f => `<span class="file ${f.startsWith('M')?'modified':''}">${f}</span>`).join('') : '<em>No changes</em>';
       
+      // Show agent logs in ascending order (croissant)
       const logsHtml = a.logs.slice(-20).map(l => 
         `<div class="log-line">
            <span class="log-time">${l.time}</span>
@@ -277,14 +290,14 @@
          </div>`
       ).join('');
 
-      el.innerHTML = `
-        <div class="agent-header">
-          <span class="agent-name">Agent ${id}</span>
-          <span class="agent-status ${a.status}">${a.status}</span>
+      el.innerHTML = "`
+        <div class=\"agent-header\">
+          <span class=\"agent-name\">Agent ${id}</span>
+          <span class=\"agent-status ${a.status}">${a.status}</span>
         </div>
-        <div class="agent-files">${filesHtml}</div>
-        <div class="agent-logs">${logsHtml}</div>
-      `;
+        <div class=\"agent-files\">${filesHtml}</div>
+        <div class=\"agent-logs\">${logsHtml}</div>
+      `";
     }
 
     function getColor(level) {
@@ -300,26 +313,30 @@
       ws.onclose = () => { dot.classList.add('off'); setTimeout(connect, 2000); };
       
       ws.onmessage = (e) => {
-        const msg = JSON.parse(e.data);
-        
-        if (msg.type === 'orchestrator_log') {
-          addOrchLog(msg.text);
-        } else if (msg.type === 'agent_log') {
-          if (!agents[msg.agent]) agents[msg.agent] = { logs: [], files: [], status: 'active' };
-          const time = new Date().toLocaleTimeString('en-GB', {hour12:false});
-          agents[msg.agent].logs.push({ time, level: msg.level, text: msg.text });
-          renderAgent(msg.agent);
-        } else if (msg.type === 'agent_files') {
-           if (!agents[msg.agent]) agents[msg.agent] = { logs: [], files: [], status: 'active' };
-           agents[msg.agent].files = msg.files;
-           renderAgent(msg.agent);
-        } else if (msg.type === 'agent_status') {
-           if (!agents[msg.agent]) return;
-           agents[msg.agent].status = msg.status;
-           renderAgent(msg.agent);
+        try {
+          const msg = JSON.parse(e.data);
+          
+          if (msg.type === 'orchestrator_log') {
+            addOrchLog(msg.text);
+          } else if (msg.type === 'agent_log') {
+            if (!agents[msg.agent]) agents[msg.agent] = { logs: [], files: [], status: 'active' };
+            const time = new Date().toLocaleTimeString('en-GB', {hour12:false});
+            agents[msg.agent].logs.push({ time, level: msg.level, text: msg.text });
+            renderAgent(msg.agent);
+          } else if (msg.type === 'agent_files') {
+             if (!agents[msg.agent]) agents[msg.agent] = { logs: [], files: [], status: 'active' };
+             agents[msg.agent].files = msg.files;
+             renderAgent(msg.agent);
+          } else if (msg.type === 'agent_status') {
+             if (!agents[msg.agent]) return;
+             agents[msg.agent].status = msg.status;
+             renderAgent(msg.agent);
+          }
+          
+          agentCountEl.textContent = Object.keys(agents).length;
+        } catch (err) {
+          console.error('WebSocket message error:', err);
         }
-        
-        agentCountEl.textContent = Object.keys(agents).length;
       };
     }
 

@@ -5,6 +5,7 @@ import { useWs } from './WsProvider';
 import { HudManager } from './HudManager';
 import { WORLD as S_WORLD } from 'shared';
 import { getPerformanceSettings, isHighPerformanceMobile } from './deviceDetection';
+import { SpermRaceGame as ModularSpermRaceGame } from './game/SpermRaceGame';
 
 interface Car {
   x: number;
@@ -130,7 +131,8 @@ interface Hotspot {
   hasSpawnedLoot: boolean;
 }
 
-class SpermRaceGame {
+// Legacy embedded game class - kept as fallback
+class LegacySpermRaceGame {
   public app: PIXI.Application | null = null;
   public arena = (() => {
     // Portrait mobile: Match iPhone aspect ratio better
@@ -2369,6 +2371,7 @@ class SpermRaceGame {
       sprite: new PIXI.Container(),
       headGraphics: new PIXI.Graphics(),
       tailGraphics: this.smallTailEnabled ? new PIXI.Graphics() : null,
+      chargeRingGraphics: type === 'player' ? new PIXI.Graphics() : undefined,
       tailWaveT: 0,
       tailLength: 34,
       tailSegments: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 6 : 10, // Fewer segments on mobile for performance
@@ -2400,6 +2403,12 @@ class SpermRaceGame {
       car.tailGraphics!.clear();
       (car.tailGraphics as any).zIndex = 1;
       car.sprite.addChild(car.tailGraphics!);
+    }
+    // Charge ring for player - shows boost energy level
+    if (car.chargeRingGraphics) {
+      car.chargeRingGraphics.clear();
+      (car.chargeRingGraphics as any).zIndex = 1.5;
+      car.sprite.addChild(car.chargeRingGraphics);
     }
     (car.headGraphics as any).zIndex = 2;
     car.sprite.addChild(car.headGraphics!);
@@ -3674,6 +3683,63 @@ class SpermRaceGame {
       }
       if (buffActive) {
         car.headGraphics.ellipse(0, 0, rx + 5, ry + 4).stroke({ width: 2, color: 0xfacc15, alpha: 0.9 });
+      }
+    }
+
+    // Draw charge ring for player showing boost energy level
+    if (car.chargeRingGraphics && car.type === 'player') {
+      const chargeRing = car.chargeRingGraphics;
+      chargeRing.clear();
+
+      const energyPercent = car.boostEnergy / car.maxBoostEnergy;
+      const ringRadius = 14 * sizeMul;
+      const ringThickness = 2.5;
+      const startAngle = -Math.PI * 0.75; // Start at 9 o'clock position (offset)
+      const fullArc = Math.PI * 1.5; // 270 degrees total arc
+      const endAngle = startAngle + fullArc * energyPercent;
+
+      // Draw background ring (dim)
+      const bgSteps = 30;
+      for (let i = 0; i < bgSteps; i++) {
+        const t1 = i / bgSteps;
+        const t2 = (i + 1) / bgSteps;
+        const a1 = startAngle + fullArc * t1;
+        const a2 = startAngle + fullArc * t2;
+        const x1 = Math.cos(a1) * ringRadius;
+        const y1 = Math.sin(a1) * ringRadius;
+        const x2 = Math.cos(a2) * ringRadius;
+        const y2 = Math.sin(a2) * ringRadius;
+        chargeRing.moveTo(x1, y1).lineTo(x2, y2).stroke({
+          width: ringThickness,
+          color: car.color,
+          alpha: 0.15
+        });
+      }
+
+      // Draw charge level arc (bright, varies with energy)
+      if (energyPercent > 0.01) {
+        const steps = Math.max(3, Math.floor(30 * energyPercent));
+        // Color gradient from red (low) to yellow (medium) to cyan (high)
+        const hue = energyPercent < 0.5
+          ? 0 + energyPercent * 60  // Red to yellow
+          : 60 + (energyPercent - 0.5) * 180; // Yellow to cyan
+        const chargeColor = (hue * 0x010000) | ((60 + Math.abs(hue - 60)) * 0x000100) | 0xff;
+
+        for (let i = 0; i < steps; i++) {
+          const t1 = i / steps;
+          const t2 = (i + 1) / steps;
+          const a1 = startAngle + fullArc * t1;
+          const a2 = startAngle + fullArc * t2;
+          const x1 = Math.cos(a1) * ringRadius;
+          const y1 = Math.sin(a1) * ringRadius;
+          const x2 = Math.cos(a2) * ringRadius;
+          const y2 = Math.sin(a2) * ringRadius;
+          chargeRing.moveTo(x1, y1).lineTo(x2, y2).stroke({
+            width: ringThickness,
+            color: car.color,
+            alpha: 0.5 + energyPercent * 0.5 // Brighter when more charged
+          });
+        }
       }
     }
   }
@@ -6282,7 +6348,7 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
   onExit?: () => void 
 }) {
   const mountRef = useRef<HTMLDivElement | null>(null);
-  const gameRef = useRef<SpermRaceGame | null>(null);
+  const gameRef = useRef<ModularSpermRaceGame | null>(null);
   const { state: wsState, sendInput } = useWs();
   const initialWsStateRef = useRef<any>(wsState);
   // Keep latest WS state available without re-creating the Pixi app.
@@ -6291,7 +6357,13 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
   // Initialize Pixi only once on mount; update callbacks via a separate effect
   useEffect(() => {
     if (!mountRef.current) return;
-    const game = new SpermRaceGame(mountRef.current, onReplay, onExit);
+    // Use the modular SpermRaceGame class
+    const game = new ModularSpermRaceGame(mountRef.current);
+
+    // NOTE: The modular SpermRaceGame is designed for offline practice mode.
+    // For online multiplayer with WebSocket integration, use LegacySpermRaceGame instead.
+    // The following WebSocket-specific code is preserved for reference when integrating:
+    /*
     // If we mounted while WS is already in game phase, pre-enable online mode immediately.
     // This avoids a short window where local/offline physics can run during server countdown on mobile.
     try {
@@ -6315,14 +6387,19 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
         if (!(game as any).preStart) (game as any).preStart = { startAt: Date.now(), durationMs: 3000 };
       }
     } catch {}
+    */
+
     gameRef.current = game;
+    // Initialize the game using the modular SpermRaceGame's init() method
     game.init().catch(console.error);
     return () => {
       try { game.destroy(); } catch (error) { console.error('Error destroying game:', error); }
     };
   }, []);
 
+  // NOTE: onReplay/onExit callbacks are not currently supported by modular SpermRaceGame
   // Keep onReplay/onExit current without re-creating the Pixi app
+  /*
   useEffect(() => {
     const game = gameRef.current;
     if (game) {
@@ -6330,13 +6407,21 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
       game.onExit = onExit;
     }
   }, [onReplay, onExit]);
+  */
 
+  // NOTE: WebSocket input sending not currently supported by modular SpermRaceGame
   // Wire WS input sending into the Pixi game loop (online matches).
+  /*
   useEffect(() => {
     const game = gameRef.current as any;
     if (game) game.wsSendInput = sendInput;
   }, [sendInput]);
+  */
 
+  // NOTE: The following WebSocket integration code is for the legacy game class.
+  // The modular SpermRaceGame does not yet support online multiplayer mode.
+  // To enable online play, switch to using LegacySpermRaceGame or extend the modular class.
+  /*
   // Bind WsProvider state into HUD when in tournament mode
   useEffect(() => {
     const game = gameRef.current;
@@ -6430,6 +6515,7 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
     }
     game.wsHud = { active: false, kills: {}, killFeed: [], playerId: null, idToName: {}, aliveSet: new Set(), eliminationOrder: [] } as any;
   }, [wsState.phase, wsState.game, wsState.lobby, wsState.kills, wsState.killFeed, wsState.playerId, wsState.eliminationOrder]);
+  */
 
   return (
     <div

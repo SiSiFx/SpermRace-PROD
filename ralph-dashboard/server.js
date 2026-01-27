@@ -90,7 +90,7 @@ function watchWorktrees() {
   const watcher = watch(WORKTREE_DIR, {
     persistent: true,
     ignoreInitial: true,
-    depth: 5,
+    depth: 10,
     ignored: /(node_modules|\.git|dist|\.next|coverage)/ // Corrected escaping for .git
   });
 
@@ -152,11 +152,11 @@ function pollAgents() {
 app.get('/', (_, res) => res.sendFile(join(__dirname, 'index.html')));
 
 wss.on('connection', (ws) => {
-  // Send orchestrator context
+  // Send orchestrator context - increased from 100 to 500 lines for better "self-talk" context
   try {
     const targetLog = existsSync(RALPHY_LOG) ? RALPHY_LOG : RALPH_LOG;
     if (existsSync(targetLog)) {
-      const logs = execSync(`tail -n 100 "${targetLog}"`, { encoding: 'utf8' });
+      const logs = execSync(`tail -n 500 "${targetLog}"`, { encoding: 'utf8' });
       ws.send(JSON.stringify({ type: 'orchestrator_log', text: logs }));
     }
   } catch {} // Ignore errors during initial log fetch
