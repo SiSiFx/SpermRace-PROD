@@ -34,7 +34,10 @@ import NewGameView from './NewGameView';
 import { Leaderboard } from './Leaderboard';
 import { WarningCircle, CreditCard, LinkSimple } from 'phosphor-react';
 import { Modes } from './components/Modes';
+import { PlayerCard } from './components/PlayerCard';
 import './leaderboard.css';
+import './hero-effects.css';
+import './components/PlayerCard.css';
 
 type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
 
@@ -459,6 +462,25 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
         <div className="lobby-container">
           <div className="lobby-header"><div className="lobby-title">Lobby</div><div className="lobby-status">{players.length}/{maxPlayers}</div></div>
           <div className="queue-bar"><div className="queue-left"><span className="queue-dot" /><span>{players.length}</span></div><div className="queue-center"><span>Queued</span></div><div className="queue-right"><span>Target</span><span>{maxPlayers}</span></div></div>
+
+          {/* Player Cards Grid for Practice Mode */}
+          <div className="player-cards-grid" style={{ marginBottom: '16px' }}>
+            {players.map((pid: string, index: number) => {
+              const name = pid.startsWith('BOT_') ? `Bot ${index}` : pid;
+              const isMe = pid === meId;
+              return (
+                <PlayerCard
+                  key={pid}
+                  playerId={pid}
+                  playerName={name}
+                  isMe={isMe}
+                  isReady={true}
+                  index={index}
+                />
+              );
+            })}
+          </div>
+
           <div className="lobby-orbit">
             <div className="orbit-center" />
             <div className="orbit-ring">
@@ -547,34 +569,20 @@ function Lobby({ onStart: _onStart, onBack }: { onStart: () => void; onBack: () 
         ) : null}
         <div className="queue-bar"><div className="queue-left"><span className="queue-dot" /><span>{players.length}</span></div><div className="queue-center"><span>Queued</span></div><div className="queue-right"><span>Target</span><span>{state.lobby?.maxPlayers ?? 16}</span></div></div>
         
-        {/* Player List */}
-        <div style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "8px",
-          justifyContent: "center",
-          margin: "16px 0",
-          maxHeight: "100px",
-          overflowY: "auto",
-          padding: "4px"
-        }}>
-          {players.map((pid: string) => {
+        {/* Player Cards Grid */}
+        <div className="player-cards-grid">
+          {players.map((pid: string, index: number) => {
             const name = state.lobby?.playerNames?.[pid] || (pid.startsWith("guest-") ? "Guest" : pid.slice(0, 4) + "…" + pid.slice(-4));
             const isMe = pid === state.playerId;
             return (
-              <div key={pid} style={{
-                fontSize: "11px",
-                padding: "4px 10px",
-                borderRadius: "6px",
-                background: isMe ? "rgba(0, 245, 255, 0.15)" : "rgba(255, 255, 255, 0.05)",
-                border: isMe ? "1px solid rgba(0, 245, 255, 0.3)" : "1px solid rgba(255, 255, 255, 0.1)",
-                color: isMe ? "#00f5ff" : "rgba(255, 255, 255, 0.7)",
-                fontWeight: isMe ? 800 : 500,
-                textTransform: "uppercase",
-                letterSpacing: "0.05em"
-              }}>
-                {name}
-              </div>
+              <PlayerCard
+                key={pid}
+                playerId={pid}
+                playerName={name}
+                isMe={isMe}
+                isReady={true}
+                index={index}
+              />
             );
           })}
         </div>
@@ -626,6 +634,158 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void }
   );
 }
 
+// Helper component for tech-styled progress bar
+function TechProgressBar({ label, value, max, suffix = '', theme = 'cyan' }: {
+  label: string;
+  value: number;
+  max: number;
+  suffix?: string;
+  theme?: 'cyan' | 'gold' | 'danger';
+}) {
+  const percentage = Math.min(100, Math.max(0, (value / max) * 100));
+  const themeClass = theme === 'gold' ? 'gold' : theme === 'danger' ? 'danger' : '';
+
+  return (
+    <div className="tech-progress-bar">
+      <div className="tech-progress-label">
+        <span className="label-text">{label}</span>
+        <span className="label-value">{value}{suffix} / {max}{suffix}</span>
+      </div>
+      <div className="tech-progress-track">
+        <div className={`tech-progress-fill ${themeClass}`} style={{ width: `${percentage}%` }} />
+      </div>
+    </div>
+  );
+}
+
+// Helper component for tech gauge
+function TechGauge({ label, value, subtext, theme = 'cyan' }: {
+  label: string;
+  value: string | number;
+  subtext?: string;
+  theme?: 'cyan' | 'gold';
+}) {
+  const themeClass = theme === 'gold' ? 'gold' : 'accent';
+
+  return (
+    <div className="tech-gauge">
+      <div className="gauge-label">{label}</div>
+      <div className={`gauge-value ${themeClass}`}>{value}</div>
+      {subtext && <div className="gauge-subtext">{subtext}</div>}
+    </div>
+  );
+}
+
+// Stats display component
+function MatchStats({ wsState, selfId, isWinner }: {
+  wsState: any;
+  selfId: string;
+  isWinner: boolean;
+}) {
+  const initialPlayers = wsState.initialPlayers || [];
+  const totalPlayers = initialPlayers.length;
+  const myKills = wsState.kills?.[selfId] || 0;
+
+  // Calculate rank
+  let rank = 0;
+  try {
+    const order = wsState.eliminationOrder || [];
+    const uniqueOrder: string[] = [];
+    for (const pid of order) {
+      if (pid && !uniqueOrder.includes(pid)) uniqueOrder.push(pid);
+    }
+    const rankMap: Record<string, number> = {};
+    const winner = wsState.lastRound?.winnerId;
+    if (winner) rankMap[winner] = 1;
+    let r = 2;
+    for (let i = uniqueOrder.length - 1; i >= 0; i--) {
+      const pid = uniqueOrder[i];
+      if (pid && !rankMap[pid]) { rankMap[pid] = r; r++; }
+    }
+    rank = rankMap[selfId] || 0;
+  } catch {}
+
+  // Calculate performance rating
+  const getPerformanceRating = () => {
+    if (!rank) return { rating: 'N/A', stars: 0, class: '' };
+    const percentile = (totalPlayers - rank + 1) / totalPlayers;
+    if (percentile >= 0.8 || isWinner) return { rating: 'Excellent', stars: 5, class: 'excellent' };
+    if (percentile >= 0.6) return { rating: 'Good', stars: 4, class: 'good' };
+    if (percentile >= 0.4) return { rating: 'Average', stars: 3, class: 'average' };
+    return { rating: 'Keep Practicing', stars: 2, class: 'poor' };
+  };
+
+  const performance = getPerformanceRating();
+
+  return (
+    <div className="match-stats-dashboard">
+      {/* Performance Rating */}
+      <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+        <div className={`performance-rating ${performance.class}`}>
+          <div className="rating-stars">
+            {[1, 2, 3, 4, 5].map((star) => (
+              <span
+                key={star}
+                className={`rating-star ${star <= performance.stars ? 'active' : ''}`}
+              >
+                ★
+              </span>
+            ))}
+          </div>
+          <span className="rating-text">{performance.rating}</span>
+        </div>
+      </div>
+
+      {/* Tech Gauges */}
+      <div className="tech-gauge-container">
+        <TechGauge label="Rank" value={`#${rank}`} subtext={`of ${totalPlayers}`} theme={isWinner ? 'gold' : 'cyan'} />
+        <TechGauge label="Kills" value={myKills} subtext="eliminations" />
+        <TechGauge label="Survival" value={`${rank <= totalPlayers / 3 ? 'Top' : ''}${Math.round(((totalPlayers - rank + 1) / totalPlayers) * 100)}%`} subtext="of players" />
+      </div>
+
+      {/* Progress Bars */}
+      {totalPlayers > 0 && (
+        <>
+          <TechProgressBar
+            label="Placement"
+            value={totalPlayers - rank + 1}
+            max={totalPlayers}
+            suffix=""
+            theme={isWinner ? 'gold' : 'cyan'}
+          />
+          <TechProgressBar
+            label="Kill Performance"
+            value={myKills}
+            max={Math.max(5, Math.ceil(totalPlayers / 3))}
+            suffix=""
+            theme={myKills > 0 ? 'cyan' : 'danger'}
+          />
+        </>
+      )}
+
+      {/* Stats Grid */}
+      <div className="match-stats-grid">
+        <div className="stat-card">
+          <div className="stat-card-label">Final Position</div>
+          <div className={`stat-card-value ${isWinner ? 'gold' : ''}`}>#{rank}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-card-label">Total Players</div>
+          <div className="stat-card-value">{totalPlayers}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-card-label">Eliminations</div>
+          <div className="stat-card-value highlight">{myKills}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-card-label">Win Rate</div>
+          <div className="stat-card-value">{isWinner ? '100%' : '0%'}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onChangeTier: () => void }) {
   const { state: wsState, connectAndJoin } = useWs();
   const { publicKey } = useWallet();
@@ -657,40 +817,17 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
       setPlayAgainBusy(false);
     }
   };
-  // Compute compact summary: your kills and rank if known (use wsState.playerId)
-  let rankText: string | null = null;
-  try {
-    const initial = wsState.initialPlayers || [];
-    const order = wsState.eliminationOrder || [];
-    if (initial.length) {
-      const uniqueOrder: string[] = [];
-      for (const pid of order) { if (pid && !uniqueOrder.includes(pid)) uniqueOrder.push(pid); }
-      const rankMap: Record<string, number> = {};
-      if (winner) rankMap[winner] = 1;
-      let r = 2;
-      for (let i = uniqueOrder.length - 1; i >= 0; i--) {
-        const pid = uniqueOrder[i];
-        if (pid && !rankMap[pid]) { rankMap[pid] = r; r++; }
-      }
-      const myRank = rankMap[selfId];
-      if (myRank) rankText = `Your rank: #${myRank}`;
-    }
-  } catch {}
   return (
     <div className="screen active" id="round-end">
-      {isWinner && (
-        <div className="god-ray-container active">
-          <div className="god-ray"></div>
-        </div>
-      )}
       <div className="modal-card">
         <div className="modal-header"><h2 className={`round-result ${isWinner ? 'victory' : 'defeat'}`}>{isWinner ? 'Fertilization!' : 'Eliminated'}</h2><p className="round-description">Winner: {winner ? `${winner.slice(0,4)}…${winner.slice(-4)}` : '—'}{typeof prize === 'number' ? ` • Prize: ${prize.toFixed(4)} SOL` : ''}</p></div>
         {solscan && (
           <div className="modal-subtitle"><a href={solscan} target="_blank" rel="noreferrer">View payout on Solscan</a></div>
         )}
-        {rankText && (
-          <div className="modal-subtitle">{rankText} • Kills: {wsState.kills?.[selfId] || 0}</div>
-        )}
+
+        {/* Tech-styled Match Stats */}
+        <MatchStats wsState={wsState} selfId={selfId} isWinner={isWinner} />
+
         <div className="round-actions">
           <button className="btn-primary" onClick={handlePlayAgain} disabled={playAgainBusy}>{playAgainBusy ? 'Joining…' : 'Replay'}</button>
           <button className="btn-secondary" onClick={onChangeTier}>Quit</button>

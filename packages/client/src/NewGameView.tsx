@@ -686,6 +686,8 @@ class SpermRaceGame {
     // Setup the game world immediately
     this.setupWorld();
 
+    // Performance settings already initialized above (line 501)
+    // No need to reinitialize here
     this.dbg('setupWorld: done, stageChildren=', (this.app as any)?.stage?.children?.length);
     this.dbg('setupWorld: done, stageChildren=', (this.app as any)?.stage?.children?.length);
     try { this.updateCamera(); } catch {}
@@ -4582,13 +4584,19 @@ class SpermRaceGame {
     // Create main overlay
     const overlay = document.createElement('div');
     overlay.id = 'game-over-overlay';
+
+    // Apply glitch aesthetic for defeat screen
+    if (!isVictory) {
+      overlay.classList.add('defeat-glitch');
+    }
+
     overlay.style.cssText = `
       position: fixed;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
-      background: rgba(0,0,0,0.92);
+      background: ${isVictory ? 'rgba(0,0,0,0.92)' : 'radial-gradient(ellipse at center, rgba(20, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.98) 100%)'};
       backdrop-filter: blur(8px);
       display: flex;
       flex-direction: column;
@@ -4596,51 +4604,106 @@ class SpermRaceGame {
       justify-content: center;
       z-index: 2000;
       font-family: var(--font-sans, 'Inter', sans-serif);
-      animation: fadeIn 0.3s ease;
+      animation: ${isVictory ? 'fadeIn 0.3s ease' : 'screen-shake 0.5s ease-out'};
     `;
 
     // Create content container
     const content = document.createElement('div');
     content.style.cssText = `
-      background: linear-gradient(135deg, rgba(34,211,238,0.15), rgba(99,102,241,0.15));
-      border: 2px solid ${isVictory ? 'rgba(34,211,238,0.6)' : 'rgba(244,63,94,0.6)'};
+      background: ${isVictory ? 'linear-gradient(135deg, rgba(34,211,238,0.15), rgba(99,102,241,0.15))' : 'rgba(20, 0, 0, 0.6)'};
+      border: 2px solid ${isVictory ? 'rgba(34,211,238,0.6)' : '#ff0000'};
       border-radius: 24px;
       padding: 40px 32px;
       text-align: center;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1);
+      box-shadow: ${isVictory ? '0 20px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1)' : '0 0 40px rgba(255, 0, 0, 0.5), inset 0 0 20px rgba(255, 0, 0, 0.2)'};
       max-width: 520px;
       width: 92%;
       backdrop-filter: blur(10px);
-      animation: slideUp 0.4s ease;
+      animation: ${isVictory ? 'slideUp 0.4s ease' : 'defeat-pulse 2s ease-in-out infinite'};
+      position: relative;
     `;
+
+    // Add glitch border effect for defeat
+    if (!isVictory) {
+      content.classList.add('defeat-glitch-border');
+    }
 
     // Main title
     const title = document.createElement('h1');
     title.style.cssText = `
       font-size: 42px;
       margin: 0 0 12px 0;
-      background: ${isVictory ? 'linear-gradient(90deg, #22d3ee, #6366f1)' : 'linear-gradient(90deg, #f43f5e, #fb923c)'};
-      background-clip: text;
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
+      background: ${isVictory ? 'linear-gradient(90deg, #22d3ee, #6366f1)' : '#ff0000'};
+      background-clip: ${isVictory ? 'text' : 'border-box'};
+      -webkit-background-clip: ${isVictory ? 'text' : 'border-box'};
+      -webkit-text-fill-color: ${isVictory ? 'transparent' : '#ff0000'};
       font-weight: 900;
       letter-spacing: -0.02em;
-      text-shadow: 0 4px 20px rgba(255,255,255,0.2);
+      text-shadow: ${isVictory ? '0 4px 20px rgba(255,255,255,0.2)' : 'none'};
+      position: relative;
+      z-index: 5;
+      font-family: ${isVictory ? 'inherit' : "'Orbitron', sans-serif"};
     `;
-    title.textContent = isVictory ? 'VICTORY' : 'ELIMINATED';
+    title.textContent = isVictory ? 'VICTORY' : 'CRITICAL SYSTEM FAILURE';
+
+    // Add glitch text effect for defeat
+    if (!isVictory) {
+      title.classList.add('defeat-title-glitch');
+    }
 
     // Rank display
     const rankDisplay = document.createElement('div');
     rankDisplay.style.cssText = `
       font-size: 24px;
-      margin: 8px 0 12px 0;
-      color: #ffffff;
+      margin: 8px 0 ${isVictory ? '12px' : '20px'} 0;
+      color: ${isVictory ? '#ffffff' : '#ff0000'};
       font-weight: 700;
+      position: relative;
+      z-index: 5;
     `;
     // Use computed totalPlayersCount above
     rankDisplay.textContent = isVictory
       ? 'Champion'
-      : `Rank #${rank} / ${totalPlayersCount}`;
+      : `ERROR: TERMINATED - RANK #${rank} / ${totalPlayersCount}`;
+
+    // Add glitch effect to rank display for defeat
+    if (!isVictory) {
+      rankDisplay.classList.add('defeat-stats-glitch');
+      rankDisplay.setAttribute('data-text', rankDisplay.textContent);
+    }
+
+    // Add scanlines effect for defeat
+    if (!isVictory) {
+      content.classList.add('defeat-scanlines');
+
+      // Create static overlay
+      const staticOverlay = document.createElement('div');
+      staticOverlay.className = 'defeat-static-overlay';
+      content.appendChild(staticOverlay);
+
+      // Create critical warning banner
+      const banner = document.createElement('div');
+      banner.className = 'defeat-critical-banner';
+      banner.textContent = '⚠ CRITICAL FAILURE ⚠';
+      overlay.appendChild(banner);
+
+      // Create error code display
+      const errorCode = document.createElement('div');
+      errorCode.className = 'defeat-error-code';
+      const errorCodeText = this.generateErrorCode();
+      errorCode.innerHTML = `ERROR_CODE: 0x${errorCodeText}<br>SYSTEM_STATUS: CRITICAL<br>FATAL_EXCEPTION<br>STACK_OVERFLOW`;
+      overlay.appendChild(errorCode);
+
+      // Create glitch particles
+      for (let i = 0; i < 20; i++) {
+        const particle = document.createElement('div');
+        particle.className = 'defeat-glitch-particle';
+        particle.style.left = `${Math.random() * 100}%`;
+        particle.style.animationDelay = `${Math.random() * 2}s`;
+        particle.style.animationDuration = `${0.5 + Math.random() * 1}s`;
+        overlay.appendChild(particle);
+      }
+    }
 
     // Winner display (show info about who won)
     let winnerDisplay: HTMLElement | null = null;
@@ -4788,11 +4851,11 @@ class SpermRaceGame {
 
     // Quick Replay button
     const replayBtn = document.createElement('button');
-    replayBtn.textContent = isVictory ? 'Another lap' : 'Run it back';
+    replayBtn.textContent = isVictory ? 'Another lap' : 'SYSTEM REBOOT';
     replayBtn.style.cssText = `
-      background: ${this.theme.accent ? '#22d3ee' : '#22d3ee'};
-      border: 1px solid rgba(255,255,255,0.12);
-      color: #03242b;
+      background: ${isVictory ? (this.theme.accent ? '#22d3ee' : '#22d3ee') : '#ff0000'};
+      border: 1px solid ${isVictory ? 'rgba(255,255,255,0.12)' : 'rgba(255, 0, 0, 0.6)'};
+      color: ${isVictory ? '#03242b' : '#ffffff'};
       padding: 10px 16px;
       font-size: 14px;
       font-weight: 600;
@@ -4801,7 +4864,12 @@ class SpermRaceGame {
       transition: transform 120ms ease;
       box-shadow: 0 6px 14px rgba(0,0,0,0.28);
       font-family: inherit;
+      position: relative;
+      z-index: 5;
     `;
+    if (!isVictory) {
+      replayBtn.classList.add('defeat-glitch-button');
+    }
     replayBtn.onmouseover = () => { replayBtn.style.transform = 'translateY(-1px)'; };
     replayBtn.onmouseout = () => { replayBtn.style.transform = 'translateY(0)'; };
     replayBtn.onclick = () => {
@@ -4814,11 +4882,11 @@ class SpermRaceGame {
 
     // Back to Menu button
     const menuBtn = document.createElement('button');
-    menuBtn.textContent = 'Back to menu';
+    menuBtn.textContent = isVictory ? 'Back to menu' : 'ABORT';
     menuBtn.style.cssText = `
       background: rgba(0,0,0,0.55);
-      border: 1px solid rgba(255,255,255,0.12);
-      color: ${this.theme.text};
+      border: 1px solid ${isVictory ? 'rgba(255,255,255,0.12)' : 'rgba(255, 0, 0, 0.4)'};
+      color: ${isVictory ? this.theme.text : '#ff6666'};
       padding: 10px 16px;
       font-size: 14px;
       font-weight: 600;
@@ -4827,7 +4895,12 @@ class SpermRaceGame {
       transition: transform 120ms ease;
       box-shadow: 0 6px 14px rgba(0,0,0,0.28);
       font-family: inherit;
+      position: relative;
+      z-index: 5;
     `;
+    if (!isVictory) {
+      menuBtn.classList.add('defeat-glitch-button');
+    }
     menuBtn.onmouseover = () => { menuBtn.style.transform = 'translateY(-1px)'; };
     menuBtn.onmouseout = () => { menuBtn.style.transform = 'translateY(0)'; };
     menuBtn.onclick = () => {
@@ -4879,6 +4952,18 @@ class SpermRaceGame {
         setTimeout(() => { try { p.remove(); } catch {} }, 900);
       }
     }
+  }
+
+  /**
+   * Generate a random hex error code for the defeat screen
+   */
+  private generateErrorCode(): string {
+    const chars = '0123456789ABCDEF';
+    let code = '';
+    for (let i = 0; i < 8; i++) {
+      code += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return code;
   }
 
   restartGame() {

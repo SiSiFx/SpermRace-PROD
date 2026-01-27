@@ -5124,15 +5124,253 @@ a,
     transparent,
     transparent 2px,
     rgba(57, 255, 20, 0.02) 2px,
-    rgba(57, 255, 0.02) 4px
+    rgba(57, 255, 20, 0.02) 4px
   );
   animation: hologram-scan 4s linear infinite;
   pointer-events: none;
 }
 
-@keyframes hologram-scan {
+/* ============================
+   Critical System Failure Glitch Effects
+   ============================ */
+
+/* Main glitch animation for text */
+@keyframes critical-glitch {
+  0% {
+    transform: translate(0);
+    text-shadow: none;
+    filter: none;
+  }
+  20% {
+    transform: translate(-2px, 2px);
+    text-shadow:
+      2px 0 #ff0000,
+      -2px 0 #00ffff;
+    filter: blur(0.5px);
+  }
+  40% {
+    transform: translate(-2px, -2px);
+    text-shadow:
+      2px 0 #ff0000,
+      -2px 0 #00ffff;
+    filter: blur(0.5px);
+  }
+  60% {
+    transform: translate(2px, 2px);
+    text-shadow:
+      2px 0 #ff0000,
+      -2px 0 #00ffff;
+    filter: blur(1px);
+  }
+  80% {
+    transform: translate(2px, -2px);
+    text-shadow:
+      2px 0 #ff0000,
+      -2px 0 #00ffff;
+    filter: blur(0.5px);
+  }
+  100% {
+    transform: translate(0);
+    text-shadow: none;
+    filter: none;
+  }
+}
+
+/* RGB split effect */
+@keyframes rgb-split {
+  0%, 100% {
+    text-shadow:
+      -2px 0 #ff0000,
+      2px 0 #00ffff,
+      0 0 10px rgba(255, 0, 0, 0.5);
+  }
+  50% {
+    text-shadow:
+      2px 0 #ff0000,
+      -2px 0 #00ffff,
+      0 0 20px rgba(255, 0, 0, 0.8);
+  }
+}
+
+/* Screen shake animation */
+@keyframes screen-shake {
+  0%, 100% { transform: translate(0, 0); }
+  10% { transform: translate(-5px, -5px); }
+  20% { transform: translate(5px, 5px); }
+  30% { transform: translate(-5px, 5px); }
+  40% { transform: translate(5px, -5px); }
+  50% { transform: translate(-3px, -3px); }
+  60% { transform: translate(3px, 3px); }
+  70% { transform: translate(-2px, 2px); }
+  80% { transform: translate(2px, -2px); }
+  90% { transform: translate(-1px, -1px); }
+}
+
+/* Static noise overlay */
+@keyframes static-noise {
   0% { background-position: 0 0; }
-  100% { background-position: 0 100px; }
+  100% { background-position: 100% 100%; }
+}
+
+/* Flicker effect */
+@keyframes glitch-flicker {
+  0%, 100% { opacity: 1; }
+  41.99% { opacity: 1; }
+  42% { opacity: 0; }
+  43% { opacity: 1; }
+  45.99% { opacity: 1; }
+  46% { opacity: 0; }
+  46.99% { opacity: 1; }
+}
+
+/* Defeat overlay specific styles */
+#game-over-overlay.defeat-glitch {
+  background: radial-gradient(ellipse at center, rgba(20, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.98) 100%);
+  animation: screen-shake 0.5s ease-out;
+}
+
+/* Scanlines effect */
+.defeat-scanlines::before {
+
+/* ==========================================
+   END-MATCH STATS - Tech-Styled Progress Bars & Gauges
+   ========================================== */
+
+.match-stats-dashboard {
+  margin: 24px 0;
+  padding: 20px;
+  background: rgba(14, 14, 18, 0.6);
+  border: 1px solid var(--border-dim);
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+}
+
+/* Tech Progress Bar Container */
+.tech-progress-bar {
+  margin: 16px 0;
+  position: relative;
+}
+
+.tech-progress-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.tech-progress-label .label-text {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tech-progress-label .label-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Progress Bar Track */
+.tech-progress-track {
+  position: relative;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Progress Bar Fill */
+.tech-progress-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background: linear-gradient(90deg,
+    rgba(0, 240, 255, 0.6) 0%,
+    rgba(0, 240, 255, 0.9) 50%,
+    rgba(0, 240, 255, 0.6) 100%);
+  border-radius: 6px;
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow:
+    0 0 20px rgba(0, 240, 255, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  animation: progress-glow 2s ease-in-out infinite;
+}
+
+@keyframes progress-glow {
+  0%, 100% {
+    box-shadow:
+      0 0 20px rgba(0, 240, 255, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+  50% {
+    box-shadow:
+      0 0 30px rgba(0, 240, 255, 0.6),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+}
+
+/* Victory/Gold themed progress bar */
+.tech-progress-fill.gold {
+  background: linear-gradient(90deg,
+    rgba(255, 215, 0, 0.6) 0%,
+    rgba(255, 215, 0, 0.9) 50%,
+    rgba(255, 215, 0, 0.6) 100%);
+  box-shadow:
+    0 0 20px rgba(255, 215, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  animation: progress-glow-gold 2s ease-in-out infinite;
+}
+
+@keyframes progress-glow-gold {
+  0%, 100% {
+    box-shadow:
+      0 0 20px rgba(255, 215, 0, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+  50% {
+    box-shadow:
+      0 0 30px rgba(255, 215, 0, 0.6),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+}
+
+/* Danger themed progress bar */
+.tech-progress-fill.danger {
+  background: linear-gradient(90deg,
+    rgba(255, 46, 85, 0.6) 0%,
+    rgba(255, 46, 85, 0.9) 50%,
+    rgba(255, 46, 85, 0.6) 100%);
+  box-shadow:
+    0 0 20px rgba(255, 46, 85, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+/* Progress bar segments for tech effect */
+.tech-progress-fill::after {
+
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+0deg,
+    rgba(0, 0, 0, 0.15),
+    rgba(0, 0, 0, 0.15) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+  pointer-events: none;
+  z-index: 1;
+  animation: scanline-move 8s linear infinite;
 }
 
 .stat-line {
@@ -5223,6 +5461,66 @@ a,
 }
 
 .action-btn .btn-text {
+
+90deg,
+    transparent,
+    transparent 4px,
+    rgba(255, 255, 255, 0.05) 4px,
+    rgba(255, 255, 255, 0.05) 8px
+  );
+  border-radius: 6px;
+}
+
+/* Tech Gauge Container */
+.tech-gauge-container {
+  display: flex;
+  justify-content: space-around;
+  gap: 20px;
+  margin: 20px 0;
+  flex-wrap: wrap;
+}
+
+.tech-gauge {
+  flex: 1;
+  min-width: 140px;
+  text-align: center;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+}
+
+.tech-gauge::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(0, 240, 255, 0.5),
+    transparent);
+}
+
+.gauge-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.gauge-value {
+  font-size: 28px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+
   position: relative;
   z-index: 1;
 }
@@ -5402,11 +5700,264 @@ a,
   .victory-particles {
     width: 300px;
     height: 300px;
+
+.gauge-value.accent {
+  color: var(--accent);
+  text-shadow: 0 0 20px rgba(0, 240, 255, 0.5);
+}
+
+.gauge-value.gold {
+  color: var(--gold);
+  text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+}
+
+.gauge-subtext {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/* Circular Gauge */
+.circular-gauge {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  margin: 0 auto 12px;
+}
+
+.circular-gauge-svg {
+  transform: rotate(-90deg);
+  width: 100%;
+  height: 100%;
+}
+
+.circular-gauge-bg {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.05);
+  stroke-width: 8;
+}
+
+.circular-gauge-progress {
+  fill: none;
+  stroke: url(#gaugeGradient);
+  stroke-width: 8;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1);
+  filter: drop-shadow(0 0 8px rgba(0, 240, 255, 0.5));
+}
+
+.circular-gauge-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.circular-gauge-value {
+  font-size: 24px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-primary);
+  display: block;
+}
+
+.circular-gauge-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+/* Performance Rating */
+.performance-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: rgba(0, 240, 255, 0.08);
+  border: 1px solid rgba(0, 240, 255, 0.2);
+  border-radius: 20px;
+  margin: 12px 0;
+}
+
+.performance-rating.excellent {
+  background: rgba(0, 255, 136, 0.08);
+  border-color: rgba(0, 255, 136, 0.3);
+}
+
+.performance-rating.good {
+  background: rgba(0, 240, 255, 0.08);
+  border-color: rgba(0, 240, 255, 0.3);
+}
+
+.performance-rating.average {
+  background: rgba(255, 215, 0, 0.08);
+  border-color: rgba(255, 215, 0, 0.3);
+}
+
+.performance-rating.poor {
+  background: rgba(255, 46, 85, 0.08);
+  border-color: rgba(255, 46, 85, 0.3);
+}
+
+.rating-stars {
+  display: flex;
+  gap: 4px;
+}
+
+.rating-star {
+  font-size: 14px;
+  opacity: 0.3;
+  color: var(--text-secondary);
+  transition: all 0.3s ease;
+}
+
+.rating-star.active {
+  opacity: 1;
+  color: var(--gold);
+  text-shadow: 0 0 8px rgba(255, 215, 0, 0.5);
+}
+
+.rating-text {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-primary);
+}
+
+/* Stats Grid Layout */
+.match-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin: 16px 0;
+}
+
+.stat-card {
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+  border-color: rgba(0, 240, 255, 0.2);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.stat-card::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg,
+    var(--accent),
+    transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.stat-card:hover::after {
+  opacity: 1;
+}
+
+.stat-card-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.stat-card-value {
+  font-size: 24px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.stat-card-value.highlight {
+  color: var(--accent);
+  text-shadow: 0 0 15px rgba(0, 240, 255, 0.4);
+}
+
+.stat-card-value.gold {
+  color: var(--gold);
+  text-shadow: 0 0 15px rgba(255, 215, 0, 0.4);
+}
+
+/* Animated Number Counter */
+@keyframes countUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.stat-card-value {
+  animation: countUp 0.6s ease-out;
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .match-stats-dashboard {
+    padding: 16px;
+    margin: 16px 0;
+  }
+
+  .tech-gauge-container {
+    gap: 12px;
+  }
+
+  .tech-gauge {
+    min-width: 100px;
+    padding: 12px;
+  }
+
+  .circular-gauge {
+    width: 90px;
+    height: 90px;
+  }
+
+  .circular-gauge-value {
+    font-size: 18px;
+  }
+
+  .gauge-value {
+    font-size: 22px;
+  }
+
+  .match-stats-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .stat-card {
+    padding: 12px;
+  }
+
+  .stat-card-value {
+    font-size: 20px;
+
   }
 }
 
 @media (max-width: 480px) {
-  .round-result {
+.round-result {
     font-size: 1.6rem;
     letter-spacing: 0.1em;
   }
@@ -6150,4 +6701,180 @@ a,
 
 .lobby-footer .btn-secondary:hover .btn-icon {
   transform: translateX(-4px);
+}
+
+/* Glitch text effect for defeat title */
+.defeat-title-glitch {
+  animation:
+    critical-glitch 0.3s ease-in-out infinite,
+    rgb-split 0.5s ease-in-out infinite alternate,
+    glitch-flicker 3s linear infinite;
+  position: relative;
+}
+
+/* Static noise overlay for defeat screen */
+.defeat-static-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="3" stitchTiles="stitch"/></filter><rect width="200" height="200" filter="url(%23n)" opacity="0.4"/></svg>');
+  opacity: 0.15;
+  pointer-events: none;
+  z-index: 2;
+  animation: static-noise 2s steps(10) infinite;
+}
+
+/* Error code display */
+.defeat-error-code {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #ff0000;
+  opacity: 0.6;
+  text-align: right;
+  line-height: 1.4;
+  animation: glitch-flicker 4s linear infinite;
+  z-index: 3;
+}
+
+/* Critical warning banner */
+.defeat-critical-banner {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: repeating-linear-gradient(
+    45deg,
+    #ff0000,
+    #ff0000 10px,
+    #ffff00 10px,
+    #ffff00 20px
+  );
+  color: #000;
+  padding: 8px 24px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  border: 2px solid #fff;
+  animation:
+    critical-glitch 0.2s ease-in-out infinite,
+    blink-warning 0.8s ease-in-out infinite;
+  z-index: 4;
+  text-transform: uppercase;
+}
+
+/* Glitch border effect */
+.defeat-glitch-border {
+  position: relative;
+  border: 3px solid #ff0000;
+  animation: rgb-split 1s ease-in-out infinite alternate;
+  box-shadow:
+    0 0 20px rgba(255, 0, 0, 0.5),
+    inset 0 0 20px rgba(255, 0, 0, 0.2);
+}
+
+/* Glitch button styles */
+.defeat-glitch-button {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.defeat-glitch-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 0, 0, 0.4),
+    transparent
+  );
+  transition: left 0.5s ease;
+}
+
+.defeat-glitch-button:hover::before {
+  left: 100%;
+}
+
+.defeat-glitch-button:hover {
+  animation: critical-glitch 0.2s ease-in-out;
+}
+
+/* Chromatic aberration for stats */
+.defeat-stats-glitch {
+  position: relative;
+}
+
+.defeat-stats-glitch::after {
+  content: attr(data-text);
+  position: absolute;
+  left: 2px;
+  top: 0;
+  color: #ff0000;
+  opacity: 0.7;
+  clip-path: polygon(0 0, 100% 0, 100% 45%, 0 45%);
+  animation: rgb-split 0.3s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+/* Pulse red glow for defeat container */
+@keyframes defeat-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 20px rgba(255, 0, 0, 0.3),
+      inset 0 0 20px rgba(255, 0, 0, 0.1);
+  }
+  50% {
+    box-shadow:
+      0 0 40px rgba(255, 0, 0, 0.6),
+      inset 0 0 30px rgba(255, 0, 0, 0.2);
+  }
+}
+
+/* Glitch particles */
+.defeat-glitch-particle {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: #ff0000;
+  animation: particle-fall 1s linear infinite;
+  opacity: 0.6;
+}
+
+@keyframes particle-fall {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.6;
+  }
+  90% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateY(100vh);
+    opacity: 0;
+
+.match-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tech-progress-bar {
+    margin: 12px 0;
+  }
+
+  .tech-progress-label {
+    font-size: 12px;
+
+  }
 }
