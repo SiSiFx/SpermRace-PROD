@@ -1,0 +1,111 @@
+import { Car, InputState, BoostPad } from './types';
+
+// Normalize angle to [-PI, PI]
+function normalizeAngle(a: number): number {
+  while (a > Math.PI) a -= 2 * Math.PI;
+  while (a < -Math.PI) a += 2 * Math.PI;
+  return a;
+}
+
+export class Physics {
+  updateCar(car: Car, deltaTime: number, boostPads: BoostPad[]): void {
+    if (car.destroyed) return;
+    const now = Date.now();
+
+    // Hotspot buff check
+    if (car.hotspotBuffExpiresAt && car.hotspotBuffExpiresAt <= now) {
+      car.hotspotBuffExpiresAt = undefined;
+    }
+    const buffActive = !!(car.hotspotBuffExpiresAt && car.hotspotBuffExpiresAt > now);
+
+    // Boost energy management
+    if (car.isBoosting) {
+      car.boostEnergy -= car.boostConsumptionRate * deltaTime;
+      car.targetSpeed = car.boostSpeed;
+      if (buffActive) car.targetSpeed *= 1.08;
+      car.driftFactor = Math.min(car.maxDriftFactor, car.driftFactor + deltaTime * 2.0);
+      if (car.boostEnergy <= 0) {
+        car.boostEnergy = 0;
+        car.isBoosting = false;
+        car.targetSpeed = car.baseSpeed;
+      }
+    } else {
+      car.boostEnergy += car.boostRegenRate * deltaTime;
+      if (car.boostEnergy > car.maxBoostEnergy) car.boostEnergy = car.maxBoostEnergy;
+      if (car.killBoostUntil && now < car.killBoostUntil) {
+        car.targetSpeed = car.boostSpeed * 0.8;
+      } else {
+        car.targetSpeed = car.baseSpeed;
+        if (buffActive) car.targetSpeed *= 1.05;
+      }
+      car.driftFactor = Math.max(0, car.driftFactor - deltaTime * 1.5);
+    }
+
+    // Boost pad check
+    for (const pad of boostPads) {
+      const dx = car.x - pad.x, dy = car.y - pad.y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq <= pad.radius * pad.radius && (now - pad.lastTriggeredAt) >= pad.cooldownMs) {
+        pad.lastTriggeredAt = now;
+        car.boostEnergy = Math.min(car.maxBoostEnergy, car.boostEnergy + 20);
+        car.isBoosting = true;
+        car.targetSpeed = car.boostSpeed * 1.05;
+      }
+    }
+
+    // Speed interpolation
+    const speedDiff = car.targetSpeed - car.speed;
+    car.speed += speedDiff * (car.accelerationScalar ?? car.speedTransitionRate) * deltaTime;
+
+    // Angle interpolation
+    const angleDiff = normalizeAngle(car.targetAngle - car.angle);
+    const turnRate = car.turnResponsiveness ?? 7.0;
+    car.angle += angleDiff * Math.min(1.0, turnRate * deltaTime);
+
+    // Velocity calculation with drift
+    const forwardX = Math.cos(car.angle);
+    const forwardY = Math.sin(car.angle);
+    const driftAngle = car.angle + Math.PI / 2;
+    const driftIntensity = car.driftFactor * car.speed * 0.4 * Math.abs(angleDiff);
+    car.vx = forwardX * car.speed + Math.cos(driftAngle) * driftIntensity;
+    car.vy = forwardY * car.speed + Math.sin(driftAngle) * driftIntensity;
+
+    // Position update
+    car.x += car.vx * deltaTime;
+    car.y += car.vy * deltaTime;
+
+    // Sprite sync
+    car.sprite.x = car.x;
+    car.sprite.y = car.y;
+    car.sprite.rotation = car.angle;
+  }
+
+  updateBot(car: Car, deltaTime: number, boostPads: BoostPad[]): void {
+    if (car.destroyed) return;
+
+    // Random direction changes
+    car.turnTimer -= deltaTime;
+    if (car.turnTimer <= 0) {
+      car.targetAngle += (Math.random() - 0.5) * Math.PI * 0.5;
+      car.turnTimer = 1.0 + Math.random() * 2.0;
+    }
+
+    // Random boost
+    car.boostAITimer -= deltaTime;
+    if (car.boostAITimer <= 0) {
+      if (!car.isBoosting && car.boostEnergy >= car.minBoostEnergy && Math.random() < 0.3) {
+        car.isBoosting = true;
+        car.targetSpeed = car.boostSpeed;
+        car.boostAITimer = 2.0 + Math.random() * 3.0;
+      } else if (car.isBoosting && (car.boostEnergy < 10 || Math.random() < 0.4)) {
+        car.isBoosting = false;
+        car.targetSpeed = car.baseSpeed;
+        car.boostAITimer = 1.0 + Math.random() * 2.0;
+      } else {
+        car.boostAITimer = 0.5;
+      }
+    }
+
+    this.updateCar(car, deltaTime, boostPads);
+  }
+}
