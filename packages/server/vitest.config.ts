@@ -11,18 +11,13 @@ export default defineConfig({
     teardownTimeout: 5000,
     isolate: true,
     pool: 'forks',
-    poolOptions: {
-      forks: {
-        singleFork: true,
-        maxForks: 1,
-        minForks: 1
-      }
-    }
+    singleFork: true,
   },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
       'shared': path.resolve(__dirname, '../shared/src'),
+      'shared/dist': path.resolve(__dirname, '../shared/dist'),
     }
   }
 });
