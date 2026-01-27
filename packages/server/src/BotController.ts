@@ -20,6 +20,14 @@ interface BotPersonalityTraits {
   inconsistency: number;       // How often they make mistakes (0-1)
   panicThreshold: number;      // Distance at which they panic (pixels)
   aggressionDistance: number;  // Distance to engage enemies (pixels)
+  predictionSkill: number;     // Accuracy of movement prediction (0-1)
+}
+
+interface PredictedPosition {
+  x: number;
+  y: number;
+  confidence: number;          // How confident the prediction is (0-1)
+  timeToIntercept: number;     // Estimated seconds to reach target
 }
 
 /**
@@ -50,6 +58,8 @@ export class BotController {
   private microAdjustmentTimer: number = 0;
   private mistakeTimer: number = 0;
   private hesitationChance: number = 0;
+  private targetPredictionHistory: PredictedPosition[] = [];
+  private lastPredictionUpdate: number = 0;
 
   constructor(player: PlayerEntity) {
     this.player = player;
@@ -283,27 +293,26 @@ export class BotController {
     if (!nearestEnemy) return this.buildSearchInput(pos, null, sense);
     const target = nearestEnemy.player;
 
-    // Personality affects prediction accuracy
-    let leadTime;
-    if (this.personality === 'aggressive') {
-      // Over-commits to predictions (can overshoot)
-      leadTime = Math.min(1.4, nearestEnemy.dist / 400);
-    } else if (this.personality === 'cautious') {
-      // More conservative predictions
-      leadTime = Math.min(1.0, nearestEnemy.dist / 500);
-    } else {
-      // Balanced prediction
-      leadTime = Math.min(1.2, nearestEnemy.dist / 450);
-    }
+    // Use advanced predictive movement for interception
+    const prediction = this.predictInterceptionPosition(
+      pos,
+      target.sperm.position,
+      target.sperm.velocity,
+      nearestEnemy.dist
+    );
 
-    // Add slight prediction error
-    leadTime *= (0.9 + Math.random() * 0.2);
+    // Apply personality-based prediction error
+    const predictionError = (1 - this.traits.predictionSkill) * 0.3;
+    const errorAngle = (Math.random() - 0.5) * 2 * Math.PI * predictionError;
+    const errorMagnitude = nearestEnemy.dist * predictionError * 0.2;
 
-    const predictedX = target.sperm.position.x + target.sperm.velocity.x * leadTime;
-    const predictedY = target.sperm.position.y + target.sperm.velocity.y * leadTime;
+    const predictedX = prediction.x + Math.cos(errorAngle) * errorMagnitude;
+    const predictedY = prediction.y + Math.sin(errorAngle) * errorMagnitude;
 
     // Personality affects boost usage during hunt
-    const boostChance = this.traits.boostFrequency * 0.4;
+    // Boost when prediction confidence is high and target is in range
+    const boostChance = this.traits.boostFrequency * 0.4 * prediction.confidence;
+    const shouldBoost = nearestEnemy.dist < 350 && Math.random() < boostChance;
 
     return {
       target: {
@@ -311,43 +320,14 @@ export class BotController {
         y: predictedY
       },
       accelerate: true,
-      boost: nearestEnemy.dist < 350 && Math.random() < boostChance,
+      boost: shouldBoost,
       drift: false,
     };
   }
 
   private buildAttackInput(pos: { x: number; y: number }, nearestEnemy: any, sense: BotSense): PlayerInput {
-    if (!nearestEnemy) return this.buildSearchInput(pos, null, sense);
-    const target = nearestEnemy.player;
-    const angleToTarget = Math.atan2(target.sperm.position.y - pos.y, target.sperm.position.x - pos.x);
-
-    // Personality affects attack style
-    let cutOffAngle;
-    if (this.personality === 'aggressive') {
-      // More aggressive cut-offs (riskier)
-      cutOffAngle = angleToTarget + (Math.random() > 0.5 ? 0.7 : -0.7);
-    } else if (this.personality === 'cautious') {
-      // More conservative cut-offs
-      cutOffAngle = angleToTarget + (Math.random() > 0.5 ? 0.35 : -0.35);
-    } else {
-      // Balanced approach
-      cutOffAngle = angleToTarget + (Math.random() > 0.5 ? 0.5 : -0.5);
-    }
-
-    // Add some randomness to make it less predictable
-    cutOffAngle += (Math.random() - 0.5) * 0.2;
-
-    const attackDistance = this.personality === 'aggressive' ? 700 : 600;
-
-    return {
-      target: {
-        x: pos.x + Math.cos(cutOffAngle) * attackDistance,
-        y: pos.y + Math.sin(cutOffAngle) * attackDistance
-      },
-      accelerate: true,
-      boost: true,
-      drift: false,
-    };
+    // Use predictive attack for smarter cut-off maneuvers
+    return this.buildPredictiveAttackInput(pos, nearestEnemy, sense);
   }
 
   private buildPanicInput(pos: { x: number; y: number }, sense: BotSense): PlayerInput {
@@ -513,6 +493,186 @@ export class BotController {
     return directions[0].angle;
   }
 
+  /**
+   * Advanced predictive movement: Calculates where to aim to intercept a moving target.
+   * Uses iterative solving to account for:
+   * - Target's current velocity and potential acceleration
+   * - Bot's own speed and turn rate limitations
+   * - Time to intercept decreases as target gets closer
+   *
+   * @param selfPos Bot's current position
+   * @param targetPos Target's current position
+   * @param targetVel Target's current velocity vector
+   * @param distance Current distance to target
+   * @returns Predicted interception point with confidence and time estimate
+   */
+  private predictInterceptionPosition(
+    selfPos: { x: number; y: number },
+    targetPos: { x: number; y: number },
+    targetVel: { x: number; y: number },
+    distance: number
+  ): PredictedPosition {
+    const selfSpeed = this.player.sperm.velocity
+      ? Math.hypot(this.player.sperm.velocity.x, this.player.sperm.velocity.y)
+      : 200; // Current speed or default
+    const maxSpeed = 480; // Max speed from constants
+
+    // Estimate target's intent based on their velocity
+    const targetSpeed = Math.hypot(targetVel.x, targetVel.y);
+    const targetHeading = Math.atan2(targetVel.y, targetVel.x);
+
+    // Use personality-based prediction skill
+    // Higher predictionSkill = more accurate lead calculation
+    const skillFactor = this.traits.predictionSkill;
+
+    // Calculate initial time to intercept estimate
+    // This is iterative: we estimate where they'll be, calculate time to reach that point,
+    // then refine our prediction based on that time
+    let predictedX = targetPos.x;
+    let predictedY = targetPos.y;
+    let timeToIntercept = distance / Math.max(selfSpeed, 100);
+
+    // Refine prediction through multiple iterations (converges on optimal intercept point)
+    const iterations = Math.floor(2 + skillFactor * 3); // 2-5 iterations based on skill
+    for (let i = 0; i < iterations; i++) {
+      // Predict where target will be after timeToIntercept seconds
+      // Account for potential direction changes (less accurate at longer distances)
+      const uncertainty = Math.min(1, timeToIntercept * 0.2); // Increases with time
+
+      // Predict target position considering their current velocity
+      // More skillful bots predict tighter turns and less drift
+      const turnPredictability = skillFactor * 0.8;
+      predictedX = targetPos.x + targetVel.x * timeToIntercept * turnPredictability;
+      predictedY = targetPos.y + targetVel.y * timeToIntercept * turnPredictability;
+
+      // Add some target trajectory prediction based on typical player behavior
+      // Players tend to drift in curves, not straight lines
+      if (targetSpeed > 50 && i > 0) {
+        // Estimate curvature based on typical turn rates
+        const curveAmount = timeToIntercept * 0.3 * (1 - skillFactor * 0.5);
+        predictedX += Math.cos(targetHeading + Math.PI / 2) * curveAmount * targetSpeed * 0.1;
+        predictedY += Math.sin(targetHeading + Math.PI / 2) * curveAmount * targetSpeed * 0.1;
+      }
+
+      // Recalculate time to reach this predicted position
+      const newDistance = Math.hypot(predictedX - selfPos.x, predictedY - selfPos.y);
+      const avgSpeed = (selfSpeed + maxSpeed) / 2;
+      timeToIntercept = newDistance / Math.max(avgSpeed, 100);
+    }
+
+    // Adjust prediction based on target's likely reactions
+    // Smart bots consider that targets will try to evade
+    if (skillFactor > 0.6) {
+      // Predict target will try to cut away - aim slightly ahead of their current path
+      const evasionLead = skillFactor * 0.15; // 0-0.15 radians lead
+      const leadDistance = timeToIntercept * maxSpeed * 0.3;
+      predictedX += Math.cos(targetHeading + evasionLead) * leadDistance;
+      predictedY += Math.sin(targetHeading + evasionLead) * leadDistance;
+    }
+
+    // Calculate confidence in prediction
+    // Higher confidence when: target is closer, target is moving predictably, bot has high skill
+    let confidence = skillFactor;
+    confidence *= Math.min(1, 300 / (distance + 1)); // Higher confidence when closer
+    confidence *= Math.min(1, targetSpeed / 200 + 0.5); // Lower confidence for very slow/stationary targets
+
+    // Personality affects confidence calibration
+    if (this.personality === 'aggressive') {
+      confidence *= 1.1; // Overconfident
+    } else if (this.personality === 'cautious') {
+      confidence *= 0.85; // Underconfident
+    }
+
+    return {
+      x: predictedX,
+      y: predictedY,
+      confidence: Math.max(0.1, Math.min(0.95, confidence)),
+      timeToIntercept,
+    };
+  }
+
+  /**
+   * Predicts where a target's trail will be positioned after a given time.
+   * Used for cutting off targets and predicting escape routes.
+   *
+   * @param targetPos Target's current position
+   * @param targetVel Target's current velocity
+   * @param timeAhead Seconds to predict into the future
+   * @returns Predicted trail position
+   */
+  private predictTrailPosition(
+    targetPos: { x: number; y: number },
+    targetVel: { x: number; y: number },
+    timeAhead: number
+  ): { x: number; y: number } {
+    // Trail lags behind the player
+    const trailLag = 0.15; // 150ms delay
+    const effectiveTime = Math.max(0, timeAhead - trailLag);
+
+    return {
+      x: targetPos.x + targetVel.x * effectiveTime,
+      y: targetPos.y + targetVel.y * effectiveTime,
+    };
+  }
+
+  /**
+   * Advanced attack mode with predictive cut-off maneuvers.
+   * Calculates interception points to cut off the target's path.
+   */
+  private buildPredictiveAttackInput(
+    pos: { x: number; y: number },
+    nearestEnemy: any,
+    sense: BotSense
+  ): PlayerInput {
+    if (!nearestEnemy) return this.buildSearchInput(pos, null, sense);
+    const target = nearestEnemy.player;
+
+    // Predict where target will be and where their trail will be
+    const interceptPrediction = this.predictInterceptionPosition(
+      pos,
+      target.sperm.position,
+      target.sperm.velocity,
+      nearestEnemy.dist
+    );
+
+    // Calculate cut-off angle based on predicted intercept point
+    const angleToIntercept = Math.atan2(
+      interceptPrediction.y - pos.y,
+      interceptPrediction.x - pos.x
+    );
+
+    // Personality affects cut-off aggressiveness
+    let cutOffAngle;
+    const baseCutOff = Math.PI / 4; // 45 degrees base
+
+    if (this.personality === 'aggressive') {
+      // More aggressive cut-offs (aim further ahead, riskier)
+      cutOffAngle = angleToIntercept + (Math.random() > 0.5 ? baseCutOff * 1.5 : -baseCutOff * 1.5);
+    } else if (this.personality === 'cautious') {
+      // More conservative cut-offs
+      cutOffAngle = angleToIntercept + (Math.random() > 0.5 ? baseCutOff * 0.6 : -baseCutOff * 0.6);
+    } else {
+      // Balanced approach
+      cutOffAngle = angleToIntercept + (Math.random() > 0.5 ? baseCutOff : -baseCutOff);
+    }
+
+    // Add randomness based on inconsistency
+    cutOffAngle += (Math.random() - 0.5) * this.traits.inconsistency * 0.5;
+
+    // Attack distance based on personality and prediction confidence
+    const attackDistance = (this.personality === 'aggressive' ? 700 : 600) * interceptPrediction.confidence;
+
+    return {
+      target: {
+        x: pos.x + Math.cos(cutOffAngle) * attackDistance,
+        y: pos.y + Math.sin(cutOffAngle) * attackDistance
+      },
+      accelerate: true,
+      boost: interceptPrediction.confidence > 0.5, // Boost when confident
+      drift: false,
+    };
+  }
+
   private randomPersonality(): BotPersonality {
     const rand = Math.random();
     if (rand < 0.33) return 'aggressive';
@@ -531,6 +691,7 @@ export class BotController {
           inconsistency: 0.4 + Math.random() * 0.2,      // Somewhat inconsistent
           panicThreshold: 120,                            // Panics later
           aggressionDistance: 700,                       // Engages from further
+          predictionSkill: 0.55 + Math.random() * 0.15,  // Moderate prediction (overcommits)
         };
 
       case 'cautious':
@@ -542,6 +703,7 @@ export class BotController {
           inconsistency: 0.2 + Math.random() * 0.15,     // More consistent
           panicThreshold: 180,                            // Panics earlier
           aggressionDistance: 500,                       // Engages from closer
+          predictionSkill: 0.75 + Math.random() * 0.15,  // Good prediction (careful calculation)
         };
 
       case 'balanced':
@@ -554,6 +716,7 @@ export class BotController {
           inconsistency: 0.3 + Math.random() * 0.2,     // Average inconsistency
           panicThreshold: 150,                           // Average panic distance
           aggressionDistance: 600,                       // Average engagement
+          predictionSkill: 0.65 + Math.random() * 0.2,  // Above average prediction
         };
     }
   }
