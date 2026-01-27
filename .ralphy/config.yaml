@@ -13,17 +13,35 @@ commands:
   build: "pnpm build"
 
 rules:
+  # Project structure
   - "This is a pnpm monorepo - use pnpm commands"
   - "Client code in packages/client/, server in packages/server/, shared in packages/shared/"
-  - "Game loop must run at 60fps - optimize for performance"
+  - "WebSocket messages defined in shared/protocol"
+
+  # CRITICAL: Verification before marking complete
+  - "VITE DOES NOT TYPE-CHECK! Always run 'npx tsc --noEmit' to catch type errors - build passing is NOT enough"
+  - "Always run 'pnpm build' AND 'npx tsc --noEmit' AND test in browser before marking task complete"
+  - "Never mark a task complete without actually running and testing the feature"
+
+  # CRITICAL: API version checking
+  - "BEFORE using ANY library API, check package.json for version and search web for '[library] v[X] migration guide'"
+  - "PixiJS v8 BREAKING CHANGES: use app.canvas (NOT app.view), use await app.init({}) (NOT constructor options), use .fill()/.stroke() (NOT beginFill/endFill)"
+
+  # Code quality
+  - "Follow existing code patterns - READ files before writing new ones"
+  - "When creating classes that need PIXI containers, defer graphics setup to a separate method called after containers exist"
+  - "Check constructor signatures match the call sites - TypeScript won't catch it if Vite skips type checking"
   - "Use TypeScript strict mode"
   - "All network messages must be type-safe in packages/shared/"
-  - "Follow existing code patterns - read before writing"
+
+  # Performance
+  - "Game loop must run at 60fps - optimize for performance"
+  - "Performance-critical code must use spatial partitioning"
+
+  # Process
   - "Test all new functions"
   - "Use conventional commits: feat:, fix:, refactor:, test:"
-  - "Performance-critical code must use spatial partitioning"
-  - "WebSocket messages defined in shared/protocol"
-  - "Read CLAUDE.md and ARCHITECTURE.md for context"
+  - "Read CLAUDE.md for context"
 
 boundaries:
   never_touch:
