@@ -68,17 +68,37 @@ export class TrailSystem {
 
     if (trail.points.length < 2) return;
 
+    const now = Date.now();
     const color = trail.car.color;
 
     for (let i = 1; i < trail.points.length; i++) {
       const p0 = trail.points[i - 1];
       const p1 = trail.points[i];
-      const width = p1.isBoosting ? 6 : 4;
-      const alpha = p1.isBoosting ? 0.9 : 0.7;
+
+      // Calculate fade based on age
+      const age = now - p1.time;
+      const maxAge = p1.expiresAt ? p1.expiresAt - p1.time : 8000;
+      const fade = 1 - Math.min(1, age / maxAge);
+
+      // Boost trails are wider, brighter, and last longer
+      const isBoostTrail = p1.isBoosting;
+      const width = isBoostTrail ? 8 : 4;
+      const baseAlpha = isBoostTrail ? 0.95 : 0.65;
+      const alpha = baseAlpha * fade;
+
+      // Boost trails have a cyan tint added
+      const trailColor = isBoostTrail ? 0x22d3ee : color;
 
       g.moveTo(p0.x, p0.y);
       g.lineTo(p1.x, p1.y);
-      g.stroke({ width, color, alpha });
+      g.stroke({ width, color: trailColor, alpha });
+
+      // Add outer glow for boost trails
+      if (isBoostTrail) {
+        g.moveTo(p0.x, p0.y);
+        g.lineTo(p1.x, p1.y);
+        g.stroke({ width: width + 4, color: 0x6366f1, alpha: alpha * 0.3 });
+      }
     }
   }
 
