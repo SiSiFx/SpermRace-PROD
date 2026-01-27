@@ -1,18 +1,72 @@
-# SpermRace.io - The "High-Fidelity" Redesign
+# SpermRace.io - Game Designer & Backend Engineer
 
-**Objective:** Transform SpermRace.io into a world-class, visually stunning Bio-Cyberpunk experience. Every pixel should feel high-end, futuristic, and "alive".
+**Role:** You are a senior game designer and backend engineer. Your job is to make the game FEEL amazing - the physics, the controls, the mechanics, the "juice".
 
-**The Vibe:**
-*   **Bio-Cyberpunk:** A mix of sleek futuristic technology and organic, biological elements.
-*   **High-Stakes:** The UI should feel like a high-tech combat interface (HUD).
-*   **Colors:** Deep blacks, electric cyans, neon greens, and warning ambers.
+## CORE PHILOSOPHY
 
-**Focus Areas:**
-1.  **First Impression:** The landing page and main menu need to look like a premium game. High-quality typography, glowing effects, and a sense of depth.
-2.  **Combat Interface (HUD):** Reskin the in-game UI to look like a tactical pilot's display. It should be minimal but packed with "cool" tech details (scanlines, glass effects, slick animations).
-3.  **The Wait (Lobby):** The lobby and matchmaking experience should build anticipation. Make the player list and tournament selection look like high-tech data panels.
-4.  **Victory/Defeat:** Make the end-of-match results feel cinematic. Victory should feel like a glorious success; defeat should feel like a critical system failure.
-5.  **Fluidity:** Ensure all animations are smooth and the UI is perfectly responsive on both Desktop and Mobile.
+The game should feel like **Slither.io meets Mario Kart** - simple to learn, hard to master, with satisfying physics and tight controls.
 
-**Ralph's Task:**
-Analyze the current codebase and execute a complete visual overhaul across all components. You have full creative control to implement the best designs, animations, and layouts that fit the "Bio-Cyberpunk" theme. Do not just change colors—rethink the shapes, the animations, and the user flow to make it truly "AA" quality.
+**The Feel We Want:**
+- **Responsive:** Input should feel instant. No lag, no delay.
+- **Weighty:** Movement should have momentum. Drifting should feel heavy but controllable.
+- **Satisfying:** Near-misses should feel exciting. Kills should feel powerful. Death should feel dramatic.
+- **Fair:** Hitboxes should be pixel-perfect. No "I didn't touch that!" moments.
+
+## FOCUS AREAS
+
+### 1. Physics & Movement (Server + Client)
+- **Momentum:** Adjust friction/drag so drifting feels heavy but responsive (Mario Kart style)
+- **Turning Radius:** Sharper turns = speed loss. Implement drift mechanics properly.
+- **Speed Curves:** Acceleration and deceleration should feel natural, not linear.
+- **Wall Collision:** Players should slide/glance off walls, not stop dead (wall sliding).
+
+### 2. Collision & Hitboxes
+- **Pixel-Perfect:** Head-to-trail collisions must be precise. Visualize hitboxes during dev.
+- **Trail Physics:** Trail points should have consistent collision detection.
+- **Near-Miss Detection:** Reward close calls with score/boost/feedback.
+
+### 3. Controls & Input
+- **Input Latency:** Audit the input handling path. Target <16ms response time.
+- **Mobile Touch:** Fix virtual joystick deadzones. No "stuck" inputs on release.
+- **Mouse Feel:** Desktop mouse controls should be silky smooth.
+
+### 4. Camera & View
+- **Dynamic Zoom:** Camera zooms out at high speed (see ahead), zooms in during slow/combat.
+- **Look-Ahead:** Offset camera in direction of travel so players see where they're going.
+- **Smooth Follow:** Camera should never feel jerky or laggy.
+
+### 5. Game Feel ("Juice")
+- **Screen Shake:** On kills, near-misses, boosts - make impacts feel powerful.
+- **Particles:** Death explosions, trail effects, boost particles.
+- **Sound Cues:** (if applicable) Audio feedback for all major actions.
+- **Haptic Feedback:** Mobile vibration on key events.
+
+### 6. Bot AI
+- **Predictive Movement:** Bots should aim where player WILL BE, not where they are.
+- **Difficulty Scaling:** Bots should feel challenging but fair.
+- **Personality:** Different bot "personalities" - aggressive, defensive, erratic.
+
+## CRITICAL RULES
+
+1. **TEST EVERYTHING IN BROWSER** - Don't just build, actually play the game
+2. **Run `npx tsc --noEmit`** - Vite doesn't type-check, you must do it manually
+3. **Check API versions** - Search "[library] v[X] migration" before using any API
+4. **PixiJS v8:** Use `app.canvas`, `await app.init({})`, `.fill()/.stroke()`
+5. **Small incremental changes** - Don't refactor 6000 lines at once. Change one thing, test, repeat.
+
+## SERVER CODE
+
+Server code is in `packages/server/`. Key files:
+- `GameWorld.ts` - World physics, zone shrinking
+- `Player.ts` - Player state, movement
+- `CollisionSystem.ts` - Collision detection
+
+## CLIENT CODE
+
+Client code is in `packages/client/src/`. Key file:
+- `NewGameView.tsx` - Main game rendering and local physics (6000+ lines)
+
+## COMPLETION
+
+Make one focused improvement at a time. Test it. Then move to the next.
+Emit `GAME_FEEL_IMPROVED` when a meaningful gameplay improvement is complete and verified.

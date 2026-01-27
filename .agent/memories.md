@@ -2,35 +2,32 @@
 
 ## Patterns
 
-### mem-1769461846-8726
-> Bio-Cyberpunk Design System
-> 
-> ## Core Color Palette
-> - **Void Black**: #050508 (primary background)
-> - **Abyssal**: #0a0a0f (secondary backgrounds)
-> - **Toxic Green**: #39ff14 (primary accent - biological success)
-> - **Electric Cyan**: #00ffff (primary accent - tech energy)
-> - **Plasma Purple**: #bf00ff (secondary accent - mutations)
-> - **Warning Amber**: #ff9500 (alerts/danger)
-> - **Error Red**: #ff073a (critical failure)
-> - **Lab White**: #f0f0f5 (primary text)
-> - **Sterile Gray**: #8a8a95 (secondary text)
-> 
-> ## Design Philosophy
-> 1. **Bio-Tech Fusion**: Combine organic curves with sharp tech edges
-> 2. **High Contrast**: Always readable, even with glowing effects
-> 3. **Living UI**: Subtle breathing animations, pulse effects
-> 4. **Tactical Feel**: HUD elements should feel like combat interface
-> 5. **Depth**: Layered glass effects, blurs, and shadows
-> 
-> ## Visual Elements
-> - Scanline overlays (subtle)
-> - Glass morphism with colored tints
-> - Gradient borders with glow
-> - Organic shapes mixed with geometric tech elements
-> - Particle effects (DNA strands, cells)
-> - Chromatic aberration on critical elements
-<!-- tags:  | created: 2026-01-26 -->
+### mem-game-architecture
+> **Game Architecture:**
+> - Server: `packages/server/` - Node.js WebSocket server, authoritative game state
+> - Client: `packages/client/src/NewGameView.tsx` - Main game file (6000+ lines), PixiJS rendering
+> - Shared: `packages/shared/` - Type definitions, constants
+>
+> **Key Physics Values (in NewGameView.tsx):**
+> - Base speed: ~200px/s
+> - Drift rate: 3.0 multiplier
+> - Trail expiration: 8-15 seconds
+> - Arena: 4000x4000 default
+>
+> **Game Loop:**
+> - Server runs at 60fps (setInterval)
+> - Client interpolates between server updates
+> - Input is sent to server, server validates and broadcasts
+<!-- tags: architecture, reference | created: 2026-01-27 -->
+
+### mem-game-feel-targets
+> **Target Game Feel:**
+> - Input latency: <16ms
+> - Physics: Mario Kart-style drift (heavy but responsive)
+> - Collisions: Pixel-perfect, no "I didn't touch that!" moments
+> - Camera: Dynamic zoom based on speed, look-ahead offset
+> - Feedback: Screen shake, particles, haptics on all major events
+<!-- tags: game-design, targets | created: 2026-01-27 -->
 
 ## Decisions
 
