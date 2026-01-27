@@ -131,7 +131,8 @@ interface Hotspot {
   hasSpawnedLoot: boolean;
 }
 
-class SpermRaceGame {
+// Legacy embedded game class - kept as fallback
+class LegacySpermRaceGame {
   public app: PIXI.Application | null = null;
   public arena = (() => {
     // Portrait mobile: Match iPhone aspect ratio better
@@ -6283,7 +6284,7 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
   onExit?: () => void 
 }) {
   const mountRef = useRef<HTMLDivElement | null>(null);
-  const gameRef = useRef<SpermRaceGame | null>(null);
+  const gameRef = useRef<ModularSpermRaceGame | null>(null);
   const { state: wsState, sendInput } = useWs();
   const initialWsStateRef = useRef<any>(wsState);
   // Keep latest WS state available without re-creating the Pixi app.
@@ -6292,7 +6293,13 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
   // Initialize Pixi only once on mount; update callbacks via a separate effect
   useEffect(() => {
     if (!mountRef.current) return;
-    const game = new SpermRaceGame(mountRef.current, onReplay, onExit);
+    // Use the modular SpermRaceGame class
+    const game = new ModularSpermRaceGame(mountRef.current);
+
+    // NOTE: The modular SpermRaceGame is designed for offline practice mode.
+    // For online multiplayer with WebSocket integration, use LegacySpermRaceGame instead.
+    // The following WebSocket-specific code is preserved for reference when integrating:
+    /*
     // If we mounted while WS is already in game phase, pre-enable online mode immediately.
     // This avoids a short window where local/offline physics can run during server countdown on mobile.
     try {
@@ -6316,14 +6323,19 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
         if (!(game as any).preStart) (game as any).preStart = { startAt: Date.now(), durationMs: 3000 };
       }
     } catch {}
+    */
+
     gameRef.current = game;
+    // Initialize the game using the modular SpermRaceGame's init() method
     game.init().catch(console.error);
     return () => {
       try { game.destroy(); } catch (error) { console.error('Error destroying game:', error); }
     };
   }, []);
 
+  // NOTE: onReplay/onExit callbacks are not currently supported by modular SpermRaceGame
   // Keep onReplay/onExit current without re-creating the Pixi app
+  /*
   useEffect(() => {
     const game = gameRef.current;
     if (game) {
@@ -6331,13 +6343,21 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
       game.onExit = onExit;
     }
   }, [onReplay, onExit]);
+  */
 
+  // NOTE: WebSocket input sending not currently supported by modular SpermRaceGame
   // Wire WS input sending into the Pixi game loop (online matches).
+  /*
   useEffect(() => {
     const game = gameRef.current as any;
     if (game) game.wsSendInput = sendInput;
   }, [sendInput]);
+  */
 
+  // NOTE: The following WebSocket integration code is for the legacy game class.
+  // The modular SpermRaceGame does not yet support online multiplayer mode.
+  // To enable online play, switch to using LegacySpermRaceGame or extend the modular class.
+  /*
   // Bind WsProvider state into HUD when in tournament mode
   useEffect(() => {
     const game = gameRef.current;
@@ -6431,6 +6451,7 @@ export default function NewGameView({ meIdOverride: _meIdOverride, onReplay, onE
     }
     game.wsHud = { active: false, kills: {}, killFeed: [], playerId: null, idToName: {}, aliveSet: new Set(), eliminationOrder: [] } as any;
   }, [wsState.phase, wsState.game, wsState.lobby, wsState.kills, wsState.killFeed, wsState.playerId, wsState.eliminationOrder]);
+  */
 
   return (
     <div
