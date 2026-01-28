@@ -5,6 +5,7 @@ import { useWs } from './WsProvider';
 import { HudManager } from './HudManager';
 import { WORLD as S_WORLD } from 'shared';
 import { getPerformanceSettings, isHighPerformanceMobile } from './deviceDetection';
+import { PLAYER, BOT, CAMERA, JUICE, isMobile } from './game/Constants';
 
 interface Car {
   x: number;
@@ -2331,6 +2332,9 @@ class SpermRaceGame {
   createCar(x: number, y: number, color: number, type: string): Car {
     const id = `${type}_${Math.random().toString(36).slice(2, 8)}`;
     const name = type === 'player' ? 'YOU' : (type || 'BOT').toUpperCase();
+    const isPlayer = type === 'player';
+    const cfg = isPlayer ? PLAYER : BOT;
+
     const car: Car = {
       x, y, color, type,
       id,
@@ -2338,13 +2342,13 @@ class SpermRaceGame {
       kills: 0,
       angle: 0,
       targetAngle: 0,
-      speed: 220,
-      baseSpeed: 220,
-      boostSpeed: 850, // Increased from 620 - much faster boost!
-      targetSpeed: 220,
-      speedTransitionRate: 18.0, // Faster transition for instant boost feel
+      speed: cfg.BASE_SPEED,
+      baseSpeed: cfg.BASE_SPEED,
+      boostSpeed: cfg.BOOST_SPEED,
+      targetSpeed: cfg.BASE_SPEED,
+      speedTransitionRate: PLAYER.SPEED_TRANSITION_RATE,
       driftFactor: 0,
-      maxDriftFactor: type === 'bot' ? 0.8 : 0.7,
+      maxDriftFactor: cfg.MAX_DRIFT_FACTOR,
       vx: 0,
       vy: 0,
       destroyed: false,
@@ -2352,13 +2356,13 @@ class SpermRaceGame {
       isBoosting: false,
       boostTimer: 0,
       boostCooldown: 0,
-      boostEnergy: 100,
-      maxBoostEnergy: 100,
-      boostRegenRate: 24,
-      boostConsumptionRate: 55,
-      minBoostEnergy: 20,
-      spawnTime: Date.now(), // For growth over time
-      killBoostUntil: 0, // Speed boost from kills
+      boostEnergy: PLAYER.MAX_BOOST_ENERGY,
+      maxBoostEnergy: PLAYER.MAX_BOOST_ENERGY,
+      boostRegenRate: PLAYER.BOOST_REGEN_RATE,
+      boostConsumptionRate: PLAYER.BOOST_CONSUMPTION_RATE,
+      minBoostEnergy: PLAYER.MIN_BOOST_ENERGY,
+      spawnTime: Date.now(),
+      killBoostUntil: 0,
       trailPoints: [],
       trailGraphics: null,
       lastTrailTime: 0,
@@ -2370,14 +2374,14 @@ class SpermRaceGame {
       headGraphics: new PIXI.Graphics(),
       tailGraphics: this.smallTailEnabled ? new PIXI.Graphics() : null,
       tailWaveT: 0,
-      tailLength: 34,
-      tailSegments: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 6 : 10, // Fewer segments on mobile for performance
-      tailAmplitude: 5,
-      turnResponsiveness: type === 'player' ? 10.0 : 6.5, // Snappier turning
-      lateralDragScalar: 1.15,
-      accelerationScalar: type === 'player' ? 24 : 18,
-      handlingAssist: type === 'player' ? 0.65 : 0.35,
-      impactMitigation: type === 'player' ? 0.75 : 0.6,
+      tailLength: PLAYER.TAIL_LENGTH,
+      tailSegments: isMobile() ? PLAYER.TAIL_SEGMENTS_MOBILE : PLAYER.TAIL_SEGMENTS_DESKTOP,
+      tailAmplitude: PLAYER.TAIL_AMPLITUDE,
+      turnResponsiveness: isPlayer ? PLAYER.TURN_RESPONSIVENESS : BOT.TURN_RESPONSIVENESS,
+      lateralDragScalar: PLAYER.LATERAL_DRAG,
+      accelerationScalar: isPlayer ? PLAYER.ACCELERATION : BOT.ACCELERATION,
+      handlingAssist: isPlayer ? PLAYER.HANDLING_ASSIST : BOT.HANDLING_ASSIST,
+      impactMitigation: isPlayer ? PLAYER.IMPACT_MITIGATION : BOT.IMPACT_MITIGATION,
       hotspotBuffExpiresAt: undefined,
       spotlightUntil: 0,
       contactCooldown: 0
@@ -2386,8 +2390,8 @@ class SpermRaceGame {
     // Build spermatozoid: head + tail
     // Head (capsule/circle) - larger and brighter for enemies
     car.headGraphics!.clear();
-    const headSize = type === 'player' ? 8 : 10; // Enemies 25% bigger
-    const strokeWidth = type === 'player' ? 2 : 3; // Thicker stroke for enemies
+    const headSize = isPlayer ? PLAYER.HEAD_SIZE : BOT.HEAD_SIZE;
+    const strokeWidth = isPlayer ? PLAYER.STROKE_WIDTH : BOT.STROKE_WIDTH;
     car.headGraphics!.circle(0, 0, headSize).fill(color).stroke({ width: strokeWidth, color, alpha: 0.5 });
     
     // Add glow effect for better visibility
@@ -2601,6 +2605,33 @@ class SpermRaceGame {
     }
     let desiredCenterX = cameraTarget.x;
     let desiredCenterY = cameraTarget.y;
+
+    // CAMERA LOOK-AHEAD: Offset camera in direction of travel so players see where they're going
+    // This is a critical game feel improvement - makes the game feel more responsive and tactical
+    if (cameraTarget === this.player && !this.player.destroyed && !this.preStart) {
+      // Calculate look-ahead based on player's velocity or angle
+      const speed = Math.hypot(this.player.vx || 0, this.player.vy || 0);
+      const hasVelocity = speed > 10; // Only apply if actually moving
+
+      // Look-ahead distance scales with speed (more speed = look further ahead)
+      // Base: 80px at low speed, up to 180px at high speed
+      const baseLookAhead = isMobile ? 60 : 80;
+      const maxLookAhead = isMobile ? 120 : 180;
+      const speedFactor = Math.min(1, speed / 300); // Normalize speed (300 is fast)
+      const lookAheadDist = baseLookAhead + (maxLookAhead - baseLookAhead) * speedFactor;
+
+      if (hasVelocity) {
+        // Use actual velocity direction for natural feel
+        const moveAngle = Math.atan2(this.player.vy, this.player.vx);
+        desiredCenterX += Math.cos(moveAngle) * lookAheadDist;
+        desiredCenterY += Math.sin(moveAngle) * lookAheadDist;
+      } else {
+        // Fallback to facing angle when stationary/slow
+        desiredCenterX += Math.cos(this.player.angle) * baseLookAhead * 0.5;
+        desiredCenterY += Math.sin(this.player.angle) * baseLookAhead * 0.5;
+      }
+    }
+
     if (this.preStart) {
       const totalDuration = this.preStart.durationMs;
       const overviewEnd = totalDuration * 0.65;
@@ -4211,6 +4242,18 @@ class SpermRaceGame {
       this.killStreak++;
       this.lastKillTime = now;
 
+      // KILL STREAK NOTIFICATIONS - Dopamine hit for multi-kills!
+      if (this.killStreak >= 2) {
+        this.showKillStreakNotification(this.killStreak, this.player.x, this.player.y);
+        // Escalating rewards for streaks
+        const streakBonus = Math.min(0.3, this.killStreak * 0.05);
+        this.screenShake(0.6 + streakBonus);
+        // Extra haptic for big streaks
+        if (this.killStreak >= 3) {
+          this.hapticFeedback('success');
+        }
+      }
+
       // Enhanced haptic feedback
       this.hapticFeedback('heavy');
 
@@ -4224,9 +4267,9 @@ class SpermRaceGame {
       this.gameEffects?.showFloatingText(
         this.player.x,
         this.player.y - 40,
-        'ELIMINATED!',
-        '#22d3ee',
-        1.2,
+        this.killStreak >= 2 ? `${this.killStreak}x KILL!` : 'ELIMINATED!',
+        this.killStreak >= 3 ? '#fbbf24' : '#22d3ee',
+        1.2 + Math.min(0.4, this.killStreak * 0.1),
         1200
       );
     }
@@ -4281,6 +4324,40 @@ class SpermRaceGame {
     // Keep only last 5 notifications
     if (this.killStreakNotifications.length > 5) {
       this.killStreakNotifications.shift();
+    }
+
+    // ADDICTION HOOK: Visual/Audio reward for streaks!
+    // Colors escalate: cyan -> yellow -> orange -> red
+    const streakColors: Record<number, string> = {
+      2: '#22d3ee', // cyan
+      3: '#fbbf24', // yellow
+      4: '#f97316', // orange
+      5: '#ef4444', // red
+      6: '#dc2626', // deep red
+      7: '#b91c1c', // darker red
+    };
+    const color = streakColors[Math.min(streak, 7)] || '#f43f5e';
+
+    // World-space floating text at kill location
+    this.gameEffects?.showFloatingText(
+      x,
+      y - 60,
+      text,
+      color,
+      1.0 + Math.min(0.6, streak * 0.1), // Bigger text for bigger streaks
+      1800
+    );
+
+    // BIG SCREEN TEXT for impressive streaks (3+)
+    if (streak >= 3) {
+      this.gameEffects?.showBigScreenText(text, color, 1600);
+      // Shockwave at player position for extra juice
+      this.gameEffects?.createShockwave(x, y, parseInt(color.replace('#', '0x')));
+    }
+
+    // MEGA rewards for 5+ streaks - confetti!
+    if (streak >= 5) {
+      this.gameEffects?.createConfetti(x, y, 25);
     }
   }
 
