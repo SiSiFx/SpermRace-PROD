@@ -1,0 +1,17 @@
+# Ralph Configuration - Incremental Refactor Mode
+event_loop:
+  prompt_file: "PROMPT.md"
+  completion_promise: "REFACTOR_PHASE_COMPLETE"
+  max_iterations: 30
+  max_runtime_seconds: 3600
+
+cli:
+  backend: "claude"
+  model: "glm-4.7"
+  timeout_ms: 600000
+
+default_mode: autonomous
+
+memory:
+  inject: true
+  store_path: ".agent/memories.md"

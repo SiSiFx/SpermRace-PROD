@@ -2,57 +2,82 @@
 
 ## Patterns
 
-### mem-game-architecture
-> **Game Architecture:**
-> - Server: `packages/server/` - Node.js WebSocket server, authoritative game state
-> - Client: `packages/client/src/NewGameView.tsx` - Main game file (6000+ lines), PixiJS rendering
-> - Shared: `packages/shared/` - Type definitions, constants
->
-> **Key Physics Values (in NewGameView.tsx):**
-> - Base speed: ~200px/s
-> - Drift rate: 3.0 multiplier
-> - Trail expiration: 8-15 seconds
-> - Arena: 4000x4000 default
->
-> **Game Loop:**
-> - Server runs at 60fps (setInterval)
-> - Client interpolates between server updates
-> - Input is sent to server, server validates and broadcasts
-<!-- tags: architecture, reference | created: 2026-01-27 -->
+### mem-architecture
+> **Project Structure:**
+> - Client: `packages/client/src/` - Vite + React + PixiJS v8
+> - Server: `packages/server/` - Node.js WebSocket
+> - Shared: `packages/shared/` - Types and constants
+> - Main game file: `NewGameView.tsx` (6500 lines - being refactored)
+> - New modules go in: `packages/client/src/game/`
+<!-- tags: architecture | created: 2026-01-27 -->
 
-### mem-game-feel-targets
-> **Target Game Feel:**
-> - Input latency: <16ms
-> - Physics: Mario Kart-style drift (heavy but responsive)
-> - Collisions: Pixel-perfect, no "I didn't touch that!" moments
-> - Camera: Dynamic zoom based on speed, look-ahead offset
-> - Feedback: Screen shake, particles, haptics on all major events
-<!-- tags: game-design, targets | created: 2026-01-27 -->
-
-## Decisions
+### mem-constants-done
+> **Constants.ts COMPLETE:** All tunable game values extracted to `src/game/Constants.ts`
+> - PLAYER: BASE_SPEED=220, BOOST_SPEED=850, drift, turning, boost params
+> - BOT: Separate config with different turning/handling
+> - CAMERA: Zoom levels, shake intensity, smoothing
+> - JUICE: Near-miss rewards, kill bonuses, streak system
+> - Helper functions: getArenaSize(), getDefaultZoom(), isMobile()
+> - NewGameView.tsx updated to import and use these constants in createCar()
+<!-- tags: refactor, complete | created: 2026-01-27 -->
 
 ## Fixes
 
 ### mem-fix-pixijs-v8
 > **PixiJS v8 BREAKING CHANGES** (project uses v8.12.0):
-> 1. `app.view` is now `app.canvas` - use `this.app.canvas` to get HTMLCanvasElement
-> 2. Application constructor NO LONGER accepts options - must use `await app.init({width, height, backgroundColor, etc.})`
-> 3. Graphics API changed - use `.fill()/.stroke()` instead of `beginFill()/endFill()`
-> 4. ALWAYS check package.json version and search "[library] v[X] migration guide" before using any library API
-> This caused "RELOAD NEEDED" runtime errors because app.view returned undefined in v8.
-<!-- tags: pixijs, breaking-changes, critical | created: 2026-01-27 -->
-
-### mem-fix-vite-typecheck
-> **VITE DOES NOT TYPE-CHECK** - it only transpiles with esbuild. A passing `pnpm build` does NOT mean types are correct!
-> Example bug: GameWorld constructor expected `(container: PIXI.Container, arena?)` but was called with `(arena)`. This type mismatch was NOT caught by build.
-> ALWAYS run `npx tsc --noEmit` before marking tasks complete.
-> This caused "addChild is not a function" runtime error because arena object has no addChild method.
-<!-- tags: vite, typescript, critical | created: 2026-01-27 -->
+> 1. `app.view` is now `app.canvas`
+> 2. Application constructor NO LONGER accepts options - use `await app.init({})`
+> 3. Graphics: use `.fill()/.stroke()` instead of `beginFill()/endFill()`
+> ALWAYS check version and search migration guide before using any API.
+<!-- tags: pixijs, critical | created: 2026-01-27 -->
 
 ### mem-fix-deferred-graphics
-> **Defer PIXI graphics setup**: When creating classes that use PIXI containers, do NOT add children in the constructor.
-> Instead: (1) Accept only data params in constructor, (2) Create a `setupGraphics(container)` method, (3) Call setupGraphics() after PIXI app and containers are initialized.
-> This pattern prevents "X is not a function" errors when objects are constructed before PIXI is ready.
-<!-- tags: pixi, architecture, critical | created: 2026-01-27 -->
+> **Defer PIXI graphics setup:** When creating classes that use PIXI containers:
+> 1. Do NOT add children in constructor
+> 2. Create a `setupGraphics(container)` method
+> 3. Call setupGraphics() AFTER PIXI app is initialized
+> This prevents "X is not a function" errors.
+<!-- tags: pixi, critical | created: 2026-01-27 -->
+
+### mem-fix-vite-typecheck
+> **VITE DOES NOT TYPE-CHECK** - it only transpiles with esbuild.
+> A passing `pnpm build` does NOT mean types are correct!
+> ALWAYS run `npx tsc --noEmit` for type checking.
+<!-- tags: vite, critical | created: 2026-01-27 -->
 
 ## Context
+
+### mem-refactor-progress
+> **Refactor Progress:**
+> ✅ Phase 1: Constants.ts - DONE
+> ⏳ Phase 2: Camera.ts - NEXT
+> ⬜ Phase 3: Physics.ts
+> ⬜ Phase 4: BotAI.ts
+> ⬜ Phase 5: TrailSystem.ts
+> ⬜ Phase 6: Effects.ts
+>
+> **Goal:** Reduce NewGameView.tsx from 6500 lines to ~500 lines (orchestrator only)
+<!-- tags: refactor, progress | created: 2026-01-27 -->
+
+### mem-camera-extraction-plan
+> **Camera.ts Extraction Plan:**
+>
+> State to extract from SpermRaceGame class:
+> - camera = { x, y, zoom, targetZoom, minZoom, maxZoom, shakeX, shakeY, shakeDecay }
+> - cameraSmoothing
+>
+> Methods to extract:
+> - updateCamera() - around line 2670
+> - screenShake(intensity) - around line 364
+> - Zoom calculations in game loop
+>
+> Interface:
+> ```typescript
+> class Camera {
+>   x, y, zoom, targetZoom, shakeX, shakeY
+>   update(target: {x, y}, deltaTime: number)
+>   shake(intensity: number)
+>   getTransform(): { x, y, scale }
+> }
+> ```
+<!-- tags: camera, plan | created: 2026-01-27 -->
