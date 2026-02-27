@@ -7,9 +7,13 @@ export const playerInputSchema = z.object({
   target: vector2Schema,
   accelerate: z.boolean(),
   boost: z.boolean().optional(),
+  drift: z.boolean().optional(),
+  // Optional client timestamp for RTT measurement and lag compensation
+  clientTimestamp: z.number().optional(),
 });
 
 export const entryFeeTierSchema = z.union([
+  z.literal(0),
   z.literal(1),
   z.literal(5),
   z.literal(25),
@@ -25,6 +29,16 @@ export const authenticateMessageSchema = z.object({
     publicKey: z.string(),
     signedMessage: z.string(),
     nonce: z.string(),
+  }),
+});
+
+export const guestLoginMessageSchema = z.object({
+  type: z.literal('guestLogin'),
+  payload: z.object({
+    guestName: z.string().min(1).max(20),
+    // Optional resume fields for mobile reconnects (practice mode).
+    guestId: z.string().min(1).max(80).optional(),
+    resumeToken: z.string().min(8).max(128).optional(),
   }),
 });
 
@@ -55,12 +69,23 @@ export const entryFeeSignatureMessageSchema = z.object({
   }),
 });
 
+export const clientHelloMessageSchema = z.object({
+  type: z.literal('clientHello'),
+  payload: z
+    .object({
+      trailDelta: z.boolean().optional(),
+    })
+    .optional(),
+});
+
 export const clientToServerMessageSchema = z.union([
   authenticateMessageSchema,
+  guestLoginMessageSchema,
   joinLobbyMessageSchema,
   leaveLobbyMessageSchema,
   playerInputMessageSchema,
   entryFeeSignatureMessageSchema,
+  clientHelloMessageSchema,
 ]);
 
 export type ClientToServerMessage = z.infer<typeof clientToServerMessageSchema>;

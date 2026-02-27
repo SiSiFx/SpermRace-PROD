@@ -1,16 +1,24 @@
-import React, { createContext, useContext, useMemo, useRef, useState } from 'react';
-// API base for HTTP calls from the client. Prefer env; else infer from hostname; else same-origin /api
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+// API base for HTTP calls from the client.
+// For any spermrace.io host (prod/dev/www), always use same-origin /api so we avoid CORS and
+// let the frontend host proxy to the API.
 const API_BASE: string = (() => {
-  const env = (import.meta as any).env?.VITE_API_BASE as string | undefined;
-  if (env && typeof env === 'string' && env.trim()) return env.trim();
   try {
     const host = (window?.location?.hostname || '').toLowerCase();
-    if (host.includes('dev.spermrace.io')) return 'https://dev.spermrace.io/api';
-    if (host.includes('spermrace.io')) return 'https://spermrace.io/api';
-  } catch {}
+    if (host.endsWith('spermrace.io')) return '/api';
+  } catch { }
+
+  const env = (import.meta as any).env?.VITE_API_BASE as string | undefined;
+  if (env && typeof env === 'string' && env.trim()) return env.trim();
+
+  try {
+    const host = (window?.location?.hostname || '').toLowerCase();
+    if (host.includes('dev.spermrace.io')) return '/api';
+    if (host.includes('spermrace.io')) return '/api';
+  } catch { }
   return '/api';
 })();
-import type { EntryFeeTier, GameMode, Lobby } from 'shared';
+import type { EntryFeeTier, GameMode, Lobby, TrailPoint, ExtractionObjectiveState } from 'shared';
 import { useWallet } from './WalletProvider';
 import { handleSIWS } from './siws';
 import { sendEntryFeeTransaction } from './walletUtils';
@@ -28,7 +36,7 @@ type WsState = {
   entryFee: { pending: boolean; verified: boolean };
   lastError: string | null;
   joining: boolean;
-  game: { timestamp: number; players: Array<{ id: string; isAlive: boolean; sperm: { position: { x: number; y: number }; angle: number; color: string }; trail: Array<{ x: number; y: number }> }>; world: { width: number; height: number }; aliveCount: number } | null;
+  game: { timestamp: number; goAtMs?: number; players: Array<{ id: string; isAlive: boolean; sperm: { position: { x: number; y: number }; angle: number; color: string }; trail: Array<{ x: number; y: number }> }>; world: { width: number; height: number }; aliveCount: number; objective?: ExtractionObjectiveState } | null;
   hasFirstGameState?: boolean;
   kills: Record<string, number>;
   killFeed: Array<{ killerId?: string; victimId: string; ts: number }>;
@@ -38,7 +46,7 @@ type WsState = {
   eliminationOrder: string[];
 };
 
-type JoinOpts = { entryFeeTier: EntryFeeTier; mode?: GameMode };
+type JoinOpts = { entryFeeTier: EntryFeeTier; mode?: GameMode; guestName?: string };
 
 type WsApi = {
   state: WsState;
@@ -46,14 +54,16 @@ type WsApi = {
   leave: () => void;
   signAuthentication: () => Promise<void>;
   sendInput: (target: { x: number; y: number }, accelerate: boolean, boost?: boolean) => void;
+  isGuest: boolean;
 };
 
 const Ctx = createContext<WsApi>({
   state: { connected: false, phase: 'idle', playerId: null, lobby: null, countdown: null, entryFee: { pending: false, verified: false }, lastError: null, joining: false, game: null, kills: {}, killFeed: [], lastRound: null, initialPlayers: [], eliminationOrder: [] },
-  connectAndJoin: async () => {},
-  leave: () => {},
-  signAuthentication: async () => {},
-  sendInput: () => {},
+  connectAndJoin: async () => { },
+  leave: () => { },
+  signAuthentication: async () => { },
+  sendInput: () => { },
+  isGuest: false,
 });
 
 const DEFAULT_WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
@@ -88,6 +98,11 @@ const RPC_ENDPOINT = (import.meta as any).env?.VITE_SOLANA_RPC_ENDPOINT || 'http
 export function WsProvider({ children }: { children: React.ReactNode }) {
   const { provider, publicKey, connect, getLatest } = useWallet();
   const [state, setState] = useState<WsState>({ connected: false, phase: 'idle', playerId: null, lobby: null, countdown: null, entryFee: { pending: false, verified: false }, lastError: null, joining: false, game: null, kills: {}, killFeed: [], lastRound: null, initialPlayers: [], eliminationOrder: [], debugCollisions: [], hasFirstGameState: false });
+  const [isGuest, setIsGuest] = useState(false);
+  const isGuestRef = useRef(false);
+  const trailsRef = useRef<Record<string, TrailPoint[]>>({});
+  const trailLastCreatedAtRef = useRef<Record<string, number>>({});
+  const serverTimeOffsetMsRef = useRef<number>(0);
   const wsRef = useRef<WebSocket | null>(null);
   const pendingJoinRef = useRef<JoinOpts | null>(null);
   const joinBusyRef = useRef<boolean>(false);
@@ -98,13 +113,120 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
   const lastInputSentRef = useRef<number>(0);
   const lastSentPayloadRef = useRef<{ target: { x: number; y: number }; accelerate: boolean; boost?: boolean } | null>(null);
   const lastBoostTsRef = useRef<number>(0);
+  const disableClientHelloRef = useRef<boolean>(false);
+  const lastClientHelloSentAtRef = useRef<number>(0);
   const expectedCloseRef = useRef<boolean>(false);
   const reconnectAttemptsRef = useRef<number>(0);
   const reconnectTimerRef = useRef<number | null>(null);
+  const storedSessionTokenRef = useRef<{ token: string; expiresAt: number } | null>(null);
+
+  // Best-effort cleanup: if the user refreshes/navigates away while queued in a lobby,
+  // tell the server immediately so their slot doesn't "ghost" until the WS timeout.
+  useEffect(() => {
+    const onPageExit = () => {
+      try {
+        const sock = wsRef.current;
+        if (!sock || sock.readyState !== WebSocket.OPEN) return;
+        try { sock.send(JSON.stringify({ type: 'leaveLobby', payload: {} })); } catch { }
+        try { expectedCloseRef.current = true; } catch { }
+        try { sock.close(); } catch { }
+      } catch { }
+    };
+    window.addEventListener('beforeunload', onPageExit);
+    window.addEventListener('pagehide', onPageExit);
+    return () => {
+      window.removeEventListener('beforeunload', onPageExit);
+      window.removeEventListener('pagehide', onPageExit);
+    };
+  }, []);
+
+  const getStoredSessionToken = (): { token: string; expiresAt: number } | null => {
+    try {
+      const cur = storedSessionTokenRef.current;
+      if (cur && cur.token && cur.expiresAt > Date.now()) return cur;
+    } catch { }
+    try {
+      const token = localStorage.getItem('sr_session_token') || '';
+      const exp = Number(localStorage.getItem('sr_session_token_expires_at') || 0) || 0;
+      if (token && exp > Date.now()) return { token, expiresAt: exp };
+    } catch { }
+    return null;
+  };
+
+  const getGuestResume = (): { guestName: string; guestId?: string; resumeToken?: string } => {
+    let guestName = '';
+    try { guestName = localStorage.getItem('sr_guest_name') || ''; } catch { }
+    if (!guestName) guestName = 'Guest';
+    let guestId: string | undefined;
+    let resumeToken: string | undefined;
+    try { guestId = localStorage.getItem('sr_guest_id') || undefined; } catch { }
+    try { resumeToken = localStorage.getItem('sr_guest_resume_token') || undefined; } catch { }
+    return { guestName, guestId, resumeToken };
+  };
 
   const connectAndJoin = async (opts: JoinOpts) => {
-    console.log(`[JOIN] Requested → mode=${opts.mode ?? 'tournament'} tier=$${opts.entryFeeTier}`);
-    try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'join_requested', payload: { mode: opts.mode ?? 'tournament', tier: opts.entryFeeTier } }) }); } catch {}
+    console.log(`[JOIN] Requested → mode=${opts.mode ?? 'tournament'} tier=$${opts.entryFeeTier} guest=${opts.guestName || 'no'}`);
+    expectedCloseRef.current = false;
+    try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'join_requested', payload: { mode: opts.mode ?? 'tournament', tier: opts.entryFeeTier, isGuest: !!opts.guestName } }) }); } catch { }
+    try {
+      const last = { entryFeeTier: opts.entryFeeTier, mode: (opts.mode ?? 'tournament'), guestName: opts.guestName || undefined };
+      localStorage.setItem('sr_last_join', JSON.stringify(last));
+      if (opts.guestName) localStorage.setItem('sr_guest_name', opts.guestName);
+    } catch { }
+
+    // Reset/Set guest state
+    setIsGuest(!!opts.guestName);
+    isGuestRef.current = !!opts.guestName;
+    trailsRef.current = {};
+    trailLastCreatedAtRef.current = {};
+    serverTimeOffsetMsRef.current = 0;
+
+    // If GUEST, skip wallet checks entirely
+    if (opts.guestName) {
+      pendingJoinRef.current = opts;
+
+      // If we already have an open authenticated guest socket, just re-join without reconnecting.
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && state.playerId && state.playerId.startsWith('guest-')) {
+        try {
+          wsRef.current.send(JSON.stringify({ type: 'joinLobby', payload: { entryFeeTier: opts.entryFeeTier, mode: opts.mode } }));
+          joinBusyRef.current = false;
+          setState(s => ({ ...s, phase: 'connecting', joining: true, lastError: null }));
+          return;
+        } catch { }
+      }
+
+      // Close existing if open
+      if (wsRef.current) {
+        try { wsRef.current.close(); } catch { }
+        wsRef.current = null;
+      }
+
+      setState(s => ({ ...s, phase: 'connecting', joining: true, lastError: null }));
+      joinBusyRef.current = true;
+
+      // Use standard connection for guest (no HTTP auth needed)
+      const ws = new WebSocket(WS_URL);
+      wsRef.current = ws;
+
+      // Reuse standard attach for message handling
+      attach(ws);
+
+      // Override onopen to send guest login
+      ws.onopen = () => {
+        console.log('[WS] Open (Guest)');
+        reconnectAttemptsRef.current = 0;
+        setState(s => ({ ...s, connected: true, phase: 'authenticating' }));
+        // Send guest login immediately (with resume token if available)
+        const r = getGuestResume();
+        const payload: any = { guestName: opts.guestName };
+        if (r.guestId) payload.guestId = r.guestId;
+        if (r.resumeToken) payload.resumeToken = r.resumeToken;
+        ws.send(JSON.stringify({ type: 'guestLogin', payload }));
+      };
+      return;
+    }
+
+    try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'join_requested', payload: { mode: opts.mode ?? 'tournament', tier: opts.entryFeeTier } }) }); } catch { }
 
     // ALWAYS get latest wallet state (React state may be stale)
     const latest = getLatest();
@@ -115,12 +237,12 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
     // Ensure wallet
     if (!currentPublicKey || !currentProvider) {
       console.log('[WALLET] Not connected → opening wallet');
-      try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_wallet_missing' }) }); } catch {}
+      try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_wallet_missing' }) }); } catch { }
       const ok = await connect();
       if (!ok) {
         setState(s => ({ ...s, lastError: 'Wallet connection required' }));
         console.error('[WALLET] Connection failed');
-        try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_wallet_failed' }) }); } catch {}
+        try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_wallet_failed' }) }); } catch { }
         return;
       }
       console.log('[WALLET] Connected');
@@ -132,7 +254,7 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
     if (!currentPublicKey || !currentProvider) {
       console.warn('[WALLET] connect() reported success but wallet data still unavailable');
       setState(s => ({ ...s, lastError: 'Wallet connection failed. Please try again.' }));
-      try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_wallet_unavailable' }) }); } catch {}
+      try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_wallet_unavailable' }) }); } catch { }
       return;
     }
     pendingJoinRef.current = opts;
@@ -140,7 +262,7 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
     if (wsRef.current) {
       const ready = wsRef.current.readyState;
       console.log('[WS] Socket exists, readyState:', ready, 'playerId:', state.playerId);
-      try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_ws_exists', payload: { readyState: ready, hasPlayerId: !!state.playerId } }) }); } catch {}
+      try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_ws_exists', payload: { readyState: ready, hasPlayerId: !!state.playerId } }) }); } catch { }
       // If already authenticated and socket is OPEN, send join now
       if (ready === WebSocket.OPEN && state.playerId) {
         console.log('[JOIN] WS open + authenticated → sending joinLobby');
@@ -148,20 +270,20 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
         joinBusyRef.current = false;
         setState(s => ({ ...s, phase: 'connecting', joining: true }));
         console.log('[JOIN] joinLobby sent (socket already authenticated)');
-        try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_reuse_ws' }) }); } catch {}
+        try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_reuse_ws' }) }); } catch { }
         return;
       }
       // If CONNECTING/CLOSING/CLOSED, let the existing flow continue or reconnect below
       if (ready === WebSocket.CONNECTING) {
         console.log('[WS] Already CONNECTING → will join after authenticate');
-        try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_ws_connecting' }) }); } catch {}
+        try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_ws_connecting' }) }); } catch { }
         return; // wait for onopen -> siws -> authenticated to send join
       }
     }
     // Create a new connection (guard to avoid join spamming)
     if (joinBusyRef.current) {
       console.log('[WS] Join already busy, skipping');
-      try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_join_busy' }) }); } catch {}
+      try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_join_busy' }) }); } catch { }
       return;
     }
     joinBusyRef.current = true;
@@ -205,32 +327,53 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
       const authData = await authResp.json();
       sessionToken = authData.sessionToken;
       console.log('[HTTP AUTH] ✓ Session token received:', sessionToken?.slice(0, 8) ?? 'unknown');
+      try {
+        const expiresInMs = Math.max(0, Number(authData.expiresIn || 0) || 0) || 300000;
+        if (sessionToken) {
+          const expiresAt = Date.now() + expiresInMs;
+          storedSessionTokenRef.current = { token: sessionToken, expiresAt };
+          try {
+            localStorage.setItem('sr_session_token', sessionToken);
+            localStorage.setItem('sr_session_token_expires_at', String(expiresAt));
+          } catch { }
+        }
+      } catch { }
 
     } catch (e: any) {
       console.error('[HTTP AUTH] Failed:', e);
       setState(s => ({ ...s, lastError: e?.message || 'Authentication failed', phase: 'ended', joining: false }));
       joinBusyRef.current = false;
-      try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_http_auth_failed', payload: { error: e?.message || String(e) } }) }); } catch {}
+      try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_http_auth_failed', payload: { error: e?.message || String(e) } }) }); } catch { }
       return;
     }
 
     // Now connect WebSocket with session token
     const wsUrlWithToken = sessionToken ? `${WS_URL}?token=${sessionToken}` : WS_URL;
     console.log(`[WS] Connecting with HTTP auth token → url=${wsUrlWithToken.replace(/token=.+/, 'token=***')}`);
-    try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_ws_creating_with_token' }) }); } catch {}
+    try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_ws_creating_with_token' }) }); } catch { }
 
-    const attach = (sock: WebSocket, triedDefault = false) => {
+    function attach(sock: WebSocket, triedDefault = false) {
       wsRef.current = sock;
       sock.onopen = () => {
         console.log('[WS] open');
         reconnectAttemptsRef.current = 0;
-        setState(s => ({ ...s, connected: true }));
+        setState(s => ({ ...s, connected: true, phase: isGuestRef.current ? 'authenticating' : s.phase, joining: isGuestRef.current ? true : s.joining, lastError: null }));
+        // If this is a guest session (practice), authenticate immediately (supports reconnect resume).
+        if (isGuestRef.current) {
+          try {
+            const r = getGuestResume();
+            const payload: any = { guestName: r.guestName };
+            if (r.guestId) payload.guestId = r.guestId;
+            if (r.resumeToken) payload.resumeToken = r.resumeToken;
+            sock.send(JSON.stringify({ type: 'guestLogin', payload }));
+          } catch { }
+        }
       };
       sock.onerror = (e: any) => {
         // Only retry fallback if we're on localhost
         if (!triedDefault && IS_LOCAL && WS_URL !== DEFAULT_WS_URL) {
           console.warn('[WS] error → retrying default /ws once');
-          try { sock.close(); } catch {}
+          try { sock.close(); } catch { }
           const ws2 = new WebSocket(DEFAULT_WS_URL);
           attach(ws2, true);
           return;
@@ -240,14 +383,14 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
       };
       sock.onclose = (ev: CloseEvent) => {
         console.warn(`[WS] close code=${ev.code} reason=${ev.reason || 'n/a'}`);
-        try { fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_ws_close', payload: { code: ev.code, reason: ev.reason || 'none', wasClean: ev.wasClean } }) }); } catch {}
+        try { fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_ws_close', payload: { code: ev.code, reason: ev.reason || 'none', wasClean: ev.wasClean } }) }); } catch { }
         joinBusyRef.current = false;
         if (joinRetryTimerRef.current) { clearTimeout(joinRetryTimerRef.current); joinRetryTimerRef.current = null; }
-        setState(s => ({ ...s, connected: false, phase: 'ended', joining: false }));
         wsRef.current = null;
         // Auto-reconnect if not an intentional leave and we have a pending intent
         const shouldReconnect = !expectedCloseRef.current && (pendingJoinRef.current != null || !!state.playerId || state.phase === 'lobby' || state.phase === 'game' || state.phase === 'authenticating');
         if (shouldReconnect) {
+          setState(s => ({ ...s, connected: false, phase: 'connecting', joining: true, lastError: null }));
           const attempt = (reconnectAttemptsRef.current = reconnectAttemptsRef.current + 1);
           const delay = Math.min(15000, 1000 * Math.pow(2, attempt - 1));
           console.log(`[WS] scheduling reconnect in ${delay}ms (attempt ${attempt})`);
@@ -255,10 +398,14 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
           reconnectTimerRef.current = (window as any).setTimeout(() => {
             try {
               console.log('[WS] reconnecting...');
-              const ws3 = new WebSocket(WS_URL);
+              const token = !isGuestRef.current ? getStoredSessionToken() : null;
+              const url = token ? `${WS_URL}?token=${encodeURIComponent(token.token)}` : WS_URL;
+              const ws3 = new WebSocket(url);
               attach(ws3, true);
             } catch (e) { console.error('[WS] reconnect failed to initiate', e); }
           }, delay);
+        } else {
+          setState(s => ({ ...s, connected: false, phase: 'ended', joining: false }));
         }
       };
       sock.onmessage = async (ev) => {
@@ -267,10 +414,16 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
           if (msg?.type) console.log(`[WS<=] ${msg.type}`);
           switch (msg.type) {
             case 'siwsChallenge': {
+              // If guest, we ignore SIWS entirely
+              if (isGuestRef.current) {
+                console.log('[SIWS] Ignoring challenge (Guest Mode)');
+                return;
+              }
+
               // Do not early return; store challenge and enter authenticating state
               siwsRef.current = { message: msg.payload.message, nonce: msg.payload.nonce };
               setState(s => ({ ...s, phase: 'authenticating', joining: true }));
-              console.log(`[SIWS] challenge received nonce=${String(msg.payload?.nonce || '').slice(0,8)}…`);
+              console.log(`[SIWS] challenge received nonce=${String(msg.payload?.nonce || '').slice(0, 8)}…`);
 
               // Check if we have pending auth from a previous signature (reconnection case)
               // BUT: we CANNOT resend the old signature because the nonce has changed!
@@ -278,7 +431,7 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
               // For now, just clear pending auth and user will need to try again
               if (pendingAuthRef.current) {
                 console.log('[SIWS] Found pending auth but nonce has changed, clearing...');
-                try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_auth_nonce_mismatch' }) }); } catch {}
+                try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_auth_nonce_mismatch' }) }); } catch { }
                 pendingAuthRef.current = null;
                 // Fall through to normal signing flow
               }
@@ -308,9 +461,9 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
                   break;
                 }
                 console.log('[SIWS] attempting auto-sign...');
-                try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_siws_start' }) }); } catch {}
+                try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_siws_start' }) }); } catch { }
                 const auth = await handleSIWS(adapter, msg.payload, pk);
-                try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_siws_success' }) }); } catch {}
+                try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_siws_success' }) }); } catch { }
 
                 // Store auth for potential reconnect (mobile browser backgrounding issue)
                 pendingAuthRef.current = auth;
@@ -318,13 +471,13 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
                 // Check if WebSocket is still open after async signature
                 if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
                   console.warn('[SIWS] WebSocket closed during signature, will retry on reconnect');
-                  try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_ws_closed_during_siws' }) }); } catch {}
+                  try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_ws_closed_during_siws' }) }); } catch { }
                   return;
                 }
-                try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_sending_auth', payload: { publicKey: auth.publicKey?.slice(0, 8) } }) }); } catch {}
+                try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_sending_auth', payload: { publicKey: auth.publicKey?.slice(0, 8) } }) }); } catch { }
                 const authMessage = JSON.stringify({ type: 'authenticate', payload: auth });
                 console.log('[SIWS] Auth message length:', authMessage.length, 'chars');
-                try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_auth_size', payload: { size: authMessage.length } }) }); } catch {}
+                try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_auth_size', payload: { size: authMessage.length } }) }); } catch { }
 
                 // Longer delay for mobile browsers to stabilize after returning from Phantom
                 console.log('[SIWS] Waiting 1 second for connection to stabilize...');
@@ -333,22 +486,22 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
                 // Re-check connection after delay
                 if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
                   console.warn('[SIWS] WebSocket closed while waiting to send auth');
-                  try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_ws_closed_before_send' }) }); } catch {}
+                  try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_ws_closed_before_send' }) }); } catch { }
                   return;
                 }
 
                 try {
                   wsRef.current.send(authMessage);
                   console.log('[SIWS] authenticate sent via WebSocket');
-                  try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_auth_sent' }) }); } catch {}
+                  try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_auth_sent' }) }); } catch { }
                 } catch (sendErr: any) {
                   console.error('[SIWS] WebSocket send error:', sendErr);
-                  try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_ws_send_error', payload: { error: sendErr?.message || String(sendErr) } }) }); } catch {}
+                  try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_ws_send_error', payload: { error: sendErr?.message || String(sendErr) } }) }); } catch { }
                   throw sendErr;
                 }
               } catch (e: any) {
                 console.error('[SIWS] auto-sign failed', e);
-                try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_siws_failed', payload: { error: e?.message || String(e) } }) }); } catch {}
+                try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_siws_failed', payload: { error: e?.message || String(e) } }) }); } catch { }
                 console.log('[SIWS] waiting for manual sign via overlay button...');
                 // As a fallback, schedule one auto-retry after 2s
                 if (siwsRetryTimerRef.current) { clearTimeout(siwsRetryTimerRef.current); siwsRetryTimerRef.current = null; }
@@ -372,8 +525,25 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
               break;
             }
             case 'authenticated': {
-              setState(s => ({ ...s, playerId: msg.payload.playerId }));
-              console.log(`[AUTH] authenticated as ${String(msg.payload.playerId).slice(0,6)}…`);
+              const pid = String(msg.payload?.playerId || '');
+              setState(s => ({ ...s, playerId: pid }));
+              console.log(`[AUTH] authenticated as ${String(msg.payload.playerId).slice(0, 6)}…`);
+              try {
+                if (pid.startsWith('guest-')) {
+                  setIsGuest(true);
+                  isGuestRef.current = true;
+                  localStorage.setItem('sr_guest_id', pid);
+                  const rt = (msg.payload as any)?.resumeToken as string | undefined;
+                  if (rt && typeof rt === 'string') localStorage.setItem('sr_guest_resume_token', rt);
+                }
+              } catch { }
+              // Capability negotiation: tell server we support trail deltas (server will then omit full trails in gameStateUpdate).
+              if (!disableClientHelloRef.current) {
+                try {
+                  lastClientHelloSentAtRef.current = Date.now();
+                  sock.send(JSON.stringify({ type: 'clientHello', payload: { trailDelta: true } }));
+                } catch { }
+              }
               // Clear pending auth since we successfully authenticated
               pendingAuthRef.current = null;
               const join = pendingJoinRef.current;
@@ -394,7 +564,7 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
                   method: 'POST', headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ type: 'lobby_state', payload: { players: (msg.payload?.players || []).length, max: msg.payload?.maxPlayers, tier: msg.payload?.entryFee } })
                 });
-              } catch {}
+              } catch { }
               break;
             }
             case 'lobbyCountdown': {
@@ -407,7 +577,7 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
                 setState(s => ({ ...s, entryFee: { pending: true, verified: false }, joining: true }));
                 const requiredLamports = msg.payload?.lamports || 0;
                 const requiredSol = (requiredLamports / 1_000_000_000).toFixed(4);
-                console.log(`[PAY] entryFeeTx received tier=$${msg.payload?.entryFeeTier} lamports=${requiredLamports} (${requiredSol} SOL) paymentId=${String(msg.payload?.paymentId || '').slice(0,8)}…`);
+                console.log(`[PAY] entryFeeTx received tier=$${msg.payload?.entryFeeTier} lamports=${requiredLamports} (${requiredSol} SOL) paymentId=${String(msg.payload?.paymentId || '').slice(0, 8)}…`);
 
                 const latest = getLatest();
                 const adapter = latest.provider ?? provider;
@@ -434,7 +604,7 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
 
                 console.log('[PAY] Balance check passed, requesting signature from wallet...');
                 const sig = await sendEntryFeeTransaction(adapter, msg.payload.txBase64 ?? msg.payload.transaction, RPC_ENDPOINT);
-                console.log(`[PAY] Transaction submitted! Signature: ${String(sig).slice(0,12)}…`);
+                console.log(`[PAY] Transaction submitted! Signature: ${String(sig).slice(0, 12)}…`);
                 sock.send(JSON.stringify({ type: 'entryFeeSignature', payload: { signature: sig, paymentId: msg.payload.paymentId, sessionNonce: msg.payload.sessionNonce } }));
               } catch (e: any) {
                 console.error('[PAY] Payment failed:', e);
@@ -445,19 +615,19 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
                 joinBusyRef.current = false;
                 expectedCloseRef.current = true;
                 // Close WebSocket to prevent further errors
-                try { wsRef.current?.close(); } catch {}
+                try { wsRef.current?.close(); } catch { }
                 wsRef.current = null;
               }
               break;
             }
             case 'entryFeeVerified': {
               const verified = !!msg.payload.ok;
-              
+
               // ✅ FIX #3: User-friendly error messages
               let friendlyError = null;
               if (!verified && msg.payload?.reason) {
                 const rawError = msg.payload.reason.toLowerCase();
-                
+
                 if (rawError.includes('insufficientfundsforrent') || rawError.includes('insufficient funds for rent')) {
                   const usd = ((1_200_000 / 1e9) * 184).toFixed(2); // Approx $0.22 at $184/SOL
                   friendlyError = `Need $${usd} more SOL. Total: entry + $0.22 fees.`;
@@ -475,18 +645,18 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
                   friendlyError = 'Payment failed. Check wallet balance.';
                 }
               }
-              
+
               // ✅ FIX #4: Store transaction signature for receipt
               if (verified && msg.payload?.signature) {
                 console.log(`[PAY] ✅ Payment verified. Tx: ${msg.payload.signature}`);
                 console.log(`[PAY] 🔗 View on Solscan: https://solscan.io/tx/${msg.payload.signature}`);
               }
-              
-              setState(s => ({ 
-                ...s, 
-                entryFee: { pending: false, verified }, 
-                joining: verified, 
-                phase: verified ? s.phase : 'idle', 
+
+              setState(s => ({
+                ...s,
+                entryFee: { pending: false, verified },
+                joining: verified,
+                phase: verified ? s.phase : 'idle',
                 lastError: friendlyError,
                 lastPaymentSignature: verified ? msg.payload?.signature : null
               } as any));
@@ -509,7 +679,7 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
                       console.log('[JOIN] no lobby update yet → re-sending joinLobby');
                       wsRef.current.send(JSON.stringify({ type: 'joinLobby', payload: { entryFeeTier: pendingJoinRef.current.entryFeeTier, mode: pendingJoinRef.current.mode } }));
                     }
-                  } catch {}
+                  } catch { }
                 }, 3000);
               }
               break;
@@ -517,26 +687,104 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
             case 'gameStarting': {
               joinBusyRef.current = false;
               console.log('[GAME] starting');
+              trailsRef.current = {};
+              trailLastCreatedAtRef.current = {};
               setState(s => ({ ...s, phase: 'game', joining: false, initialPlayers: Array.isArray(s.lobby?.players) ? [...(s.lobby!.players as any)] : [], eliminationOrder: [], kills: {}, killFeed: [], hasFirstGameState: false }));
-              try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'game_start', payload: { players: (state.lobby?.players || []).length, tier: state.lobby?.entryFee } }) }); } catch {}
+              try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'game_start', payload: { players: (state.lobby?.players || []).length, tier: state.lobby?.entryFee } }) }); } catch { }
+              break;
+            }
+            case 'trailDelta': {
+              const deltas = (msg.payload?.deltas || []) as Array<{ playerId: string; points: TrailPoint[] }>;
+              if (!Array.isArray(deltas) || deltas.length === 0) break;
+              const now = Date.now() + (serverTimeOffsetMsRef.current || 0);
+              for (const d of deltas) {
+                const pid = d?.playerId;
+                if (!pid) continue;
+                const points = Array.isArray(d?.points) ? d.points : [];
+                if (points.length === 0) continue;
+                const existing = trailsRef.current[pid] || [];
+                // prune expired points and append new points
+                const pruned = existing.filter(p => (p?.expiresAt || 0) > now);
+                let lastCreatedAt = trailLastCreatedAtRef.current[pid] || 0;
+                for (const pt of points) {
+                  if (!pt) continue;
+                  if (typeof (pt as any).x !== 'number' || typeof (pt as any).y !== 'number' || typeof (pt as any).expiresAt !== 'number') continue;
+                  const createdAt = typeof (pt as any).createdAt === 'number' ? (pt as any).createdAt : undefined;
+                  // Deduplicate/resync safety: only accept points newer than what we've already seen.
+                  if (createdAt !== undefined) {
+                    if (createdAt <= lastCreatedAt) continue;
+                    lastCreatedAt = createdAt;
+                  }
+                  pruned.push({ x: (pt as any).x, y: (pt as any).y, expiresAt: (pt as any).expiresAt, ...(createdAt !== undefined ? { createdAt } : {}) });
+                }
+                trailsRef.current[pid] = pruned;
+                if (lastCreatedAt > 0) trailLastCreatedAtRef.current[pid] = lastCreatedAt;
+              }
               break;
             }
             case 'gameStateUpdate': {
               const p = msg.payload;
-              setState(s => ({ ...s, game: { timestamp: p.timestamp, players: p.players, world: p.world, aliveCount: p.aliveCount }, hasFirstGameState: s.hasFirstGameState || true }));
-              try { (window as any).__SR_HAS_FIRST_GAME_STATE__ = true; } catch {}
+              // Align pruning/expiration to server time to avoid clock-skew artifacts.
+              if (typeof p?.timestamp === 'number') {
+                serverTimeOffsetMsRef.current = p.timestamp - Date.now();
+              }
+              const serverPlayers = Array.isArray(p?.players) ? p.players : [];
+              const now = Date.now() + (serverTimeOffsetMsRef.current || 0);
+              const ids = new Set<string>();
+              const mergedPlayers = serverPlayers.map((pl: any) => {
+                const id = String(pl?.id || '');
+                if (id) ids.add(id);
+                const existingTrail = Array.isArray(pl?.trail) ? (pl.trail as TrailPoint[]) : (trailsRef.current[id] || []);
+                // prune on read to keep memory bounded even if trailDelta pauses
+                const prunedTrail = Array.isArray(existingTrail) ? existingTrail.filter(t => (t?.expiresAt || 0) > now) : [];
+                trailsRef.current[id] = prunedTrail as any;
+                // If server sent a full trail (legacy mode), sync the dedupe cursor.
+                if (Array.isArray(pl?.trail)) {
+                  let maxCreatedAt = 0;
+                  for (const pt of prunedTrail as any[]) {
+                    const ca = typeof pt?.createdAt === 'number' ? pt.createdAt : 0;
+                    if (ca > maxCreatedAt) maxCreatedAt = ca;
+                  }
+                  if (maxCreatedAt > 0) trailLastCreatedAtRef.current[id] = maxCreatedAt;
+                }
+                return { ...pl, trail: prunedTrail };
+              });
+              // Drop trails for players no longer present in the match
+              for (const k of Object.keys(trailsRef.current)) {
+                if (!ids.has(k)) delete trailsRef.current[k];
+              }
+              for (const k of Object.keys(trailLastCreatedAtRef.current)) {
+                if (!ids.has(k)) delete trailLastCreatedAtRef.current[k];
+              }
+
+              setState(s => ({
+                ...s,
+                phase: 'game',
+                joining: false,
+                game: { timestamp: p.timestamp, goAtMs: (p as any)?.goAtMs, players: mergedPlayers, world: p.world, aliveCount: p.aliveCount, objective: p?.objective },
+                hasFirstGameState: s.hasFirstGameState || true
+              }));
+              try { (window as any).__SR_HAS_FIRST_GAME_STATE__ = true; } catch { }
               break;
             }
             case 'roundEnd': {
               console.log('[GAME] round end received');
               // Keep phase ended so UI can navigate to results (App handles screen switch)
+              trailsRef.current = {};
+              trailLastCreatedAtRef.current = {};
+              serverTimeOffsetMsRef.current = 0;
               setState(s => ({ ...s, phase: 'ended', joining: false, lastRound: { winnerId: msg.payload?.winnerId, prizeAmount: msg.payload?.prizeAmount, txSignature: msg.payload?.txSignature } }));
-              try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'round_end', payload: { winner: msg.payload?.winnerId, prize: msg.payload?.prizeAmount, tx: msg.payload?.txSignature } }) }); } catch {}
+              try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'round_end', payload: { winner: msg.payload?.winnerId, prize: msg.payload?.prizeAmount, tx: msg.payload?.txSignature } }) }); } catch { }
               break;
             }
             case 'playerEliminated': {
               const killer = msg.payload?.eliminatorId as string | undefined;
               const victim = msg.payload?.playerId as string;
+              
+              // Haptic feedback for kill
+              if (killer === state.playerId && 'vibrate' in navigator) {
+                navigator.vibrate(50);
+              }
               setState(s => {
                 const newKills = killer ? { ...s.kills, [killer]: (s.kills[killer] || 0) + 1 } : s.kills;
                 const newFeed = [{ killerId: killer, victimId: victim, ts: Date.now() }, ...s.killFeed].slice(0, 6);
@@ -552,6 +800,20 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
               setState(s => ({ ...s, debugCollisions: [entry, ...(s.debugCollisions || [])].slice(0, 12) }));
               break;
             }
+            case 'ping': {
+              // Respond to server ping for RTT measurement
+              const pingId = msg.payload?.pingId;
+              const timestamp = msg.payload?.timestamp;
+              if (typeof pingId === 'number' && typeof timestamp === 'number') {
+                try {
+                  sock.send(JSON.stringify({
+                    type: 'pong',
+                    payload: { pingId, timestamp }
+                  }));
+                } catch { }
+              }
+              break;
+            }
             case 'soloPlayerWarning': {
               console.log('[LOBBY] Solo player warning:', msg.payload?.secondsUntilRefund, 'seconds until refund');
               const seconds = msg.payload?.secondsUntilRefund || 0;
@@ -565,73 +827,85 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
               const txSig = msg.payload?.txSignature;
               joinBusyRef.current = false;
               if (joinRetryTimerRef.current) { clearTimeout(joinRetryTimerRef.current); joinRetryTimerRef.current = null; }
-              
+
               // ✅ FIX #4: Log transaction link
               if (txSig) {
                 console.log(`[REFUND] 🔗 View refund: https://solscan.io/tx/${txSig}`);
               }
-              
+
               // Clear lobby state immediately to prevent countdown restart
-              setState(s => ({ 
-                ...s, 
-                lastError: `✅ Refunded ${solAmount} SOL - Returning to menu...`, 
-                phase: 'idle', 
+              setState(s => ({
+                ...s,
+                lastError: `✅ Refunded ${solAmount} SOL - Returning to menu...`,
+                phase: 'idle',
                 joining: false,
                 lobby: null, // Clear lobby state immediately
                 countdown: null, // Clear countdown
                 lastRefundSignature: txSig,
                 refundReceived: true // Flag for auto-return
               } as any));
-              
+
               // Close WebSocket to prevent reconnection
               if (wsRef.current) {
                 expectedCloseRef.current = true;
                 wsRef.current.close();
                 wsRef.current = null;
               }
-              
+
               // Auto-clear error message after showing
               setTimeout(() => {
                 setState(s => ({ ...s, lastError: null, refundReceived: false }));
               }, 2500);
-              
-              try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'lobby_refund', payload: { lamports: msg.payload?.lamports, tx: txSig } }) }); } catch {}
+
+              try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'lobby_refund', payload: { lamports: msg.payload?.lamports, tx: txSig } }) }); } catch { }
               break;
             }
-            
+
             case 'refundFailed': {
               // ✅ FIX #2: Handle refund failures with clear error message
               console.error('[REFUND] Failed:', msg.payload);
               joinBusyRef.current = false;
               if (joinRetryTimerRef.current) { clearTimeout(joinRetryTimerRef.current); joinRetryTimerRef.current = null; }
-              
-              setState(s => ({ 
-                ...s, 
-                lastError: `❌ ${msg.payload?.message || 'Refund failed - contact support'}`, 
-                phase: 'idle', 
+
+              setState(s => ({
+                ...s,
+                lastError: `❌ ${msg.payload?.message || 'Refund failed - contact support'}`,
+                phase: 'idle',
                 joining: false,
                 lobby: null
               }));
-              
+
               // Show error for longer (5s)
               setTimeout(() => {
                 setState(s => ({ ...s, lastError: null }));
               }, 5000);
-              
-              try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'refund_failed', payload: msg.payload }) }); } catch {}
+
+              try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'refund_failed', payload: msg.payload }) }); } catch { }
               break;
             }
-            
+
             case 'error': {
               joinBusyRef.current = false;
               if (joinRetryTimerRef.current) { clearTimeout(joinRetryTimerRef.current); joinRetryTimerRef.current = null; }
-              console.error('[WS] server error', msg.payload?.message);
-              setState(s => ({ ...s, lastError: msg.payload?.message || 'Server error', joining: false }));
+              const message = msg.payload?.message || 'Server error';
+              // Backward-compatible: older servers might reject optional capability messages like `clientHello`.
+              // Don't block the user for that; just disable the feature and continue.
+              if (
+                /invalid message schema/i.test(message) &&
+                lastClientHelloSentAtRef.current > 0 &&
+                (Date.now() - lastClientHelloSentAtRef.current) < 5000
+              ) {
+                disableClientHelloRef.current = true;
+                console.warn('[WS] server rejected clientHello; disabling capability negotiation');
+                break;
+              }
+              console.error('[WS] server error', message);
+              setState(s => ({ ...s, lastError: message, joining: false }));
               break;
             }
             default: break;
           }
-        } catch {}
+        } catch { }
       };
     };
 
@@ -660,8 +934,11 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
   };
 
   const leave = () => {
-    try { expectedCloseRef.current = true; wsRef.current?.close(); } catch {}
+    try { expectedCloseRef.current = true; wsRef.current?.close(); } catch { }
     wsRef.current = null;
+    trailsRef.current = {};
+    trailLastCreatedAtRef.current = {};
+    serverTimeOffsetMsRef.current = 0;
     if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
     reconnectAttemptsRef.current = 0;
     pendingJoinRef.current = null;
@@ -700,17 +977,17 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
         tx = Math.max(0, Math.min(world.width, tx));
         ty = Math.max(0, Math.min(world.height, ty));
       }
+      if (!Number.isFinite(tx) || !Number.isFinite(ty)) return;
       const sock = wsRef.current;
       if (!sock || sock.readyState !== WebSocket.OPEN) return;
       const payload = { target: { x: tx, y: ty }, accelerate, ...(boost !== undefined ? { boost } : {}) };
       lastSentPayloadRef.current = { target: { x: tx, y: ty }, accelerate, boost };
       sock.send(JSON.stringify({ type: 'playerInput', payload }));
-    } catch {}
+    } catch { }
   };
 
-  const value = useMemo<WsApi>(() => ({ state, connectAndJoin, leave, signAuthentication, sendInput }), [state]);
+  const value = useMemo<WsApi>(() => ({ state, connectAndJoin, leave, signAuthentication, sendInput, isGuest }), [state, isGuest]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
 export function useWs() { return useContext(Ctx); }
-

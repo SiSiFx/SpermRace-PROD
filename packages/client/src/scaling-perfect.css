@@ -1,0 +1,562 @@
+/* =================================================================
+   PERFECT UI SCALING - Comprehensive responsive scaling system
+   Ensures all UI elements scale perfectly and remain tap-friendly
+   ================================================================= */
+
+/* CSS Custom Properties for dynamic scaling */
+:root {
+  /* Base spacing system - scales with viewport */
+  --space-1: clamp(4px, 0.8vw, 8px);
+  --space-2: clamp(8px, 1.5vw, 12px);
+  --space-3: clamp(12px, 2vw, 16px);
+  --space-4: clamp(16px, 2.5vw, 20px);
+  --space-5: clamp(20px, 3vw, 24px);
+  --space-6: clamp(24px, 3.5vw, 28px);
+  --space-8: clamp(32px, 4vw, 36px);
+
+  /* Border radius - scales proportionally */
+  --radius-sm: clamp(6px, 1.2vw, 10px);
+  --radius-md: clamp(10px, 1.8vw, 14px);
+  --radius-lg: clamp(14px, 2.4vw, 18px);
+  --radius-xl: clamp(18px, 3vw, 24px);
+
+  /* Touch target sizes - WCAG 2.1 AAA compliant */
+  --touch-target-min: 44px;
+  --touch-target-rec: 48px;
+  --touch-target-lg: 56px;
+
+  /* Font sizes - fluid typography */
+  --text-xs: clamp(10px, 1.8vw, 12px);
+  --text-sm: clamp(12px, 2.2vw, 14px);
+  --text-base: clamp(14px, 2.6vw, 16px);
+  --text-lg: clamp(16px, 3vw, 20px);
+  --text-xl: clamp(20px, 3.5vw, 24px);
+  --text-2xl: clamp(24px, 4vw, 32px);
+  --text-3xl: clamp(32px, 5vw, 48px);
+
+  /* Container widths */
+  --container-sm: clamp(280px, 85vw, 400px);
+  --container-md: clamp(320px, 90vw, 600px);
+  --container-lg: clamp(400px, 95vw, 900px);
+}
+
+/* ==========================================================================
+   RESPONSIVE BREAKPOINT OVERRIDES
+   ========================================================================== */
+
+/* Extra small devices (< 375px) */
+@media (max-width: 374px) {
+  :root {
+    --space-1: 4px;
+    --space-2: 6px;
+    --space-3: 10px;
+    --space-4: 12px;
+    --space-5: 16px;
+    --space-6: 20px;
+    --space-8: 24px;
+
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+  }
+}
+
+/* Small devices (375px - 767px) */
+@media (min-width: 375px) and (max-width: 767px) {
+  :root {
+    --space-1: 6px;
+    --space-2: 10px;
+    --space-3: 14px;
+    --space-4: 18px;
+    --space-5: 22px;
+    --space-6: 26px;
+    --space-8: 32px;
+  }
+}
+
+/* Tablets (768px - 1023px) */
+@media (min-width: 768px) and (max-width: 1023px) {
+  :root {
+    --space-1: 8px;
+    --space-2: 12px;
+    --space-3: 16px;
+    --space-4: 20px;
+    --space-5: 24px;
+    --space-6: 28px;
+    --space-8: 36px;
+  }
+}
+
+/* Desktop (>= 1024px) */
+@media (min-width: 1024px) {
+  :root {
+    --space-1: 8px;
+    --space-2: 12px;
+    --space-3: 16px;
+    --space-4: 20px;
+    --space-5: 24px;
+    --space-6: 28px;
+    --space-8: 32px;
+  }
+}
+
+/* ==========================================================================
+   TOUCH TARGETS - Ensure all interactive elements are tap-friendly
+   ========================================================================== */
+
+/* Base touch target styles */
+button,
+a,
+input,
+select,
+textarea,
+[role="button"],
+.clickable,
+.interactive {
+  min-height: var(--touch-target-min);
+  min-width: var(--touch-target-min);
+  padding: calc(var(--space-2) * 0.75) var(--space-3);
+  font-size: var(--text-base);
+  position: relative;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(34, 211, 238, 0.2);
+}
+
+/* Enhanced touch targets for Android */
+@media (hover: none) and (pointer: coarse) {
+  button,
+  a[role="button"],
+  .clickable {
+    min-height: var(--touch-target-rec);
+    min-width: var(--touch-target-rec);
+    padding: var(--space-2) var(--space-4);
+  }
+}
+
+/* ==========================================================================
+   RESPONSIVE BUTTONS
+   ========================================================================== */
+
+.btn-primary,
+.btn-secondary,
+.cta-primary,
+.cta-secondary,
+.wallet-connect-btn,
+.mode-select-btn,
+.tournament-join-btn {
+  height: auto;
+  min-height: var(--touch-target-min);
+  padding: var(--space-3) var(--space-6);
+  font-size: var(--text-base);
+  border-radius: var(--radius-md);
+  transition: transform 0.15s ease-out;
+}
+
+/* Compact buttons for small screens */
+@media (max-width: 374px) {
+  .btn-primary,
+  .btn-secondary {
+    padding: var(--space-2) var(--space-4);
+    font-size: var(--text-sm);
+  }
+}
+
+/* Large, comfortable buttons for desktop */
+@media (min-width: 1024px) {
+  .btn-primary,
+  .btn-secondary {
+    padding: var(--space-4) var(--space-8);
+    font-size: var(--text-lg);
+  }
+}
+
+/* ==========================================================================
+   RESPONSIVE CARDS & CONTAINERS
+   ========================================================================== */
+
+.modal-card,
+.modal-container,
+.tournament-card,
+.mode-card {
+  width: var(--container-sm);
+  max-width: 90vw;
+  padding: var(--space-6);
+  border-radius: var(--radius-lg);
+  margin: var(--space-4) auto;
+}
+
+/* Wider modals on larger screens */
+@media (min-width: 768px) {
+  .modal-card.wide,
+  .modal-container.wide {
+    width: var(--container-md);
+    padding: var(--space-8);
+  }
+}
+
+/* Full-width cards on small screens */
+@media (max-width: 374px) {
+  .tournament-card,
+  .mode-card {
+    width: 100%;
+    max-width: calc(100vw - var(--space-6));
+    padding: var(--space-4);
+  }
+}
+
+/* ==========================================================================
+   RESPONSIVE FORM ELEMENTS
+   ========================================================================== */
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+select,
+textarea {
+  width: 100%;
+  min-height: var(--touch-target-min);
+  padding: var(--space-3);
+  font-size: 16px; /* Prevent iOS zoom */
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+}
+
+/* Focus states for accessibility */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid rgba(34, 211, 238, 0.6);
+  outline-offset: 2px;
+}
+
+/* ==========================================================================
+   RESPONSIVE ICONS & AVATARS
+   ========================================================================== */
+
+.icon-sm {
+  width: clamp(16px, 3vw, 20px);
+  height: clamp(16px, 3vw, 20px);
+}
+
+.icon-md {
+  width: clamp(24px, 4vw, 32px);
+  height: clamp(24px, 4vw, 32px);
+}
+
+.icon-lg {
+  width: clamp(32px, 5vw, 48px);
+  height: clamp(32px, 5vw, 48px);
+}
+
+.avatar-sm,
+.player-avatar {
+  width: clamp(28px, 5vw, 40px);
+  height: clamp(28px, 5vw, 40px);
+  min-width: var(--touch-target-min);
+  min-height: var(--touch-target-min);
+  font-size: clamp(12px, 2.5vw, 16px);
+}
+
+/* ==========================================================================
+   RESPONSIVE HUD ELEMENTS
+   ========================================================================== */
+
+.hud-players,
+.hud-timer,
+.hud-boost,
+.game-radar,
+.game-zone-timer,
+.mobile-wallet-badge {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-xs);
+  border-radius: var(--radius-md);
+}
+
+/* Larger HUD on tablets and desktop */
+@media (min-width: 768px) {
+  .hud-players,
+  .hud-timer,
+  .hud-boost {
+    padding: var(--space-3) var(--space-4);
+    font-size: var(--text-sm);
+  }
+}
+
+/* ==========================================================================
+   RESPONSIVE MOBILE CONTROLS
+   ========================================================================== */
+
+.mobile-joystick {
+  width: clamp(120px, 25vw, 180px);
+  height: clamp(120px, 25vw, 180px);
+  min-width: 120px;
+  min-height: 120px;
+}
+
+.joystick-ring {
+  width: 60%;
+  height: 60%;
+  min-width: 60px;
+  min-height: 60px;
+}
+
+.joystick-stick {
+  width: clamp(30px, 6vw, 40px);
+  height: clamp(30px, 6vw, 40px);
+  min-width: 30px;
+  min-height: 30px;
+}
+
+.mobile-boost-button {
+  width: clamp(100px, 22vw, 160px);
+  height: clamp(100px, 22vw, 160px);
+  min-width: 100px;
+  min-height: 100px;
+  border-radius: var(--radius-lg);
+}
+
+.mobile-boost-button::before {
+  width: clamp(50px, 12vw, 70px);
+  height: clamp(50px, 12vw, 70px);
+}
+
+.boost-icon {
+  font-size: clamp(20px, 4vw, 28px);
+}
+
+/* ==========================================================================
+   RESPONSIVE GRIDS & LAYOUTS
+   ========================================================================== */
+
+.tournament-grid,
+.mode-grid {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4);
+}
+
+/* Responsive grid columns */
+.tournament-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+}
+
+.mode-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+}
+
+/* Single column on small screens */
+@media (max-width: 640px) {
+  .tournament-grid,
+  .mode-grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
+  }
+}
+
+/* ==========================================================================
+   RESPONSIVE TYPOGRAPHY
+   ========================================================================== */
+
+.brand-title {
+  font-size: clamp(2rem, 10vw, 6rem);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.brand-punchline,
+.brand-subtitle {
+  font-size: clamp(1rem, 3vw, 1.5rem);
+}
+
+.modal-title,
+.lobby-title,
+.tournament-title {
+  font-size: var(--text-xl);
+  font-weight: 600;
+}
+
+@media (min-width: 768px) {
+  .modal-title,
+  .lobby-title,
+  .tournament-title {
+    font-size: var(--text-2xl);
+  }
+}
+
+/* ==========================================================================
+   SAFE AREA SUPPORT (Notched devices)
+   ========================================================================== */
+
+@supports (padding: env(safe-area-inset-bottom)) {
+  .safe-area-all,
+  .mobile-landing-container,
+  .mobile-lobby-container,
+  .screen.active {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* Adjust mobile controls for safe areas */
+  .mobile-joystick {
+    bottom: calc(var(--mobile-control-bottom, 120px) + env(safe-area-inset-bottom, 0px));
+    left: calc(24px + env(safe-area-inset-left, 0px));
+  }
+
+  .mobile-boost-button {
+    bottom: calc(var(--mobile-control-bottom, 120px) + env(safe-area-inset-bottom, 0px));
+    right: calc(24px + env(safe-area-inset-right, 0px));
+  }
+}
+
+/* ==========================================================================
+   LANDSCAPE MODE OPTIMIZATIONS
+   ========================================================================== */
+
+@media (orientation: landscape) and (max-height: 500px) {
+  /* Compact everything for landscape */
+  .modal-card,
+  .modal-container {
+    padding: var(--space-3) var(--space-4);
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  .mobile-joystick,
+  .mobile-boost-button {
+    transform: scale(0.85);
+  }
+
+  .brand-title {
+    font-size: clamp(1.5rem, 6vw, 3rem);
+  }
+
+  .cta-primary,
+  .btn-primary {
+    padding: var(--space-2) var(--space-4);
+  }
+}
+
+/* ==========================================================================
+   ACCESSIBILITY ENHANCEMENTS
+   ========================================================================== */
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    border: 2px solid currentColor;
+  }
+
+  .tournament-card,
+  .mode-card,
+  .modal-card {
+    border: 2px solid currentColor;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Dark mode support (system preference) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-primary: #030712;
+    --bg-secondary: #0e1116;
+    --text-primary: #ffffff;
+    --text-secondary: #9ca3af;
+  }
+}
+
+/* ==========================================================================
+   UTILITY CLASSES
+   ========================================================================== */
+
+/* Spacing utilities */
+.p-1 { padding: var(--space-1); }
+.p-2 { padding: var(--space-2); }
+.p-3 { padding: var(--space-3); }
+.p-4 { padding: var(--space-4); }
+.p-5 { padding: var(--space-5); }
+.p-6 { padding: var(--space-6); }
+
+.m-1 { margin: var(--space-1); }
+.m-2 { margin: var(--space-2); }
+.m-3 { margin: var(--space-3); }
+.m-4 { margin: var(--space-4); }
+.m-5 { margin: var(--space-5); }
+.m-6 { margin: var(--space-6); }
+
+/* Gap utilities */
+.gap-1 { gap: var(--space-1); }
+.gap-2 { gap: var(--space-2); }
+.gap-3 { gap: var(--space-3); }
+.gap-4 { gap: var(--space-4); }
+.gap-5 { gap: var(--space-5); }
+.gap-6 { gap: var(--space-6); }
+
+/* Text size utilities */
+.text-xs { font-size: var(--text-xs); }
+.text-sm { font-size: var(--text-sm); }
+.text-base { font-size: var(--text-base); }
+.text-lg { font-size: var(--text-lg); }
+.text-xl { font-size: var(--text-xl); }
+.text-2xl { font-size: var(--text-2xl); }
+.text-3xl { font-size: var(--text-3xl); }
+
+/* Touch target utilities */
+.touch-min { min-height: var(--touch-target-min); min-width: var(--touch-target-min); }
+.touch-rec { min-height: var(--touch-target-rec); min-width: var(--touch-target-rec); }
+.touch-lg { min-height: var(--touch-target-lg); min-width: var(--touch-target-lg); }
+
+/* ==========================================================================
+   PERFORMANCE OPTIMIZATIONS
+   ========================================================================== */
+
+/* GPU acceleration for animated elements */
+.gpu-accelerated {
+  will-change: transform, opacity;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* Optimize images for high DPI */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  img,
+  canvas {
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+  }
+}
+
+/* Hide scrollbar but keep functionality */
+.hide-scrollbar {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
+}

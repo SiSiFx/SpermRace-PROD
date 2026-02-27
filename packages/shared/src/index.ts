@@ -2,6 +2,8 @@
 // CORE GAME TYPES
 // =================================================================================================
 
+export { WORLD, PHYSICS, TRAIL, COLLISION, TICK, INPUT } from './constants';
+
 /** Represents a 2D vector. */
 export interface Vector2 {
   x: number;
@@ -14,6 +16,8 @@ export interface PlayerInput {
   accelerate: boolean;
   /** Optional momentary boost input */
   boost?: boolean;
+  /** Optional drift/brake input for tighter turning */
+  drift?: boolean;
 }
 
 /** Represents the physical state of a spermatozoide. */
@@ -32,12 +36,31 @@ export interface TrailPoint extends Vector2 {
   createdAt?: number;
 }
 
+/** A collectible item present in the game world. */
+export interface GameItem {
+  id: string;
+  type: 'dna';
+  x: number;
+  y: number;
+}
+
+/** Match objective state (optional). */
+export interface ExtractionObjectiveState {
+  kind: 'extraction';
+  keysRequired: number;
+  // Egg is centered in world-space (0..width/height); client may re-center.
+  egg: { x: number; y: number; radius: number; openAtMs: number; holdMs: number };
+  holding?: { playerId: string; sinceMs: number };
+  keysByPlayerId: Record<string, number>;
+}
+
 /** Represents a player in the game. */
 export interface Player {
   id: string; // Solana public key
   sperm: SpermState;
   trail: TrailPoint[];
   isAlive: boolean;
+  status?: { boosting: boolean; boostCooldownMs: number; boostMaxCooldownMs: number };
   input: PlayerInput;
 }
 
@@ -55,10 +78,12 @@ export interface GameState {
     width: number;
     height: number;
   };
+  items: Record<string, GameItem>;
+  objective?: ExtractionObjectiveState;
 }
 
 /** Represents the entry fee tiers in USD. */
-export type EntryFeeTier = 1 | 5 | 25 | 100;
+export type EntryFeeTier = 0 | 1 | 5 | 25 | 100;
 
 /** Game modes */
 export type GameMode = 'practice' | 'tournament';
@@ -67,6 +92,7 @@ export type GameMode = 'practice' | 'tournament';
 export interface Lobby {
   lobbyId: string;
   players: string[]; // List of player IDs (public keys)
+  playerNames?: Record<string, string>; // Optional mapping of player IDs to display names
   maxPlayers: number;
   entryFee: EntryFeeTier;
   mode: GameMode;
@@ -87,6 +113,15 @@ export interface AuthenticateMessage {
     publicKey: string;
     signedMessage: string; // Assuming SIWS provides a signed message
     nonce: string;
+  };
+}
+
+export interface GuestLoginMessage {
+  type: 'guestLogin';
+  payload: {
+    guestName: string;
+    guestId?: string;
+    resumeToken?: string;
   };
 }
 
@@ -117,12 +152,22 @@ export interface EntryFeeSignatureMessage {
   };
 }
 
+export interface PongMessage {
+  type: 'pong';
+  payload: {
+    pingId: number;
+    timestamp: number;
+  };
+}
+
 export type ClientToServerMessage =
   | AuthenticateMessage
+  | GuestLoginMessage
   | JoinLobbyMessage
   | LeaveLobbyMessage
   | PlayerInputMessage
-  | EntryFeeSignatureMessage;
+  | EntryFeeSignatureMessage
+  | PongMessage;
 
 // -------------------------------------------------------------------------------------------------
 // Server -> Client Messages
@@ -132,6 +177,7 @@ export interface AuthenticatedMessage {
   type: 'authenticated';
   payload: {
     playerId: string; // wallet public key base58
+    resumeToken?: string; // guest resume token
   };
 }
 
@@ -192,9 +238,22 @@ export interface GameStateUpdateMessage {
   type: 'gameStateUpdate';
   payload: {
     timestamp: number;
-    players: Array<Pick<Player, 'id' | 'sperm' | 'isAlive'> & { trail: TrailPoint[] }>;
+    // When present, the server will not advance physics/collisions until this time (server ms).
+    // Clients can use it to align their pre-start countdown/zoom.
+    goAtMs?: number;
+    // Trails are intentionally optional here; newer servers send trails via `trailDelta`.
+    players: Array<Pick<Player, 'id' | 'sperm' | 'isAlive' | 'status'> & { trail?: TrailPoint[] }>;
     world: { width: number; height: number };
     aliveCount: number;
+    objective?: ExtractionObjectiveState;
+  };
+}
+
+export interface TrailDeltaMessage {
+  type: 'trailDelta';
+  payload: {
+    timestamp: number;
+    deltas: Array<{ playerId: string; points: TrailPoint[] }>;
   };
 }
 
@@ -222,18 +281,28 @@ export interface ErrorMessage {
   };
 }
 
+export interface PingMessage {
+  type: 'ping';
+  payload: {
+    pingId: number;
+    timestamp: number;
+  };
+}
+
 export type ServerToClientMessage =
   | AuthenticatedMessage
   | LobbyStateMessage
   | GameStartingMessage
   | GameStateUpdateMessage
+  | TrailDeltaMessage
   | PlayerEliminatedMessage
   | RoundEndMessage
   | ErrorMessage
   | LobbyCountdownMessage
   | SiwsChallengeMessage
   | EntryFeeTransactionMessage
-  | EntryFeeVerifiedMessage;
+  | EntryFeeVerifiedMessage
+  | PingMessage;
 // =================================================================================================
 // RUNTIME SCHEMAS (zod)
 // =================================================================================================

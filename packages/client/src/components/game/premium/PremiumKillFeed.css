@@ -1,0 +1,117 @@
+/**
+ * PremiumKillFeed Styles
+ * Glass morphism kill notifications
+ */
+
+@import '../../../styles/premium-theme.css';
+
+.premium-kill-feed {
+  position: absolute;
+  top: 72px;
+  left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 101;
+}
+
+.premium-kill-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  animation: killSlideIn 0.3s ease-out both;
+  max-width: 280px;
+}
+
+@keyframes killSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.premium-kill-entry.self-kill {
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.premium-kill-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: rgba(220, 38, 38, 0.2);
+  border-radius: 4px;
+  color: var(--accent-red);
+  flex-shrink: 0;
+}
+
+.premium-kill-entry.self-kill .premium-kill-icon {
+  background: rgba(245, 158, 11, 0.2);
+  color: var(--accent-yellow);
+}
+
+.premium-kill-name {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.premium-kill-name.killer {
+  color: var(--accent-red-light);
+}
+
+.premium-kill-name.victim {
+  color: var(--text-secondary);
+}
+
+.premium-kill-action {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+/* Mobile adjustments */
+.premium-kill-feed.is-mobile {
+  top: max(60px, env(safe-area-inset-top, 0px) + 48px);
+  left: max(12px, env(safe-area-inset-left, 0px));
+}
+
+.premium-kill-feed.is-mobile .premium-kill-entry {
+  padding: 6px 10px;
+  gap: 6px;
+  max-width: 220px;
+}
+
+.premium-kill-feed.is-mobile .premium-kill-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.premium-kill-feed.is-mobile .premium-kill-name {
+  font-size: 11px;
+  max-width: 60px;
+}
+
+.premium-kill-feed.is-mobile .premium-kill-action {
+  font-size: 9px;
+}

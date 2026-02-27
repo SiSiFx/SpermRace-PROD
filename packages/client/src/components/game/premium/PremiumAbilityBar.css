@@ -1,0 +1,164 @@
+/**
+ * PremiumAbilityBar Styles
+ * Sleek boost/ability bar with glow effects
+ */
+
+@import '../../../styles/premium-theme.css';
+
+.premium-ability-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  min-width: 200px;
+  animation: slideInUp 0.3s ease-out;
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.premium-ability-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: rgba(59, 130, 246, 0.2);
+  border-radius: 6px;
+  color: var(--accent-blue);
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+}
+
+.premium-ability-bar.low .premium-ability-icon {
+  background: rgba(220, 38, 38, 0.2);
+  color: var(--accent-red);
+}
+
+.premium-ability-bar.ready .premium-ability-icon {
+  background: rgba(16, 185, 129, 0.3);
+  color: var(--accent-green);
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+  animation: readyPulse 1s ease-in-out infinite;
+}
+
+@keyframes readyPulse {
+  0%, 100% {
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.6);
+  }
+}
+
+.premium-ability-track {
+  position: relative;
+  flex: 1;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.premium-ability-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-blue) 0%, var(--accent-blue-light) 100%);
+  border-radius: 4px;
+  transition: width 0.15s ease-out;
+}
+
+.premium-ability-bar.low .premium-ability-fill {
+  background: linear-gradient(90deg, var(--accent-red) 0%, var(--accent-red-light) 100%);
+}
+
+.premium-ability-bar.ready .premium-ability-fill {
+  background: linear-gradient(90deg, var(--accent-green) 0%, var(--accent-green-light) 100%);
+}
+
+.premium-ability-glow {
+  position: absolute;
+  top: -4px;
+  left: 0;
+  height: calc(100% + 8px);
+  background: linear-gradient(90deg, transparent 0%, rgba(59, 130, 246, 0.3) 100%);
+  border-radius: 4px;
+  filter: blur(4px);
+  transition: width 0.15s ease-out;
+  pointer-events: none;
+}
+
+.premium-ability-bar.low .premium-ability-glow {
+  background: linear-gradient(90deg, transparent 0%, rgba(220, 38, 38, 0.3) 100%);
+}
+
+.premium-ability-bar.ready .premium-ability-glow {
+  background: linear-gradient(90deg, transparent 0%, rgba(16, 185, 129, 0.4) 100%);
+  animation: glowPulse 1s ease-in-out infinite;
+}
+
+@keyframes glowPulse {
+  0%, 100% {
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.premium-ability-percent {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  min-width: 36px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  transition: color 0.3s ease;
+}
+
+.premium-ability-bar.low .premium-ability-percent {
+  color: var(--accent-red);
+}
+
+.premium-ability-bar.ready .premium-ability-percent {
+  color: var(--accent-green);
+}
+
+/* Mobile adjustments */
+@media (max-width: 640px) {
+  .premium-ability-bar {
+    min-width: 160px;
+    padding: 6px 10px;
+    gap: 8px;
+  }
+
+  .premium-ability-icon {
+    width: 24px;
+    height: 24px;
+  }
+
+  .premium-ability-track {
+    height: 6px;
+  }
+
+  .premium-ability-percent {
+    font-size: 12px;
+    min-width: 32px;
+  }
+}

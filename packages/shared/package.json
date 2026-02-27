@@ -4,6 +4,12 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./constants": "./dist/constants.js",
+    "./schemas": "./dist/schemas.js",
+    "./dist/*": "./dist/*"
+  },
   "scripts": {
     "build": "tsc"
   },

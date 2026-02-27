@@ -34,17 +34,11 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    sourcemap: true,
-    minify: 'terser',
-    terserOptions: {
-      compress: {
-        drop_console: false,
-        pure_funcs: [ 'console.debug', 'console.info' ],
-      },
-    },
+    // Keep builds memory-friendly (CI + local). Source maps can be enabled via tooling if needed.
+    sourcemap: false,
+    minify: 'esbuild',
     rollupOptions: {
       output: {
-        manualChunks: undefined, // Bundle everything together for this small game
         assetFileNames: 'assets/[name].[hash][extname]',
         chunkFileNames: 'js/[name].[hash].js',
         entryFileNames: 'js/[name].[hash].js',

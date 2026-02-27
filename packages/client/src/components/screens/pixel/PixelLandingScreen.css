@@ -1,0 +1,382 @@
+/**
+ * PixelLandingScreen Styles
+ * Retro tournament landing page styling
+ */
+
+@import '../../../styles/pixel-theme.css';
+
+.pixel-landing-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  background-color: var(--color-bg, #1d2b53);
+  overflow-y: auto;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity var(--duration-slow, 400ms) var(--ease-steps-2),
+              transform var(--duration-slow, 400ms) var(--ease-steps-2);
+}
+
+.pixel-landing-screen.pixel-loaded {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* =========================================
+   PIXEL GRID BACKGROUND
+   ========================================= */
+
+.pixel-grid-bg {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+/* =========================================
+   MAIN CONTENT
+   ========================================= */
+
+.pixel-landing-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--pixel-space-4, 16px);
+  padding: var(--pixel-space-6, 24px);
+  padding-top: calc(var(--pixel-space-6, 24px) + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(var(--pixel-space-8, 32px) + env(safe-area-inset-bottom, 0px));
+  max-width: 600px;
+  width: 100%;
+}
+
+/* =========================================
+   HEADER
+   ========================================= */
+
+.pixel-landing-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--pixel-space-2, 8px);
+}
+
+.pixel-back-btn {
+  font-family: var(--font-display, 'Press Start 2P', monospace);
+  font-size: var(--pixel-xs, 10px);
+  padding: var(--pixel-space-2, 8px) var(--pixel-space-3, 12px);
+}
+
+/* =========================================
+   HERO SECTION
+   ========================================= */
+
+.pixel-landing-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--pixel-space-3, 12px);
+  text-align: center;
+}
+
+.pixel-trophy-icon {
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(4px 4px 0 rgba(0, 0, 0, 0.5));
+}
+
+.pixel-trophy-icon.pixel-glow .pixel-trophy-svg {
+  filter: drop-shadow(0 0 8px rgba(255, 163, 0, 0.6));
+}
+
+.pixel-trophy-svg {
+  width: 100%;
+  height: 100%;
+}
+
+.pixel-landing-title {
+  font-family: var(--font-display, 'Press Start 2P', monospace);
+  font-size: var(--pixel-2xl, 32px);
+  font-weight: var(--font-bold, 700);
+  color: var(--pixel-white, #fff1e8);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin: 0;
+  text-shadow:
+    4px 4px 0 var(--pixel-dark, #1d2b53),
+    -2px -2px 0 var(--pixel-dark, #1d2b53);
+}
+
+.pixel-landing-subtitle {
+  font-family: var(--font-ui, 'VT323', monospace);
+  font-size: var(--pixel-md, 16px);
+  color: var(--pixel-blue, #29adff);
+  letter-spacing: 0.15em;
+  margin: 0;
+}
+
+/* =========================================
+   PRIZE DISPLAY
+   ========================================= */
+
+.pixel-prize-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--pixel-space-1, 4px);
+  padding: var(--pixel-space-3, 12px);
+  background-color: var(--color-surface, #29366f);
+  border: var(--border-thick, 4px) solid var(--pixel-yellow, #ffec27);
+  box-shadow: var(--shadow-lg, 6px 6px 0 rgba(0, 0, 0, 0.5));
+}
+
+.pixel-prize-label {
+  display: flex;
+  align-items: center;
+  gap: var(--pixel-space-1, 4px);
+  font-family: var(--font-display, 'Press Start 2P', monospace);
+  font-size: var(--pixel-xs, 10px);
+  color: var(--pixel-yellow, #ffec27);
+  letter-spacing: 0.1em;
+}
+
+.pixel-prize-amount {
+  font-family: var(--font-display, 'Press Start 2P', monospace);
+  font-size: var(--pixel-4xl, 48px);
+  font-weight: var(--font-bold, 700);
+  color: var(--pixel-yellow, #ffec27);
+  text-shadow:
+    2px 2px 0 var(--pixel-dark, #1d2b53),
+    -1px -1px 0 var(--pixel-dark, #1d2b53);
+  transition: transform var(--duration-snap, 50ms) var(--ease-linear);
+}
+
+.pixel-prize-amount.pixel-bounce {
+  animation: pixel-bounce 300ms var(--ease-steps-2);
+}
+
+@keyframes pixel-bounce {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+/* =========================================
+   TIER GRID
+   ========================================= */
+
+.pixel-tier-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--pixel-space-3, 12px);
+  width: 100%;
+}
+
+.pixel-tier-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--pixel-space-1, 4px);
+  padding: var(--pixel-space-3, 12px);
+  background-color: var(--color-surface, #29366f);
+  border: var(--border-thick, 4px) solid var(--color-border, #5f574f);
+  cursor: pointer;
+  transition: all var(--duration-snap, 50ms) var(--ease-linear);
+  font-family: var(--font-display, 'Press Start 2P', monospace);
+}
+
+.pixel-tier-card:hover {
+  border-color: var(--pixel-blue, #29adff);
+  transform: translate(-2px, -2px);
+  box-shadow: var(--shadow-md, 4px 4px 0 rgba(0, 0, 0, 0.5));
+}
+
+.pixel-tier-card:active {
+  transform: translate(2px, 2px);
+  box-shadow: var(--shadow-inset, inset 2px 2px 0 rgba(0, 0, 0, 0.3));
+}
+
+.pixel-tier-card.pixel-tier-selected {
+  background-color: var(--pixel-blue, #29adff);
+  border-color: var(--pixel-white, #fff1e8);
+  box-shadow: var(--shadow-lg, 6px 6px 0 rgba(0, 0, 0, 0.5));
+}
+
+.pixel-tier-card.pixel-tier-selected .pixel-tier-name,
+.pixel-tier-card.pixel-tier-selected .pixel-tier-entry,
+.pixel-tier-card.pixel-tier-selected .pixel-tier-prize {
+  color: var(--pixel-dark, #1d2b53);
+}
+
+.pixel-tier-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+}
+
+.pixel-tier-name {
+  font-size: var(--pixel-sm, 12px);
+  font-weight: var(--font-bold, 700);
+  color: var(--pixel-white, #fff1e8);
+  letter-spacing: 0.1em;
+}
+
+.pixel-tier-entry {
+  font-size: var(--pixel-xl, 24px);
+  font-weight: var(--font-bold, 700);
+  color: var(--pixel-green, #00e436);
+}
+
+.pixel-tier-prize {
+  font-size: var(--pixel-lg, 20px);
+  font-weight: var(--font-bold, 700);
+  color: var(--pixel-yellow, #ffec27);
+}
+
+.pixel-tier-desc {
+  font-family: var(--font-ui, 'VT323', monospace);
+  font-size: var(--pixel-xs, 10px);
+  color: var(--color-text-dim, #c2c3c7);
+  text-align: center;
+}
+
+.pixel-tier-players {
+  font-family: var(--font-ui, 'VT323', monospace);
+  font-size: var(--pixel-xs, 10px);
+  color: var(--color-text-muted, #83769c);
+}
+
+/* =========================================
+   TIER INFO CARD
+   ========================================= */
+
+.pixel-tier-info {
+  width: 100%;
+  margin-top: var(--pixel-space-1, 4px);
+}
+
+.pixel-tier-info-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--pixel-space-2, 8px);
+  font-family: var(--font-display, 'Press Start 2P', monospace);
+  font-size: var(--pixel-md, 16px);
+  flex-wrap: wrap;
+}
+
+.pixel-tier-info-label,
+.pixel-tier-info-into {
+  color: var(--color-text-dim, #c2c3c7);
+  font-size: var(--pixel-sm, 12px);
+}
+
+.pixel-tier-info-value {
+  color: var(--pixel-white, #fff1e8);
+  font-weight: var(--font-bold, 700);
+}
+
+.pixel-tier-info-prize {
+  color: var(--pixel-yellow, #ffec27);
+}
+
+.pixel-tier-info-detail {
+  font-family: var(--font-ui, 'VT323', monospace);
+  font-size: var(--pixel-sm, 12px);
+  color: var(--color-text-muted, #83769c);
+  text-align: center;
+  margin-top: var(--pixel-space-2, 8px);
+}
+
+/* =========================================
+   ACTION BUTTONS
+   ========================================= */
+
+.pixel-landing-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pixel-space-2, 8px);
+  width: 100%;
+}
+
+.pixel-join-btn,
+.pixel-practice-btn {
+  font-size: var(--pixel-md, 16px);
+  padding: var(--pixel-space-4, 16px);
+  min-height: 56px;
+}
+
+.pixel-insert-coin {
+  font-family: var(--font-display, 'Press Start 2P', monospace);
+  font-size: var(--pixel-xs, 10px);
+  color: var(--pixel-peach, #ffccaa);
+  letter-spacing: 0.1em;
+  text-align: center;
+  margin-top: var(--pixel-space-1, 4px);
+}
+
+/* =========================================
+   FEATURE PILLS
+   ========================================= */
+
+.pixel-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pixel-space-2, 8px);
+  justify-content: center;
+}
+
+.pixel-feature-pill {
+  display: flex;
+  align-items: center;
+  gap: var(--pixel-space-1, 4px);
+  padding: var(--pixel-space-1, 4px) var(--pixel-space-2, 8px);
+  background-color: var(--color-surface, #29366f);
+  border: var(--border-thin, 2px) solid var(--color-border, #5f574f);
+  font-family: var(--font-display, 'Press Start 2P', monospace);
+  font-size: var(--pixel-xs, 10px);
+  color: var(--color-text-dim, #c2c3c7);
+}
+
+/* =========================================
+   RESPONSIVE
+   ========================================= */
+
+@media (max-width: 480px) {
+  .pixel-tier-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pixel-prize-amount {
+    font-size: var(--pixel-3xl, 40px);
+  }
+
+  .pixel-landing-title {
+    font-size: var(--pixel-xl, 24px);
+  }
+}
+
+/* =========================================
+   ANIMATIONS
+   ========================================= */
+
+@keyframes pixel-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.pixel-blink {
+  animation: pixel-blink 1s steps(1) infinite;
+}

@@ -65,31 +65,32 @@ pnpm build:prod
 ## 🌍 Environment Files
 
 ### Client Environment Files
-- `.env.development` - Development configuration
-- `.env.demo` - Demo configuration  
-- `.env.production` - Production configuration
+- Copy `packages/client/.env.example` → `packages/client/.env` for local development.
+- Copy `packages/client/.env.production.example` → `packages/client/.env.production` for production builds.
+- Never commit real `.env*` files; only commit `*.env.example` templates.
 
 ### Server Environment Files
-- `.env.development` - Development server configuration
-- `.env.demo` - Demo server configuration
-- `.env.production` - Production server configuration
+- Copy `packages/server/.env.example` → `packages/server/.env` for local development.
+- Copy `packages/server/.env.production.example` → `packages/server/.env.production` for production.
+- Never commit real `.env*` files; only commit `*.env.example` templates.
 
 ## 🔧 Environment Variables
 
 ### Client Variables (VITE_ prefix)
-- `VITE_SERVER_URL` - WebSocket server URL
-- `VITE_API_URL` - HTTP API URL
-- `VITE_ENABLE_DEBUG` - Enable debug features
-- `VITE_ENABLE_REAL_MONEY` - Enable real money features
-- `VITE_SHOW_WALLET_BUTTON` - Show wallet connection button
-- `VITE_USE_TESTNET` - Use testnet for crypto features
+- `VITE_API_BASE` - HTTP API base (default recommended: same-origin `/api`)
+- `VITE_WS_URL` - WebSocket URL (default recommended: same-origin `/ws`)
+- `VITE_SOLANA_CLUSTER` - `devnet` / `mainnet-beta`
+- `VITE_SOLANA_RPC_ENDPOINT` - Solana JSON-RPC endpoint
 
 ### Server Variables
 - `PORT` - Server port
 - `NODE_ENV` - Environment mode
-- `ENABLE_BOTS` - Enable bot system
+- `ENABLE_DEV_BOTS` - Enable bot system (dev only)
 - `LOG_LEVEL` - Logging level
-- `ENABLE_DEBUG` - Enable debug logging
+- `ALLOWED_ORIGINS` - Comma-separated origins allowed for CORS + WS
+- `SIWS_DOMAINS` - Comma-separated SIWS domains (defaults to `spermrace.io`)
+- `PRIZE_POOL_WALLET` - Public key for prize pool wallet (prod)
+- `PRIZE_POOL_SECRET_KEY` - Secret key for prize pool (prod; never commit)
 
 ## 📋 Feature Comparison
 

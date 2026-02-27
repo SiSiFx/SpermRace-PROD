@@ -1,0 +1,348 @@
+/**
+ * PremiumGameHud Styles
+ * Dark casino aesthetic with glass morphism for in-game HUD
+ */
+
+@import '../../../styles/premium-theme.css';
+
+/* =========================================
+   MAIN CONTAINER
+   ========================================= */
+
+.premium-game-hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 100;
+  font-family: var(--font-sans);
+}
+
+/* =========================================
+   TOP BAR - Rank, Name, Kills
+   ========================================= */
+
+.premium-hud-top {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  pointer-events: auto;
+  animation: slideInDown 0.3s ease-out;
+}
+
+@keyframes slideInDown {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.premium-hud-rank-badge {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+
+.premium-rank-hash {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.premium-rank-number {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--accent-blue);
+  font-variant-numeric: tabular-nums;
+}
+
+.premium-hud-divider {
+  width: 1px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.premium-hud-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.premium-hud-kills {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.premium-kills-count {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--accent-red);
+  font-variant-numeric: tabular-nums;
+}
+
+.premium-kills-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* =========================================
+   ALIVE COUNTER
+   ========================================= */
+
+.premium-hud-alive {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 8px 14px;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  pointer-events: auto;
+  animation: slideInRight 0.3s ease-out;
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.premium-alive-count {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--accent-green);
+  font-variant-numeric: tabular-nums;
+  transition: color 0.3s ease;
+}
+
+.premium-alive-divider {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.premium-alive-total {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.premium-alive-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-left: 6px;
+}
+
+/* Urgency states */
+.premium-hud-alive.warning {
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.premium-hud-alive.warning .premium-alive-count {
+  color: var(--accent-yellow);
+}
+
+.premium-hud-alive.danger {
+  border-color: rgba(220, 38, 38, 0.4);
+  animation: slideInRight 0.3s ease-out, dangerPulse 1s ease-in-out infinite;
+}
+
+.premium-hud-alive.danger .premium-alive-count {
+  color: var(--accent-red);
+}
+
+@keyframes dangerPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 rgba(220, 38, 38, 0);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(220, 38, 38, 0.4);
+  }
+}
+
+/* =========================================
+   MINIMAP POSITION
+   ========================================= */
+
+.premium-hud-minimap {
+  position: absolute;
+  top: 72px;
+  right: 16px;
+  pointer-events: auto;
+}
+
+/* =========================================
+   ABILITY BAR POSITION
+   ========================================= */
+
+.premium-hud-ability {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+
+/* =========================================
+   HUD HINTS
+   ========================================= */
+
+.premium-hud-hints {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+  opacity: 0.6;
+  animation: fadeIn 0.5s ease-out 0.3s both;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 0.6;
+  }
+}
+
+.premium-hint {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.premium-hint kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* =========================================
+   RESPONSIVE - Mobile
+   ========================================= */
+
+.premium-game-hud.is-mobile .premium-hud-top {
+  top: max(12px, env(safe-area-inset-top, 0px));
+  padding: 6px 12px;
+  gap: 8px;
+}
+
+.premium-game-hud.is-mobile .premium-rank-number,
+.premium-game-hud.is-mobile .premium-kills-count {
+  font-size: 16px;
+}
+
+.premium-game-hud.is-mobile .premium-hud-name {
+  font-size: 12px;
+  max-width: 80px;
+}
+
+.premium-game-hud.is-mobile .premium-kills-label {
+  display: none;
+}
+
+.premium-game-hud.is-mobile .premium-hud-alive {
+  top: max(12px, env(safe-area-inset-top, 0px));
+  right: max(12px, env(safe-area-inset-right, 0px));
+  padding: 6px 10px;
+}
+
+.premium-game-hud.is-mobile .premium-alive-count {
+  font-size: 18px;
+}
+
+.premium-game-hud.is-mobile .premium-alive-total {
+  font-size: 12px;
+}
+
+.premium-game-hud.is-mobile .premium-alive-label {
+  display: none;
+}
+
+.premium-game-hud.is-mobile .premium-hud-minimap {
+  top: 60px;
+  right: max(12px, env(safe-area-inset-right, 0px));
+}
+
+.premium-game-hud.is-mobile .premium-hud-ability {
+  bottom: max(16px, env(safe-area-inset-bottom, 0px) + 8px);
+}
+
+.premium-game-hud.is-mobile .premium-hud-hints {
+  display: none;
+}
+
+/* =========================================
+   EXTRA SMALL SCREENS
+   ========================================= */
+
+@media (max-width: 400px) {
+  .premium-hud-top {
+    gap: 6px;
+    padding: 4px 8px;
+  }
+
+  .premium-hud-divider {
+    height: 18px;
+  }
+
+  .premium-rank-number,
+  .premium-kills-count {
+    font-size: 14px;
+  }
+
+  .premium-hud-name {
+    font-size: 11px;
+    max-width: 60px;
+  }
+}

@@ -1,0 +1,235 @@
+/**
+ * ZoneIndicator.css - Zone Status Display
+ * Shows timer, progress, and safe zone information
+ */
+
+/* Fonts imported globally in premium-dark.css */
+
+/* Main Zone Indicator */
+.zone-indicator {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  background: rgba(0, 0, 0, 0.85);
+  border: 2px solid;
+  border-radius: 8px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  min-width: 160px;
+}
+
+/* Mobile: Move to top to avoid conflict with boost button */
+@media (max-width: 768px) {
+  .zone-indicator {
+    top: calc(10px + env(safe-area-inset-top, 0px));
+    bottom: auto;
+    padding: 6px 12px;
+    min-width: 120px;
+  }
+
+  .zone-time {
+    font-size: 14px;
+  }
+
+  .zone-status {
+    font-size: 9px;
+  }
+}
+
+/* State colors */
+.zone-indicator.zone-safe {
+  border-color: #10b981;
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+}
+
+.zone-indicator.zone-warning {
+  border-color: #fbbf24;
+  box-shadow: 0 0 20px rgba(251, 191, 36, 0.4);
+  animation: zonePulse 1s ease-in-out infinite;
+}
+
+.zone-indicator.zone-shrinking {
+  border-color: #ef4444;
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
+  animation: zonePulse 0.5s ease-in-out infinite;
+}
+
+.zone-indicator.zone-final {
+  border-color: #dc2626;
+  box-shadow: 0 0 30px rgba(220, 38, 38, 0.6);
+}
+
+@keyframes zonePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}
+
+/* Content */
+.zone-indicator .zone-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.zone-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.zone-status {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.zone-indicator.zone-safe .zone-status {
+  color: #10b981;
+}
+
+.zone-indicator.zone-warning .zone-status {
+  color: #fbbf24;
+}
+
+.zone-indicator.zone-shrinking .zone-status,
+.zone-indicator.zone-final .zone-status {
+  color: #ef4444;
+}
+
+.zone-time {
+  font-family: 'Outfit', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+}
+
+/* Progress bar */
+.zone-progress-bar {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.zone-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981, #fbbf24, #ef4444);
+  transition: width 0.3s ease;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+}
+
+.zone-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981, #fbbf24, #ef4444);
+  transition: width 0.3s ease;
+}
+
+/* Danger alert */
+.zone-danger-alert {
+  position: fixed;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  animation: alertFlash 0.5s ease-in-out infinite;
+  z-index: 101;
+}
+
+.zone-danger-alert.warning {
+  background: rgba(251, 191, 36, 0.9);
+  color: #000;
+  border: 2px solid #fbbf24;
+}
+
+.zone-danger-alert.outside {
+  background: rgba(220, 38, 38, 0.9);
+  color: #fff;
+  border: 2px solid #dc2626;
+}
+
+@keyframes alertFlash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Minimap safe zone overlay */
+.minimap-safe-zone {
+  position: absolute;
+  border: 2px solid rgba(16, 185, 129, 0.5);
+  border-radius: 50%;
+  pointer-events: none;
+  box-shadow: inset 0 0 20px rgba(16, 185, 129, 0.2);
+  z-index: 100;
+}
+
+/* Compact timer variant */
+.zone-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(0, 0, 0, 0.7);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.zone-timer.timer-safe {
+  color: #10b981;
+}
+
+.zone-timer.timer-warning {
+  color: #fbbf24;
+}
+
+.zone-timer.timer-shrinking,
+.zone-timer.timer-final {
+  color: #ef4444;
+  animation: timerBlink 1s ease-in-out infinite;
+}
+
+@keyframes timerBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .zone-indicator {
+    top: calc(10px + env(safe-area-inset-top, 0px));
+    bottom: auto;
+    padding: 6px 12px;
+    min-width: 120px;
+  }
+
+  .zone-time {
+    font-size: 14px;
+  }
+
+  .zone-status {
+    font-size: 9px;
+  }
+
+  .zone-danger-alert {
+    top: calc(60px + env(safe-area-inset-top, 0px));
+    bottom: auto;
+    font-size: 11px;
+    padding: 6px 10px;
+  }
+}

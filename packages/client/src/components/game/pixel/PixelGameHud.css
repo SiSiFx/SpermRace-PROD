@@ -1,0 +1,172 @@
+/**
+ * PixelGameHud Styles
+ * Retro pixel art game HUD styling
+ */
+
+@import '../../../styles/pixel-theme.css';
+
+.pixel-game-hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 100;
+}
+
+/* =========================================
+   TOP BAR
+   ========================================= */
+
+.pixel-hud-top {
+  position: absolute;
+  top: var(--pixel-space-3, 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--pixel-space-2, 8px);
+  padding: var(--pixel-space-2, 8px) var(--pixel-space-3, 12px);
+  background-color: rgba(29, 43, 83, 0.9);
+  border: var(--border-thick, 4px) solid var(--color-border, #5f574f);
+  font-family: var(--font-display, 'Press Start 2P', monospace);
+  pointer-events: auto;
+}
+
+.pixel-hud-rank {
+  font-size: var(--pixel-md, 16px);
+  font-weight: var(--font-bold, 700);
+  color: var(--pixel-blue, #29adff);
+  min-width: 32px;
+  text-align: center;
+}
+
+.pixel-hud-name {
+  font-size: var(--pixel-sm, 12px);
+  color: var(--pixel-white, #fff1e8);
+  min-width: 60px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pixel-hud-kills {
+  font-size: var(--pixel-md, 16px);
+  font-weight: var(--font-bold, 700);
+  color: var(--pixel-red, #ff004d);
+  min-width: 32px;
+  text-align: center;
+}
+
+/* =========================================
+   ALIVE COUNTER
+   ========================================= */
+
+.pixel-hud-alive {
+  position: absolute;
+  top: var(--pixel-space-3, 12px);
+  right: var(--pixel-space-3, 12px);
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  padding: var(--pixel-space-1, 4px) var(--pixel-space-2, 8px);
+  background-color: rgba(29, 43, 83, 0.9);
+  border: var(--border-thin, 2px) solid var(--color-border, #5f574f);
+  font-family: var(--font-display, 'Press Start 2P', monospace);
+  pointer-events: auto;
+}
+
+.pixel-alive-count {
+  font-size: var(--pixel-md, 16px);
+  font-weight: var(--font-bold, 700);
+  color: var(--pixel-green, #00e436);
+}
+
+.pixel-alive-total {
+  font-size: var(--pixel-sm, 12px);
+  color: var(--color-text-dim, #c2c3c7);
+}
+
+/* =========================================
+   MINIMAP POSITION
+   ========================================= */
+
+.pixel-hud-minimap {
+  position: absolute;
+  top: var(--pixel-space-3, 12px);
+  right: var(--pixel-space-12, 48px);
+  pointer-events: auto;
+}
+
+/* =========================================
+   ABILITY BAR POSITION
+   ========================================= */
+
+.pixel-hud-ability {
+  position: absolute;
+  bottom: var(--pixel-space-4, 16px);
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+
+/* =========================================
+   HUD HINTS
+   ========================================= */
+
+.pixel-hud-hints {
+  position: absolute;
+  bottom: var(--pixel-space-3, 12px);
+  left: var(--pixel-space-3, 12px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--pixel-space-1, 4px);
+  font-family: var(--font-display, 'Press Start 2P', monospace);
+  font-size: 8px;
+  color: var(--color-text-muted, #83769c);
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.pixel-hint {
+  text-shadow: 1px 1px 0 var(--pixel-dark, #1d2b53);
+}
+
+/* =========================================
+   RESPONSIVE
+   ========================================= */
+
+@media (max-width: 640px) {
+  .pixel-hud-top {
+    top: var(--pixel-space-2, 8px);
+    padding: var(--pixel-space-1, 4px) var(--pixel-space-2, 8px);
+  }
+
+  .pixel-hud-rank,
+  .pixel-hud-kills {
+    font-size: var(--pixel-sm, 12px);
+    min-width: 24px;
+  }
+
+  .pixel-hud-name {
+    font-size: var(--pixel-xs, 10px);
+    min-width: 40px;
+  }
+
+  .pixel-hud-alive {
+    top: var(--pixel-space-2, 8px);
+    right: var(--pixel-space-2, 8px);
+  }
+
+  .pixel-hud-minimap {
+    top: var(--pixel-space-2, 8px);
+    right: var(--pixel-space-8, 32px);
+  }
+
+  .pixel-hud-ability {
+    bottom: var(--pixel-space-3, 12px);
+  }
+
+  .pixel-hud-hints {
+    display: none;
+  }
+}

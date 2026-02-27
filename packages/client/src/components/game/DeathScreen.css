@@ -1,0 +1,467 @@
+/**
+ * SpermRace Death Screen - Taste-Skill Compliant
+ *
+ * DESIGN_VARIANCE: 8 (Brutal, bold aesthetic)
+ * MOTION_INTENSITY: 6 (Spring animations)
+ * VISUAL_DENSITY: 4 (Fits viewport)
+ */
+
+@import '../../styles/premium-theme.css';
+
+/* =========================================
+   OVERLAY
+   ========================================= */
+
+.death-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Background blood effect */
+.death-bg-effect {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgba(220, 38, 38, 0.15) 0%, transparent 70%);
+  animation: bloodPulse 3s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes bloodPulse {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.05); }
+}
+
+/* =========================================
+   CARD
+   ========================================= */
+
+.death-card {
+  position: relative;
+  background: linear-gradient(145deg, #1a1a1a 0%, #0a0a0a 100%);
+  border: 2px solid var(--accent-red);
+  border-radius: 16px;
+  padding: 32px 28px;
+  padding-top: calc(32px + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(32px + env(safe-area-inset-bottom, 0px));
+  padding-left: calc(28px + env(safe-area-inset-left, 0px));
+  padding-right: calc(28px + env(safe-area-inset-right, 0px));
+  min-width: 340px;
+  max-width: 400px;
+  width: 90%;
+  text-align: center;
+  box-shadow:
+    0 0 0 1px rgba(220, 38, 38, 0.2),
+    0 20px 60px rgba(0, 0, 0, 0.8),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* =========================================
+   ELIMINATED STAMP
+   ========================================= */
+
+.death-stamp {
+  font-family: var(--font-display);
+  font-size: clamp(28px, 6vw, 42px);
+  font-weight: 900;
+  color: var(--accent-red);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  margin: 0 0 12px 0;
+  text-shadow:
+    0 0 20px rgba(220, 38, 38, 0.8),
+    0 0 40px rgba(220, 38, 38, 0.4);
+}
+
+/* =========================================
+   PLACEMENT
+   ========================================= */
+
+.death-placement {
+  font-family: var(--font-display);
+  font-size: clamp(32px, 7vw, 48px);
+  font-weight: 900;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+  margin: 12px 0 16px;
+  text-shadow: 0 4px 20px rgba(220, 38, 38, 0.5);
+}
+
+.death-total {
+  font-size: 0.4em;
+  color: var(--text-muted);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+/* =========================================
+   KILLER INFO
+   ========================================= */
+
+.death-killer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 20px 0;
+  padding: 10px 16px;
+  background: rgba(220, 38, 38, 0.1);
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  border-radius: 12px;
+}
+
+.death-killer-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.death-killer-color {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--text-primary);
+  box-shadow: 0 0 10px currentColor;
+}
+
+.death-killer-name {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--accent-red);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* =========================================
+   STATS
+   ========================================= */
+
+.death-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 24px 0;
+}
+
+.death-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.death-stat-icon {
+  font-size: 18px;
+  color: var(--text-secondary);
+}
+
+.death-stat-content {
+  text-align: center;
+}
+
+.death-stat-value {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.death-stat-label {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+/* =========================================
+   ACTIONS
+   ========================================= */
+
+.death-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.death-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  min-height: 52px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  border-radius: 12px;
+  border: none;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  text-align: left;
+}
+
+.death-btn-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+}
+
+.death-btn-text {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.death-btn-subtitle {
+  display: block;
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 0.7;
+  letter-spacing: 0.02em;
+}
+
+/* Spectate Button */
+.death-btn.spectate {
+  background: linear-gradient(135deg, var(--accent-red) 0%, #b91c1c 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--accent-red) 30%, transparent);
+}
+
+.death-btn.spectate:hover {
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--accent-red) 45%, transparent);
+}
+
+/* Change Class Button */
+.death-btn.change-class {
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 16px color-mix(in srgb, #6366f1 30%, transparent);
+}
+
+.death-btn.change-class:hover {
+  box-shadow: 0 6px 20px color-mix(in srgb, #6366f1 45%, transparent);
+}
+
+/* Leave Button */
+.death-btn.leave {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+}
+
+.death-btn.leave:hover {
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+  background: rgba(220, 38, 68, 0.05);
+}
+
+/* =========================================
+   PROGRESS BAR
+   ========================================= */
+
+.death-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 0 0 14px 14px;
+  overflow: hidden;
+}
+
+.death-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-red), #ef4444);
+}
+
+/* =========================================
+   MOBILE
+   ========================================= */
+
+@media (max-width: 480px) {
+  .death-card {
+    padding: 24px 20px;
+    padding-top: calc(24px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    padding-left: calc(20px + env(safe-area-inset-left, 0px));
+    padding-right: calc(20px + env(safe-area-inset-right, 0px));
+    min-width: unset;
+    width: 95%;
+  }
+
+  .death-stamp {
+    font-size: 28px;
+    margin-bottom: 8px;
+  }
+
+  .death-placement {
+    font-size: 32px;
+    margin: 8px 0 12px;
+  }
+
+  .death-killer {
+    margin: 16px 0;
+    padding: 8px 14px;
+    gap: 6px;
+  }
+
+  .death-killer-label {
+    font-size: 9px;
+  }
+
+  .death-killer-name {
+    font-size: 14px;
+  }
+
+  .death-stats {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    margin: 20px 0;
+  }
+
+  .death-stat {
+    flex-direction: row;
+    justify-content: flex-start;
+    padding: 10px 14px;
+    gap: 10px;
+  }
+
+  .death-stat-icon {
+    font-size: 16px;
+  }
+
+  .death-stat-value {
+    font-size: 16px;
+  }
+
+  .death-stat-label {
+    font-size: 8px;
+  }
+
+  .death-actions {
+    gap: 8px;
+    margin-top: 20px;
+  }
+
+  .death-btn {
+    padding: 12px 16px;
+    min-height: 48px;
+  }
+
+  .death-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .death-btn-text {
+    font-size: 13px;
+  }
+
+  .death-btn-subtitle {
+    font-size: 9px;
+  }
+}
+
+/* =========================================
+   LANDSCAPE MOBILE
+   ========================================= */
+
+@media (orientation: landscape) and (max-height: 600px) {
+  .death-card {
+    padding: 20px 24px;
+    padding-top: calc(20px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    padding-left: calc(24px + env(safe-area-inset-left, 0px));
+    padding-right: calc(24px + env(safe-area-inset-right, 0px));
+    max-width: 500px;
+  }
+
+  .death-stamp {
+    font-size: 24px;
+  }
+
+  .death-placement {
+    font-size: 28px;
+  }
+
+  .death-killer {
+    margin: 12px 0;
+    padding: 6px 12px;
+  }
+
+  .death-killer-label {
+    font-size: 8px;
+  }
+
+  .death-killer-name {
+    font-size: 13px;
+  }
+
+  .death-stats {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin: 16px 0;
+  }
+
+  .death-stat {
+    flex-direction: column;
+    padding: 8px 6px;
+    gap: 4px;
+  }
+
+  .death-stat-icon {
+    font-size: 14px;
+  }
+
+  .death-stat-value {
+    font-size: 14px;
+  }
+
+  .death-stat-label {
+    font-size: 7px;
+  }
+
+  .death-actions {
+    gap: 8px;
+    margin-top: 16px;
+  }
+
+  .death-btn {
+    padding: 10px 14px;
+    min-height: 44px;
+  }
+
+  .death-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .death-btn-text {
+    font-size: 12px;
+  }
+
+  .death-btn-subtitle {
+    font-size: 8px;
+  }
+}

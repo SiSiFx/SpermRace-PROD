@@ -6,16 +6,18 @@ Uploads tarball and deployment script, then runs deployment
 import os
 import sys
 import time
+from getpass import getpass
+from pathlib import Path
 
-# VPS Configuration
-VPS_IP = "93.180.133.94"
-VPS_USER = "root"
-VPS_PASSWORD = "yELys6TZvJzT!"
+# VPS Configuration (no secrets in repo; provide via env/prompt)
+VPS_IP = (os.environ.get("VPS_IP") or "").strip()
+VPS_USER = (os.environ.get("VPS_USER") or "root").strip()
+VPS_PASSWORD = os.environ.get("VPS_PASSWORD")
 
 # Paths
-BASE_DIR = r"C:\Users\SISI\Documents\skidr.io fork"
-TARBALL_LOCAL = os.path.join(BASE_DIR, "spermrace-deploy.tar.gz")
-DEPLOY_SCRIPT_LOCAL = os.path.join(BASE_DIR, "scripts", "deploy-from-root.sh")
+REPO_ROOT = Path(__file__).resolve().parents[1]
+TARBALL_LOCAL = Path(os.environ.get("TARBALL_LOCAL") or (REPO_ROOT / "spermrace-deploy.tar.gz"))
+DEPLOY_SCRIPT_LOCAL = Path(os.environ.get("DEPLOY_SCRIPT_LOCAL") or (REPO_ROOT / "scripts" / "deploy-from-root.sh"))
 
 TARBALL_REMOTE = "/tmp/spermrace-deploy.tar.gz"
 DEPLOY_SCRIPT_REMOTE = "/tmp/deploy-from-root.sh"
@@ -38,16 +40,27 @@ def main():
         print("  pip install paramiko scp")
         sys.exit(1)
 
+    if not VPS_IP:
+        print("❌ ERROR: VPS_IP is required (set env var VPS_IP).")
+        sys.exit(1)
+
+    vps_password = VPS_PASSWORD
+    if not vps_password:
+        vps_password = getpass("VPS password (input hidden): ").strip()
+        if not vps_password:
+            print("❌ ERROR: VPS password is required (set VPS_PASSWORD or enter it).")
+            sys.exit(1)
+
     # Check files exist
-    if not os.path.exists(TARBALL_LOCAL):
+    if not TARBALL_LOCAL.exists():
         print(f"❌ ERROR: Tarball not found at {TARBALL_LOCAL}")
         sys.exit(1)
 
-    if not os.path.exists(DEPLOY_SCRIPT_LOCAL):
+    if not DEPLOY_SCRIPT_LOCAL.exists():
         print(f"❌ ERROR: Deploy script not found at {DEPLOY_SCRIPT_LOCAL}")
         sys.exit(1)
 
-    tarball_size = os.path.getsize(TARBALL_LOCAL) / (1024 * 1024)
+    tarball_size = TARBALL_LOCAL.stat().st_size / (1024 * 1024)
     print(f"✓ Tarball found: {tarball_size:.2f} MB")
     print(f"✓ Deploy script found")
     print()
@@ -90,21 +103,21 @@ def main():
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
     try:
-        ssh.connect(VPS_IP, username=VPS_USER, password=VPS_PASSWORD, timeout=30)
+        ssh.connect(VPS_IP, username=VPS_USER, password=vps_password, timeout=30)
         print("✓ Connected to VPS\n")
 
         # Upload tarball
         print_header("Step 1: Upload Tarball")
         print(f"Uploading {tarball_size:.2f} MB to {TARBALL_REMOTE}...")
         with SCPClient(ssh.get_transport(), progress=progress) as scp:
-            scp.put(TARBALL_LOCAL, TARBALL_REMOTE)
+            scp.put(str(TARBALL_LOCAL), TARBALL_REMOTE)
         print("\n✓ Tarball uploaded\n")
 
         # Upload deployment script
         print_header("Step 2: Upload Deployment Script")
         print(f"Uploading deploy script...")
         with SCPClient(ssh.get_transport()) as scp:
-            scp.put(DEPLOY_SCRIPT_LOCAL, DEPLOY_SCRIPT_REMOTE)
+            scp.put(str(DEPLOY_SCRIPT_LOCAL), DEPLOY_SCRIPT_REMOTE)
         print("✓ Deploy script uploaded\n")
 
         # Make script executable

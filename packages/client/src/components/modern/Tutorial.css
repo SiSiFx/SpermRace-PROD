@@ -1,0 +1,472 @@
+/**
+ * Tutorial.css - Neon-Biological Style
+ * Bioluminescent living arena aesthetic with neon glow effects
+ */
+
+/* Tutorial Overlay */
+.tutorial-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--bio-z-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bio-void-bg-92);
+  backdrop-filter: var(--bio-glass-blur);
+  padding: var(--bio-spacing-lg);
+  font-family: var(--font-ui);
+}
+
+/* Tutorial Card */
+.tutorial-card {
+  background: var(--bio-glass-bg-strong);
+  border: 1px solid var(--bio-glass-border-strong);
+  border-radius: var(--bio-radius-2xl);
+  box-shadow: 0 0 60px var(--bio-cyan-glow-25), 0 20px 60px rgba(0, 0, 0, 0.5);
+  max-width: 480px;
+  width: 100%;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: bio-entrance var(--bio-transition-normal);
+  backdrop-filter: var(--bio-glass-blur);
+}
+
+/* Tutorial Header */
+.tutorial-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--bio-spacing-md) var(--bio-spacing-lg);
+  border-bottom: 1px solid var(--bio-glass-border);
+  background: var(--bio-glass-bg);
+  position: relative;
+}
+
+/* Bioluminescent border pulse for header */
+.tutorial-header::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    var(--bio-cyan) 50%,
+    transparent 100%
+  );
+  opacity: 0.5;
+}
+
+.tutorial-step-info {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.tutorial-step-text {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--bio-cyan);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  font-family: var(--font-ui);
+  text-shadow: 0 0 10px var(--bio-cyan-dim);
+}
+
+.tutorial-dots {
+  display: flex;
+  gap: 8px;
+}
+
+.tutorial-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--bio-radius-md);
+  background: var(--bio-glass-bg);
+  border: 1px solid var(--bio-glass-border);
+  transition: all var(--bio-transition-fast);
+}
+
+.tutorial-dot.active {
+  background: var(--bio-magenta);
+  border-color: var(--bio-magenta);
+  box-shadow: 0 0 15px var(--bio-magenta-glow-40);
+}
+
+/* Skip Button */
+.tutorial-skip-btn {
+  background: var(--bio-glass-bg-strong);
+  border: 1px solid var(--bio-magenta);
+  color: var(--bio-magenta);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  padding: 8px 14px;
+  border-radius: var(--bio-radius-md);
+  box-shadow: 0 0 15px var(--bio-magenta-glow-20);
+  transition: all var(--bio-transition-fast);
+}
+
+.tutorial-skip-btn:hover {
+  background: var(--bio-magenta);
+  color: var(--bio-white);
+  box-shadow: 0 0 25px var(--bio-magenta-glow-40);
+}
+
+/* Tutorial Content */
+.tutorial-content {
+  padding: 26px 22px;
+  overflow-y: auto;
+  flex: 1;
+  transition: all var(--bio-transition-fast);
+}
+
+.tutorial-content.animating {
+  opacity: 0.5;
+  transform: translateX(-10px);
+}
+
+/* Tutorial Image */
+.tutorial-image-wrapper {
+  margin-bottom: 18px;
+  border: 1px solid var(--bio-glass-border);
+  border-radius: var(--bio-radius-lg);
+  overflow: hidden;
+  background: var(--bio-glass-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 160px;
+  box-shadow: 0 0 20px var(--bio-cyan-glow-15);
+}
+
+.tutorial-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* Tutorial Title */
+.tutorial-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--bio-cyan);
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin: 0 0 14px 0;
+  border-left: 3px solid var(--bio-cyan);
+  padding-left: 14px;
+  text-shadow: 0 0 20px var(--bio-cyan-dim);
+}
+
+/* Tutorial Description */
+.tutorial-description {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--bio-white);
+  margin: 0;
+  font-family: var(--font-ui);
+}
+
+/* Tutorial Action Box */
+.tutorial-action-box {
+  margin-top: 18px;
+  padding: 14px 18px;
+  background: var(--bio-glass-bg);
+  border: 1px solid var(--bio-cyan);
+  border-radius: var(--bio-radius-lg);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--bio-white);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 0 20px var(--bio-cyan-glow-20);
+}
+
+.tutorial-action-icon {
+  color: var(--bio-cyan);
+  flex-shrink: 0;
+}
+
+/* Tutorial Footer */
+.tutorial-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-top: 1px solid var(--bio-glass-border);
+  background: transparent;
+  gap: 14px;
+}
+
+/* Tutorial Buttons */
+.tutorial-btn {
+  padding: 12px 24px;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  cursor: pointer;
+  transition: all var(--bio-transition-normal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--bio-spacing-sm);
+  border-radius: var(--bio-radius-lg);
+  min-height: 44px;
+}
+
+.tutorial-btn-back {
+  background: var(--bio-glass-bg-strong);
+  color: var(--bio-white);
+  box-shadow: 0 0 20px var(--bio-cyan-glow-20);
+}
+
+.tutorial-btn-back:hover:not(:disabled) {
+  border-color: var(--bio-cyan);
+  box-shadow: 0 0 30px var(--bio-cyan-glow-35);
+  transform: translateY(-2px);
+}
+
+.tutorial-btn-back:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.tutorial-btn-back:disabled {
+  background: transparent;
+  color: var(--bio-white-dim);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.tutorial-btn-next {
+  background: var(--bio-gradient-player);
+  border: none;
+  color: var(--bio-white);
+  box-shadow: 0 0 25px var(--bio-cyan-glow-40);
+}
+
+.tutorial-btn-next:hover {
+  box-shadow: 0 0 40px var(--bio-cyan-glow-60);
+  transform: translateY(-2px);
+}
+
+.tutorial-btn-next:active {
+  transform: translateY(0);
+}
+
+/* Tutorial Tooltip Variant */
+.tutorial-tooltip-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.tutorial-tooltip {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--bio-z-tooltip);
+  min-width: 200px;
+  max-width: 280px;
+}
+
+.tutorial-tooltip-top {
+  bottom: 100%;
+  margin-bottom: 12px;
+}
+
+.tutorial-tooltip-bottom {
+  top: 100%;
+  margin-top: 12px;
+}
+
+.tutorial-tooltip-left {
+  right: 100%;
+  left: auto;
+  transform: none;
+  margin-left: 12px;
+}
+
+.tutorial-tooltip-right {
+  left: 100%;
+  transform: none;
+  margin-left: 12px;
+}
+
+.tutorial-tooltip-content {
+  background: var(--bio-glass-bg-strong);
+  border: 1px solid var(--bio-cyan);
+  border-radius: var(--bio-radius-lg);
+  box-shadow: 0 0 30px var(--bio-cyan-glow-40), 0 10px 40px rgba(0, 0, 0, 0.5);
+  padding: 14px 18px;
+  position: relative;
+  z-index: 1;
+  backdrop-filter: var(--bio-glass-blur);
+}
+
+.tutorial-tooltip-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.tutorial-tooltip-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--bio-cyan);
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0;
+}
+
+.tutorial-tooltip-close {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--bio-white-dim);
+  display: flex;
+  transition: all var(--bio-transition-fast);
+}
+
+.tutorial-tooltip-close:hover {
+  transform: scale(1.1);
+  color: var(--bio-cyan);
+}
+
+.tutorial-tooltip-desc {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--bio-white);
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* Tooltip Arrow */
+.tutorial-tooltip-arrow {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+}
+
+.tutorial-tooltip-top .tutorial-tooltip-arrow {
+  bottom: -8px;
+  border-top: 8px solid var(--bio-cyan);
+  filter: drop-shadow(0 2px 4px var(--bio-cyan-glow-30));
+}
+
+.tutorial-tooltip-bottom .tutorial-tooltip-arrow {
+  top: -8px;
+  border-bottom: 8px solid var(--bio-cyan);
+  filter: drop-shadow(0 -2px 4px var(--bio-cyan-glow-30));
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .tutorial-card {
+    max-width: 100%;
+  }
+
+  .tutorial-header {
+    padding: var(--bio-spacing-sm) var(--bio-spacing-md);
+  }
+
+  .tutorial-footer {
+    padding: var(--bio-spacing-sm) var(--bio-spacing-md);
+  }
+
+  .tutorial-content {
+    padding: var(--bio-spacing-lg) var(--bio-spacing-md);
+  }
+
+  .tutorial-title {
+    font-size: 16px;
+  }
+
+  .tutorial-description {
+    font-size: 13px;
+  }
+
+  .tutorial-btn {
+    padding: 10px var(--bio-spacing-lg);
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 480px) {
+  .tutorial-overlay {
+    padding: var(--bio-spacing-md);
+  }
+
+  .tutorial-card {
+    max-height: 85vh;
+  }
+
+  .tutorial-header {
+    padding: var(--bio-spacing-sm) var(--bio-spacing-md);
+  }
+
+  .tutorial-footer {
+    flex-direction: column;
+    gap: var(--bio-spacing-sm);
+    padding: var(--bio-spacing-md);
+  }
+
+  .tutorial-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .tutorial-image-wrapper {
+    height: 120px;
+  }
+
+  .tutorial-title {
+    font-size: 15px;
+  }
+
+  .tutorial-step-text {
+    font-size: 10px;
+  }
+
+  .tutorial-action-box {
+    font-size: 12px;
+    padding: 12px 14px;
+  }
+}
+
+/* Scrollbar Styling */
+.tutorial-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.tutorial-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tutorial-content::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--bio-cyan), var(--bio-magenta));
+  border-radius: 3px;
+}
+
+.tutorial-content::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, var(--bio-cyan), var(--bio-magenta));
+}

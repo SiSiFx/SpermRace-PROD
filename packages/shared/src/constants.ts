@@ -3,8 +3,8 @@
 export const WORLD = {
   WIDTH: 3500,
   HEIGHT: 2500,
-  ARENA_SHRINK_START_S: 60,
-  ARENA_SHRINK_DURATION_S: 90,
+  ARENA_SHRINK_START_S: 10,  // Start shrinking at 10s for fast 42s rounds
+  ARENA_SHRINK_DURATION_S: 32,  // Complete shrink by 42s (10+32)
 };
 
 export const PHYSICS = {
@@ -37,5 +37,11 @@ export const COLLISION = {
 export const TICK = {
   RATE: 66, // Hz
   INTERVAL_MS: Math.floor(1000 / 66),
+};
+
+export const INPUT = {
+  RATE: 60, // Hz - target input rate for sub-16ms response
+  INTERVAL_MS: Math.floor(1000 / 60), // ~16ms
+  MAX_BURST_INTERVAL_MS: 16, // Maximum time between inputs for burst limiting
 };
 

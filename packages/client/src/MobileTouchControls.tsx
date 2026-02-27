@@ -1,5 +1,7 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, memo } from 'react';
+import { Lightning } from 'phosphor-react';
 import './mobile-controls.css';
+import { getMobileControlsScale, TOUCH_TARGETS } from './uiScalingUtils';
 
 interface TouchPosition {
   x: number;
@@ -10,188 +12,247 @@ interface MobileTouchControlsProps {
   onTouch: (x: number, y: number) => void;
   onBoost: () => void;
   canBoost: boolean;
-  boostCooldownPct: number; // 0-1, where 1 = ready
+  boostCooldownPct: number;
 }
 
-export function MobileTouchControls({ onTouch, onBoost, canBoost, boostCooldownPct }: MobileTouchControlsProps) {
+export const MobileTouchControls = memo(function MobileTouchControls({ onTouch, onBoost, canBoost, boostCooldownPct }: MobileTouchControlsProps) {
   const [joystickActive, setJoystickActive] = useState(false);
-  
-  // Use refs instead of state to avoid re-renders (better performance)
+  const [joystickPosition, setJoystickPosition] = useState({ x: 0, y: 0 });
+  const [controlsScale, setControlsScale] = useState(() => getMobileControlsScale());
+
   const joystickStart = useRef<TouchPosition>({ x: 0, y: 0 });
   const joystickCurrent = useRef<TouchPosition>({ x: 0, y: 0 });
-  const joystickRef = useRef<HTMLDivElement>(null);
+  const joystickTouchId = useRef<number | null>(null);
+  const touchAreaRef = useRef<HTMLDivElement>(null);
   const boostRef = useRef<HTMLButtonElement>(null);
   const stickElement = useRef<HTMLDivElement>(null);
+  const boostTouchId = useRef<number | null>(null);
 
-  // Handle joystick area touch - proper multi-touch using targetTouches
+  // Update scale on resize
   useEffect(() => {
-    const joystick = joystickRef.current;
-    if (!joystick) return;
+    const handleResize = () => {
+      setControlsScale(getMobileControlsScale());
+    };
+    window.addEventListener('resize', handleResize, { passive: true });
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Dynamic joystick recentering logic with responsive radius
+  const updateStickPosition = (touchX: number, touchY: number, centerX: number, centerY: number) => {
+    if (!stickElement.current) return;
+
+    const maxRadius = 50 * controlsScale; // Scale radius based on device
+    let dx = touchX - centerX;
+    let dy = touchY - centerY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance > maxRadius) {
+      dx = (dx / distance) * maxRadius;
+      dy = (dy / distance) * maxRadius;
+    }
+
+    stickElement.current.style.transform = `translate(${dx}px, ${dy}px)`;
+  };
+
+  useEffect(() => {
+    const touchArea = touchAreaRef.current;
+    if (!touchArea) return;
 
     const handleTouchStart = (e: TouchEvent) => {
-      // Use targetTouches - touches currently on THIS element
-      if (e.targetTouches.length === 0) return;
-      
-      // Only preventDefault for touches on this element
+      // If we already have an active joystick, ignore new touches in this area
+      // unless we want to allow "re-grabbing" which can be complex. 
+      // For simple robust controls, one joystick touch at a time.
+      if (joystickTouchId.current !== null) return;
+
       e.preventDefault();
       
-      const touch = e.targetTouches[0]; // First touch on joystick
+      // Find a touch that isn't the boost button touch
+      let joystickTouch: Touch | null = null;
       
-      const rect = joystick.getBoundingClientRect();
-      const centerX = rect.left + rect.width / 2;
-      const centerY = rect.top + rect.height / 2;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        // If this touch is on the left side of screen OR we haven't assigned a boost touch yet
+        if (t.identifier !== boostTouchId.current) {
+           joystickTouch = t;
+           break;
+        }
+      }
 
-      // Use refs for instant updates (no re-render lag)
+      if (!joystickTouch) return;
+
+      joystickTouchId.current = joystickTouch.identifier;
+      const centerX = joystickTouch.clientX;
+      const centerY = joystickTouch.clientY;
+
+      setJoystickPosition({ x: centerX, y: centerY });
       joystickStart.current = { x: centerX, y: centerY };
-      joystickCurrent.current = { x: touch.clientX, y: touch.clientY };
+      joystickCurrent.current = { x: joystickTouch.clientX, y: joystickTouch.clientY };
       setJoystickActive(true);
 
-      // Update stick position directly for instant feedback
-      updateStickPosition(touch.clientX, touch.clientY, centerX, centerY);
-
-      // Send initial direction
-      onTouch(touch.clientX - centerX, touch.clientY - centerY);
-
-      // Haptic feedback
-      try { navigator.vibrate?.(10); } catch {}
+      // Instant feedback
+      try { navigator.vibrate?.(5); } catch {}
+      onTouch(0, 0);
     };
 
     const handleTouchMove = (e: TouchEvent) => {
-      // Use targetTouches for active touches on this element
-      if (e.targetTouches.length === 0) return;
-      
-      // Only preventDefault for our element's touches
       e.preventDefault();
-      
-      const touch = e.targetTouches[0];
-      
-      // Update ref directly (no re-render)
-      joystickCurrent.current = { x: touch.clientX, y: touch.clientY };
-      
-      // Update stick position directly for instant visual feedback
-      updateStickPosition(touch.clientX, touch.clientY, joystickStart.current.x, joystickStart.current.y);
+      if (joystickTouchId.current === null) return;
 
-      // Send direction relative to joystick center
-      const dx = touch.clientX - joystickStart.current.x;
-      const dy = touch.clientY - joystickStart.current.y;
+      // Find the active joystick touch by ID
+      let currentTouch: Touch | null = null;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === joystickTouchId.current) {
+          currentTouch = e.changedTouches[i];
+          break;
+        }
+      }
+
+      if (!currentTouch) return;
+
+      joystickCurrent.current = { x: currentTouch.clientX, y: currentTouch.clientY };
+      updateStickPosition(currentTouch.clientX, currentTouch.clientY, joystickStart.current.x, joystickStart.current.y);
+
+      const dx = currentTouch.clientX - joystickStart.current.x;
+      const dy = currentTouch.clientY - joystickStart.current.y;
       onTouch(dx, dy);
     };
 
     const handleTouchEnd = (e: TouchEvent) => {
       e.preventDefault();
+      if (joystickTouchId.current === null) return;
 
-      setJoystickActive(false);
-      onTouch(0, 0); // Reset to center
+      // Check if our joystick touch ended
+      let joystickEnded = false;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === joystickTouchId.current) {
+          joystickEnded = true;
+          break;
+        }
+      }
+
+      if (joystickEnded) {
+        setJoystickActive(false);
+        joystickTouchId.current = null;
+        onTouch(0, 0);
+      }
     };
 
-    joystick.addEventListener('touchstart', handleTouchStart, { passive: false });
-    joystick.addEventListener('touchmove', handleTouchMove, { passive: false });
-    joystick.addEventListener('touchend', handleTouchEnd, { passive: false });
-    joystick.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+    touchArea.addEventListener('touchstart', handleTouchStart, { passive: false });
+    touchArea.addEventListener('touchmove', handleTouchMove, { passive: false });
+    touchArea.addEventListener('touchend', handleTouchEnd, { passive: false });
+    touchArea.addEventListener('touchcancel', handleTouchEnd, { passive: false });
 
     return () => {
-      joystick.removeEventListener('touchstart', handleTouchStart);
-      joystick.removeEventListener('touchmove', handleTouchMove);
-      joystick.removeEventListener('touchend', handleTouchEnd);
-      joystick.removeEventListener('touchcancel', handleTouchEnd);
+      touchArea.removeEventListener('touchstart', handleTouchStart);
+      touchArea.removeEventListener('touchmove', handleTouchMove);
+      touchArea.removeEventListener('touchend', handleTouchEnd);
+      touchArea.removeEventListener('touchcancel', handleTouchEnd);
     };
   }, [onTouch]);
 
-  // Direct DOM manipulation for stick position (no React re-render)
-  const updateStickPosition = (touchX: number, touchY: number, centerX: number, centerY: number) => {
-    if (!stickElement.current) return;
-    
-    const maxRadius = 25; // pixels
-    let dx = touchX - centerX;
-    let dy = touchY - centerY;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    
-    if (distance > maxRadius) {
-      dx = (dx / distance) * maxRadius;
-      dy = (dy / distance) * maxRadius;
-    }
-    
-    stickElement.current.style.transform = `translate(${dx}px, ${dy}px)`;
-  };
-
-  // Handle boost button with touch events for better multi-touch support
   useEffect(() => {
     const boost = boostRef.current;
     if (!boost) return;
 
-    const handleBoostTouch = (e: TouchEvent) => {
+    const handleBoostStart = (e: TouchEvent) => {
       e.preventDefault();
       e.stopPropagation();
+      const t = e.changedTouches[0];
+      boostTouchId.current = t.identifier;
       
-      if (!canBoost) return;
-      
-      onBoost();
-      
-      // Haptic feedback
-      try { navigator.vibrate?.(50); } catch {}
+      if (canBoost) {
+        onBoost();
+        // Stronger haptic for boost
+        try { navigator.vibrate?.([15]); } catch {} 
+        
+        // Visual press effect
+        boost.style.transform = 'scale(0.92)';
+      }
     };
 
-    boost.addEventListener('touchstart', handleBoostTouch, { passive: false });
+    const handleBoostEnd = (e: TouchEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      boostTouchId.current = null;
+      boost.style.transform = 'scale(1)';
+    };
+
+    boost.addEventListener('touchstart', handleBoostStart, { passive: false });
+    boost.addEventListener('touchend', handleBoostEnd, { passive: false });
+    boost.addEventListener('touchcancel', handleBoostEnd, { passive: false });
     
     return () => {
-      boost.removeEventListener('touchstart', handleBoostTouch);
+      boost.removeEventListener('touchstart', handleBoostStart);
+      boost.removeEventListener('touchend', handleBoostEnd);
+      boost.removeEventListener('touchcancel', handleBoostEnd);
     };
   }, [canBoost, onBoost]);
 
   return (
     <>
-      {/* Virtual Joystick - Left side */}
       <div
-        ref={joystickRef}
-        className={`mobile-joystick ${joystickActive ? 'active' : ''}`}
-      >
-        <div className="joystick-base">
-          <div className="joystick-ring" />
-        </div>
-        <div
-          ref={stickElement}
-          className="joystick-stick"
-          style={{
-            transform: 'translate(0, 0)' // Direct DOM manipulation via ref
-          }}
-        />
-        <div className="joystick-hint">STEER</div>
-      </div>
+        ref={touchAreaRef}
+        style={{
+          position: 'fixed',
+          left: 0,
+          top: 0,
+          width: '60%',
+          height: '100%',
+          zIndex: 10,
+          pointerEvents: 'auto',
+          touchAction: 'none'
+        }}
+      />
 
-      {/* Boost Button - Right side */}
+      {joystickActive && (
+        <div
+          className="mobile-joystick active"
+          style={{
+            position: 'fixed',
+            left: `${joystickPosition.x}px`,
+            top: `${joystickPosition.y}px`,
+            transform: 'translate(-50%, -50%)',
+            pointerEvents: 'none',
+            zIndex: 15,
+          }}
+        >
+          <div className="joystick-base">
+            <div className="joystick-ring" />
+          </div>
+          <div
+            ref={stickElement}
+            className="joystick-stick"
+            style={{ transform: 'translate(0, 0)' }}
+          />
+        </div>
+      )}
+
       <button
         ref={boostRef}
         className={`mobile-boost-button ${canBoost ? 'ready' : 'cooldown'}`}
         disabled={!canBoost}
         style={{
-          // Remove flash effect - causes big square glitch
+          // Ensure minimum touch target size is maintained
+          minWidth: `${TOUCH_TARGETS.MIN}px`,
+          minHeight: `${TOUCH_TARGETS.MIN}px`,
+          // Apply responsive scaling
+          transform: `scale(${controlsScale})`,
         }}
       >
-        <div className="boost-icon">⚡</div>
-        <div className="boost-label">BOOST</div>
+        <div className="boost-icon">
+          <Lightning size={24 * controlsScale} weight="fill" />
+        </div>
         <svg className="boost-cooldown-ring" viewBox="0 0 100 100">
-          <circle
-            cx="50"
-            cy="50"
-            r="45"
-            className="cooldown-bg"
-          />
+          <circle cx="50" cy="50" r="45" className="cooldown-bg" />
           <circle
             cx="50"
             cy="50"
             r="45"
             className="cooldown-progress"
-            style={{
-              strokeDashoffset: 283 * (1 - boostCooldownPct)
-            }}
+            style={{ strokeDashoffset: 283 * (1 - boostCooldownPct) }}
           />
         </svg>
       </button>
-
-      {/* Touch indicator hint removed - was blocking interactions */}
     </>
   );
-}
-
-export default MobileTouchControls;
-
+});

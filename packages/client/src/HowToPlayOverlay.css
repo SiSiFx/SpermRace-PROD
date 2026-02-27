@@ -1,0 +1,354 @@
+/**
+ * SpermRace How to Play Overlay - Taste-Skill Compliant
+ *
+ * DESIGN_VARIANCE: 8 (Information hierarchy)
+ * MOTION_INTENSITY: 6 (Spring animations)
+ * VISUAL_DENSITY: 4 (Fits viewport)
+ */
+
+@import './styles/premium-theme.css';
+
+/* =========================================
+   OVERLAY
+   ========================================= */
+
+.how-to-play-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.86);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 10002;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+/* =========================================
+   MODAL
+   ========================================= */
+
+.how-to-play-modal {
+  width: 100%;
+  max-width: 420px;
+  max-height: 90vh;
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.96) 0%, rgba(15, 23, 42, 0.98) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 20px;
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  padding: 20px 18px 18px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* =========================================
+   HEADER
+   ========================================= */
+
+.how-to-play-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.how-to-play-title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  margin: 0 0 4px 0;
+}
+
+.how-to-play-subtitle {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.how-to-play-close {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(248, 113, 113, 0.8);
+  border-radius: 50%;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.how-to-play-close:hover {
+  background: rgba(15, 23, 42, 0.95);
+  color: #fee2e2;
+}
+
+/* =========================================
+   CONTENT
+   ========================================= */
+
+.how-to-play-content {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-right: 4px;
+  /* Hide scrollbar */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.how-to-play-content::-webkit-scrollbar {
+  display: none;
+}
+
+/* =========================================
+   SECTIONS
+   ========================================= */
+
+.how-to-play-section {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 14px;
+}
+
+.section-icon {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(34, 211, 238, 0.1);
+  border: 1px solid rgba(34, 211, 238, 0.3);
+  border-radius: 10px;
+  color: var(--accent-cyan);
+}
+
+.section-icon.warning {
+  background: rgba(252, 211, 77, 0.1);
+  border-color: rgba(252, 211, 77, 0.3);
+  color: #fcd34d;
+}
+
+.section-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.section-title {
+  font-size: 12px;
+  font-weight: 700;
+  margin: 0 0 6px 0;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #93c5fd;
+}
+
+.section-content ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.section-content li {
+  margin-bottom: 4px;
+}
+
+.section-content li:last-child {
+  margin-bottom: 0;
+}
+
+.section-content strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* Controls Grid */
+.controls-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.control-group .control-label {
+  font-weight: 700;
+  margin-bottom: 4px;
+  color: var(--text-primary);
+}
+
+/* =========================================
+   TIP
+   ========================================= */
+
+.how-to-play-tip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(34, 211, 238, 0.05);
+  border: 1px solid rgba(34, 211, 238, 0.15);
+  border-radius: 12px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.how-to-play-tip svg {
+  flex-shrink: 0;
+  color: var(--accent-cyan);
+}
+
+.how-to-play-tip strong {
+  color: var(--accent-cyan);
+  font-weight: 600;
+}
+
+/* =========================================
+   DESKTOP
+   ========================================= */
+
+@media (min-width: 768px) {
+  .how-to-play-overlay {
+    padding: 24px;
+  }
+
+  .how-to-play-modal {
+    max-width: 640px;
+    padding: 24px;
+  }
+
+  .how-to-play-header {
+    margin-bottom: 20px;
+  }
+
+  .how-to-play-title {
+    font-size: 20px;
+  }
+
+  .how-to-play-subtitle {
+    font-size: 12px;
+  }
+
+  .how-to-play-content {
+    gap: 14px;
+  }
+
+  .how-to-play-section {
+    padding: 14px;
+  }
+
+  .section-icon {
+    width: 42px;
+    height: 42px;
+  }
+
+  .section-content ul {
+    font-size: 14px;
+  }
+
+  .controls-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .how-to-play-tip {
+    font-size: 12px;
+  }
+}
+
+/* =========================================
+   LANDSCAPE MOBILE
+   ========================================= */
+
+@media (orientation: landscape) and (max-height: 600px) {
+  .how-to-play-overlay {
+    padding: 12px;
+  }
+
+  .how-to-play-modal {
+    max-height: 95vh;
+    padding: 14px 16px 12px;
+  }
+
+  .how-to-play-header {
+    margin-bottom: 10px;
+    gap: 8px;
+  }
+
+  .how-to-play-title {
+    font-size: 16px;
+  }
+
+  .how-to-play-subtitle {
+    font-size: 10px;
+  }
+
+  .how-to-play-close {
+    width: 32px;
+    height: 32px;
+  }
+
+  .how-to-play-close svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .how-to-play-content {
+    gap: 8px;
+  }
+
+  .how-to-play-section {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .section-icon {
+    width: 28px;
+    height: 28px;
+  }
+
+  .section-icon svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .section-title {
+    font-size: 11px;
+    margin-bottom: 4px;
+  }
+
+  .section-content ul {
+    font-size: 11px;
+  }
+
+  .controls-grid {
+    gap: 8px;
+  }
+
+  .how-to-play-tip {
+    padding: 8px 10px;
+    font-size: 10px;
+  }
+
+  .how-to-play-tip svg {
+    width: 14px;
+    height: 14px;
+  }
+}

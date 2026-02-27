@@ -1,13 +1,21 @@
 import { useEffect, useState } from 'react';
-// Base URL for backend API; prefer env, else infer by hostname, else same-origin /api
+// Base URL for backend API.
+// For any spermrace.io host (prod/dev/www), always hit same-origin /api so Vercel can proxy
+// and we avoid CORS issues with api.spermrace.io.
 const API_BASE: string = (() => {
+  try {
+    const host = (window?.location?.hostname || '').toLowerCase();
+    if (host.endsWith('spermrace.io')) return '/api';
+  } catch { }
+
   const env = (import.meta as any).env?.VITE_API_BASE as string | undefined;
   if (env && typeof env === 'string' && env.trim()) return env.trim();
+
   try {
     const host = (window?.location?.hostname || '').toLowerCase();
     if (host.includes('dev.spermrace.io')) return 'https://dev.spermrace.io/api';
     if (host.includes('spermrace.io')) return 'https://spermrace.io/api';
-  } catch {}
+  } catch { }
   return '/api';
 })();
 // Solana cluster for links (e.g., Solscan): prefer env, else infer by hostname
@@ -17,14 +25,24 @@ const SOLANA_CLUSTER: 'devnet' | 'mainnet' = (() => {
   try {
     const host = (window?.location?.hostname || '').toLowerCase();
     return host.includes('dev.spermrace.io') ? 'devnet' : 'mainnet';
-  } catch {}
+  } catch { }
   return 'devnet';
 })();
 import { WalletProvider, useWallet } from './WalletProvider';
 import { WsProvider, useWs } from './WsProvider';
-import NewGameView from './NewGameView';
+import { GameViewWrapper } from './components/GameViewWrapper';
+import HowToPlayOverlay from './HowToPlayOverlay';
+import PracticeFullTutorial from './PracticeFullTutorial';
+import { PracticeModeSelection } from './PracticeModeSelection';
+import { Leaderboard } from './Leaderboard';
+import { HolographicKeycard } from './HolographicKeycard';
+import { CrownSimple, Atom } from 'phosphor-react';
+import { PremiumLandingScreen } from './components/screens/premium/PremiumLandingScreen';
+import { WalletScreen } from './components/WalletScreen';
+import './components/WalletScreen.css';
+import './styles/premium-theme.css';
 
-type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
+type AppScreen = 'landing' | 'practice' | 'practice-solo' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
 
 export default function AppPC() {
   return (
@@ -46,12 +64,21 @@ function AppInner() {
     setToast(msg);
     window.setTimeout(() => setToast(null), duration);
   };
-  const [showHelp, setShowHelp] = useState<boolean>(false);
-  
+  const [showHowTo, setShowHowTo] = useState<boolean>(false);
+  const [showLeaderboard, setShowLeaderboard] = useState<boolean>(false);
+  const [pendingEntryFee, setPendingEntryFee] = useState<number | undefined>(undefined);
+
   // Loading progress for overlay (indefinite fill)
   const [loadProg, setLoadProg] = useState<number>(0);
   const overlayActive = (wsState.phase === 'connecting' || wsState.phase === 'authenticating' || wsState.entryFee.pending);
-  
+
+  useEffect(() => {
+    try {
+      const qs = new URLSearchParams(window.location.search);
+      if (qs.get('practice') === '1') setScreen('practice');
+    } catch { }
+  }, []);
+
   useEffect(() => {
     let id: any;
     if (overlayActive) {
@@ -65,18 +92,7 @@ function AppInner() {
     return () => { if (id) clearInterval(id); };
   }, [overlayActive]);
 
-  // Scope background animation to Landing only
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const bg = await import('./spermBackground');
-      if (cancelled) return;
-      if (screen === 'landing') bg.startSpermBackground?.();
-      else bg.stopSpermBackground?.();
-    })();
-    return () => { cancelled = true; };
-  }, [screen]);
-
+  
   // Map wallet adapter errors to toast
   useEffect(() => {
     const onWalletError = (e: any) => {
@@ -102,19 +118,25 @@ function AppInner() {
         const r = await fetch(`${API_BASE}/sol-price`);
         const j = await r.json();
         setSolPrice(Number(j.usd) || null);
-      } catch {}
+      } catch { }
     };
     fetchSol();
     const id = setInterval(fetchSol, 30000);
     return () => clearInterval(id);
   }, []);
 
-  const onPractice = () => setScreen('practice');
-  const onTournament = () => setScreen('modes');
+  const onPractice = () => setScreen('practice-solo');
+  const onTournament = () => setScreen('landing');
+  const onWallet = (entryFee?: number) => {
+    setPendingEntryFee(entryFee);
+    setScreen('wallet');
+  };
+  const openLeaderboard = () => setShowLeaderboard(true);
 
   useEffect(() => {
     if (wsState.phase === 'lobby') setScreen('lobby');
     else if (wsState.phase === 'game') setScreen('game');
+    else if (wsState.phase === 'ended') setScreen('results');
   }, [wsState.phase]);
 
   // PC Keyboard shortcuts
@@ -124,7 +146,8 @@ function AppInner() {
       if (e.key === 'Escape') {
         if (screen === 'modes') setScreen('landing');
         else if (screen === 'practice') setScreen('landing');
-        else if (screen === 'wallet') setScreen('modes');
+        else if (screen === 'practice-solo') setScreen('landing');
+        else if (screen === 'wallet') setScreen('landing');
       }
       // P for practice
       if (e.key === 'p' && screen === 'landing') {
@@ -141,22 +164,17 @@ function AppInner() {
 
   return (
     <div id="app-root" className="pc-optimized">
-      {/* Header wallet + status */}
-      <HeaderWallet screen={screen} status={statusText} />
-      <div id="bg-particles" />
-      
-      {/* PC: Keyboard shortcuts hint */}
-      <div className="pc-shortcuts-hint">
-        <div className="shortcut-item">
-          <kbd>ESC</kbd> Back
-        </div>
-        <div className="shortcut-item">
-          <kbd>P</kbd> Practice
-        </div>
-        <div className="shortcut-item">
-          <kbd>T</kbd> Tournament
-        </div>
-      </div>
+      {/* PC top bar: brand + nav + wallet - hide during gameplay and landing (has own header) */}
+      {screen !== 'game' && screen !== 'practice' && screen !== 'practice-solo' && screen !== 'landing' && (
+        <HeaderWallet
+          screen={screen}
+          status={statusText}
+          solPrice={solPrice}
+          onPractice={onPractice}
+          onTournament={onTournament}
+          onLeaderboard={openLeaderboard}
+        />
+      )}
 
       {/* UNIFIED OVERLAY SYSTEM - Only ONE overlay shows at a time, priority: Error > Payment > Auth > Connecting */}
       {wsState.lastError ? (
@@ -169,9 +187,6 @@ function AppInner() {
             boxShadow: '0 20px 60px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1)'
           }}>
             <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-              <div style={{ fontSize: '52px', marginBottom: '8px' }}>
-                {wsState.lastError.toLowerCase().includes('insufficient') ? '💸' : '⚠️'}
-              </div>
               <div className="modal-title" style={{ fontSize: '26px', fontWeight: 800 }}>
                 {wsState.lastError.toLowerCase().includes('insufficient') ? 'Insufficient Funds' : 'Something Went Wrong'}
               </div>
@@ -198,8 +213,8 @@ function AppInner() {
                 lineHeight: '1.5'
               }}>
                 {publicKey
-                  ? '🚀 Top up your wallet with SOL to continue racing'
-                  : '🔗 Connect a wallet or buy SOL to get started'}
+                  ? 'Top up your wallet with SOL to continue racing'
+                  : 'Connect a wallet or buy SOL to get started'}
               </div>
             )}
 
@@ -235,7 +250,7 @@ function AppInner() {
                         window.open('https://www.moonpay.com/buy/sol', '_blank');
                       }
                     }}
-                  >💳 Buy SOL</button>
+                  >Buy SOL</button>
                   <button
                     className="btn-secondary"
                     style={{
@@ -268,15 +283,15 @@ function AppInner() {
           <div className="loading-spinner"></div>
           <div className="loading-text">{
             wsState.entryFee.pending ? 'Verifying entry fee transaction on Solana…'
-            : wsState.phase === 'authenticating' ? 'Approve signature in your wallet to continue…'
-            : 'Opening WebSocket connection…'
+              : wsState.phase === 'authenticating' ? 'Approve signature in your wallet to continue…'
+                : 'Opening WebSocket connection…'
           }</div>
           <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.5)', marginTop: '8px', maxWidth: '340px', textAlign: 'center' }}>
             {wsState.entryFee.pending
               ? 'Waiting for transaction confirmation (finalized commitment)'
               : wsState.phase === 'authenticating'
-              ? 'Check your wallet extension for the signature request'
-              : 'Establishing secure connection to game server'
+                ? 'Check your wallet extension for the signature request'
+                : 'Establishing secure connection to game server'
             }
           </div>
           {/* Smooth loading bar */}
@@ -294,41 +309,43 @@ function AppInner() {
       ) : null}
 
       {screen === 'landing' && (
-        <Landing
+        <PremiumLandingScreen
           solPrice={solPrice}
           onPractice={onPractice}
-          onTournament={onTournament}
+          onWallet={onWallet}
+          onLeaderboard={openLeaderboard}
         />
       )}
       {screen === 'practice' && (
+        <PracticeModeSelection
+          onSelectSolo={() => setScreen('practice-solo' as any)}
+          onBack={() => setScreen('landing')}
+          onNotify={showToast}
+        />
+      )}
+      {screen === 'practice-solo' && (
         <Practice onFinish={() => setScreen('results')} onBack={() => setScreen('landing')} />
       )}
       {screen === 'modes' && (
-        <Modes onSelect={() => setScreen('wallet')} onClose={() => setScreen('landing')} onNotify={showToast} />
+        <TournamentModesScreen onSelect={() => setScreen('wallet')} onClose={() => setScreen('landing')} onNotify={showToast} solPrice={solPrice} />
       )}
       {screen === 'wallet' && (
-        <Wallet onConnected={() => setScreen('lobby')} onClose={() => setScreen('modes')} />
+        <WalletScreen entryFee={pendingEntryFee} onConnected={() => setScreen('lobby')} onClose={() => setScreen('landing')} />
       )}
       {screen === 'lobby' && (
-        <Lobby onStart={() => setScreen('game')} onBack={() => setScreen('modes')} />
+        <Lobby
+          onStart={() => setScreen('game')}
+          onBack={() => setScreen('landing')}
+        />
       )}
       {screen === 'game' && (
         <Game onEnd={() => setScreen('results')} onRestart={() => setScreen('game')} />
       )}
       {screen === 'results' && (
-        <Results onPlayAgain={() => setScreen('practice')} onChangeTier={() => setScreen('modes')} />
+        <Results onPlayAgain={() => setScreen('practice')} onChangeTier={() => setScreen('landing')} />
       )}
 
-      {/* Help toggle */}
-      <button onClick={() => setShowHelp(v => !v)} title="Help" style={{ position: 'fixed', top: 10, left: 10, zIndex: 60, padding: '6px 8px', borderRadius: 8, background: 'rgba(0,0,0,0.55)', color: '#c7d2de', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12, cursor: 'pointer' }}>?</button>
-      {showHelp && (
-        <div style={{ position: 'fixed', top: 44, left: 10, zIndex: 60, padding: '10px 12px', borderRadius: 10, background: 'rgba(0,0,0,0.80)', color: '#c7d2de', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12, maxWidth: 320 }}>
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>Controls</div>
-          <div>• Aim with mouse</div>
-          <div>• Boost: Space or B</div>
-          <div>• Back: ESC</div>
-        </div>
-      )}
+
 
       {/* Toast - appears ABOVE overlays for visibility */}
       {toast && (
@@ -336,153 +353,244 @@ function AppInner() {
           {toast}
         </div>
       )}
+
+      {showHowTo && (
+        <HowToPlayOverlay
+          mode="pc"
+          onClose={() => {
+            setShowHowTo(false);
+            try {
+              localStorage.setItem('sr_howto_seen_v2', '1');
+            } catch { }
+          }}
+        />
+      )}
+
+      {showLeaderboard && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 11000 }}>
+          <Leaderboard
+            onClose={() => setShowLeaderboard(false)}
+            apiBase={API_BASE}
+            myWallet={publicKey || null}
+            isMobile={false}
+          />
+        </div>
+      )}
     </div>
   );
 }
 
-function HeaderWallet({ screen, status }: { screen: string; status: string }) {
-  const { publicKey, disconnect } = useWallet() as any;
-  const style: React.CSSProperties = {
-    position: 'fixed',
-    top: 16,
-    right: 16,
-    zIndex: 60,
-    background: 'rgba(0,0,0,0.65)',
-    padding: '10px 16px',
-    borderRadius: 10,
-    fontSize: 13,
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    border: '1px solid rgba(255,255,255,0.15)'
-  };
-
-  if (publicKey) {
-    const short = `${publicKey.slice(0,6)}…${publicKey.slice(-6)}`;
-    return (
-      <div style={style}>
-        <span style={{ color: '#c7d2de', opacity: 0.7, fontSize: 12 }}>{status}</span>
-        <span style={{ color: 'rgba(255,255,255,0.3)' }}>•</span>
-        <span style={{ fontFamily: 'JetBrains Mono, monospace', color: '#00ffff' }}>{short}</span>
-        <button className="btn-secondary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => disconnect?.()}>Disconnect</button>
-      </div>
-    );
-  }
-  if (screen === 'game') {
-    return <div style={style}>🎮 Simulation mode (no wallet)</div>;
-  }
-  // Show status even when not connected
-  return <div style={{ ...style, color: '#c7d2de' }}>{status}</div>;
-}
-
-function Landing({ solPrice, onPractice, onTournament }: { solPrice: number | null; onPractice: () => void; onTournament: () => void; }) {
-  const { publicKey, isConnecting } = useWallet();
-  const sendAnalytic = async (type: string, payload: any) => { try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, payload }) }); } catch {} };
-  
-  const handleTournament = async () => {
-    sendAnalytic('landing_cta_click', { publicKey: publicKey || null });
-    onTournament();
-  };
-
-  // Get player stats from localStorage
-  const getPlayerStats = () => {
-    try {
-      const stored = localStorage.getItem('spermrace_stats');
-      if (stored) return JSON.parse(stored);
-    } catch {}
-    return { totalGames: 0, wins: 0, losses: 0, totalPrizes: 0, totalKills: 0, history: [] };
-  };
-  const stats = getPlayerStats();
-  const winRate = stats.totalGames > 0 ? ((stats.wins / stats.totalGames) * 100).toFixed(1) : '0.0';
+function HeaderWallet({
+  screen,
+  status,
+  solPrice,
+  onPractice: _onPractice,
+  onTournament,
+  onLeaderboard,
+}: {
+  screen: string;
+  status: string;
+  solPrice: number | null;
+  onPractice: () => void;
+  onTournament: () => void;
+  onLeaderboard?: () => void;
+}) {
+  const { publicKey, disconnect, connect } = useWallet() as any;
+  const short = publicKey ? `${publicKey.slice(0, 4)}…${publicKey.slice(-4)}` : null;
+  const isLanding = screen === 'landing';
+  const showStatusPill = status && status !== 'Not Connected' && status !== 'Connected';
 
   return (
-    <div className="screen active pc-landing" id="landing-screen">
-      <div className="landing-container pc-container">
-        <div className="brand-section">
-          <div className="pc-badge">🖥️ PC EDITION</div>
-          <h1 className="brand-title pc-title">
-            <span className="text-gradient">SPERM</span>
-            <span className="text-accent">RACE</span>
-            <span className="text-gradient">.IO</span>
-          </h1>
-          <p className="brand-punchline">Battle Royale starts at birth 💥</p>
-          
-          {stats.totalGames > 0 && (
-            <div className="pc-stats-grid">
-              <div className="pc-stat-card">
-                <div className="stat-label">Total Games</div>
-                <div className="stat-value">{stats.totalGames}</div>
-              </div>
-              <div className="pc-stat-card">
-                <div className="stat-label">Win Rate</div>
-                <div className="stat-value">{winRate}%</div>
-              </div>
-              <div className="pc-stat-card">
-                <div className="stat-label">Total Kills</div>
-                <div className="stat-value">{stats.totalKills}</div>
-              </div>
-              {stats.totalPrizes > 0 && (
-                <div className="pc-stat-card highlight">
-                  <div className="stat-label">💰 Prizes Won</div>
-                  <div className="stat-value">{stats.totalPrizes.toFixed(4)} SOL</div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        
-        <div className="cta-section pc-cta">
-          <button className="cta-primary pc-btn-large" onClick={handleTournament} disabled={isConnecting}>
-            <span className="cta-text">
-              {isConnecting ? 'Opening wallet…' : 'Enter Tournament'}
-            </span>
-            <div className="cta-glow"/>
-          </button>
-          
-          <button className="btn-secondary pc-btn-secondary" onClick={onPractice}>
-            🎮 Practice Mode (Free)
-          </button>
-          
-          <div className="live-sol-price pc-price">
-            <span className="price-label">SOLANA</span>
-            <span className="price-value">${solPrice?.toFixed(2) ?? '--'}</span>
-            <span className="price-updated">Live</span>
-          </div>
-        </div>
+    <header style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 50,
+      zIndex: 60,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '0 20px',
+      background: 'rgba(0,0,0,0.85)',
+      borderBottom: '1px solid rgba(0,245,255,0.2)',
+    }}>
+      {/* Left: Logo */}
+      <button
+        type="button"
+        onClick={() => { if (screen !== 'landing') window.location.href = '/'; }}
+        style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: 6,
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+        }}
+      >
+        <span style={{ fontSize: 16, fontWeight: 800, color: '#fff', letterSpacing: '0.1em' }}>SPERM</span>
+        <span style={{ fontSize: 16, fontWeight: 800, color: '#00f5ff', letterSpacing: '0.1em' }}>RACE</span>
+      </button>
+
+      {/* Center: SOL Price */}
+      <div style={{
+        position: 'absolute',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: '6px 16px',
+        background: 'rgba(0,245,255,0.1)',
+        border: '1px solid rgba(0,245,255,0.3)',
+        borderRadius: 4,
+      }}>
+        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>SOL</span>
+        <span style={{ fontSize: 16, fontWeight: 700, color: '#00f5ff' }}>
+          ${solPrice?.toFixed(2) ?? '--'}
+        </span>
       </div>
-    </div>
+
+      {/* Right: Nav + Wallet */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        {isLanding && (
+          <>
+            <button
+              onClick={onTournament}
+              style={{
+                padding: '6px 12px',
+                background: 'none',
+                border: '1px solid rgba(255,255,255,0.2)',
+                borderRadius: 4,
+                color: 'rgba(255,255,255,0.8)',
+                fontSize: 11,
+                fontWeight: 600,
+                letterSpacing: '0.1em',
+                cursor: 'pointer',
+              }}
+            >
+              PLAY
+            </button>
+            {onLeaderboard && (
+              <button
+                onClick={onLeaderboard}
+                style={{
+                  padding: '6px 12px',
+                  background: 'none',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: 4,
+                  color: 'rgba(255,255,255,0.8)',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  letterSpacing: '0.1em',
+                  cursor: 'pointer',
+                }}
+              >
+                RANKS
+              </button>
+            )}
+          </>
+        )}
+        {showStatusPill && (
+          <span style={{
+            padding: '4px 10px',
+            background: 'rgba(0,245,255,0.15)',
+            borderRadius: 4,
+            fontSize: 11,
+            color: '#00f5ff',
+          }}>{status}</span>
+        )}
+        {short ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 12, color: '#00f5ff', fontFamily: 'monospace' }}>{short}</span>
+            <button
+              onClick={() => disconnect?.()}
+              style={{
+                padding: '6px 12px',
+                background: 'rgba(255,100,100,0.2)',
+                border: '1px solid rgba(255,100,100,0.4)',
+                borderRadius: 4,
+                color: '#ff6b6b',
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              EXIT
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => connect?.()}
+            style={{
+              padding: '6px 14px',
+              background: 'linear-gradient(135deg, #00f5ff, #00ff88)',
+              border: 'none',
+              borderRadius: 4,
+              color: '#000',
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: '0.1em',
+              cursor: 'pointer',
+            }}
+          >
+            CONNECT
+          </button>
+        )}
+      </div>
+    </header>
   );
 }
 
+
+
+
+
+
+
 function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBack: () => void }) {
-  const [step, setStep] = useState<'lobby' | 'game'>('lobby');
+  const [step, setStep] = useState<'lobby' | 'game'>(() => {
+    try {
+      return localStorage.getItem('sr_practice_full_tuto_seen') ? 'game' : 'lobby';
+    } catch {
+      return 'lobby';
+    }
+  });
   const [meId] = useState<string>('PLAYER_' + Math.random().toString(36).slice(2, 8));
   const [players, setPlayers] = useState<string[]>([]);
   const [countdown, setCountdown] = useState<number>(5);
   const countdownTotal = 5;
 
+  const [showPracticeIntro, setShowPracticeIntro] = useState<boolean>(() => {
+    try {
+      return !localStorage.getItem('sr_practice_full_tuto_seen');
+    } catch {
+      return true;
+    }
+  });
+
   useEffect(() => {
     if (step === 'lobby') {
       const base = [meId];
-      const bots = Array.from({ length: 7 }, (_, i) => `BOT_${i.toString(36)}${Math.random().toString(36).slice(2,4)}`);
+      const bots = Array.from({ length: 7 }, (_, i) => `BOT_${i.toString(36)}${Math.random().toString(36).slice(2, 4)}`);
       setPlayers([...base, ...bots]);
-      
       setCountdown(countdownTotal);
+      if (showPracticeIntro) return;
       let currentCountdown = countdownTotal;
-      
+
       const t = setInterval(() => {
         currentCountdown -= 1;
         setCountdown(currentCountdown);
-        
+
         if (currentCountdown <= 0) {
           clearInterval(t);
           setStep('game');
         }
       }, 1000);
-      
+
       return () => clearInterval(t);
     }
-  }, [step, meId]);
+  }, [step, meId, showPracticeIntro]);
 
   if (step === 'lobby') {
     const maxPlayers = 8;
@@ -491,7 +599,7 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
       <div className="screen active pc-lobby" id="lobby-screen">
         <div className="lobby-container pc-lobby-container">
           <div className="lobby-header">
-            <div className="lobby-title">🎮 Practice Lobby</div>
+            <div className="lobby-title">Practice Lobby</div>
             <div className="lobby-status">{players.length}/{maxPlayers}</div>
           </div>
           <div className="queue-bar pc-queue">
@@ -520,6 +628,17 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
             <button className="btn-secondary pc-btn" onClick={onBack}>← Back to Menu</button>
           </div>
         </div>
+        <PracticeFullTutorial
+          visible={showPracticeIntro}
+          onDone={() => {
+            setShowPracticeIntro(false);
+            try {
+              localStorage.setItem('sr_practice_full_tuto_seen', '1');
+            } catch { }
+            // After the first tutorial, jump straight into the game and skip lobby on PC
+            setStep('game');
+          }}
+        />
       </div>
     );
   }
@@ -527,7 +646,7 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
   if (step === 'game') {
     return (
       <div className="screen active" style={{ padding: 0 }}>
-        <NewGameView 
+        <GameViewWrapper
           meIdOverride={meId || 'YOU'}
           onReplay={() => setStep('lobby')}
           onExit={onBack}
@@ -539,13 +658,15 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
   return null;
 }
 
-function Modes({ onSelect: _onSelect, onClose, onNotify }: { onSelect: () => void; onClose: () => void; onNotify: (msg: string, duration?: number) => void }) {
+function TournamentModesScreen({ onSelect: _onSelect, onClose, onNotify, solPrice: _solPrice }: { onSelect: () => void; onClose: () => void; onNotify: (msg: string, duration?: number) => void; solPrice: number | null }) {
   const { publicKey, connect } = useWallet();
   const { connectAndJoin, state: wsState } = useWs();
   const [isJoining, setIsJoining] = useState<boolean>(false);
+  // @ts-expect-error - preflight is set but not currently read, will be used in future
   const [preflight, setPreflight] = useState<{ address: string | null; sol: number | null; configured: boolean } | null>(null);
   const [preflightError, setPreflightError] = useState<boolean>(false);
-  
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
   useEffect(() => {
     (async () => {
       try {
@@ -553,215 +674,231 @@ function Modes({ onSelect: _onSelect, onClose, onNotify }: { onSelect: () => voi
         if (!r.ok) throw new Error(`preflight ${r.status}`);
         const j = await r.json();
         setPreflight(j);
-        const misconfigured = !j?.configured || !j?.address || j?.sol == null;
-        setPreflightError(!!misconfigured);
+        setPreflightError(!j?.configured || !j?.address || j?.sol == null);
       } catch {
         setPreflightError(true);
       }
     })();
   }, []);
 
-  const tiers = [
-    { name: 'Micro Race', usd: 1, max: 16, dur: '2-3 min' },
-    { name: 'Nano Race', usd: 5, max: 32, dur: '3-4 min' },
-    { name: 'Mega Race', usd: 25, max: 32, dur: '4-6 min' },
-    { name: 'Championship', usd: 100, max: 16, dur: '5-8 min' },
-  ];
-
   useEffect(() => {
     if (wsState.phase === 'lobby' || wsState.phase === 'game') setIsJoining(false);
   }, [wsState.phase]);
 
+  const tiers = [
+    { name: 'MICRO', usd: 1, max: 16, prize: 10, popular: true, desc: 'Perfect for beginners' },
+    { name: 'NANO', usd: 5, max: 32, prize: 50, popular: false, desc: 'Most competitive' },
+    { name: 'MEGA', usd: 25, max: 32, prize: 250, popular: false, desc: 'High stakes action' },
+    { name: 'ELITE', usd: 100, max: 16, prize: 1000, popular: false, desc: 'Ultimate challenge' },
+  ];
+
+  const selected = tiers[selectedIndex];
+  const isDisabled = isJoining || wsState.phase === 'connecting' || wsState.phase === 'authenticating' || preflightError;
+
+  const handleJoin = async () => {
+    if (isDisabled) return;
+    setIsJoining(true);
+    if (!publicKey && !(await connect())) {
+      setIsJoining(false);
+      onNotify('Connect wallet to enter tournament');
+      return;
+    }
+    await connectAndJoin({ entryFeeTier: selected.usd as any, mode: 'tournament' });
+  };
+
   return (
-    <div className="screen active" id="mode-screen">
-      <div className="modes-sheet">
-        <div className="sheet-grip" />
-        <div className="modal-header"><h2 className="modal-title">Enter Sperm Race</h2><p className="modal-subtitle">Select a tier</p></div>
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      background: 'linear-gradient(180deg, #030712 0%, #0a1628 100%)',
+      overflowY: 'auto',
+      padding: '120px 40px 40px',
+    }}>
+      <div style={{ maxWidth: 1000, width: '100%', margin: '0 auto' }}>
+        {/* Hero Header */}
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <div style={{
+            fontSize: 12,
+            letterSpacing: '0.3em',
+            color: 'rgba(255,255,255,0.5)',
+            marginBottom: 8,
+            textTransform: 'uppercase',
+          }}>
+            Choose Your Battle
+          </div>
+          <h1 style={{
+            fontSize: 48,
+            fontWeight: 900,
+            color: '#fff',
+            margin: 0,
+            marginBottom: 10,
+            textShadow: '0 0 40px rgba(0,245,255,0.3)',
+          }}>
+            TOURNAMENT
+          </h1>
+          <p style={{
+            fontSize: 18,
+            color: 'rgba(0,245,255,0.9)',
+            margin: 0,
+            fontWeight: 700,
+            letterSpacing: '0.02em',
+          }}>
+            Win Real Cryptocurrency in Minutes ⚡
+          </p>
+        </div>
+
+        {/* Tier Cards Grid */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: 16,
+          marginBottom: 20
+        }}>
+          {tiers.map((tier, i) => (
+            <HolographicKeycard
+              key={tier.name}
+              tier={tier}
+              isActive={i === selectedIndex}
+              onClick={() => setSelectedIndex(i)}
+              disabled={preflightError}
+            />
+          ))}
+        </div>
+
+        {/* Feature Highlights Row */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: 12,
+          marginBottom: 20,
+        }}>
+          {[
+            { icon: '⚡', title: 'Instant Payouts', desc: 'Win SOL immediately' },
+            { icon: '🏆', title: 'Winner Takes All', desc: '85% to #1 place' },
+            { icon: '🔒', title: 'Provably Fair', desc: 'Blockchain verified' },
+            { icon: '⏱️', title: 'Fast Rounds', desc: '3-5 minute matches' },
+          ].map((feature, i) => (
+            <div key={i} style={{
+              background: 'rgba(255,255,255,0.03)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 14,
+              padding: '14px',
+              textAlign: 'center',
+            }}>
+              <div style={{ fontSize: 24, marginBottom: 8 }}>{feature.icon}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', marginBottom: 4 }}>{feature.title}</div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{feature.desc}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Selected Panel with Social Proof */}
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(0,245,255,0.15) 0%, rgba(0,255,136,0.12) 100%)',
+          borderRadius: 20,
+          padding: '24px',
+          marginBottom: 20,
+          border: '1px solid rgba(0,245,255,0.3)',
+          textAlign: 'center',
+          boxShadow: '0 8px 32px rgba(0,245,255,0.2)',
+        }}>
+          <div style={{
+            fontSize: 13,
+            color: 'rgba(255,255,255,0.6)',
+            letterSpacing: '0.2em',
+            marginBottom: 10,
+            textTransform: 'uppercase',
+          }}>
+            Turn ${selected.usd} into
+          </div>
+          <div style={{
+            fontSize: 64,
+            fontWeight: 900,
+            color: '#00ff88',
+            textShadow: '0 0 50px rgba(0,255,136,0.7)',
+            lineHeight: 1,
+            marginBottom: 12,
+          }}>
+            ${selected.prize}
+          </div>
+          <div style={{
+            fontSize: 16,
+            color: '#00f5ff',
+            fontWeight: 700,
+            letterSpacing: '0.05em',
+            marginBottom: 16,
+          }}>
+            Winner Takes 85% • Instant Crypto Payout
+          </div>
+          <div style={{
+            fontSize: 13,
+            color: 'rgba(255,255,255,0.6)',
+            fontWeight: 600,
+          }}>
+            🎯 Join {selected.max} players racing for the prize pool
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div style={{ display: 'flex', gap: 16 }}>
+          <button
+            onClick={onClose}
+            style={{
+              flex: '0 0 140px',
+              padding: '20px 24px',
+              borderRadius: 14,
+              border: '1px solid rgba(255,255,255,0.15)',
+              background: 'transparent',
+              color: 'rgba(255,255,255,0.6)',
+              fontSize: 16,
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            ← BACK
+          </button>
+          <button
+            onClick={handleJoin}
+            disabled={isDisabled}
+            style={{
+              flex: 1,
+              padding: '20px',
+              borderRadius: 14,
+              border: 'none',
+              background: isDisabled
+                ? 'rgba(255,255,255,0.1)'
+                : 'linear-gradient(135deg, #00f5ff 0%, #00ff88 100%)',
+              color: isDisabled ? 'rgba(255,255,255,0.4)' : '#000',
+              fontSize: 20,
+              fontWeight: 900,
+              letterSpacing: '0.05em',
+              cursor: isDisabled ? 'not-allowed' : 'pointer',
+              boxShadow: isDisabled ? 'none' : '0 0 60px rgba(0,245,255,0.6), 0 6px 30px rgba(0,0,0,0.3)',
+              transition: 'all 0.2s ease',
+              textTransform: 'uppercase',
+            }}
+          >
+            {isJoining ? '⏳ JOINING TOURNAMENT...' : preflightError ? '❌ UNAVAILABLE' : '🚀 JOIN TOURNAMENT NOW'}
+          </button>
+        </div>
+
         {preflightError && (
-          <div className="modal-subtitle" style={{ color: '#ff8080', marginBottom: 8 }}>Tournaments are temporarily unavailable (prize preflight issue).</div>
+          <div style={{
+            textAlign: 'center',
+            marginTop: 16,
+            fontSize: 14,
+            color: 'rgba(255,100,100,0.9)',
+            fontWeight: 700,
+          }}>
+            ⚠️ Tournaments temporarily unavailable
+          </div>
         )}
 
-        <div className="tournament-grid">
-          {tiers.map((t, i) => {
-            const prize = (t.usd * t.max * 0.85).toFixed(2);
-            const cardGradients = [
-              'linear-gradient(135deg, rgba(34,211,238,0.15) 0%, rgba(99,102,241,0.15) 100%)',
-              'linear-gradient(135deg, rgba(99,102,241,0.18) 0%, rgba(244,63,94,0.18) 100%)', 
-              'linear-gradient(135deg, rgba(244,63,94,0.20) 0%, rgba(251,146,60,0.20) 100%)',
-              'linear-gradient(135deg, rgba(251,146,60,0.22) 0%, rgba(34,211,238,0.22) 100%)'
-            ];
-            const prizeGradients = [
-              'linear-gradient(90deg, rgba(34,211,238,0.25), rgba(99,102,241,0.25))',
-              'linear-gradient(90deg, rgba(99,102,241,0.28), rgba(244,63,94,0.28))',
-              'linear-gradient(90deg, rgba(244,63,94,0.30), rgba(251,146,60,0.30))',
-              'linear-gradient(90deg, rgba(251,146,60,0.32), rgba(34,211,238,0.32))'
-            ];
-            const buttonGradients = [
-              'linear-gradient(90deg, #22d3ee 0%, #6366f1 100%)',
-              'linear-gradient(90deg, #6366f1 0%, #f43f5e 100%)',
-              'linear-gradient(90deg, #f43f5e 0%, #fb923c 100%)',
-              'linear-gradient(90deg, #fb923c 0%, #22d3ee 100%)'
-            ];
-            return (
-              <div key={t.name} className="tournament-card" style={{
-                background: cardGradients[i],
-                border: '2px solid rgba(255,255,255,0.15)',
-                borderRadius: '20px',
-                padding: '24px',
-                position: 'relative',
-                overflow: 'hidden',
-                backdropFilter: 'blur(10px)',
-                boxShadow: '0 20px 40px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.1)'
-              }} data-ribbon={i===0? '🔥 HOT' : i===1? '⭐ POPULAR' : i===2? '💎 VIP' : '👑 ELITE'}>
-                
-                {/* Animated background orb */}
-                <div style={{
-                  position: 'absolute',
-                  top: '-50%',
-                  right: '-30%',
-                  width: '200px',
-                  height: '200px',
-                  background: prizeGradients[i],
-                  borderRadius: '50%',
-                  opacity: 0.3,
-                  filter: 'blur(60px)',
-                  animation: 'float 6s ease-in-out infinite'
-                }} />
-                
-                <div className="tournament-header" style={{ position: 'relative', zIndex: 2 }}>
-                  <div className="tournament-icon" style={{ fontSize: '32px', marginBottom: '8px' }}>🧬</div>
-                  <h3 className="tournament-title" style={{ fontSize: '24px', fontWeight: 800, marginBottom: '4px' }}>{t.name}</h3>
-                  <div className="tournament-badge" style={{ 
-                    background: 'rgba(255,255,255,0.2)', 
-                    padding: '4px 12px', 
-                    borderRadius: '20px', 
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    backdropFilter: 'blur(10px)'
-                  }}>Tier {i+1}</div>
-                </div>
-                
-                {/* Massive prize display */}
-                <div style={{ 
-                  textAlign: 'center', 
-                  margin: '20px 0', 
-                  position: 'relative', 
-                  zIndex: 2 
-                }}>
-                  <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.8)', marginBottom: '8px' }}>WIN UP TO</div>
-                  <div style={{ 
-                    fontSize: '48px', 
-                    fontWeight: 900, 
-                    background: buttonGradients[i],
-                    backgroundClip: 'text',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    textShadow: '0 4px 20px rgba(255,255,255,0.3)',
-                    lineHeight: 1,
-                    marginBottom: '4px'
-                  }}>${prize}</div>
-                  <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)' }}>Instant crypto payout</div>
-                </div>
-
-                <div className="tournament-details" style={{ position: 'relative', zIndex: 2 }}>
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    background: 'rgba(255,255,255,0.1)',
-                    padding: '12px 16px',
-                    borderRadius: '12px',
-                    marginBottom: '16px',
-                    backdropFilter: 'blur(10px)'
-                  }}>
-                    <div>
-                      <div style={{ fontSize: '18px', fontWeight: 700 }}>${t.usd.toFixed(2)}</div>
-                      <div style={{ fontSize: '11px', opacity: 0.8 }}>Entry fee</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '14px', fontWeight: 600 }}>{t.max} players max</div>
-                      <div style={{ fontSize: '11px', opacity: 0.8 }}>{t.dur} duration</div>
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  style={{
-                    width: '100%',
-                    padding: '16px 24px',
-                    background: buttonGradients[i],
-                    border: 'none',
-                    borderRadius: '16px',
-                    color: '#000',
-                    fontSize: '18px',
-                    fontWeight: 800,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                    cursor: 'pointer',
-                    position: 'relative',
-                    zIndex: 2,
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.3)',
-                    // Disable transition when animating to avoid conflicts
-                    transition: (publicKey && !isJoining && wsState.phase !== 'connecting' && wsState.phase !== 'authenticating') ? 'none' : 'all 0.2s ease',
-                    // Only set transform when NOT animating (animation will handle it)
-                    ...(!(publicKey && !isJoining && wsState.phase !== 'connecting' && wsState.phase !== 'authenticating') && { transform: 'translateY(0px)' }),
-                    // Add glowing animation when wallet is connected and ready
-                    animation: publicKey && !isJoining && wsState.phase !== 'connecting' && wsState.phase !== 'authenticating'
-                      ? 'buttonGlow 2s ease-in-out infinite, buttonPulse 2s ease-in-out infinite'
-                      : 'none'
-                  }}
-                  disabled={
-                    isJoining ||
-                    wsState.phase === 'connecting' ||
-                    wsState.phase === 'authenticating' ||
-                    preflightError ||
-                    (!!preflight && (!preflight.configured || !preflight.address || preflight.sol == null))
-                  }
-                  onClick={async () => {
-                    setIsJoining(true);
-                    const ok = publicKey ? true : await connect();
-                    if (!ok) {
-                      setIsJoining(false);
-                      onNotify('Wallet not detected. Please install or unlock your wallet.');
-                      return;
-                    }
-                    await connectAndJoin({ entryFeeTier: t.usd as any, mode: 'tournament' });
-                  }}
-                  onMouseEnter={(e) => {
-                    if (publicKey && !isJoining && wsState.phase !== 'connecting' && wsState.phase !== 'authenticating') {
-                      e.currentTarget.style.animation = 'none';
-                      e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)';
-                      e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.4), 0 0 35px rgba(34,211,238,0.8)';
-                    } else {
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                      e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.4)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (publicKey && !isJoining && wsState.phase !== 'connecting' && wsState.phase !== 'authenticating') {
-                      e.currentTarget.style.animation = 'buttonGlow 2s ease-in-out infinite, buttonPulse 2s ease-in-out infinite';
-                      e.currentTarget.style.transform = 'translateY(0px)';
-                      e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.3)';
-                    } else {
-                      e.currentTarget.style.transform = 'translateY(0px)';
-                      e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.3)';
-                    }
-                  }}
-                >{
-                  preflightError ? 'Service unavailable'
-                  : (preflight && (!preflight.configured || !preflight.address || preflight.sol == null)) ? 'Temporarily unavailable'
-                  : (isJoining || wsState.phase === 'connecting' || wsState.phase === 'authenticating') ? 'Joining…'
-                  : publicKey ? `🚀 ENTER RACE - READY!` : `ENTER RACE`
-                }</button>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="mode-footer">
-          <button className="btn-secondary" onClick={onClose}>Back</button>
-        </div>
       </div>
+
+      {/* SOL Price - Fixed badge */}
+
     </div>
   );
 }
@@ -771,18 +908,20 @@ function Wallet({ onConnected, onClose }: { onConnected: () => void; onClose: ()
   const tryConnect = async () => {
     if (await connect()) onConnected();
   };
-  
+
   return (
     <div className="screen active pc-wallet" id="wallet-screen">
       <div className="pc-wallet-container">
         <div className="modal-header">
-          <h2 className="modal-title">🔐 Connect Wallet</h2>
+          <h2 className="modal-title">Connect Wallet</h2>
           <p className="modal-subtitle">Sign in with Solana to continue</p>
         </div>
-        
+
         <div className="pc-wallet-options">
           <button className="pc-wallet-btn" onClick={tryConnect}>
-            <div className="wallet-icon">🔗</div>
+            <div className="wallet-icon">
+              <CrownSimple size={18} weight="fill" />
+            </div>
             <div className="wallet-text">
               <div className="wallet-title">Connect Wallet</div>
               <div className="wallet-subtitle">Phantom / Solflare / Coinbase • build wallet-refactor</div>
@@ -790,11 +929,11 @@ function Wallet({ onConnected, onClose }: { onConnected: () => void; onClose: ()
           </button>
           {publicKey && (
             <div className="pc-connected-badge">
-              ✅ Connected: {publicKey.slice(0,6)}…{publicKey.slice(-6)}
+              Connected: {publicKey.slice(0, 6)}…{publicKey.slice(-6)}
             </div>
           )}
         </div>
-        
+
         <button className="btn-secondary pc-btn" onClick={onClose}>← Back</button>
       </div>
     </div>
@@ -806,47 +945,111 @@ function Lobby({ onStart: _onStart, onBack }: { onStart: () => void; onBack: () 
   const players = state.lobby?.players || [];
   const realPlayers = players.filter(p => !String(p).startsWith('BOT_'));
   const estimatedPrizeUsd = state.lobby ? Math.max(0, Math.floor(realPlayers.length * (state.lobby.entryFee as number) * 0.85)) : 0;
-  
+  const lobbyMode = (state.lobby as any)?.mode as ('practice' | 'tournament' | undefined);
+  const practiceMissingPlayers = lobbyMode === 'practice' ? Math.max(0, 2 - realPlayers.length) : 0;
+
   return (
-    <div className="screen active pc-lobby" id="lobby-screen">
-      <div className="lobby-container pc-lobby-container">
-        <div className="lobby-header">
-          <div className="lobby-title">🏆 Tournament Lobby</div>
-          <div className="lobby-status">{players.length}/{state.lobby?.maxPlayers ?? 16}</div>
+    <div className="screen active pc-lobby" id="lobby-screen" style={{ 
+      background: "#030712",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: "100vh"
+    }}>
+      <div className="lobby-container pc-lobby-container" style={{
+        maxWidth: "600px",
+        width: "100%",
+        background: "rgba(10, 20, 35, 0.6)",
+        backdropFilter: "blur(20px)",
+        border: "1px solid rgba(0, 245, 255, 0.2)",
+        borderRadius: "24px",
+        padding: "40px",
+        textAlign: "center"
+      }}>
+        <div style={{ marginBottom: 20 }}>
+          <Atom size={48} weight="duotone" color="#00f5ff" />
         </div>
-        
-        {state.lobby && (
-          <div className="pc-prize-info">
-            <span className="label">Estimated Prize Pool:</span>
-            <span className="amount">${estimatedPrizeUsd}</span>
-            <span className="note">(85% to winner)</span>
+        <h1 style={{ fontSize: "32px", fontWeight: 900, color: "#fff", marginBottom: "32px", fontFamily: "Orbitron, sans-serif" }}>LOBBY</h1>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "24px" }}>
+          <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "16px", padding: "16px" }}>
+            <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase" }}>Pilots</div>
+            <div style={{ fontSize: "24px", fontWeight: 900, color: "#00f5ff" }}>{players.length} / {state.lobby?.maxPlayers ?? 32}</div>
           </div>
-        )}
-        
-        <div className="queue-bar pc-queue">
-          <div className="queue-left"><span className="queue-dot" /><span>{players.length} Joined</span></div>
-          <div className="queue-center"><span>Waiting for Players</span></div>
-          <div className="queue-right"><span>Target: {state.lobby?.maxPlayers ?? 16}</span></div>
+          <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "16px", padding: "16px" }}>
+            <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase" }}>Prize</div>
+            <div style={{ fontSize: "24px", fontWeight: 900, color: "#00ff88" }}>${estimatedPrizeUsd}</div>
+          </div>
         </div>
-        
-        <div className="lobby-orbit">
-          <div className="orbit-center" />
-          <div className="orbit-ring">
-            {players.map((p: string, i: number) => (
-              <div key={p} className="orbit-sperm" style={{ '--i': i, '--n': players.length } as any} />
-            ))}
-          </div>
-          {state.countdown && (
-            <div className="countdown-halo">
-              <div className="halo-ring" />
-              <div className="halo-timer">{state.countdown.remaining}s</div>
+
+        <div style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "8px",
+          justifyContent: "center",
+          marginBottom: "32px",
+          padding: "12px",
+          background: "rgba(0,0,0,0.2)",
+          borderRadius: "12px"
+        }}>
+          {players.map((pid: string) => {
+            const name = state.lobby?.playerNames?.[pid] || (pid.startsWith("guest-") ? "Guest" : pid.slice(0, 4) + "…" + pid.slice(-4));
+            const isMe = pid === state.playerId;
+            return (
+              <div key={pid} style={{
+                fontSize: "12px",
+                padding: "4px 12px",
+                borderRadius: "6px",
+                background: isMe ? "rgba(0, 245, 255, 0.15)" : "rgba(255, 255, 255, 0.05)",
+                border: isMe ? "1px solid rgba(0, 245, 255, 0.3)" : "1px solid rgba(255, 255, 255, 0.1)",
+                color: isMe ? "#00f5ff" : "rgba(255, 255, 255, 0.7)",
+                fontWeight: 800
+              }}>
+                {name}
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ minHeight: "120px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+          {state.countdown ? (
+            <div>
+              <div style={{ fontSize: "14px", fontWeight: 800, color: "#00f5ff", letterSpacing: "0.3em" }}>STARTING IN</div>
+              <div style={{ fontSize: "80px", fontWeight: 900, color: "#fff", lineHeight: 1 }}>
+                {state.countdown.remaining}
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontSize: "16px", color: "rgba(255,255,255,0.5)", fontWeight: 800 }}>
+              {lobbyMode === 'practice' && practiceMissingPlayers > 0
+                ? `NEED ${practiceMissingPlayers} MORE PLAYER${practiceMissingPlayers === 1 ? '' : 'S'} TO START`
+                : 'WAITING FOR RIVALS...'}
+              {lobbyMode === 'practice' && practiceMissingPlayers > 0 && (
+                <div style={{ marginTop: 10, fontSize: 13, color: "rgba(148,163,184,0.85)", fontWeight: 600 }}>
+                  Practice is pure multiplayer (2+ players).
+                </div>
+              )}
             </div>
           )}
         </div>
-        
-        <div className="lobby-footer">
-          <button className="btn-secondary pc-btn" onClick={onBack}>← Leave Lobby</button>
-        </div>
+
+        <button 
+          className="btn-secondary pc-btn" 
+          onClick={onBack}
+          style={{
+            marginTop: "40px",
+            padding: "14px 40px",
+            borderRadius: "12px",
+            fontSize: "14px",
+            fontWeight: 800,
+            color: "rgba(255,255,255,0.4)",
+            background: "rgba(255,255,255,0.03)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            cursor: "pointer"
+          }}
+        >
+          ← ABORT MISSION
+        </button>
       </div>
     </div>
   );
@@ -861,7 +1064,7 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void }
   const cdMs = Math.max(0, cdMsRaw - Math.max(0, Date.now() - (srvTs || Date.now())));
   const cdMax = me?.status?.boostMaxCooldownMs ?? 2500;
   const [boostPct, setBoostPct] = useState<number>(cdMax > 0 ? 1 - cdMs / cdMax : 1);
-  const smoothRef = (function(){
+  const smoothRef = (function () {
     const r = (window as any).__SR_PC_BOOST_SMOOTH__ || { running: false, lastMs: cdMs, lastAt: performance.now(), raf: 0 };
     (window as any).__SR_PC_BOOST_SMOOTH__ = r;
     return r;
@@ -888,21 +1091,78 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void }
         smoothRef.raf = requestAnimationFrame(tick);
       };
       smoothRef.raf = requestAnimationFrame(tick);
-      return () => { try { cancelAnimationFrame(smoothRef.raf); } catch {} smoothRef.running = false; };
+      return () => { try { cancelAnimationFrame(smoothRef.raf); } catch { } smoothRef.running = false; };
     }
   }, [cdMs, cdMax]);
+  // Simple pre-start tips countdown for early players (first few games)
+  const [prestartCountdown, setPrestartCountdown] = useState<number>(() => {
+    try {
+      const stored = localStorage.getItem('spermrace_stats');
+      if (!stored) return 5;
+      const stats = JSON.parse(stored) as { totalGames?: number };
+      return (stats.totalGames ?? 0) < 5 ? 5 : 0;
+    } catch {
+      return 5;
+    }
+  });
+  const [tipIndex, setTipIndex] = useState(0);
+  useEffect(() => {
+    if (prestartCountdown <= 0) return;
+    const id = window.setInterval(() => {
+      setPrestartCountdown((v) => (v <= 1 ? 0 : v - 1));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [prestartCountdown]);
+  useEffect(() => {
+    if (prestartCountdown <= 0) return;
+    const id = window.setInterval(() => {
+      setTipIndex((i) => (i + 1) % 3);
+    }, 2000);
+    return () => window.clearInterval(id);
+  }, [prestartCountdown]);
   const [debugOn, setDebugOn] = useState<boolean>(() => {
     try { const v = localStorage.getItem('sr_debug'); return v === '1'; } catch { return false; }
   });
-  useEffect(() => { try { localStorage.setItem('sr_debug', debugOn ? '1' : '0'); } catch {} }, [debugOn]);
+  useEffect(() => { try { localStorage.setItem('sr_debug', debugOn ? '1' : '0'); } catch { } }, [debugOn]);
   const isProd = (import.meta as any).env?.PROD === true;
-  
+
   return (
     <div className="screen active" style={{ padding: 0 }}>
-      <NewGameView 
+      <GameViewWrapper
         onReplay={onRestart}
         onExit={onEnd}
       />
+      {prestartCountdown > 0 && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 90,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 30,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            pointerEvents: 'none',
+          }}
+        >
+          <div
+            style={{
+              background: 'rgba(0,0,0,0.78)',
+              borderRadius: 999,
+              border: '1px solid rgba(148,163,184,0.6)',
+              padding: '6px 14px',
+              fontSize: 13,
+              color: '#e5e7eb',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {tipIndex === 0 && 'Your trail kills on contact  even you after a short grace.'}
+            {tipIndex === 1 && 'Stay inside the shrinking zone as the arena slices in.'}
+            {tipIndex === 2 && 'Collect energy orbs to refill boost and chase kills.'}
+          </div>
+        </div>
+      )}
       {/* Simple boost cooldown bar (server authoritative) */}
       <div style={{ position: 'fixed', bottom: 18, left: '50%', transform: 'translateX(-50%)', width: 220, height: 10, borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.08)', overflow: 'hidden', zIndex: 20 }}>
         <div style={{ height: '100%', width: `${Math.round(boostPct * 100)}%`, background: 'linear-gradient(90deg, #22d3ee, #14b8a6)', transition: 'width 60ms linear' }} />
@@ -911,12 +1171,12 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void }
       {!isProd && (
         <div className="pc-debug-panel">
           <button onClick={() => setDebugOn(v => !v)} className="btn-secondary pc-debug-btn">
-            🐛 Debug {debugOn ? 'ON' : 'OFF'}
+            Debug {debugOn ? 'ON' : 'OFF'}
           </button>
           {debugOn && (
-              <div className="pc-debug-info">
-                Collisions: {(state.debugCollisions || []).length}
-              </div>
+            <div className="pc-debug-info">
+              Collisions: {(state.debugCollisions || []).length}
+            </div>
           )}
         </div>
       )}
@@ -925,7 +1185,7 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void }
 }
 
 function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onChangeTier: () => void }) {
-  const { state: wsState } = useWs();
+  const { state: wsState, connectAndJoin } = useWs();
   const { publicKey } = useWallet();
   const tx = wsState.lastRound?.txSignature;
   const winner = wsState.lastRound?.winnerId;
@@ -933,7 +1193,31 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
   const solscan = tx ? `https://solscan.io/tx/${tx}${SOLANA_CLUSTER === 'devnet' ? '?cluster=devnet' : ''}` : null;
   const selfId = wsState.playerId || publicKey || '';
   const isWinner = !!winner && winner === selfId;
-  
+  const [playAgainBusy, setPlayAgainBusy] = useState(false);
+
+  const handlePlayAgain = async () => {
+    if (playAgainBusy) return;
+    // Only auto-requeue for real online matches; fallback for solo/offline flows.
+    if (wsState.phase !== 'ended') { onPlayAgain(); return; }
+    setPlayAgainBusy(true);
+    try {
+      let last: any = null;
+      try { last = JSON.parse(localStorage.getItem('sr_last_join') || 'null'); } catch { }
+      const lobby: any = wsState.lobby || null;
+      const entryFeeTier = (lobby?.entryFee ?? last?.entryFeeTier ?? 0) as any;
+      const mode = (lobby?.mode ?? last?.mode ?? (entryFeeTier === 0 ? 'practice' : 'tournament')) as any;
+      const guestName =
+        mode === 'practice'
+          ? (last?.guestName || localStorage.getItem('sr_guest_name') || lobby?.playerNames?.[wsState.playerId || ''] || 'Guest')
+          : undefined;
+      await connectAndJoin({ entryFeeTier, mode, ...(guestName ? { guestName } : {}) });
+    } catch {
+      onPlayAgain();
+    } finally {
+      setPlayAgainBusy(false);
+    }
+  };
+
   let rankText: string | null = null;
   try {
     const initial = wsState.initialPlayers || [];
@@ -951,46 +1235,50 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
       const myRank = rankMap[selfId];
       if (myRank) rankText = `Your rank: #${myRank}`;
     }
-  } catch {}
-  
+  } catch { }
+
   return (
     <div className="screen active pc-results" id="round-end">
+      {isWinner && (
+        <div className="god-ray-container active">
+          <div className="god-ray"></div>
+        </div>
+      )}
       <div className="modal-card pc-results-card">
         <div className="modal-header">
           <h2 className={`round-result ${isWinner ? 'victory' : 'defeat'}`}>
-            {isWinner ? '🏆 Victory! Fertilization!' : '💀 Eliminated'}
+            {isWinner ? 'Victory! Fertilization!' : 'Eliminated'}
           </h2>
           <p className="round-description">
-            Winner: {winner ? `${winner.slice(0,6)}…${winner.slice(-6)}` : '—'}
+            Winner: {winner ? `${winner.slice(0, 6)}…${winner.slice(-6)}` : '—'}
             {typeof prize === 'number' ? ` • Prize: ${prize.toFixed(4)} SOL` : ''}
           </p>
         </div>
-        
+
         {solscan && (
           <div className="pc-solscan-link">
             <a href={solscan} target="_blank" rel="noreferrer">
-              🔗 View payout on Solscan →
+              View payout on Solscan →
             </a>
           </div>
         )}
-        
+
         {rankText && (
           <div className="pc-stats-summary">
             <div className="stat">{rankText}</div>
             <div className="stat">Kills: {wsState.kills?.[selfId] || 0}</div>
           </div>
         )}
-        
+
         <div className="round-actions pc-actions">
-          <button className="btn-primary pc-btn-large" onClick={onPlayAgain}>
-            🔄 Play Again
+          <button className="btn-primary pc-btn-large" onClick={handlePlayAgain} disabled={playAgainBusy}>
+            {playAgainBusy ? 'Joining…' : 'Play Again'}
           </button>
           <button className="btn-secondary pc-btn" onClick={onChangeTier}>
-            🏠 Main Menu
+            Main Menu
           </button>
         </div>
       </div>
     </div>
   );
 }
-
