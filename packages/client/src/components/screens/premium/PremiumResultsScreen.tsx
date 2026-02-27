@@ -5,7 +5,7 @@
 
 import { useState, useEffect, memo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, Skull, Target, Sword, ArrowCounterClockwise, House, Crown, Sparkle, ArrowSquareOut, CheckCircle } from 'phosphor-react';
+import { Trophy, Skull, Target, Sword, ArrowCounterClockwise, House, Crown, Sparkle, ArrowSquareOut, CheckCircle, GlobeHemisphereWest } from 'phosphor-react';
 import { GlassCard, PremiumButton, StatBadge } from '../../ui/premium';
 import { useWallet } from '../../../WalletProvider';
 import { useWs } from '../../../WsProvider';
@@ -19,6 +19,8 @@ const springTitle = { type: 'spring' as const, stiffness: 80, damping: 20 };
 export interface PremiumResultsScreenProps {
   onPlayAgain: () => void;
   onChangeTier: () => void;
+  /** Optional: show a "Play with others" upsell after practice games */
+  onMultiplayer?: () => void;
 }
 
 const SOLANA_CLUSTER: 'devnet' | 'mainnet' = (globalThis as any).SOLANA_CLUSTER || 'mainnet';
@@ -26,6 +28,7 @@ const SOLANA_CLUSTER: 'devnet' | 'mainnet' = (globalThis as any).SOLANA_CLUSTER 
 export const PremiumResultsScreen = memo(function PremiumResultsScreen({
   onPlayAgain,
   onChangeTier,
+  onMultiplayer,
 }: PremiumResultsScreenProps) {
   const { state: wsState } = useWs();
   const { publicKey } = useWallet();
@@ -319,6 +322,19 @@ export const PremiumResultsScreen = memo(function PremiumResultsScreen({
               </>
             )}
           </PremiumButton>
+
+          {onMultiplayer && (
+            <PremiumButton
+              variant="secondary"
+              size="lg"
+              fullWidth
+              onClick={onMultiplayer}
+              className="premium-menu-btn"
+            >
+              <GlobeHemisphereWest size={20} weight="bold" />
+              <span>PLAY WITH OTHERS</span>
+            </PremiumButton>
+          )}
 
           <PremiumButton
             variant="secondary"

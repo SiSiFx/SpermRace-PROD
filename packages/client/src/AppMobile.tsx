@@ -174,9 +174,9 @@ function AppInner() {
         /* Neon-Biological styles are in mobile-neon.css */
       `}</style>
       <OrientationWarning />
-      {screen !== "game" && screen !== "practice" && screen !== "practice-solo" && screen !== "landing" && screen !== "welcome" && (
+      {screen !== "game" && screen !== "practice" && screen !== "practice-solo" && screen !== "welcome" && (
         <>
-          <HeaderWallet screen={screen} wsState={wsState} publicKey={publicKey} />
+          {screen !== "landing" && <HeaderWallet screen={screen} wsState={wsState} publicKey={publicKey} />}
           <button className="mobile-bio-help" onClick={() => setShowHowTo(true)} aria-label="How to play">
             <Question size={20} weight="bold" aria-hidden="true" />
           </button>
@@ -224,7 +224,13 @@ function AppInner() {
       )}
       {screen === 'lobby' && <PremiumLobbyScreen onStart={() => setScreen('game')} onBack={() => setScreen('landing')} />}
       {screen === 'game' && <Game onEnd={() => setScreen('results')} onRestart={() => setScreen('game')} />}
-      {screen === 'results' && <PremiumResultsScreen onPlayAgain={() => setScreen('practice-solo')} onChangeTier={() => setScreen('landing')} />}
+      {screen === 'results' && (
+        <PremiumResultsScreen
+          onPlayAgain={() => setScreen('practice-solo')}
+          onChangeTier={() => setScreen('landing')}
+          onMultiplayer={() => setScreen('practice')}
+        />
+      )}
 
       {toast && <div className="mobile-bio-toast">{toast}</div>}
       {showHowTo && (
@@ -262,10 +268,10 @@ const TournamentModesScreen = memo(function TournamentModesScreen({ onSelect, on
   const [preflightError, setPreflightError] = useState<boolean>(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const tiers = [
-    { name: 'MICRO', usd: 1, max: 16, prize: 10, popular: true, desc: 'Perfect for beginners' },
-    { name: 'NANO', usd: 5, max: 32, prize: 50, popular: false, desc: 'Most competitive' },
-    { name: 'MEGA', usd: 25, max: 32, prize: 250, popular: false, desc: 'High stakes action' },
-    { name: 'ELITE', usd: 100, max: 16, prize: 1000, popular: false, desc: 'Ultimate challenge' },
+    { name: 'CHALLENGER', usd: 1, max: 16, prize: 10, popular: true, desc: 'Perfect for beginners' },
+    { name: 'COMPETITOR', usd: 5, max: 32, prize: 50, popular: false, desc: 'Most competitive' },
+    { name: 'CONTENDER', usd: 25, max: 32, prize: 250, popular: false, desc: 'High stakes action' },
+    { name: 'CHAMPION', usd: 100, max: 16, prize: 1000, popular: false, desc: 'Ultimate challenge' },
   ];
   const selected = tiers[selectedIndex];
   const isDisabled = preflightError || wsState.phase === 'connecting' || wsState.phase === 'authenticating';

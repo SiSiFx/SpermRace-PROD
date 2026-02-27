@@ -101,8 +101,6 @@ export const PremiumLandingScreen = memo(function PremiumLandingScreen({
 }: PremiumLandingScreenProps) {
   const [selectedTier, setSelectedTier] = useState(0);
   const [isLoaded, setIsLoaded] = useState(false);
-  const [playersOnline, setPlayersOnline] = useState(47);
-  const [gamesToday, setGamesToday] = useState(128);
   const artCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const selected = TIERS[selectedTier];
@@ -110,15 +108,6 @@ export const PremiumLandingScreen = memo(function PremiumLandingScreen({
   useEffect(() => {
     const timer = setTimeout(() => setIsLoaded(true), 80);
     return () => clearTimeout(timer);
-  }, []);
-
-  // Simulate live stats fluctuation
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setPlayersOnline((prev) => Math.max(20, prev + Math.floor(Math.random() * 7) - 3));
-      setGamesToday((prev) => prev + (Math.random() > 0.7 ? 1 : 0));
-    }, 3000);
-    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -191,18 +180,20 @@ export const PremiumLandingScreen = memo(function PremiumLandingScreen({
             <span className="title-gradient">ROYALE</span>
           </h1>
           <p className="landing-subtitle">
-            Win <span className="highlight">10x</span> Your Entry
+            Battle Royale · Last Sperm Standing
           </p>
 
-          {/* Live Stats */}
+          {/* Static Trust Tagline */}
           <motion.div
             className="live-stats"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3, ...springHero }}
           >
-            <LiveCounter count={playersOnline} label="Playing Now" icon={Users} />
-            <LiveCounter count={gamesToday} label="Games Today" icon={Lightning} />
+            <div className="trust-badge" style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
+              <ShieldCheck size={14} weight="fill" />
+              <span>On-chain verified · Instant SOL payouts</span>
+            </div>
           </motion.div>
         </motion.div>
 
@@ -243,6 +234,20 @@ export const PremiumLandingScreen = memo(function PremiumLandingScreen({
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.4, ...springHero }}
       >
+        {/* Secondary Action - Practice (shown first) */}
+        {onPractice && (
+          <motion.button
+            className="practice-btn"
+            onClick={onPractice}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            style={{ marginBottom: '12px' }}
+          >
+            <Lightning weight="fill" size={18} />
+            <span>Practice Free</span>
+          </motion.button>
+        )}
+
         {/* Prize Display */}
         <div className="prize-cta-row">
           <div className="prize-display">
@@ -266,22 +271,9 @@ export const PremiumLandingScreen = memo(function PremiumLandingScreen({
             } as React.CSSProperties}
           >
             <Coin weight="fill" size={20} />
-            <span>Join ${selected.usd}</span>
+            <span>Enter Tournament — ${selected.usd}</span>
           </motion.button>
         </div>
-
-        {/* Secondary Action */}
-        {onPractice && (
-          <motion.button
-            className="practice-btn"
-            onClick={onPractice}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-          >
-            <Lightning weight="fill" size={18} />
-            <span>Practice Free</span>
-          </motion.button>
-        )}
 
         {/* Trust Badges */}
         <div className="trust-badges">

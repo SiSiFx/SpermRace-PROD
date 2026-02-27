@@ -19,6 +19,10 @@ export const MobileTouchControls = memo(function MobileTouchControls({ onTouch, 
   const [joystickActive, setJoystickActive] = useState(false);
   const [joystickPosition, setJoystickPosition] = useState({ x: 0, y: 0 });
   const [controlsScale, setControlsScale] = useState(() => getMobileControlsScale());
+  // Ghost hint: hide after first touch ever
+  const [hasEverTouched, setHasEverTouched] = useState(() => {
+    try { return localStorage.getItem('sr_joystick_hint_seen') === '1'; } catch { return false; }
+  });
 
   const joystickStart = useRef<TouchPosition>({ x: 0, y: 0 });
   const joystickCurrent = useRef<TouchPosition>({ x: 0, y: 0 });
@@ -88,6 +92,12 @@ export const MobileTouchControls = memo(function MobileTouchControls({ onTouch, 
       joystickStart.current = { x: centerX, y: centerY };
       joystickCurrent.current = { x: joystickTouch.clientX, y: joystickTouch.clientY };
       setJoystickActive(true);
+
+      // Hide ghost hint permanently after first touch
+      if (!hasEverTouched) {
+        setHasEverTouched(true);
+        try { localStorage.setItem('sr_joystick_hint_seen', '1'); } catch {}
+      }
 
       // Instant feedback
       try { navigator.vibrate?.(5); } catch {}
@@ -203,6 +213,63 @@ export const MobileTouchControls = memo(function MobileTouchControls({ onTouch, 
           touchAction: 'none'
         }}
       />
+
+      {/* Ghost joystick hint — shown until first touch */}
+      {!hasEverTouched && !joystickActive && (
+        <div
+          style={{
+            position: 'fixed',
+            left: '22%',
+            bottom: '28%',
+            transform: 'translate(-50%, 50%)',
+            pointerEvents: 'none',
+            zIndex: 14,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <style>{`
+            @keyframes ghostPulse {
+              0%, 100% { opacity: 0.35; transform: scale(1); }
+              50%       { opacity: 0.6;  transform: scale(1.06); }
+            }
+          `}</style>
+          {/* Ghost base ring */}
+          <div style={{
+            width: 80,
+            height: 80,
+            borderRadius: '50%',
+            border: '2px solid rgba(34,211,238,0.5)',
+            background: 'rgba(34,211,238,0.06)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            animation: 'ghostPulse 2s ease-in-out infinite',
+          }}>
+            {/* Ghost stick */}
+            <div style={{
+              width: 32,
+              height: 32,
+              borderRadius: '50%',
+              background: 'rgba(34,211,238,0.25)',
+              border: '2px solid rgba(34,211,238,0.5)',
+            }} />
+          </div>
+          <div style={{
+            fontSize: 10,
+            color: 'rgba(34,211,238,0.7)',
+            letterSpacing: 1,
+            textTransform: 'uppercase',
+            fontWeight: 700,
+            textAlign: 'center',
+            lineHeight: 1.3,
+          }}>
+            DRAG TO<br />STEER
+          </div>
+        </div>
+      )}
 
       {joystickActive && (
         <div

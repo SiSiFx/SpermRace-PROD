@@ -159,6 +159,46 @@ export const DeathScreen = memo(function DeathScreen({
               <span className="death-killer-name">{killerText}</span>
             </motion.div>
 
+            {/* Death cause tip */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.55 }}
+              style={{
+                margin: '8px 0 12px',
+                padding: '8px 12px',
+                borderRadius: 10,
+                background: ownTrail
+                  ? 'rgba(251,191,36,0.08)'
+                  : killerName
+                    ? 'rgba(239,68,68,0.08)'
+                    : 'rgba(239,68,68,0.08)',
+                border: ownTrail
+                  ? '1px solid rgba(251,191,36,0.3)'
+                  : '1px solid rgba(239,68,68,0.3)',
+                fontSize: 12,
+                lineHeight: 1.5,
+                color: ownTrail ? 'rgba(251,191,36,0.9)' : 'rgba(252,165,165,0.9)',
+              }}
+            >
+              {ownTrail ? (
+                <>
+                  <strong>You hit your own trail.</strong>{' '}
+                  Your trail is deadly after 2 seconds. Keep turning to avoid it.
+                </>
+              ) : killerName ? (
+                <>
+                  <strong>{killerName} cut you off.</strong>{' '}
+                  Try to stay away from enemy trails and cut them off instead.
+                </>
+              ) : (
+                <>
+                  <strong>Zone eliminated you.</strong>{' '}
+                  Watch for the red border flash — it warns you 1.5s before the wall moves.
+                </>
+              )}
+            </motion.div>
+
             {/* Stats */}
             <div className="death-stats">
               <DeathStat label="KILLS" value={kills.toString()} icon={<Sword weight="fill" />} delay={0.6} />

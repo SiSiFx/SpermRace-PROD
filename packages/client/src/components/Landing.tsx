@@ -29,7 +29,7 @@ export function Landing({ solPrice, onPractice, onWallet, onLeaderboard }: Landi
   // Auto-rotate features
   useEffect(() => {
     const interval = setInterval(() => {
-      setActiveFeature((prev) => (prev + 1) % 4);
+      setActiveFeature((prev) => (prev + 1) % 3);
     }, 3000);
     return () => clearInterval(interval);
   }, []);
@@ -38,7 +38,7 @@ export function Landing({ solPrice, onPractice, onWallet, onLeaderboard }: Landi
     {
       icon: '⚡',
       title: 'INSTANT ACTION',
-      desc: '30-second matches. No waiting.',
+      desc: '60–90 second matches. No waiting.',
       color: '#00ffff',
     },
     {
@@ -52,12 +52,6 @@ export function Landing({ solPrice, onPractice, onWallet, onLeaderboard }: Landi
       title: 'WIN CRYPTO',
       desc: '85% prize pools. Instant SOL payouts.',
       color: '#ffd700',
-    },
-    {
-      icon: '🎮',
-      title: '3 CLASSES',
-      desc: 'Sprinter, Tank, or Balanced. Your style.',
-      color: '#bf00ff',
     },
   ];
 
@@ -158,7 +152,7 @@ export function Landing({ solPrice, onPractice, onWallet, onLeaderboard }: Landi
 
       {/* How to Play */}
       <section className="howto">
-        <h2 className="section-title">CONTROLS</h2>
+        <h2 className="section-title">HOW TO PLAY</h2>
         <div className="howto-grid">
           <div className="howto-card">
             <div className="howto-icon">{isMobile ? '👆' : '🖱️'}</div>
