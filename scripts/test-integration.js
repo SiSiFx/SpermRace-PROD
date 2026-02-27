@@ -2,8 +2,10 @@
 const http = require('http');
 let WebSocket;
 try { WebSocket = require('ws'); } catch {
-  console.error('❌ Missing dependency: ws');
-  process.exit(1);
+  try { WebSocket = require('../packages/server/node_modules/ws'); } catch {
+    console.error('❌ Missing dependency: ws');
+    process.exit(1);
+  }
 }
 
 const BASE = process.env.TEST_BASE || 'http://localhost:8080';

@@ -1,0 +1,216 @@
+/**
+ * SpermRace Leaderboard - Taste-Skill Compliant
+ *
+ * DESIGN_VARIANCE: 8 (Liquid glass overlay)
+ * MOTION_INTENSITY: 6 (Layout animations)
+ * VISUAL_DENSITY: 4 (Compact overlay)
+ */
+
+@import '../../styles/premium-theme.css';
+
+/* =========================================
+   CONTAINER
+   ========================================= */
+
+.leaderboard {
+  position: fixed;
+  top: 80px;
+  left: 20px;
+  width: 180px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(34, 211, 238, 0.3);
+  border-radius: 12px;
+  padding: 12px;
+  z-index: 1000;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* =========================================
+   HEADER
+   ========================================= */
+
+.leaderboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.leaderboard-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-cyan);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.leaderboard-alive {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-green);
+}
+
+/* =========================================
+   LIST
+   ========================================= */
+
+.leaderboard-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 280px;
+  overflow-y: auto;
+  /* Hide scrollbar */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.leaderboard-list::-webkit-scrollbar {
+  display: none;
+}
+
+/* =========================================
+   ROW
+   ========================================= */
+
+.leaderboard-row {
+  display: grid;
+  grid-template-columns: 20px 8px 14px 1fr 20px;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Player row highlight */
+.leaderboard-row.player {
+  background: rgba(34, 211, 238, 0.12);
+  border-color: rgba(34, 211, 238, 0.25);
+}
+
+/* Dead row style */
+.leaderboard-row.dead {
+  opacity: 0.5;
+  background: rgba(220, 38, 38, 0.08);
+}
+
+.leaderboard-row.dead .leaderboard-name {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+/* Rank */
+.leaderboard-rank {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.leaderboard-row.player .leaderboard-rank {
+  color: var(--accent-cyan);
+}
+
+/* Color indicator */
+.leaderboard-color {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  justify-self: center;
+}
+
+/* Class icon */
+.leaderboard-class {
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+  opacity: 0.8;
+}
+
+.leaderboard-class-balanced {
+  color: var(--accent-cyan);
+}
+
+.leaderboard-class-sprinter {
+  color: #fbbf24;
+}
+
+.leaderboard-class-tank {
+  color: var(--accent-red);
+}
+
+/* Name */
+.leaderboard-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leaderboard-row.player .leaderboard-name {
+  color: var(--accent-cyan);
+}
+
+/* Kills */
+.leaderboard-kills {
+  font-size: 11px;
+  font-weight: 700;
+  color: #fbbf24;
+  text-align: center;
+}
+
+/* Placement (for eliminated players) */
+.leaderboard-placement {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--accent-red);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* =========================================
+   MOBILE
+   ========================================= */
+
+@media (max-width: 768px) {
+  .leaderboard {
+    top: auto;
+    bottom: 100px;
+    left: 10px;
+    width: 150px;
+    padding: 10px;
+  }
+
+  .leaderboard-row {
+    grid-template-columns: 16px 6px 12px 1fr 16px;
+    gap: 4px;
+    padding: 5px 6px;
+  }
+
+  .leaderboard-class {
+    font-size: 8px;
+  }
+
+  .leaderboard-name {
+    font-size: 10px;
+  }
+
+  .leaderboard-rank,
+  .leaderboard-kills {
+    font-size: 9px;
+  }
+}

@@ -1,0 +1,457 @@
+/* HERO SECTION REDESIGN - MASSIVE NEON GLOWS & GLITCH EFFECTS */
+
+/* ========== HERO CONTAINER ========== */
+#landing-screen {
+  position: relative;
+  overflow: hidden;
+}
+
+.landing-container {
+  position: relative;
+  z-index: 2;
+}
+
+/* ========== MASSIVE NEON BACKGROUND GLOWS ========== */
+.hero-neon-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 120vw;
+  height: 120vw;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0;
+  animation: neonGlowEntry 2s ease-out forwards;
+}
+
+.hero-neon-glow::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle, rgba(0, 240, 255, 0.15) 0%, rgba(168, 85, 247, 0.08) 30%, transparent 70%);
+  filter: blur(60px);
+  animation: neonGlowPulse 4s ease-in-out infinite;
+}
+
+.hero-neon-glow::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 60%;
+  height: 60%;
+  background: radial-gradient(circle, rgba(0, 240, 255, 0.1) 0%, transparent 60%);
+  filter: blur(40px);
+  animation: neonGlowPulse 3s ease-in-out infinite 0.5s;
+}
+
+/* Secondary neon glow - purple accent */
+.hero-neon-glow-secondary {
+  position: absolute;
+  top: 30%;
+  right: -20%;
+  width: 80vw;
+  height: 80vw;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0;
+  animation: neonGlowEntry 2.5s ease-out 0.3s forwards;
+}
+
+.hero-neon-glow-secondary::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle, rgba(168, 85, 247, 0.12) 0%, rgba(245, 158, 11, 0.06) 40%, transparent 70%);
+  filter: blur(80px);
+  animation: neonGlowPulse 5s ease-in-out infinite 1s;
+}
+
+/* ========== ANIMATIONS ========== */
+@keyframes neonGlowEntry {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.5);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes neonGlowPulse {
+  0%, 100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: translate(-50%, -50%) scale(1.1);
+  }
+}
+
+/* ========== HERO TITLE GLITCH EFFECT ========== */
+.brand-title {
+  position: relative;
+  display: inline-block;
+  animation: glitchEntry 1.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) both,
+             textFlicker 4s ease-in-out infinite 2s;
+  text-shadow:
+    0 0 10px rgba(0, 240, 255, 0.8),
+    0 0 20px rgba(0, 240, 255, 0.6),
+    0 0 40px rgba(0, 240, 255, 0.4),
+    0 0 80px rgba(0, 240, 255, 0.2);
+}
+
+/* Glitch layers */
+.brand-title::before,
+.brand-title::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.brand-title::before {
+  color: #ff00ff;
+  z-index: -1;
+  animation: glitch-1 2.5s infinite linear alternate-reverse;
+  clip-path: polygon(0 0, 100% 0, 100% 35%, 0 35%);
+  text-shadow:
+    -2px 0 #ff00ff,
+    2px 2px rgba(0, 240, 255, 0.5);
+}
+
+.brand-title::after {
+  color: #00ffff;
+  z-index: -2;
+  animation: glitch-2 3s infinite linear alternate-reverse;
+  clip-path: polygon(0 65%, 100% 65%, 100% 100%, 0 100%);
+  text-shadow:
+    2px 0 #00ffff,
+    -2px -2px rgba(168, 85, 247, 0.5);
+}
+
+@keyframes glitchEntry {
+  0% {
+    opacity: 0;
+    transform: translateX(-100px) skewX(-20deg);
+    filter: blur(10px);
+  }
+  20% {
+    opacity: 0;
+    transform: translateX(100px) skewX(20deg);
+    filter: blur(5px);
+  }
+  40% {
+    opacity: 1;
+    transform: translateX(-30px) skewX(-10deg);
+    filter: blur(2px);
+  }
+  60% {
+    opacity: 1;
+    transform: translateX(10px) skewX(5deg);
+    filter: blur(0px);
+  }
+  80% {
+    opacity: 1;
+    transform: translateX(-5px) skewX(-2deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) skewX(0deg);
+  }
+}
+
+@keyframes glitch-1 {
+  0%, 100% {
+    opacity: 0;
+    transform: translate(0);
+  }
+  10% {
+    opacity: 0.8;
+    transform: translate(-3px, 2px);
+  }
+  20% {
+    opacity: 0;
+    transform: translate(3px, -2px);
+  }
+  30% {
+    opacity: 0;
+    transform: translate(0);
+  }
+  40% {
+    opacity: 0.6;
+    transform: translate(-2px, 1px);
+  }
+  50% {
+    opacity: 0;
+    transform: translate(2px, -1px);
+  }
+  60%, 100% {
+    opacity: 0;
+    transform: translate(0);
+  }
+}
+
+@keyframes glitch-2 {
+  0%, 100% {
+    opacity: 0;
+    transform: translate(0);
+  }
+  15% {
+    opacity: 0;
+    transform: translate(0);
+  }
+  20% {
+    opacity: 0.7;
+    transform: translate(3px, -2px);
+  }
+  25% {
+    opacity: 0;
+    transform: translate(-3px, 2px);
+  }
+  30% {
+    opacity: 0;
+    transform: translate(0);
+  }
+  45% {
+    opacity: 0.5;
+    transform: translate(2px, -1px);
+  }
+  50% {
+    opacity: 0;
+    transform: translate(-2px, 1px);
+  }
+  55%, 100% {
+    opacity: 0;
+    transform: translate(0);
+  }
+}
+
+@keyframes textFlicker {
+  0%, 100% {
+    text-shadow:
+      0 0 10px rgba(0, 240, 255, 0.8),
+      0 0 20px rgba(0, 240, 255, 0.6),
+      0 0 40px rgba(0, 240, 255, 0.4),
+      0 0 80px rgba(0, 240, 255, 0.2);
+  }
+  5% {
+    text-shadow:
+      0 0 15px rgba(0, 240, 255, 1),
+      0 0 30px rgba(0, 240, 255, 0.8),
+      0 0 60px rgba(0, 240, 255, 0.6),
+      0 0 120px rgba(0, 240, 255, 0.4);
+  }
+  10% {
+    text-shadow:
+      0 0 8px rgba(0, 240, 255, 0.6),
+      0 0 16px rgba(0, 240, 255, 0.4),
+      0 0 32px rgba(0, 240, 255, 0.2),
+      0 0 64px rgba(0, 240, 255, 0.1);
+  }
+  15%, 100% {
+    text-shadow:
+      0 0 10px rgba(0, 240, 255, 0.8),
+      0 0 20px rgba(0, 240, 255, 0.6),
+      0 0 40px rgba(0, 240, 255, 0.4),
+      0 0 80px rgba(0, 240, 255, 0.2);
+  }
+}
+
+/* ========== HERO SUBTITLE GLITCH ========== */
+.brand-subtitle,
+.landing-container header p {
+  position: relative;
+  animation: subtitleGlitch 1s ease-out 0.5s both,
+             subtitleFlicker 3s ease-in-out infinite 2.5s;
+  text-shadow:
+    0 0 5px rgba(168, 85, 247, 0.5),
+    0 0 10px rgba(168, 85, 247, 0.3);
+}
+
+@keyframes subtitleGlitch {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+    letter-spacing: 0.5em;
+  }
+  50% {
+    opacity: 0.5;
+    transform: translateY(-5px);
+    letter-spacing: 0.4em;
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    letter-spacing: 0.3em;
+  }
+}
+
+@keyframes subtitleFlicker {
+  0%, 100% {
+    text-shadow:
+      0 0 5px rgba(168, 85, 247, 0.5),
+      0 0 10px rgba(168, 85, 247, 0.3);
+  }
+  50% {
+    text-shadow:
+      0 0 8px rgba(168, 85, 247, 0.7),
+      0 0 16px rgba(168, 85, 247, 0.5),
+      0 0 32px rgba(168, 85, 247, 0.3);
+  }
+}
+
+/* ========== SCANLINE OVERLAY ========== */
+.hero-scanlines {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.03;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.15),
+    rgba(0, 0, 0, 0.15) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+  animation: scanlineMove 8s linear infinite;
+}
+
+@keyframes scanlineMove {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(50px);
+  }
+}
+
+/* ========== PARTICLE ENHANCEMENT ========== */
+#bg-particles {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* ========== MODE CARD ENHANCEMENTS ========== */
+.mode-card {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.mode-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(0, 240, 255, 0.1),
+    transparent
+  );
+  transition: left 0.5s ease;
+  pointer-events: none;
+}
+
+.mode-card:hover::before {
+  left: 100%;
+}
+
+.mode-card:hover {
+  animation: cardGlow 2s ease-in-out infinite;
+}
+
+@keyframes cardGlow {
+  0%, 100% {
+    box-shadow:
+      0 0 20px rgba(0, 240, 255, 0.3),
+      0 16px 40px rgba(0, 0, 0, 0.9);
+  }
+  50% {
+    box-shadow:
+      0 0 40px rgba(0, 240, 255, 0.5),
+      0 20px 60px rgba(0, 240, 255, 0.2),
+      0 16px 40px rgba(0, 0, 0, 0.9);
+  }
+}
+
+/* ========== RESPONSIVE DESIGN ========== */
+@media (max-width: 768px) {
+  .hero-neon-glow,
+  .hero-neon-glow-secondary {
+    width: 150vw;
+    height: 150vw;
+  }
+
+  .brand-title {
+    animation: glitchEntryMobile 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) both,
+               textFlicker 4s ease-in-out infinite 2s;
+  }
+
+  .hero-scanlines {
+    opacity: 0.02;
+  }
+}
+
+@keyframes glitchEntryMobile {
+  0% {
+    opacity: 0;
+    transform: translateX(-50px) skewX(-15deg);
+    filter: blur(8px);
+  }
+  30% {
+    opacity: 0.5;
+    transform: translateX(30px) skewX(10deg);
+    filter: blur(3px);
+  }
+  60% {
+    opacity: 1;
+    transform: translateX(-10px) skewX(-5deg);
+    filter: blur(1px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) skewX(0deg);
+    filter: blur(0);
+  }
+}
+
+/* ========== PERFORMANCE OPTIMIZATION ========== */
+@media (prefers-reduced-motion: reduce) {
+  .brand-title,
+  .brand-subtitle,
+  .landing-container header p,
+  .hero-neon-glow,
+  .hero-neon-glow-secondary,
+  .mode-card {
+    animation: none !important;
+  }
+}

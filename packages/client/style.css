@@ -375,6 +375,31 @@ html, body {
   font-size: 14px;
 }
 
+.cta-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 26px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  background: rgba(10, 13, 20, 0.9);
+  color: rgba(226, 232, 240, 0.9);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.18s ease-out;
+}
+
+.cta-secondary:hover {
+  border-color: var(--accent);
+  color: #f9fafb;
+  background: rgba(15, 23, 42, 0.98);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.85);
+  transform: translateY(-1px);
+}
+
 .live-sol-price {
   margin-top: 10px;
   font-size: 0.9rem;

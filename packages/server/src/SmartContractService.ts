@@ -85,10 +85,13 @@ export class SmartContractService {
   }
 
   private async fetchSolPriceUsd(): Promise<number> {
+    const override = Number(process.env.SOL_PRICE_USD_OVERRIDE);
+    if (Number.isFinite(override) && override > 0) return override;
+
     // Prefer unified server price endpoint first, then fall back to public sources
     const port = process.env.PORT || '8080';
-    const override = process.env.INTERNAL_PRICE_URL; // e.g., http://127.0.0.1:8080/api/sol-price
-    const internalUrl = override || `http://127.0.0.1:${port}/api/sol-price`;
+    const overrideUrl = process.env.INTERNAL_PRICE_URL; // e.g., http://127.0.0.1:8080/api/sol-price
+    const internalUrl = overrideUrl || `http://127.0.0.1:${port}/api/sol-price`;
     const tryFetch = async (url: string, pick: (j: any) => number | null): Promise<number | null> => {
       try {
         const ctrl = new AbortController();

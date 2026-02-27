@@ -1,32 +1,15 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# skidr.io Production Deployment Script
-# This script sets up the environment for production deployment
+set -euo pipefail
 
-echo "🚀 Setting up skidr.io for production deployment..."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$SCRIPT_DIR"
+CANONICAL_DEPLOY_SCRIPT="$REPO_ROOT/scripts/deploy-vps.sh"
 
-# Note: All configuration is centralized in packages/server/src/game.config.ts
-# No environment files are needed - everything is hardcoded for simplicity
+if [ ! -x "$CANONICAL_DEPLOY_SCRIPT" ]; then
+  echo "[deploy] missing canonical deploy script: $CANONICAL_DEPLOY_SCRIPT" >&2
+  exit 1
+fi
 
-echo "✅ Production environment ready!"
-echo ""
-echo "📋 Configuration System:"
-echo "   - All settings are in packages/server/src/game.config.ts"
-echo "   - No .env files needed - everything is hardcoded"
-echo "   - Edit game.config.ts to modify any settings"
-echo ""
-echo "🔒 Production Features:"
-echo "   - Debug features disabled for performance"
-echo "   - Security features enabled"
-echo "   - Bot testing available but controlled"
-echo "   - Performance monitoring disabled"
-echo ""
-echo "🚀 To start production:"
-echo "  pnpm build         # Build client for production"
-echo "  pnpm start         # Start production server"
-echo ""
-echo "📝 To modify production settings:"
-echo "  Edit packages/server/src/game.config.ts"
-echo "  Set features.debug = false"
-echo "  Set features.performanceMonitoring = false"
-echo "  Restart server to apply changes" 
+echo "[deploy] forwarding to canonical deploy path: scripts/deploy-vps.sh"
+exec "$CANONICAL_DEPLOY_SCRIPT" production

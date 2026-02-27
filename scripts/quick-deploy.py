@@ -6,26 +6,27 @@ Non-interactive version for testing
 import os
 import sys
 
-# VPS Configuration
-VPS_IP = "93.180.133.94"
-VPS_USER = "root"
-VPS_PASSWORD = "yELys6TZvJzT!"
+# VPS configuration (env-driven; no hardcoded secrets)
+VPS_IP = os.environ.get("VPS_IP")
+VPS_USER = os.environ.get("VPS_USER", "root")
+VPS_PASSWORD = os.environ.get("VPS_PASSWORD")
 
-# Paths
-BASE_DIR = r"C:\Users\SISI\Documents\skidr.io fork"
-TARBALL_LOCAL = os.path.join(BASE_DIR, "spermrace-deploy.tar.gz")
-DEPLOY_SCRIPT_LOCAL = os.path.join(BASE_DIR, "scripts", "deploy-from-root.sh")
+# Paths (repo‑relative defaults; override via env)
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
+TARBALL_LOCAL = os.environ.get("TARBALL_LOCAL", os.path.join(REPO_ROOT, "spermrace-deploy.tar.gz"))
+DEPLOY_SCRIPT_LOCAL = os.environ.get("DEPLOY_SCRIPT_LOCAL", os.path.join(REPO_ROOT, "scripts", "deploy-from-root.sh"))
 
 TARBALL_REMOTE = "/tmp/spermrace-deploy.tar.gz"
 DEPLOY_SCRIPT_REMOTE = "/tmp/deploy-from-root.sh"
 
-# Default configuration (will prompt if you want)
-DEFAULT_DOMAIN = "spermrace.io"
-DEFAULT_EMAIL = "admin@spermrace.io"
-DEFAULT_SOLANA_RPC = "https://api.devnet.solana.com"  # Using devnet for testing
-DEFAULT_PRIZE_WALLET = "11111111111111111111111111111111"  # Placeholder
-DEFAULT_PRIZE_SECRET = "dummy-secret-for-testing"  # Placeholder
-DEFAULT_VERCEL_ORIGIN = ""
+# Default configuration (safe placeholders; override via env)
+DEFAULT_DOMAIN = os.environ.get("DEPLOY_DOMAIN", "example.com")
+DEFAULT_EMAIL = os.environ.get("DEPLOY_EMAIL", "admin@example.com")
+DEFAULT_SOLANA_RPC = os.environ.get("SOLANA_RPC_ENDPOINT", "https://api.devnet.solana.com")
+DEFAULT_PRIZE_WALLET = os.environ.get("PRIZE_POOL_WALLET", "REPLACE_WITH_PUBLIC_KEY")
+DEFAULT_PRIZE_SECRET = os.environ.get("PRIZE_POOL_SECRET_KEY", "REPLACE_WITH_SECRET_MANAGER_VALUE")
+DEFAULT_VERCEL_ORIGIN = os.environ.get("VERCEL_ORIGIN", "")
 
 def print_header(text):
     print("\n" + "=" * 70)
@@ -34,6 +35,11 @@ def print_header(text):
 
 def main():
     print_header("SpermRace.io - Quick VPS Deployment")
+
+    # Validate configuration
+    if not VPS_IP or not VPS_PASSWORD:
+        print("❌ ERROR: Set VPS_IP and VPS_PASSWORD in environment (no secrets in code).")
+        sys.exit(1)
 
     # Check dependencies
     try:

@@ -1,7 +1,10 @@
 // @ts-nocheck
 import * as PIXI from 'pixi.js';
+import GameEffects from './GameEffects';
 import { startSpermBackground, stopSpermBackground } from './spermBackground';
 import type { PlayerInput, GameStateUpdateMessage, TrailPoint } from 'shared';
+import { TRAIL } from 'shared';
+import { INPUT } from 'shared/constants';
 import { VersionedTransaction, Connection } from '@solana/web3.js';
 import bs58 from 'bs58';
 
@@ -60,11 +63,17 @@ const PRICE_API_URL = (import.meta as any).env?.VITE_PRICE_API_URL || '/api/sol-
 
 type PlayerRenderGroup = {
   container: PIXI.Container;
-  sperm: PIXI.Graphics;
-  trail: PIXI.Graphics;
-  trailGlow: PIXI.Graphics;
+  // Sperm body rendered as a textured sprite (tinted per-player)
+  sperm: PIXI.Sprite;
+  // Trails rendered as MeshRope instances for GPU-accelerated ribbons
+  trail: any;
+  trailGlow: any;
   boostGlow: PIXI.Graphics;
 };
+const TRAIL_SEGMENTS = 32;
+let spermTexture: PIXI.Texture | null = null;
+let spermAnchor: PIXI.Point | null = null;
+let trailTexture: PIXI.Texture | null = null;
 const playerGroups: Map<string, PlayerRenderGroup> = new Map();
 const playerInput: PlayerInput = {
   target: { x: 3000, y: 2000 }, // Start at center of map
@@ -85,6 +94,16 @@ let cachedWorldSize: { w: number; h: number } | null = null;
 type Puff = { g: PIXI.Graphics; vx: number; vy: number; life: number; maxLife: number };
 let exhaustPuffs: Puff[] = [];
 let screenLayer: PIXI.Container;
+let dangerTexture: PIXI.Texture | null = null;
+let dangerTop: PIXI.TilingSprite | null = null;
+let dangerBottom: PIXI.TilingSprite | null = null;
+let dangerLeft: PIXI.TilingSprite | null = null;
+let dangerRight: PIXI.TilingSprite | null = null;
+let arenaBorder: PIXI.Graphics | null = null;
+let arenaGrid: PIXI.Graphics | null = null;
+let lastWorldWidth: number | null = null;
+let zoneWarningTriggered = false;
+let gameEffects: GameEffects | null = null;
 // Camera zoom state
 let cameraZoom = 1.0;
 let targetZoom = 1.0;
@@ -94,6 +113,17 @@ let flashRect: PIXI.Graphics | null = null;
 let latestServerTimestamp = 0;
 let matchTimerStartMs: number | null = null;
 let gotGameStarting = false;
+let lastHeartbeatVibrationAt = 0;
+
+// Smooth position correction for local player
+type SmoothCorrection = {
+  currentPos: { x: number; y: number };
+  targetPos: { x: number; y: number };
+  startTime: number;
+  duration: number;
+};
+const smoothCorrections: Map<string, SmoothCorrection> = new Map();
+const CORRECTION_DURATION_MS = 100;
 
 // Simple SFX via Web Audio API
 let audioCtx: AudioContext | null = null;
@@ -126,12 +156,121 @@ const sfx = {
 
 type Snapshot = { time: number; state: GameStateUpdateMessage['payload'] };
 const snapshots: Snapshot[] = [];
-let INTERPOLATION_DELAY_MS = 80; // Reduced for more responsive movement
+let INTERPOLATION_DELAY_MS = 50; // Reduced to 50ms for better responsiveness with 60fps input
+
+// Trail interpolation cache for smooth rendering
+interface TrailCache {
+  trail: TrailPoint[];
+  timestamp: number;
+}
+const trailCache: Map<string, TrailCache> = new Map();
 
 function bufferSnapshot(state: GameStateUpdateMessage['payload']): void {
   // Use server timestamp for consistent interpolation
   snapshots.push({ time: state.timestamp, state });
   if (snapshots.length > 120) snapshots.shift();
+}
+
+/**
+ * Interpolate between two trail arrays based on parameter t (0-1).
+ * Creates smooth transitions between snapshots by blending trail points.
+ */
+function interpolateTrails(
+  fromTrail: TrailPoint[] | undefined,
+  toTrail: TrailPoint[] | undefined,
+  t: number,
+  timestamp: number
+): TrailPoint[] {
+  // If no trails in either snapshot, return empty
+  if (!toTrail || toTrail.length === 0) return [];
+  if (!fromTrail || fromTrail.length === 0) return toTrail;
+
+  // Filter out expired points from both trails
+  const now = timestamp;
+  const validFrom = fromTrail.filter(p => p.expiresAt > now);
+  const validTo = toTrail.filter(p => p.expiresAt > now);
+
+  if (validTo.length === 0) return [];
+
+  // For very short trails or near endpoints, just return the target
+  if (validTo.length <= 2 || t >= 0.95) return validTo;
+
+  // Build interpolated trail by sampling and blending
+  const result: TrailPoint[] = [];
+  const maxLength = Math.max(validFrom.length, validTo.length);
+
+  // Sample points at regular intervals
+  const sampleCount = Math.min(maxLength, 64); // Limit for performance
+  for (let i = 0; i < sampleCount; i++) {
+    const normPos = i / (sampleCount - 1); // 0 to 1 along trail
+
+    // Find corresponding points in both trails (from tail to head)
+    const fromIdx = Math.floor(normPos * (validFrom.length - 1));
+    const toIdx = Math.floor(normPos * (validTo.length - 1));
+
+    const fromPoint = validFrom[fromIdx];
+    const toPoint = validTo[toIdx];
+
+    if (!toPoint) continue;
+
+    // Interpolate position
+    const ix = fromPoint ? fromPoint.x + (toPoint.x - fromPoint.x) * t : toPoint.x;
+    const iy = fromPoint ? fromPoint.y + (toPoint.y - fromPoint.y) * t : toPoint.y;
+
+    // Use expiration from target trail (authoritative)
+    const interpolatedPoint: TrailPoint = {
+      x: ix,
+      y: iy,
+      expiresAt: toPoint.expiresAt,
+      createdAt: toPoint.createdAt
+    };
+
+    result.push(interpolatedPoint);
+  }
+
+  return result;
+}
+
+/**
+ * Get interpolated trail for a player, using cached trails for smoothness.
+ */
+function getInterpolatedTrail(
+  playerId: string,
+  leftSnapshot: Snapshot,
+  rightSnapshot: Snapshot,
+  t: number,
+  timestamp: number
+): TrailPoint[] {
+  // Check cache first
+  const cached = trailCache.get(playerId);
+  if (cached && cached.timestamp === timestamp) {
+    return cached.trail;
+  }
+
+  // Get trails from both snapshots
+  const leftPlayer = leftSnapshot.state.players.find(p => p.id === playerId);
+  const rightPlayer = rightSnapshot.state.players.find(p => p.id === playerId);
+
+  const fromTrail = leftPlayer?.trail;
+  const toTrail = rightPlayer?.trail;
+
+  // Interpolate
+  const interpolated = interpolateTrails(fromTrail, toTrail, t, timestamp);
+
+  // Cache result
+  trailCache.set(playerId, { trail: interpolated, timestamp });
+
+  // Clean old cache entries periodically
+  if (trailCache.size > 32) {
+    const oldestTimestamp = timestamp - 5000; // 5 seconds old
+    for (const [id, entry] of trailCache) {
+      if (entry.timestamp < oldestTimestamp) {
+        trailCache.delete(id);
+      }
+    }
+  }
+
+  return interpolated;
 }
 
 function startInterpolatedRender(): void {
@@ -151,14 +290,14 @@ function startInterpolatedRender(): void {
     const span = Math.max(1, right.time - left.time);
     const t = Math.min(1, Math.max(0, (target - left.time) / span));
 
-    // Auto-tune interpolation delay to maintain ~2–3 snapshot buffer
+    // Auto-tune interpolation delay to maintain ~1.5–2 snapshot buffer for lower latency
     if (snapshots.length >= 3) {
       let totalDelta = 0;
       for (let i = 1; i < snapshots.length; i++) totalDelta += (snapshots[i].time - snapshots[i - 1].time);
       const avgDelta = totalDelta / (snapshots.length - 1);
-      const desiredBacklog = 2.0; // Reduced for lower latency
-      const desiredDelay = Math.max(50, Math.min(180, avgDelta * desiredBacklog));
-      INTERPOLATION_DELAY_MS += (desiredDelay - INTERPOLATION_DELAY_MS) * 0.08; // Faster adaptation
+      const desiredBacklog = 1.5; // Target lower backlog for minimal latency
+      const desiredDelay = Math.max(30, Math.min(120, avgDelta * desiredBacklog));
+      INTERPOLATION_DELAY_MS += (desiredDelay - INTERPOLATION_DELAY_MS) * 0.1; // Faster adaptation
     }
 
     // Interpolate players
@@ -180,11 +319,15 @@ function startInterpolatedRender(): void {
       // Simple angle lerp
       let da = to.sperm.angle - from.sperm.angle; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
       const ia = from.sperm.angle + da * t;
+
+      // Interpolate trails for smooth rendering
+      const interpolatedTrail = getInterpolatedTrail(id, left, right, t, right.state.timestamp);
+
       interpPlayers.push({
         id,
         sperm: { position: { x: ix, y: iy }, velocity: to.sperm.velocity, angle: ia, angularVelocity: to.sperm.angularVelocity, color: to.sperm.color },
         isAlive: to.isAlive,
-        trail: to.trail, // draw latest trail without interpolation
+        trail: interpolatedTrail, // Use interpolated trails for smooth rendering
         status: (to as any).status,
       } as any);
     });
@@ -212,8 +355,8 @@ function startInterpolatedRender(): void {
       const maxY = 0;
       rootContainer.scale.set(s);
       rootContainer.position.set(
-        Math.max(minX, Math.min(maxX, Math.round(desiredX))),
-        Math.max(minY, Math.min(maxY, Math.round(desiredY)))
+        Math.max(minX, Math.min(maxX, desiredX)), // no rounding for smooth camera
+        Math.max(minY, Math.min(maxY, desiredY))
       );
     }
   });
@@ -627,6 +770,17 @@ async function initializeGame(): Promise<void> {
   app.stage.addChild(rootContainer);
   rootContainer.addChild(worldContainer);
   app.stage.addChild(screenLayer);
+  // Reset arena caches and VFX helpers
+  cachedWorldSize = null;
+  lastWorldWidth = null;
+  zoneWarningTriggered = false;
+  dangerTop = dangerBottom = dangerLeft = dangerRight = null;
+  arenaBorder = arenaGrid = null;
+  // Instantiate game effects for screen glitches and warnings
+  gameEffects = new GameEffects(worldContainer);
+  // Generate shared textures used by player sprites and trail ropes
+  generateSpermTexture(app);
+  generateTrailTexture(app);
   // Start smooth interpolation renderer
   startInterpolatedRender();
   
@@ -662,6 +816,11 @@ async function initializeGame(): Promise<void> {
       e.preventDefault();
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'playerInput', payload: { ...playerInput, boost: true } }));
+        try {
+          if (typeof navigator !== 'undefined' && (navigator as any).vibrate) {
+            navigator.vibrate?.(30);
+          }
+        } catch {}
       }
     }
   });
@@ -685,6 +844,11 @@ async function initializeGame(): Promise<void> {
         e.preventDefault();
         if (ws && ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: 'playerInput', payload: { ...playerInput, boost: true } }));
+          try {
+            if (typeof navigator !== 'undefined' && (navigator as any).vibrate) {
+              navigator.vibrate?.(30);
+            }
+          } catch {}
         }
         break;
       // Keyboard accelerate disabled (mouse-only)
@@ -697,12 +861,12 @@ async function initializeGame(): Promise<void> {
   // No keyboard accelerate on keyup
   
   // Start input loop
-  // Send player input at higher rate for better responsiveness
+  // Send player input at 60fps for sub-16ms response time
   setInterval(() => {
     if (ws && ws.readyState === WebSocket.OPEN && state.isInGame) {
       ws.send(JSON.stringify({ type: 'playerInput', payload: playerInput }));
     }
-  }, 33); // ~30fps input rate for smoother control
+  }, INPUT.INTERVAL_MS); // 60fps input rate for sub-16ms response time
 
 
 }
@@ -950,6 +1114,17 @@ async function handleServerMessage(event: MessageEvent): Promise<void> {
         elements.killFeed.prepend(row);
         setTimeout(() => { row.remove(); }, 5000);
       }
+
+      // Haptics: strong buzz on death, double pulse on kill
+      try {
+        if (typeof navigator !== 'undefined' && (navigator as any).vibrate) {
+          if (playerId && playerId === state.playerId) {
+            try { navigator.vibrate?.(400); } catch {}
+          } else if (eliminatorId && eliminatorId === state.playerId) {
+            try { navigator.vibrate?.([50, 30, 50]); } catch {}
+          }
+        }
+      } catch {}
         break;
     }
 
@@ -1058,6 +1233,67 @@ async function joinLobby(): Promise<void> {
 // Game Rendering
 // =================================================================================================
 
+// Pre-rendered textures for sperm bodies and trails
+function generateSpermTexture(app: PIXI.Application): void {
+  if (spermTexture) return;
+
+  const g = new PIXI.Graphics();
+
+  // Sperm head (white, to be tinted per-player)
+  g.ellipse(0, 0, 8, 4).fill({ color: 0xffffff, alpha: 1.0 });
+  g.ellipse(0, 0, 8, 4).stroke({ width: 2, color: 0xffffff, alpha: 0.4 });
+
+  // Tail (simple wavy line)
+  g.moveTo(-8, 0)
+    .lineTo(-12, -1)
+    .lineTo(-16, 1)
+    .lineTo(-20, -1)
+    .lineTo(-24, 0)
+    .lineTo(-28, 1)
+    .lineTo(-32, 0)
+    .stroke({ width: 2, color: 0xffffff, alpha: 0.9 });
+
+  // Head nucleus
+  g.circle(2, 0, 2).fill({ color: 0xffffff, alpha: 0.9 });
+
+  const bounds = g.getLocalBounds();
+  const resolution = (window.devicePixelRatio || 1) as number;
+
+  spermTexture = app.renderer.generateTexture(g, {
+    resolution,
+    region: bounds,
+  } as any);
+  spermAnchor = new PIXI.Point(
+    -bounds.x / bounds.width,
+    -bounds.y / bounds.height,
+  );
+
+  g.destroy();
+}
+
+function generateTrailTexture(app: PIXI.Application): void {
+  if (trailTexture) return;
+
+  const g = new PIXI.Graphics();
+  const length = 128;
+  const thickness = 16;
+
+  // Soft outer glow
+  g.rect(0, (thickness - 10) / 2, length, 10).fill({ color: 0xffffff, alpha: 0.25 });
+  // Bright inner core
+  g.rect(0, (thickness - 4) / 2, length, 4).fill({ color: 0xffffff, alpha: 1.0 });
+
+  const bounds = g.getLocalBounds();
+  const resolution = (window.devicePixelRatio || 1) as number;
+
+  trailTexture = app.renderer.generateTexture(g, {
+    resolution,
+    region: bounds,
+  } as any);
+
+  g.destroy();
+}
+
 function renderGame(gameState: GameStateUpdateMessage['payload']): void {
   if (!app || !state.isInGame) return;
   
@@ -1069,6 +1305,45 @@ function renderGame(gameState: GameStateUpdateMessage['payload']): void {
   
   // Draw arena boundaries
   drawArena(world);
+  // Heartbeat haptics: pulse when the nearest enemy is very close
+  try {
+    const me = players.find(p => p.id === state.playerId && p.isAlive);
+    if (me && typeof navigator !== 'undefined' && (navigator as any).vibrate) {
+      let nearest = Infinity;
+      for (const p of players) {
+        if (!p.isAlive || p.id === me.id) continue;
+        const dx = p.sperm.position.x - me.sperm.position.x;
+        const dy = p.sperm.position.y - me.sperm.position.y;
+        const d = Math.hypot(dx, dy);
+        if (d < nearest) nearest = d;
+      }
+      const now = Date.now();
+      if (nearest < 300 && (now - lastHeartbeatVibrationAt) >= 500) {
+        try { navigator.vibrate?.([5, 50]); } catch {}
+        lastHeartbeatVibrationAt = now;
+      }
+    }
+  } catch {}
+
+  // Heartbeat haptics: pulse when the nearest enemy is very close
+  try {
+    const me = players.find(p => p.id === state.playerId && p.isAlive);
+    if (me && typeof navigator !== 'undefined' && (navigator as any).vibrate) {
+      let nearest = Infinity;
+      for (const p of players) {
+        if (!p.isAlive || p.id === me.id) continue;
+        const dx = p.sperm.position.x - me.sperm.position.x;
+        const dy = p.sperm.position.y - me.sperm.position.y;
+        const d = Math.hypot(dx, dy);
+        if (d < nearest) nearest = d;
+      }
+      const now = Date.now();
+      if (nearest < 300 && (now - lastHeartbeatVibrationAt) >= 500) {
+        try { navigator.vibrate?.([5, 50]); } catch {}
+        lastHeartbeatVibrationAt = now;
+      }
+    }
+  } catch {}
   
   // Update or create player groups and trails
   for (const player of players) {
@@ -1085,6 +1360,15 @@ function renderGame(gameState: GameStateUpdateMessage['payload']): void {
       trailsLayer.removeChild(group.trailGlow);
       vfxLayer.removeChild(group.boostGlow);
       playerGroups.delete(id);
+      smoothCorrections.delete(id); // Clean up corrections
+    }
+  }
+
+  // Clean up expired smooth corrections
+  const now = performance.now();
+  for (const [id, correction] of smoothCorrections) {
+    if (now - correction.startTime > correction.duration) {
+      smoothCorrections.delete(id);
     }
   }
   
@@ -1136,106 +1420,315 @@ function renderInterpolated(gameState: GameStateUpdateMessage['payload']): void 
   renderGame(gameState);
 }
 
+// Create a cached "biohazard" danger texture used for the void outside the arena
+function createDangerTexture(_app: PIXI.Application): void {
+  if (dangerTexture) return;
+  try {
+    if (typeof document === 'undefined') {
+      dangerTexture = PIXI.Texture.WHITE;
+      return;
+    }
+    const size = 64;
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      dangerTexture = PIXI.Texture.WHITE;
+      return;
+    }
+
+    // Dark red background
+    ctx.fillStyle = '#190009';
+    ctx.fillRect(0, 0, size, size);
+
+    // Diagonal hazard stripes
+    ctx.fillStyle = '#ff2745';
+    const stripeWidth = 10;
+    for (let offset = -size; offset < size * 2; offset += stripeWidth * 2) {
+      ctx.beginPath();
+      ctx.moveTo(offset, 0);
+      ctx.lineTo(offset + stripeWidth, 0);
+      ctx.lineTo(offset + stripeWidth + size, size);
+      ctx.lineTo(offset + size, size);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    dangerTexture = PIXI.Texture.from(canvas);
+  } catch {
+    dangerTexture = PIXI.Texture.WHITE;
+  }
+}
+
 function drawArena(world: { width: number; height: number }): void {
-  // Redraw only if world size changed
-  if (cachedWorldSize && cachedWorldSize.w === world.width && cachedWorldSize.h === world.height) return;
-  arenaLayer.removeChildren();
+  if (!arenaLayer) return;
+
+  const prevWidth = cachedWorldSize?.w ?? null;
+  const worldChanged = !cachedWorldSize || cachedWorldSize.w !== world.width || cachedWorldSize.h !== world.height;
   cachedWorldSize = { w: world.width, h: world.height };
 
-  // Neon border (cyan theme)
-  const border = new PIXI.Graphics();
-  border.rect(0, 0, world.width, world.height);
-  border.stroke({ width: 3, color: 0x00d4ff, alpha: 0.95 });
-  arenaLayer.addChild(border);
+  // Detect shrink: current width smaller than previous
+  const shrinkingNow = prevWidth !== null && world.width < prevWidth;
+  lastWorldWidth = world.width;
 
-  // Neon grid lines every 200px
-  const grid = new PIXI.Graphics();
-  grid.stroke({ width: 1, color: 0x0a6ea6, alpha: 0.35 });
-  for (let x = 200; x < world.width; x += 200) {
-    grid.moveTo(x, 0); grid.lineTo(x, world.height);
+  // Danger pattern texture (cached)
+  if (!dangerTexture) {
+    createDangerTexture(app);
   }
-  for (let y = 200; y < world.height; y += 200) {
-    grid.moveTo(0, y); grid.lineTo(world.width, y);
+
+  // Lazily create void sprites and arena primitives
+  if (!dangerTop || !dangerBottom || !dangerLeft || !dangerRight) {
+    dangerTop = new PIXI.TilingSprite({ texture: dangerTexture || PIXI.Texture.WHITE, width: 1, height: 1 });
+    dangerBottom = new PIXI.TilingSprite({ texture: dangerTexture || PIXI.Texture.WHITE, width: 1, height: 1 });
+    dangerLeft = new PIXI.TilingSprite({ texture: dangerTexture || PIXI.Texture.WHITE, width: 1, height: 1 });
+    dangerRight = new PIXI.TilingSprite({ texture: dangerTexture || PIXI.Texture.WHITE, width: 1, height: 1 });
+    arenaBorder = new PIXI.Graphics();
+    arenaGrid = new PIXI.Graphics();
+    arenaLayer.addChild(dangerTop, dangerBottom, dangerLeft, dangerRight, arenaBorder, arenaGrid);
   }
-  grid.stroke({ width: 1, color: 0x0aa67a, alpha: 0.35 });
-  arenaLayer.addChild(grid);
+
+  // Layout danger "void" around the safe world rectangle
+  const pad = Math.max(800, Math.max(world.width, world.height));
+  const totalWidth = world.width + pad * 2;
+
+  if (dangerTop && dangerBottom && dangerLeft && dangerRight) {
+    // Top strip
+    dangerTop.x = -pad;
+    dangerTop.y = -pad;
+    dangerTop.width = totalWidth;
+    dangerTop.height = pad;
+
+    // Bottom strip
+    dangerBottom.x = -pad;
+    dangerBottom.y = world.height;
+    dangerBottom.width = totalWidth;
+    dangerBottom.height = pad;
+
+    // Left strip
+    dangerLeft.x = -pad;
+    dangerLeft.y = 0;
+    dangerLeft.width = pad;
+    dangerLeft.height = world.height;
+
+    // Right strip
+    dangerRight.x = world.width;
+    dangerRight.y = 0;
+    dangerRight.width = pad;
+    dangerRight.height = world.height;
+  }
+
+  // Arena border with dynamic color/alpha when shrinking
+  if (arenaBorder) {
+    arenaBorder.clear();
+    const borderColor = shrinkingNow ? 0xff4444 : 0x00d4ff;
+    const alpha = shrinkingNow
+      ? 0.5 + Math.sin(Date.now() / 200) * 0.5
+      : 0.95;
+    arenaBorder.rect(0, 0, world.width, world.height);
+    arenaBorder.stroke({ width: 3, color: borderColor, alpha });
+  }
+
+  // Grid only needs to be recomputed when size changes
+  if (arenaGrid && worldChanged) {
+    arenaGrid.clear();
+    arenaGrid.stroke({ width: 1, color: 0x0a6ea6, alpha: 0.35 });
+    for (let x = 200; x < world.width; x += 200) {
+      arenaGrid.moveTo(x, 0); arenaGrid.lineTo(x, world.height);
+    }
+    for (let y = 200; y < world.height; y += 200) {
+      arenaGrid.moveTo(0, y); arenaGrid.lineTo(world.width, y);
+    }
+    arenaGrid.stroke({ width: 1, color: 0x0aa67a, alpha: 0.35 });
+  }
+
+  // Trigger cinematic zone warning only once when shrink begins
+  if (shrinkingNow && !zoneWarningTriggered && gameEffects) {
+    try { gameEffects.showZoneWarning(1); } catch {}
+    zoneWarningTriggered = true;
+  }
 }
 
 function ensurePlayerGroup(id: string): PlayerRenderGroup {
   let group = playerGroups.get(id);
   if (group) return group;
   const container = new PIXI.Container();
-            const sperm = new PIXI.Graphics();
-  const trail = new PIXI.Graphics();
-  const trailGlow = new PIXI.Graphics();
+
+  // Ensure textures exist before creating renderers
+  if (!spermTexture || !trailTexture) {
+    generateSpermTexture(app);
+    generateTrailTexture(app);
+  }
+
+  const sperm = new PIXI.Sprite(spermTexture || PIXI.Texture.WHITE);
+  if (spermAnchor) {
+    sperm.anchor.set(spermAnchor.x, spermAnchor.y);
+  } else {
+    sperm.anchor.set(0.5);
+  }
+  container.addChild(sperm);
+
+  // Preallocate rope geometry for trails (shared points array for main + glow ropes)
+  const ropePoints: PIXI.Point[] = [];
+  for (let i = 0; i < TRAIL_SEGMENTS; i++) {
+    ropePoints.push(new PIXI.Point(0, 0));
+  }
+
+  const trail = new (PIXI as any).MeshRope(trailTexture || PIXI.Texture.WHITE, ropePoints);
+  trail.autoUpdate = true;
+
+  const trailGlow = new (PIXI as any).MeshRope(trailTexture || PIXI.Texture.WHITE, ropePoints);
+  trailGlow.autoUpdate = true;
+  trailGlow.alpha = 0;
+  trailGlow.scale.y = 1.5;
+  trailGlow.blendMode = 'add';
+
   const boostGlow = new PIXI.Graphics();
   boostGlow.blendMode = 'add';
-  container.addChild(sperm);
+
   playersLayer.addChild(container);
   trailsLayer.addChild(trail);
   trailsLayer.addChild(trailGlow);
   vfxLayer.addChild(boostGlow);
+
   group = { container, sperm, trail, trailGlow, boostGlow };
   playerGroups.set(id, group);
   return group;
 }
 
 function updatePlayerGroup(group: PlayerRenderGroup, player: GameStateUpdateMessage['payload']['players'][0]): void {
-  // Trail
-  group.trail.clear();
-  group.trailGlow.clear();
-  const trail = player.trail as TrailPoint[];
-  if (trail && trail.length > 1) {
-    const speed = Math.hypot(player.sperm.velocity.x, player.sperm.velocity.y);
-    const width = 5 + Math.min(8, speed / 70);
-    const isSelf = player.id === state.playerId;
-    const color = isSelf ? 0x00d4ff : 0xff6b6b;
-    const alpha = (player as any).status?.boosting ? 1.0 : 0.85;
-    for (let i = 0; i < trail.length; i++) {
-      const p = trail[i];
-      if (i === 0) group.trail.moveTo(p.x, p.y); else group.trail.lineTo(p.x, p.y);
+  // Trails rendered as MeshRope ribbons
+  const trailHistory = player.trail as TrailPoint[];
+  const rope = group.trail as any;
+  const glowRope = group.trailGlow as any;
+  const isSelf = player.id === state.playerId;
+  const speed = Math.hypot(player.sperm.velocity.x, player.sperm.velocity.y);
+  const color = isSelf ? 0x00d4ff : 0xff6b6b;
+  const boosting = !!(player as any).status?.boosting;
+
+  if (!trailHistory || trailHistory.length < 2 || !rope || !rope.points) {
+    if (rope) rope.visible = false;
+    if (glowRope) glowRope.visible = false;
+  } else {
+    rope.visible = true;
+    rope.tint = color;
+
+    const points = rope.points as PIXI.Point[];
+    const maxPoints = points.length;
+    const srcLen = Math.min(trailHistory.length, maxPoints);
+
+    // Get current timestamp for fade calculations
+    const now = Date.now();
+
+    // Calculate fade-out based on trail point expiration
+    // Find the earliest expiration time in the trail
+    let earliestExpiration = Infinity;
+    let latestExpiration = 0;
+    for (const point of trailHistory) {
+      if (point.expiresAt < earliestExpiration) earliestExpiration = point.expiresAt;
+      if (point.expiresAt > latestExpiration) latestExpiration = point.expiresAt;
     }
-    group.trail.stroke({ width, color, alpha, cap: 'round', join: 'round' });
-    if (isSelf && (player as any).status?.boosting) {
-      for (let i = 0; i < trail.length; i++) {
-        const p = trail[i];
-        if (i === 0) group.trailGlow.moveTo(p.x, p.y); else group.trailGlow.lineTo(p.x, p.y);
+
+    // Calculate overall trail alpha based on expiration
+    let trailAlpha = 1.0;
+    if (earliestExpiration !== Infinity) {
+      const timeUntilExpiration = earliestExpiration - now;
+      const totalLifetime = latestExpiration - earliestExpiration + TRAIL.FADE_OUT_DURATION_MS;
+
+      // Fade out starts 2 seconds before expiration
+      if (timeUntilExpiration < TRAIL.FADE_OUT_DURATION_MS) {
+        trailAlpha = Math.max(0, timeUntilExpiration / TRAIL.FADE_OUT_DURATION_MS);
       }
-      group.trailGlow.stroke({ width: width + 6, color, alpha: 0.12, cap: 'round', join: 'round' });
-      group.trailGlow.blendMode = 'add';
+    }
+
+    rope.alpha = trailAlpha;
+
+    // Sample from latest trail points backwards into the rope geometry
+    const step = (trailHistory.length - 1) / Math.max(1, srcLen - 1);
+    const offset = maxPoints - srcLen;
+    for (let i = 0; i < srcLen; i++) {
+      const srcIndex = Math.floor(i * step);
+      const src = trailHistory[trailHistory.length - 1 - srcIndex]; // newest → head
+      const p = points[offset + i];
+      p.x = src.x;
+      p.y = src.y;
+    }
+    // Extend the far tail with the oldest sampled point
+    for (let i = 0; i < offset; i++) {
+      points[i].x = points[offset].x;
+      points[i].y = points[offset].y;
+    }
+
+    // Apply lightweight sine-wave wiggle along the rope for organic motion
+    const nowTime = performance.now() * 0.004;
+    const speedFactor = 1.0 + Math.min(1.5, speed / 280);
+    for (let i = 1; i < maxPoints - 1; i++) {
+      const prev = points[i - 1];
+      const curr = points[i];
+      const dx = curr.x - prev.x;
+      const dy = curr.y - prev.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len;
+      const ny = dx / len;
+      const tNorm = i / (maxPoints - 1); // 0 at head → 1 at tail
+      const ampBase = isSelf ? 6 : 4;
+      const amp = ampBase * tNorm;
+      const wave = Math.sin(nowTime + tNorm * 5.0) * amp * speedFactor;
+      curr.x += nx * wave;
+      curr.y += ny * wave;
+    }
+
+    if (glowRope) {
+      glowRope.visible = isSelf && boosting;
+      glowRope.tint = color;
+      glowRope.alpha = boosting ? 0.22 * trailAlpha : 0;
     }
   }
 
-  // Player container/spermatozoide
-  group.container.position.set(player.sperm.position.x, player.sperm.position.y);
-  group.container.rotation = player.sperm.angle;
-  group.sperm.clear();
+  // Player container/spermatozoide - with smooth correction for local player
   const isOwnPlayer = player.id === state.playerId;
   const spermColor = isOwnPlayer ? 0x00ff88 : 0xff6b6b;
+  group.sperm.tint = spermColor;
 
-  // Sperm head (oval/round)
-  group.sperm.beginFill(spermColor);
-  group.sperm.drawEllipse(0, 0, 8, 4);
-  group.sperm.endFill();
+  // Apply smooth position correction for local player
+  let renderX = player.sperm.position.x;
+  let renderY = player.sperm.position.y;
 
-  // Sperm tail (wavy line)
-  group.sperm.lineStyle(2, spermColor, 0.9);
-  group.sperm.moveTo(-8, 0);
-  group.sperm.lineTo(-12, -1);
-  group.sperm.lineTo(-16, 1);
-  group.sperm.lineTo(-20, -1);
-  group.sperm.lineTo(-24, 0);
-  group.sperm.lineTo(-28, 1);
-  group.sperm.lineTo(-32, 0);
+  if (isOwnPlayer) {
+    const currentPos = group.container.position;
+    const dist = Math.hypot(renderX - currentPos.x, renderY - currentPos.y);
 
-  // Sperm head nucleus (smaller white circle)
-  group.sperm.beginFill(0xffffff);
-  group.sperm.drawCircle(2, 0, 2);
-  group.sperm.endFill();
+    // If position difference is significant, start smooth correction
+    if (dist > 2) {
+      const existing = smoothCorrections.get(player.id);
+      if (!existing || performance.now() - existing.startTime > existing.duration) {
+        // Start new smooth correction
+        smoothCorrections.set(player.id, {
+          currentPos: { x: currentPos.x, y: currentPos.y },
+          targetPos: { x: renderX, y: renderY },
+          startTime: performance.now(),
+          duration: CORRECTION_DURATION_MS
+        });
+      }
+    }
 
-  // Propulsion glow
+    // Apply smooth correction if active
+    const correction = smoothCorrections.get(player.id);
+    if (correction && performance.now() - correction.startTime < correction.duration) {
+      const elapsed = performance.now() - correction.startTime;
+      const t = Math.min(1, elapsed / correction.duration);
+      // Smooth easing function (ease-out)
+      const easeT = 1 - Math.pow(1 - t, 3);
+      renderX = correction.currentPos.x + (correction.targetPos.x - correction.currentPos.x) * easeT;
+      renderY = correction.currentPos.y + (correction.targetPos.y - correction.currentPos.y) * easeT;
+    }
+  }
+
+  group.container.position.set(renderX, renderY);
+  group.container.rotation = player.sperm.angle;
+
+  // Propulsion glow (small Graphics triangle behind head)
   group.boostGlow.clear();
-  if ((player as any).status?.boosting) {
+  if (boosting) {
     const hx = Math.cos(player.sperm.angle), hy = Math.sin(player.sperm.angle);
     const backX = -hx * 18, backY = -hy * 18;
     group.boostGlow.moveTo(backX, backY);

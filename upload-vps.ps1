@@ -1,12 +1,19 @@
 # Upload SpermRace.io to Turkey VPS
-$source = "C:\Users\SISI\Documents\skidr.io fork\spermrace-deploy.tar.gz"
-$destination = "root@93.180.133.94:/tmp/"
+$source = $env:TARBALL_LOCAL
+if (-not $source) { $source = Join-Path $PSScriptRoot "spermrace-deploy.tar.gz" }
+
+$vpsIP = $env:VPS_IP
+if (-not $vpsIP) { $vpsIP = "REPLACE_WITH_VPS_IP" }
+$vpsUser = $env:VPS_USER
+if (-not $vpsUser) { $vpsUser = "root" }
+
+$destination = "$vpsUser@$vpsIP:/tmp/"
 
 Write-Host "Uploading tarball to VPS..." -ForegroundColor Cyan
 Write-Host "Source: $source" -ForegroundColor Yellow
 Write-Host "Destination: $destination" -ForegroundColor Yellow
 Write-Host ""
-Write-Host "When prompted, enter password: yELys6TZvJzT!" -ForegroundColor Green
+Write-Host "When prompted, enter password (or use ssh keys)." -ForegroundColor Green
 Write-Host ""
 
 scp $source $destination

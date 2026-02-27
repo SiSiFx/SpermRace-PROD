@@ -1,0 +1,665 @@
+import Database from 'better-sqlite3';
+import { randomUUID } from 'crypto';
+
+interface Player {
+  wallet_address: string;
+  username: string | null;
+  total_games: number;
+  total_wins: number;
+  total_kills: number;
+  total_earnings: number; // lamports
+  skill_rating: number; // ELO rating
+  created_at: string;
+}
+
+interface Game {
+  game_id: string;
+  winner_wallet: string;
+  prize_lamports: number;
+  player_count: number;
+  ended_at: string;
+}
+
+type PayoutStatus = 'planned' | 'sent' | 'failed' | 'skipped';
+interface PayoutRecord {
+  round_id: string;
+  match_id: string | null;
+  lobby_id: string | null;
+  mode: string | null;
+  winner_wallet: string;
+  prize_lamports: number;
+  platform_fee_bps: number;
+  tx_signature: string | null;
+  status: PayoutStatus;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface LeaderboardEntry {
+  wallet_address: string;
+  username: string | null;
+  metric_value: number;
+  total_games: number;
+  rank?: number;
+}
+
+export class DatabaseService {
+  private db: Database.Database;
+  private leaderboardCache: {
+    wins: LeaderboardEntry[];
+    earnings: LeaderboardEntry[];
+    kills: LeaderboardEntry[];
+    skillRating: LeaderboardEntry[];
+    lastRefresh: number;
+  };
+  private readonly CACHE_TTL = 60000; // 60 seconds
+
+  constructor(dbPath: string) {
+    this.db = new Database(dbPath);
+    this.db.pragma('journal_mode = WAL'); // Better performance
+    this.initSchema();
+    
+    this.leaderboardCache = {
+      wins: [],
+      earnings: [],
+      kills: [],
+      skillRating: [],
+      lastRefresh: 0,
+    };
+
+    // Start background refresh
+    this.startCacheRefresh();
+  }
+
+  private initSchema() {
+    // Players table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS players (
+        wallet_address TEXT PRIMARY KEY,
+        username TEXT,
+        total_games INTEGER DEFAULT 0,
+        total_wins INTEGER DEFAULT 0,
+        total_kills INTEGER DEFAULT 0,
+        total_earnings INTEGER DEFAULT 0,
+        skill_rating INTEGER DEFAULT 1200,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Add skill_rating column to existing players table if it doesn't exist
+    try {
+      this.db.exec(`
+        ALTER TABLE players ADD COLUMN skill_rating INTEGER DEFAULT 1200;
+      `);
+    } catch (e) {
+      // Column already exists - ignore error
+    }
+
+    // Games table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS games (
+        game_id TEXT PRIMARY KEY,
+        winner_wallet TEXT,
+        prize_lamports INTEGER,
+        player_count INTEGER,
+        ended_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Payouts table (idempotency + ops)
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS payouts (
+        round_id TEXT PRIMARY KEY,
+        match_id TEXT,
+        lobby_id TEXT,
+        mode TEXT,
+        winner_wallet TEXT NOT NULL,
+        prize_lamports INTEGER NOT NULL,
+        platform_fee_bps INTEGER NOT NULL,
+        tx_signature TEXT,
+        status TEXT NOT NULL,
+        error TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Indexes for fast queries
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_players_wins
+        ON players(total_wins DESC, total_earnings DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_players_earnings
+        ON players(total_earnings DESC, total_wins DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_players_kills
+        ON players(total_kills DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_players_skill_rating
+        ON players(skill_rating DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_games_ended
+        ON games(ended_at DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_payouts_status
+        ON payouts(status, updated_at DESC);
+    `);
+
+    console.log('[DB] ✅ Database schema initialized');
+  }
+
+  // Ensure player exists (upsert)
+  ensurePlayer(walletAddress: string): void {
+    const stmt = this.db.prepare(`
+      INSERT INTO players (wallet_address, skill_rating)
+      VALUES (?, 1200)
+      ON CONFLICT(wallet_address) DO NOTHING
+    `);
+    stmt.run(walletAddress);
+  }
+
+  // Record game result (fire-and-forget, async)
+  recordGameResult(
+    winnerWallet: string,
+    prizeLamports: number,
+    playerCount: number,
+    playerKills: Record<string, number> // { wallet: kills }
+  ): void {
+    try {
+      const gameId = randomUUID();
+
+      // Ensure all players exist
+      for (const wallet of Object.keys(playerKills)) {
+        this.ensurePlayer(wallet);
+      }
+
+      // Insert game record
+      const gameStmt = this.db.prepare(`
+        INSERT INTO games (game_id, winner_wallet, prize_lamports, player_count)
+        VALUES (?, ?, ?, ?)
+      `);
+      gameStmt.run(gameId, winnerWallet, prizeLamports, playerCount);
+
+      // Update all participants
+      const updateStmt = this.db.prepare(`
+        UPDATE players
+        SET 
+          total_games = total_games + 1,
+          total_wins = total_wins + ?,
+          total_kills = total_kills + ?,
+          total_earnings = total_earnings + ?
+        WHERE wallet_address = ?
+      `);
+
+      for (const [wallet, kills] of Object.entries(playerKills)) {
+        const isWinner = wallet === winnerWallet ? 1 : 0;
+        const earnings = isWinner ? prizeLamports : 0;
+        updateStmt.run(isWinner, kills, earnings, wallet);
+      }
+
+      // Update skill ratings
+      this.updateSkillRatings(winnerWallet, playerKills);
+
+      console.log(`[DB] ✅ Recorded game: winner=${winnerWallet.slice(0, 8)}, prize=${prizeLamports}, players=${playerCount}`);
+    } catch (error) {
+      console.error('[DB] ❌ Failed to record game:', error);
+    }
+  }
+
+  getPayoutByRoundId(roundId: string): PayoutRecord | null {
+    const stmt = this.db.prepare(`SELECT * FROM payouts WHERE round_id = ?`);
+    return (stmt.get(roundId) as PayoutRecord | undefined) || null;
+  }
+
+  recordPayoutPlanned(input: {
+    roundId: string;
+    matchId?: string | null;
+    lobbyId?: string | null;
+    mode?: string | null;
+    winnerWallet: string;
+    prizeLamports: number;
+    platformFeeBps: number;
+  }): void {
+    const stmt = this.db.prepare(`
+      INSERT INTO payouts (
+        round_id, match_id, lobby_id, mode, winner_wallet, prize_lamports, platform_fee_bps, status, error, updated_at
+      ) VALUES (
+        @roundId, @matchId, @lobbyId, @mode, @winnerWallet, @prizeLamports, @platformFeeBps, 'planned', NULL, CURRENT_TIMESTAMP
+      )
+      ON CONFLICT(round_id) DO UPDATE SET
+        match_id=COALESCE(excluded.match_id, payouts.match_id),
+        lobby_id=COALESCE(excluded.lobby_id, payouts.lobby_id),
+        mode=COALESCE(excluded.mode, payouts.mode),
+        winner_wallet=excluded.winner_wallet,
+        prize_lamports=excluded.prize_lamports,
+        platform_fee_bps=excluded.platform_fee_bps,
+        status=CASE WHEN payouts.status='sent' THEN payouts.status ELSE 'planned' END,
+        updated_at=CURRENT_TIMESTAMP
+    `);
+    stmt.run({
+      roundId: input.roundId,
+      matchId: input.matchId ?? null,
+      lobbyId: input.lobbyId ?? null,
+      mode: input.mode ?? null,
+      winnerWallet: input.winnerWallet,
+      prizeLamports: input.prizeLamports,
+      platformFeeBps: input.platformFeeBps,
+    });
+  }
+
+  recordPayoutSent(roundId: string, txSignature: string): void {
+    const stmt = this.db.prepare(`
+      UPDATE payouts
+      SET status='sent', tx_signature=?, error=NULL, updated_at=CURRENT_TIMESTAMP
+      WHERE round_id=?
+    `);
+    stmt.run(txSignature, roundId);
+  }
+
+  recordPayoutFailed(roundId: string, error: string): void {
+    const stmt = this.db.prepare(`
+      UPDATE payouts
+      SET status='failed', error=?, updated_at=CURRENT_TIMESTAMP
+      WHERE round_id=?
+    `);
+    stmt.run(error.slice(0, 2000), roundId);
+  }
+
+  recordPayoutSkipped(roundId: string, reason: string): void {
+    const stmt = this.db.prepare(`
+      UPDATE payouts
+      SET status='skipped', error=?, updated_at=CURRENT_TIMESTAMP
+      WHERE round_id=?
+    `);
+    stmt.run(reason.slice(0, 2000), roundId);
+  }
+
+  // Get player stats
+  getPlayerStats(walletAddress: string): Player | null {
+    const stmt = this.db.prepare(`
+      SELECT * FROM players WHERE wallet_address = ?
+    `);
+    return stmt.get(walletAddress) as Player | null;
+  }
+
+  // Get top N by wins (from cache)
+  getTopWins(limit: number = 100): LeaderboardEntry[] {
+    if (Date.now() - this.leaderboardCache.lastRefresh < this.CACHE_TTL) {
+      return this.leaderboardCache.wins.slice(0, limit);
+    }
+    return this.refreshCache('wins', limit);
+  }
+
+  // Get top N by earnings (from cache)
+  getTopEarnings(limit: number = 100): LeaderboardEntry[] {
+    if (Date.now() - this.leaderboardCache.lastRefresh < this.CACHE_TTL) {
+      return this.leaderboardCache.earnings.slice(0, limit);
+    }
+    return this.refreshCache('earnings', limit);
+  }
+
+  // Get top N by kills (from cache)
+  getTopKills(limit: number = 100): LeaderboardEntry[] {
+    if (Date.now() - this.leaderboardCache.lastRefresh < this.CACHE_TTL) {
+      return this.leaderboardCache.kills.slice(0, limit);
+    }
+    return this.refreshCache('kills', limit);
+  }
+
+  // Refresh cache for specific leaderboard
+  private refreshCache(type: 'wins' | 'earnings' | 'kills' | 'skillRating', limit: number = 100): LeaderboardEntry[] {
+    const column = type === 'wins' ? 'total_wins' : type === 'earnings' ? 'total_earnings' : type === 'kills' ? 'total_kills' : 'skill_rating';
+    
+    const stmt = this.db.prepare(`
+      SELECT 
+        wallet_address,
+        username,
+        ${column} as metric_value,
+        total_games
+      FROM players
+      WHERE total_games > 0
+      ORDER BY ${column} DESC
+      LIMIT ?
+    `);
+
+    const results = stmt.all(limit) as LeaderboardEntry[];
+    
+    // Add ranks
+    results.forEach((entry, index) => {
+      entry.rank = index + 1;
+    });
+
+    this.leaderboardCache[type] = results;
+    return results;
+  }
+
+  // Background cache refresh
+  private startCacheRefresh(): void {
+    setInterval(() => {
+      try {
+        this.refreshCache('wins', 100);
+        this.refreshCache('earnings', 100);
+        this.refreshCache('kills', 100);
+        this.refreshCache('skillRating', 100);
+        this.leaderboardCache.lastRefresh = Date.now();
+        console.log('[DB] 🔄 Leaderboard cache refreshed');
+      } catch (error) {
+        console.error('[DB] ❌ Cache refresh failed:', error);
+      }
+    }, this.CACHE_TTL);
+
+    // Initial refresh
+    this.refreshCache('wins', 100);
+    this.refreshCache('earnings', 100);
+    this.refreshCache('kills', 100);
+    this.refreshCache('skillRating', 100);
+    this.leaderboardCache.lastRefresh = Date.now();
+    console.log('[DB] ✅ Cache refresh started (60s interval)');
+  }
+
+  // Get recent games
+  getRecentGames(limit: number = 20): Game[] {
+    const stmt = this.db.prepare(`
+      SELECT * FROM games
+      ORDER BY ended_at DESC
+      LIMIT ?
+    `);
+    return stmt.all(limit) as Game[];
+  }
+
+  // Update player username
+  updateUsername(walletAddress: string, username: string): boolean {
+    try {
+      this.ensurePlayer(walletAddress);
+      const stmt = this.db.prepare(`
+        UPDATE players
+        SET username = ?
+        WHERE wallet_address = ?
+      `);
+      stmt.run(username, walletAddress);
+      return true;
+    } catch (error) {
+      console.error('[DB] Failed to update username:', error);
+      return false;
+    }
+  }
+
+  // Get player ELO rating
+  getPlayerElo(walletAddress: string): number {
+    this.ensurePlayer(walletAddress);
+    const stmt = this.db.prepare(`
+      SELECT skill_rating FROM players WHERE wallet_address = ?
+    `);
+    const result = stmt.get(walletAddress) as { skill_rating: number } | undefined;
+    return result?.skill_rating ?? 1200;
+  }
+
+  // Get multiple players' ELO ratings
+  getPlayersElo(walletAddresses: string[]): Map<string, number> {
+    const eloMap = new Map<string, number>();
+    if (walletAddresses.length === 0) return eloMap;
+
+    const placeholders = walletAddresses.map(() => '?').join(',');
+    const stmt = this.db.prepare(`
+      SELECT wallet_address, skill_rating FROM players
+      WHERE wallet_address IN (${placeholders})
+    `);
+    const results = stmt.all(...walletAddresses) as Array<{ wallet_address: string; skill_rating: number }>;
+
+    for (const result of results) {
+      eloMap.set(result.wallet_address, result.skill_rating);
+    }
+
+    // Ensure all players have an ELO (default 1200 for new players)
+    for (const address of walletAddresses) {
+      if (!eloMap.has(address)) {
+        this.ensurePlayer(address);
+        eloMap.set(address, 1200);
+      }
+    }
+
+    return eloMap;
+  }
+
+  // Update player ELO rating
+  updatePlayerElo(walletAddress: string, newElo: number): void {
+    this.ensurePlayer(walletAddress);
+    const stmt = this.db.prepare(`
+      UPDATE players
+      SET skill_rating = ?
+      WHERE wallet_address = ?
+    `);
+    stmt.run(newElo, walletAddress);
+  }
+
+  // Update ELO ratings for multiple players after a match
+  updateMatchEloRatings(
+    winnerWallet: string,
+    playerWallets: string[],
+    playerRankings: string[] // ordered from winner (1st) to last place
+  ): void {
+    // Ensure all players exist
+    for (const wallet of playerWallets) {
+      this.ensurePlayer(wallet);
+    }
+
+    // Get current ELOs
+    const currentElos = this.getPlayersElo(playerWallets);
+
+    // Calculate new ELOs using a pairwise round-robin model:
+    // each player is compared against every other player based on ranking order.
+    // This keeps the system (approximately) zero-sum across the match.
+    const K_FACTOR = 32; // Standard K-factor for ELO calculations (per-player)
+    const newElos = new Map<string, number>();
+
+    const ranks = new Map<string, number>();
+    for (let i = 0; i < playerRankings.length; i++) {
+      ranks.set(playerRankings[i], i);
+    }
+
+    for (const playerWallet of playerWallets) {
+      const playerElo = currentElos.get(playerWallet) ?? 1200;
+      const playerRank = ranks.get(playerWallet) ?? (playerWallets.length - 1);
+
+      let expectedSum = 0;
+      let actualSum = 0;
+      for (const otherWallet of playerWallets) {
+        if (otherWallet === playerWallet) continue;
+        const otherElo = currentElos.get(otherWallet) ?? 1200;
+        expectedSum += this.calculateExpectedScoreVs(playerElo, otherElo);
+
+        const otherRank = ranks.get(otherWallet) ?? (playerWallets.length - 1);
+        if (playerRank < otherRank) actualSum += 1;
+        else if (playerRank === otherRank) actualSum += 0.5;
+        else actualSum += 0;
+      }
+      const denom = Math.max(1, playerWallets.length - 1);
+      const expectedAvg = expectedSum / denom;
+      const actualAvg = actualSum / denom;
+
+      const newElo = Math.round(playerElo + K_FACTOR * (actualAvg - expectedAvg));
+      newElos.set(playerWallet, newElo);
+    }
+
+    // Update all ELOs
+    for (const [wallet, elo] of newElos) {
+      this.updatePlayerElo(wallet, elo);
+    }
+
+    console.log(`[DB] ✅ Updated ELO ratings for ${playerWallets.length} players, winner: ${winnerWallet.slice(0, 8)}`);
+  }
+
+  private calculateExpectedScoreMultiPlayer(
+    playerElo: number,
+    allElos: Map<string, number>,
+    allPlayers: string[],
+    currentPlayer: string
+  ): number {
+    let expectedSum = 0;
+    for (const otherPlayer of allPlayers) {
+      if (otherPlayer === currentPlayer) continue;
+      const otherElo = allElos.get(otherPlayer) ?? 1200;
+      expectedSum += this.calculateExpectedScoreVs(playerElo, otherElo);
+    }
+    return expectedSum / (allPlayers.length - 1);
+  }
+
+  private calculateExpectedScoreVs(playerElo: number, opponentElo: number): number {
+    return 1 / (1 + Math.pow(10, (opponentElo - playerElo) / 400));
+  }
+
+  // Get total stats
+  getTotalStats(): { totalGames: number; totalPlayers: number; totalPrizes: number } {
+    const gamesStmt = this.db.prepare('SELECT COUNT(*) as count FROM games');
+    const playersStmt = this.db.prepare('SELECT COUNT(*) as count FROM players WHERE total_games > 0');
+    const prizesStmt = this.db.prepare('SELECT SUM(prize_lamports) as total FROM games');
+
+    const games = gamesStmt.get() as { count: number };
+    const players = playersStmt.get() as { count: number };
+    const prizes = prizesStmt.get() as { total: number | null };
+
+    return {
+      totalGames: games.count,
+      totalPlayers: players.count,
+      totalPrizes: prizes.total || 0,
+    };
+  }
+
+  // =================================================================================================
+  // SKILL RATING SYSTEM (ELO-based)
+  // =================================================================================================
+
+  /**
+   * Calculate expected score using ELO formula
+   * Returns a value between 0 and 1
+   */
+  private calculateExpectedScore(playerRating: number, opponentRating: number): number {
+    return 1 / (1 + Math.pow(10, (opponentRating - playerRating) / 400));
+  }
+
+  /**
+   * Get K-factor based on player experience
+   * New players get higher K-factor for faster adjustment
+   */
+  private getKFactor(totalGames: number): number {
+    if (totalGames < 10) return 60;  // New players - rapid adjustment
+    if (totalGames < 30) return 40;  // Still learning
+    if (totalGames < 100) return 25; // Established players
+    return 20;                       // Veterans - slower changes
+  }
+
+  /**
+   * Calculate new skill rating based on match outcome
+   * @param winnerRating - Winner's current rating
+   * @param winnerGames - Winner's total games played
+   * @param loserRating - Loser's current rating
+   * @param loserGames - Loser's total games played
+   * @returns Object with new ratings for winner and loser
+   */
+  calculateSkillRatingChange(
+    winnerRating: number,
+    winnerGames: number,
+    loserRating: number,
+    loserGames: number
+  ): { winnerNewRating: number; loserNewRating: number } {
+    // Calculate expected scores
+    const winnerExpected = this.calculateExpectedScore(winnerRating, loserRating);
+    const loserExpected = this.calculateExpectedScore(loserRating, winnerRating);
+
+    // Get K-factors
+    const winnerK = this.getKFactor(winnerGames);
+    const loserK = this.getKFactor(loserGames);
+
+    // Calculate new ratings
+    // Winner gets 1.0 points (won), loser gets 0.0 points (lost)
+    const winnerNewRating = Math.round(winnerRating + winnerK * (1 - winnerExpected));
+    const loserNewRating = Math.round(loserRating + loserK * (0 - loserExpected));
+
+    return { winnerNewRating, loserNewRating };
+  }
+
+  /**
+   * Update skill ratings after a match
+   * This is called automatically by recordGameResult
+   */
+  private updateSkillRatings(
+    winnerWallet: string,
+    playerKills: Record<string, number>
+  ): void {
+    try {
+      // Get all players' current ratings and games
+      const players: Array<{ wallet: string; rating: number; games: number; isWinner: boolean }> = [];
+
+      for (const wallet of Object.keys(playerKills)) {
+        const stmt = this.db.prepare(`
+          SELECT skill_rating, total_games FROM players WHERE wallet_address = ?
+        `);
+        const row = stmt.get(wallet) as { skill_rating: number; total_games: number } | undefined;
+
+        if (row) {
+          players.push({
+            wallet,
+            rating: row.skill_rating,
+            games: row.total_games,
+            isWinner: wallet === winnerWallet,
+          });
+        }
+      }
+
+      if (players.length < 2) return;
+
+      // Separate winner and losers
+      const winner = players.find(p => p.isWinner);
+      if (!winner) return;
+
+      const losers = players.filter(p => !p.isWinner);
+
+      // Update ratings for each loser vs winner
+      const updateStmt = this.db.prepare(`
+        UPDATE players SET skill_rating = ? WHERE wallet_address = ?
+      `);
+
+      // Update winner rating based on average opponent rating
+      const avgLoserRating = losers.reduce((sum, p) => sum + p.rating, 0) / losers.length;
+      const avgLoserGames = losers.reduce((sum, p) => sum + p.games, 0) / losers.length;
+
+      const { winnerNewRating } = this.calculateSkillRatingChange(
+        winner.rating,
+        winner.games,
+        avgLoserRating,
+        avgLoserGames
+      );
+      updateStmt.run(winnerNewRating, winner.wallet);
+
+      // Update each loser rating
+      for (const loser of losers) {
+        const { loserNewRating } = this.calculateSkillRatingChange(
+          winner.rating,
+          winner.games,
+          loser.rating,
+          loser.games
+        );
+        updateStmt.run(loserNewRating, loser.wallet);
+      }
+
+      console.log(`[SKILL] Updated ratings: winner=${winner.wallet.slice(0, 8)} ${winner.rating}→${winnerNewRating}`);
+    } catch (error) {
+      console.error('[SKILL] Failed to update ratings:', error);
+    }
+  }
+
+  /**
+   * Get top N players by skill rating
+   */
+  getTopSkillRating(limit: number = 100): LeaderboardEntry[] {
+    if (Date.now() - this.leaderboardCache.lastRefresh < this.CACHE_TTL) {
+      return this.leaderboardCache.skillRating.slice(0, limit);
+    }
+    return this.refreshCache('skillRating', limit);
+  }
+
+  close(): void {
+    this.db.close();
+  }
+}

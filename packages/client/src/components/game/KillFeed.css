@@ -1,0 +1,152 @@
+/**
+ * KillFeed.css - Real-time Elimination Feed
+ * Brutal aesthetic with slide-in animations
+ */
+
+/* Fonts imported globally in premium-dark.css */
+
+/* Container */
+.kill-feed {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 1000;
+  pointer-events: none;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* Entry */
+.kill-feed-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.85);
+  border: 2px solid rgba(220, 38, 38, 0.5);
+  border-radius: 4px;
+  min-width: 200px;
+  max-width: 280px;
+  animation: killFeedSlide 0.3s ease-out, killFeedFade 0.3s ease-out 4.7s forwards;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+@keyframes killFeedSlide {
+  from {
+    opacity: 0;
+    transform: translateX(100px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes killFeedFade {
+  to {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+}
+
+/* Color indicator */
+.kill-feed-color {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  flex-shrink: 0;
+  box-shadow: 0 0 8px currentColor;
+}
+
+/* Names */
+.kill-feed-name {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100px;
+}
+
+.kill-feed-name.killer {
+  color: #fff;
+}
+
+.kill-feed-name.victim {
+  color: #999;
+}
+
+/* Action text */
+.kill-feed-action {
+  font-size: 11px;
+  font-weight: 800;
+  color: #dc2626;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* Self-elimination styling */
+.kill-feed-entry:has(.kill-feed-action:contains("CRASHED")) {
+  border-color: rgba(156, 163, 175, 0.5);
+}
+
+.kill-feed-entry:has(.kill-feed-action:contains("CRASHED")) .kill-feed-action {
+  color: #9ca3af;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .kill-feed {
+    top: 60px;
+    right: 10px;
+  }
+
+  .kill-feed-entry {
+    min-width: 160px;
+    max-width: 200px;
+    padding: 8px 12px;
+  }
+
+  .kill-feed-name {
+    font-size: 11px;
+    max-width: 70px;
+  }
+
+  .kill-feed-action {
+    font-size: 9px;
+  }
+
+  /* Even more compact for in-game mobile (portrait) */
+  .kill-feed-mobile {
+    top: calc(50px + env(safe-area-inset-top, 0px));
+    right: 8px;
+    gap: 4px;
+  }
+
+  .kill-feed-mobile .kill-feed-entry {
+    min-width: 140px;
+    max-width: 180px;
+    padding: 6px 10px;
+    gap: 6px;
+  }
+
+  .kill-feed-mobile .kill-feed-name {
+    font-size: 11px; /* Increased from 10px for WCAG compliance */
+    max-width: 60px;
+  }
+
+  .kill-feed-mobile .kill-feed-action {
+    font-size: 10px; /* Increased from 8px for WCAG compliance */
+  }
+
+  .kill-feed-mobile .kill-feed-color {
+    width: 8px;
+    height: 8px;
+  }
+}

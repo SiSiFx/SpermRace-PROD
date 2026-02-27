@@ -1,0 +1,114 @@
+/**
+ * RadialGauge - Styles for custom circular stat gauges
+ */
+
+.radial-gauge {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.gauge-svg {
+  transform: rotate(-135deg);
+  overflow: visible;
+}
+
+.gauge-track {
+  stroke: rgba(255, 255, 255, 0.08);
+}
+
+.gauge-fill {
+  transition: filter 0.3s ease;
+}
+
+/* Center content - Liquid glass effect */
+.gauge-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 65%;
+  height: 65%;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 50%;
+  backdrop-filter: blur(8px);
+  box-shadow: 
+    inset 0 1px 1px rgba(255, 255, 255, 0.1),
+    0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.gauge-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gauge-color);
+  filter: drop-shadow(0 0 8px var(--gauge-glow));
+  transition: transform 0.3s ease;
+}
+
+.radial-gauge:hover .gauge-icon-wrapper {
+  transform: scale(1.1);
+}
+
+.gauge-value {
+  font-weight: 700;
+  color: var(--gauge-color);
+  text-shadow: 0 0 10px var(--gauge-glow);
+  margin-top: 2px;
+}
+
+.gauge-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* Selected state enhancements */
+.radial-gauge.selected .gauge-center {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 
+    inset 0 1px 1px rgba(255, 255, 255, 0.15),
+    0 4px 30px rgba(0, 0, 0, 0.3),
+    0 0 30px var(--gauge-glow);
+}
+
+.radial-gauge.selected .gauge-fill {
+  filter: drop-shadow(0 0 6px var(--gauge-color));
+}
+
+/* Pulse animation for selected */
+.radial-gauge.selected .gauge-icon-wrapper {
+  animation: iconPulse 2s ease-in-out infinite;
+}
+
+@keyframes iconPulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 8px var(--gauge-glow));
+  }
+  50% {
+    filter: drop-shadow(0 0 16px var(--gauge-glow));
+  }
+}
+
+/* Class-specific hover effects */
+.radial-gauge.speed:hover .gauge-fill {
+  filter: drop-shadow(0 0 8px #fbbf24);
+}
+
+.radial-gauge.size:hover .gauge-fill {
+  filter: drop-shadow(0 0 8px #ef4444);
+}
+
+.radial-gauge.agility:hover .gauge-fill {
+  filter: drop-shadow(0 0 8px #22d3ee);
+}

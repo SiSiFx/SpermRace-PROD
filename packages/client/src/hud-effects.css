@@ -1,0 +1,428 @@
+/**
+ * HUD Visual Effects
+ * Adds scanlines, glass morphism, and tech animations to the game HUD
+ */
+
+/* ============================================
+   SCANLINE EFFECTS
+   ============================================ */
+
+/* Scanline overlay for entire game screen */
+.hud-scanline-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.03;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.15),
+    rgba(0, 0, 0, 0.15) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+  animation: scanlineMove 8s linear infinite;
+}
+
+@keyframes scanlineMove {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(4px);
+  }
+}
+
+/* Scanline effect specifically for HUD elements */
+#unified-top-bar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(34, 211, 238, 0.03),
+    rgba(34, 211, 238, 0.03) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+  opacity: 0.6;
+  animation: hudScanlines 6s linear infinite;
+}
+
+@keyframes hudScanlines {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 0 4px;
+  }
+}
+
+/* CRT-style scanline flicker */
+@keyframes scanlineFlicker {
+  0%, 100% {
+    opacity: 0.03;
+  }
+  50% {
+    opacity: 0.05;
+  }
+}
+
+/* ============================================
+   ENHANCED GLASS MORPHISM
+   ============================================ */
+
+/* Enhanced glass morphism for HUD top bar */
+#unified-top-bar {
+  background: linear-gradient(
+    135deg,
+    rgba(10, 10, 15, 0.85) 0%,
+    rgba(20, 20, 30, 0.75) 50%,
+    rgba(10, 10, 15, 0.85) 100%
+  );
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(0, 255, 255, 0.15);
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.5),
+    0 0 20px rgba(0, 255, 255, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Glass reflection effect */
+#unified-top-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.03),
+    transparent
+  );
+  animation: glassReflection 4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes glassReflection {
+  0% {
+    left: -100%;
+  }
+  50%, 100% {
+    left: 100%;
+  }
+}
+
+/* Frosted edge effect for glass */
+#unified-top-bar {
+  position: relative;
+}
+
+#unified-top-bar > * {
+  position: relative;
+  z-index: 2;
+}
+
+/* ============================================
+   TECH ANIMATIONS
+   ============================================ */
+
+/* Data flow animation for boost bar */
+#boost-bar-fill {
+  position: relative;
+  overflow: hidden;
+}
+
+#boost-bar-fill::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.4),
+    transparent
+  );
+  animation: dataFlow 1.5s ease-in-out infinite;
+}
+
+@keyframes dataFlow {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 200%;
+  }
+}
+
+/* Pulsing tech glow for active elements */
+@keyframes techPulse {
+  0%, 100% {
+    box-shadow:
+      0 0 8px rgba(34, 211, 238, 0.6),
+      0 0 16px rgba(34, 211, 238, 0.3);
+  }
+  50% {
+    box-shadow:
+      0 0 12px rgba(34, 211, 238, 0.9),
+      0 0 24px rgba(34, 211, 238, 0.5),
+      0 0 36px rgba(34, 211, 238, 0.2);
+  }
+}
+
+/* Tech corner brackets for HUD */
+#unified-top-bar {
+  position: relative;
+}
+
+#unified-top-bar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background:
+    /* Top left corner */
+    linear-gradient(90deg, rgba(0, 255, 255, 0.4) 2px, transparent 2px) 0 0,
+    linear-gradient(180deg, rgba(0, 255, 255, 0.4) 2px, transparent 2px) 0 0,
+    /* Top right corner */
+    linear-gradient(-90deg, rgba(0, 255, 255, 0.4) 2px, transparent 2px) 100% 0,
+    linear-gradient(180deg, rgba(0, 255, 255, 0.4) 2px, transparent 2px) 100% 0,
+    /* Bottom left corner */
+    linear-gradient(90deg, rgba(0, 255, 255, 0.4) 2px, transparent 2px) 0 100%,
+    linear-gradient(-180deg, rgba(0, 255, 255, 0.4) 2px, transparent 2px) 0 100%,
+    /* Bottom right corner */
+    linear-gradient(-90deg, rgba(0, 255, 255, 0.4) 2px, transparent 2px) 100% 100%,
+    linear-gradient(-180deg, rgba(0, 255, 255, 0.4) 2px, transparent 2px) 100% 100%;
+  background-size: 8px 8px;
+  background-repeat: no-repeat;
+  opacity: 0.6;
+  pointer-events: none;
+  animation: techCornerPulse 3s ease-in-out infinite;
+}
+
+@keyframes techCornerPulse {
+  0%, 100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+/* Glitch effect for critical states */
+@keyframes techGlitch {
+  0%, 100% {
+    transform: translate(0);
+    filter: none;
+  }
+  20% {
+    transform: translate(-2px, 2px);
+    filter: hue-rotate(90deg);
+  }
+  40% {
+    transform: translate(-2px, -2px);
+  }
+  60% {
+    transform: translate(2px, 2px);
+    filter: hue-rotate(-90deg);
+  }
+  80% {
+    transform: translate(2px, -2px);
+  }
+}
+
+/* ============================================
+   ENHANCED BOOST BAR
+   ============================================ */
+
+#boost-bar-fill {
+  animation: techPulse 2s ease-in-out infinite;
+}
+
+/* Low boost warning animation */
+#boost-bar-fill.low-boost {
+  animation: lowBoostWarning 0.5s ease-in-out infinite;
+}
+
+@keyframes lowBoostWarning {
+  0%, 100% {
+    opacity: 1;
+    filter: brightness(1);
+  }
+  50% {
+    opacity: 0.7;
+    filter: brightness(1.3);
+  }
+}
+
+/* ============================================
+   ENHANCED TIMER DISPLAY
+   ============================================ */
+
+/* Tech ring animation around timer when critical */
+.zone-timer-critical {
+  position: relative;
+  animation: timerCritical 0.8s ease-in-out infinite;
+}
+
+@keyframes timerCritical {
+  0%, 100% {
+    text-shadow:
+      0 0 10px rgba(239, 68, 68, 0.9),
+      0 0 20px rgba(239, 68, 68, 0.6),
+      0 0 30px rgba(239, 68, 68, 0.3);
+  }
+  50% {
+    text-shadow:
+      0 0 15px rgba(239, 68, 68, 1),
+      0 0 30px rgba(239, 68, 68, 0.8),
+      0 0 45px rgba(239, 68, 68, 0.5);
+  }
+}
+
+/* ============================================
+   ENHANCED ALIVE COUNTER
+   ============================================ */
+
+/* Pulse effect when player count changes */
+.alive-count-update {
+  animation: aliveCountPulse 0.6s ease-out;
+}
+
+@keyframes aliveCountPulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ============================================
+   SEPARATOR ENHANCEMENTS
+   ============================================ */
+
+#unified-top-bar > div:not(:first-child):not(:last-child) {
+  position: relative;
+}
+
+#unified-top-bar > div[class*="separator"] {
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgba(0, 255, 255, 0.3),
+    transparent
+  );
+  box-shadow: 0 0 8px rgba(0, 255, 255, 0.2);
+}
+
+/* ============================================
+   LOADING/HOVER TECH EFFECTS
+   ============================================ */
+
+/* Scanline sweep on hover */
+#unified-top-bar:hover {
+  border-color: rgba(0, 255, 255, 0.25);
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.5),
+    0 0 30px rgba(0, 255, 255, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+}
+
+/* ============================================
+   MOBILE OPTIMIZATIONS
+   ============================================ */
+
+@media (max-width: 768px) {
+  /* Reduce scanline intensity on mobile */
+  .hud-scanline-overlay {
+    opacity: 0.02;
+  }
+
+  /* Simplified animations for mobile performance */
+  #unified-top-bar::after {
+    animation: glassReflection 6s ease-in-out infinite;
+  }
+
+  #boost-bar-fill::before {
+    animation: dataFlow 2s ease-in-out infinite;
+  }
+
+  /* Smaller tech corners on mobile */
+  #unified-top-bar::before {
+    background-size: 6px 6px;
+  }
+}
+
+/* ============================================
+   PERFORMANCE OPTIMIZATIONS
+   ============================================ */
+
+/* Use GPU acceleration for animations */
+#unified-top-bar,
+#boost-bar-fill,
+.hud-scanline-overlay {
+  will-change: transform, opacity;
+  transform: translateZ(0);
+}
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  .hud-scanline-overlay,
+  #unified-top-bar::after,
+  #boost-bar-fill::before,
+  #unified-top-bar::before {
+    animation: none;
+  }
+
+  #boost-bar-fill {
+    animation: none;
+  }
+}
+
+/* ============================================
+   ACCESSIBILITY
+   ============================================ */
+
+/* Ensure text remains readable with all effects */
+#unified-top-bar * {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  #unified-top-bar {
+    background: rgba(0, 0, 0, 0.95);
+    border-width: 2px;
+  }
+
+  .hud-scanline-overlay {
+    opacity: 0.01;
+  }
+}

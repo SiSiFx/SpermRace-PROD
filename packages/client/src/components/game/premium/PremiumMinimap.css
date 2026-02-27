@@ -1,0 +1,51 @@
+/**
+ * PremiumMinimap Styles
+ * Glass morphism minimap container
+ */
+
+@import '../../../styles/premium-theme.css';
+
+.premium-minimap {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 8px;
+  overflow: hidden;
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.premium-minimap-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.premium-minimap-border {
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  pointer-events: none;
+}
+
+/* Mobile adjustments */
+@media (max-width: 640px) {
+  .premium-minimap {
+    width: 100px;
+    height: 100px;
+  }
+}

@@ -1,0 +1,253 @@
+/**
+ * HowToPlayOverlay - Premium Dark Design
+ * Sophisticated, premium aesthetic that builds trust
+ */
+
+/* Fonts imported globally in premium-dark.css */
+
+.brutal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 10, 15, 0.9);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 10002;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.brutal-modal {
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--pr-bg-card);
+  border: 1px solid var(--pr-border-subtle);
+  border-radius: var(--pr-radius-2xl);
+  box-shadow: var(--pr-shadow-xl);
+  padding: 28px 24px;
+  color: var(--pr-text-primary);
+}
+
+/* Custom scrollbar */
+.brutal-modal::-webkit-scrollbar {
+  width: 6px;
+}
+
+.brutal-modal::-webkit-scrollbar-track {
+  background: var(--pr-bg-surface);
+  border-radius: 3px;
+}
+
+.brutal-modal::-webkit-scrollbar-thumb {
+  background: var(--pr-border-default);
+  border-radius: 3px;
+}
+
+.brutal-modal::-webkit-scrollbar-thumb:hover {
+  background: var(--pr-border-strong);
+}
+
+/* Header */
+.brutal-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--pr-border-subtle);
+}
+
+.brutal-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--pr-text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.brutal-modal-subtitle {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  color: var(--pr-text-tertiary);
+  font-weight: 500;
+  margin-top: 4px;
+}
+
+.brutal-close-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  background: transparent;
+  border: 1px solid var(--pr-border-default);
+  color: var(--pr-text-primary);
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-transform: uppercase;
+  border-radius: var(--pr-radius-md);
+  transition: all 0.2s ease;
+  letter-spacing: 0.05em;
+}
+
+.brutal-close-btn:hover {
+  border-color: var(--pr-accent-primary);
+  color: var(--pr-accent-primary);
+}
+
+.brutal-close-btn:active {
+  transform: translateY(0);
+}
+
+/* Steps */
+.brutal-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.brutal-step {
+  padding: 18px;
+  background: var(--pr-bg-elevated);
+  border: 1px solid var(--pr-border-subtle);
+  border-radius: var(--pr-radius-xl);
+  transition: all 0.2s ease;
+}
+
+.brutal-step:hover {
+  border-color: var(--pr-border-default);
+}
+
+.brutal-step-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.brutal-step-icon {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--pr-bg-surface);
+  border: 1px solid var(--pr-border-default);
+  border-radius: var(--pr-radius-md);
+  flex-shrink: 0;
+  color: var(--pr-accent-primary);
+}
+
+.brutal-step-title {
+  font-family: 'Outfit', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--pr-text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.brutal-step-content {
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  color: var(--pr-text-secondary);
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.brutal-step-content ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.brutal-step-content li {
+  margin-bottom: 4px;
+  color: var(--pr-text-secondary);
+}
+
+/* Tip */
+.brutal-tip {
+  display: flex;
+  gap: 10px;
+  padding: 14px 16px;
+  background: rgba(42, 157, 143, 0.1);
+  border: 1px solid rgba(42, 157, 143, 0.2);
+  border-radius: var(--pr-radius-lg);
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--pr-text-primary);
+}
+
+.brutal-tip-label {
+  font-weight: 600;
+  color: var(--pr-accent-success);
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .brutal-overlay {
+    padding: 12px;
+  }
+
+  .brutal-modal {
+    padding: 20px 16px;
+    max-height: 85vh;
+  }
+
+  .brutal-modal-header {
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+  }
+
+  .brutal-modal-title {
+    font-size: 18px;
+  }
+
+  .brutal-modal-subtitle {
+    font-size: 12px;
+    width: 100%;
+  }
+
+  .brutal-close-btn {
+    padding: 8px 12px;
+    font-size: 11px;
+  }
+
+  .brutal-step {
+    padding: 14px;
+  }
+
+  .brutal-step-icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .brutal-step-icon svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .brutal-step-title {
+    font-size: 14px;
+  }
+
+  .brutal-step-content {
+    font-size: 13px;
+  }
+}

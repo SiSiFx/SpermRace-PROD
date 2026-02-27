@@ -5,14 +5,17 @@ Upload tarball and deploy SpermRace.io to Turkey VPS
 import os
 import sys
 
-# VPS Configuration
-VPS_IP = "93.180.133.94"
-VPS_USER = "root"
-VPS_PASSWORD = "yELys6TZvJzT!"
+# VPS configuration (read from environment; do not hardcode secrets)
+VPS_IP = os.environ.get("VPS_IP")
+VPS_USER = os.environ.get("VPS_USER", "root")
+VPS_PASSWORD = os.environ.get("VPS_PASSWORD")
 
-TARBALL_LOCAL = r"C:\Users\SISI\Documents\skidr.io fork\spermrace-deploy.tar.gz"
-TARBALL_REMOTE = "/tmp/spermrace-deploy.tar.gz"
-DEPLOY_SCRIPT = r"C:\Users\SISI\Documents\skidr.io fork\scripts\vps-deploy-turkey.sh"
+# Paths (repo‑relative by default; override via env if needed)
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
+TARBALL_LOCAL = os.environ.get("TARBALL_LOCAL", os.path.join(REPO_ROOT, "spermrace-deploy.tar.gz"))
+TARBALL_REMOTE = os.environ.get("TARBALL_REMOTE", "/tmp/spermrace-deploy.tar.gz")
+DEPLOY_SCRIPT = os.environ.get("DEPLOY_SCRIPT", os.path.join(REPO_ROOT, "scripts", "vps-deploy-turkey.sh"))
 
 def main():
     print("=" * 70)
@@ -27,6 +30,11 @@ def main():
     except ImportError:
         print("ERROR: Required packages not installed.")
         print("Please run: pip install paramiko scp")
+        sys.exit(1)
+
+    # Validate configuration
+    if not VPS_IP or not VPS_PASSWORD:
+        print("ERROR: Set VPS_IP and VPS_PASSWORD in environment (no secrets in code).")
         sys.exit(1)
 
     # Check if tarball exists

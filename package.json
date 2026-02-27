@@ -24,22 +24,38 @@
 		"prod:frontend": "pnpm --filter @skidr/frontend-production dev",
 		"all": "concurrently --kill-others-on-fail --names \"dev,demo,prod\" --prefix-colors \"cyan,green,magenta\" \"pnpm dev\" \"pnpm demo\" \"pnpm prod\"",
 		"build": "pnpm --filter shared build && pnpm --filter server build && pnpm --filter client build",
+		"vercel-build": "pnpm --filter shared build && pnpm --filter client build",
 		"build:server": "pnpm --filter server build",
 		"build:client": "pnpm --filter client build",
 		"start:prod": "pm2 start ops/pm2/ecosystem.config.js && pm2 save",
 		"test": "node test-integration.js",
+		"test:ws": "node scripts/loadtest/ws-regression-test.js",
+		"test:ws:local": "node scripts/loadtest/ws-regression-test.js --url ws://127.0.0.1:8080/ws --clients 12 --seconds 35 --mode practice --tier 0",
+		"loadtest:ws": "node scripts/loadtest/ws-broadcast.js ws://127.0.0.1:8080/ws 200 60",
+		"test:mobile": "bash scripts/test-mobile.sh",
+		"test:mobile:coverage": "bash scripts/test-mobile.sh --coverage",
+		"test:mobile:ui": "bash scripts/test-mobile.sh --ui",
+		"test:mobile:client": "pnpm --filter client test:mobile",
+		"test:e2e:dev": "cross-env PLAYWRIGHT_BASE_URL=https://dev.spermrace.io pnpm exec playwright test -c playwright.remote.config.ts",
 		"diagnose": "node frontend-diagnostic.js",
 		"menu": "node interactive-menu.js",
 		"install-all": "pnpm install && pnpm --filter @skidr/core install && pnpm --filter @skidr/shared install && pnpm --filter @skidr/env-development install && pnpm --filter @skidr/env-demo install && pnpm --filter @skidr/env-production install && pnpm --filter @skidr/frontend-development install && pnpm --filter @skidr/frontend-demo install && pnpm --filter @skidr/frontend-production install",
 		"mcp:svelte": "pnpm dlx @sveltejs/mcp --config mcp.config.json"
 	},
 	"devDependencies": {
+		"@playwright/test": "1.56.1",
 		"concurrently": "^8.2.2",
 		"cross-env": "^7.0.3",
-		"@sveltejs/mcp": "^0.1.0"
+		"playwright": "1.56.1"
 	},
 	"dependencies": {
 		"pnpm": "^10.13.1"
+	},
+	"pnpm": {
+		"overrides": {
+			"axios": "1.13.5",
+			"minimatch": "10.2.1"
+		}
 	},
 	"packageManager": "pnpm@9.15.9+sha512.68046141893c66fad01c079231128e9afb89ef87e2691d69e4d40eee228988295fd4682181bae55b58418c3a253bde65a505ec7c5f9403ece5cc3cd37dcf2531"
 }

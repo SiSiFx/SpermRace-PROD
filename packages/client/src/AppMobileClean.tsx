@@ -2,10 +2,18 @@ import { useEffect, useState } from 'react';
 import { OrientationWarning } from './OrientationWarning';
 import { MobileTouchControls } from './MobileTouchControls';
 import { MobileTutorial } from './MobileTutorial';
-// Base URL for backend API; prefer env, else infer by hostname, else same-origin /api
+// Base URL for backend API.
+// For any spermrace.io host (prod/dev/www), always use same-origin /api so hosting can proxy
+// and avoid CORS if VITE_API_BASE targets api.spermrace.io.
 const API_BASE: string = (() => {
+  try {
+    const host = (window?.location?.hostname || '').toLowerCase();
+    if (host.endsWith('spermrace.io')) return '/api';
+  } catch {}
+
   const env = (import.meta as any).env?.VITE_API_BASE as string | undefined;
   if (env && typeof env === 'string' && env.trim()) return env.trim();
+
   try {
     const host = (window?.location?.hostname || '').toLowerCase();
     if (host.includes('dev.spermrace.io')) return 'https://dev.spermrace.io/api';
@@ -70,18 +78,6 @@ function AppInner() {
     return () => { if (id) clearInterval(id); };
   }, [overlayActive]);
 
-  // Scope background animation to Landing only
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const bg = await import('./spermBackground');
-      if (cancelled) return;
-      if (screen === 'landing') bg.startSpermBackground?.();
-      else bg.stopSpermBackground?.();
-    })();
-    return () => { cancelled = true; };
-  }, [screen]);
-
   useEffect(() => {
     const fetchSol = async () => {
       try {
@@ -135,9 +131,7 @@ function AppInner() {
       
       {/* Mobile: Compact header wallet */}
       <HeaderWallet screen={screen} />
-      
-      <div id="bg-particles" />
-      
+
       {/* Status chip + Help toggle */}
       <div style={{ position: 'fixed', top: 8, right: 8, zIndex: 60, padding: '6px 10px', borderRadius: 8, background: 'rgba(0,0,0,0.55)', color: '#c7d2de', border: '1px solid rgba(255,255,255,0.12)', fontSize: 11 }}>
         {wsState.phase === 'authenticating' ? 'Authenticating…' : wsState.phase === 'lobby' ? 'Lobby' : wsState.phase === 'game' ? 'In Game' : wsState.phase === 'connecting' ? 'Connecting…' : (publicKey ? 'Connected' : 'Not Connected')}
@@ -148,15 +142,15 @@ function AppInner() {
       {showHelp && (
         <div style={{ position: 'fixed', top: 40, left: 8, zIndex: 60, padding: '10px 12px', borderRadius: 10, background: 'rgba(0,0,0,0.80)', color: '#c7d2de', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12, maxWidth: 260 }}>
           <div style={{ fontWeight: 700, marginBottom: 6 }}>Controls</div>
-          <div>• Drag to aim</div>
-          <div>• Double‑tap to boost</div>
+          <div>• Drag left side to move</div>
+          <div>• Tap BOOST button to boost</div>
         </div>
       )}
 
       {wsState.lastError && (
         <div className="loading-overlay mobile-overlay" style={{ display: 'flex', background: 'rgba(0,0,0,0.85)' }}>
           <div className="modal-card mobile-modal">
-            <div className="modal-title">⚠️ Error</div>
+            <div className="modal-title">Error</div>
             <div className="modal-subtitle" style={{ marginTop: 8 }}>{wsState.lastError}</div>
             <button className="btn-primary mobile-btn-large" style={{ marginTop: 16 }} onClick={() => location.reload()}>Reload App</button>
           </div>
@@ -239,7 +233,7 @@ function HeaderWallet({ screen }: { screen: string }) {
     );
   }
   if (screen === 'game') {
-    return <div className="mobile-wallet-badge">🎮 Practice</div>;
+    return <div className="mobile-wallet-badge">Practice</div>;
   }
   return null;
 }
@@ -272,7 +266,7 @@ function Landing({ solPrice, onPractice, onTournament }: { solPrice: number | nu
             <span className="text-accent">RACE</span>
             <span className="text-gradient">.IO</span>
           </h1>
-          <p className="mobile-brand-subtitle">Battle Royale 💥</p>
+          <p className="mobile-brand-subtitle">Battle Royale</p>
           
           {stats.totalGames > 0 && (
             <div className="mobile-stats-row">
@@ -290,7 +284,7 @@ function Landing({ solPrice, onPractice, onTournament }: { solPrice: number | nu
               </div>
               {stats.totalPrizes > 0 && (
                 <div className="mobile-stat highlight">
-                  <div className="label">💰 Won</div>
+                  <div className="label">Won</div>
                   <div className="value">{stats.totalPrizes.toFixed(3)}</div>
                 </div>
               )}
@@ -300,14 +294,14 @@ function Landing({ solPrice, onPractice, onTournament }: { solPrice: number | nu
         
         <div className="mobile-cta-section">
           <button className="mobile-cta-primary" onClick={handleTournament} disabled={isConnecting}>
-            <span className="icon">🏆</span>
+            <span className="icon">★</span>
             <span className="text">
               {isConnecting ? 'Opening Wallet...' : 'Enter Tournament'}
             </span>
           </button>
           
           <button className="mobile-btn-secondary" onClick={onPractice}>
-            <span className="icon">🎮</span>
+            <span className="icon">▶</span>
             <span className="text">Practice (Free)</span>
           </button>
           
@@ -378,8 +372,8 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
     return (
       <div className="screen active mobile-lobby-screen">
         <div className="mobile-lobby-container">
-          <div className="mobile-lobby-header">
-            <h2 className="mobile-lobby-title">🎮 Practice Lobby</h2>
+        <div className="mobile-lobby-header">
+          <h2 className="mobile-lobby-title">Practice Lobby</h2>
             <div className="mobile-lobby-count">{players.length}/{maxPlayers}</div>
           </div>
           
@@ -533,7 +527,7 @@ function Modes({ onSelect: _onSelect, onClose, onNotify }: { onSelect: () => voi
                 overflow: 'hidden',
                 backdropFilter: 'blur(10px)',
                 boxShadow: '0 20px 40px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.1)'
-              }} data-ribbon={i===0? '🔥 HOT' : i===1? '⭐ POPULAR' : i===2? '💎 VIP' : '👑 ELITE'}>
+              }} data-ribbon={i===0? 'HOT' : i===1? 'POPULAR' : i===2? 'VIP' : 'ELITE'}>
                 
                 {/* Animated background orb */}
                 <div style={{
@@ -550,7 +544,7 @@ function Modes({ onSelect: _onSelect, onClose, onNotify }: { onSelect: () => voi
                 }} />
                 
                 <div className="tournament-header" style={{ position: 'relative', zIndex: 2 }}>
-                  <div className="tournament-icon" style={{ fontSize: '32px', marginBottom: '8px' }}>🧬</div>
+                  <div className="tournament-icon" style={{ fontSize: '18px', marginBottom: '8px', fontWeight: 700 }}>SR</div>
                   <h3 className="tournament-title" style={{ fontSize: '24px', fontWeight: 800, marginBottom: '4px' }}>{t.name}</h3>
                   <div className="tournament-badge" style={{ 
                     background: 'rgba(255,255,255,0.2)', 
@@ -702,11 +696,11 @@ function Wallet({ onConnected, onClose }: { onConnected: () => void; onClose: ()
           </div>
         </button>
         
-        {publicKey && (
-          <div className="mobile-connected-status">
-            ✅ {publicKey.slice(0,8)}...{publicKey.slice(-8)}
-          </div>
-        )}
+          {publicKey && (
+            <div className="mobile-connected-status">
+              Connected: {publicKey.slice(0,8)}...{publicKey.slice(-8)}
+            </div>
+          )}
 
         {/* WalletConnect fallback deep-links on mobile */}
         {isMobileDevice() && wcError && (
@@ -738,7 +732,7 @@ function Lobby({ onStart: _onStart, onBack }: { onStart: () => void; onBack: () 
     <div className="screen active mobile-lobby-screen">
       <div className="mobile-lobby-container">
         <div className="mobile-lobby-header">
-          <h2 className="mobile-lobby-title">🏆 Lobby</h2>
+          <h2 className="mobile-lobby-title">Lobby</h2>
           <div className="mobile-lobby-count">{players.length}/{state.lobby?.maxPlayers ?? 16}</div>
         </div>
         
@@ -841,7 +835,7 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void; 
 }
 
 function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onChangeTier: () => void; }) {
-  const { state: wsState } = useWs();
+  const { state: wsState, connectAndJoin } = useWs();
   const { publicKey } = useWallet();
   const tx = wsState.lastRound?.txSignature;
   const winner = wsState.lastRound?.winnerId;
@@ -849,6 +843,29 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
   const solscan = tx ? `https://solscan.io/tx/${tx}${SOLANA_CLUSTER === 'devnet' ? '?cluster=devnet' : ''}` : null;
   const selfId = wsState.playerId || publicKey || '';
   const isWinner = !!winner && winner === selfId;
+  const [playAgainBusy, setPlayAgainBusy] = useState(false);
+
+  const handlePlayAgain = async () => {
+    if (playAgainBusy) return;
+    if (wsState.phase !== 'ended') { onPlayAgain(); return; }
+    setPlayAgainBusy(true);
+    try {
+      let last: any = null;
+      try { last = JSON.parse(localStorage.getItem('sr_last_join') || 'null'); } catch { }
+      const lobby: any = wsState.lobby || null;
+      const entryFeeTier = (lobby?.entryFee ?? last?.entryFeeTier ?? 0) as any;
+      const mode = (lobby?.mode ?? last?.mode ?? (entryFeeTier === 0 ? 'practice' : 'tournament')) as any;
+      const guestName =
+        mode === 'practice'
+          ? (last?.guestName || localStorage.getItem('sr_guest_name') || lobby?.playerNames?.[wsState.playerId || ''] || 'Guest')
+          : undefined;
+      await connectAndJoin({ entryFeeTier, mode, ...(guestName ? { guestName } : {}) });
+    } catch {
+      onPlayAgain();
+    } finally {
+      setPlayAgainBusy(false);
+    }
+  };
   
   let rankText: string | null = null;
   try {
@@ -871,10 +888,15 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
   
   return (
     <div className="screen active mobile-results-screen">
+      {isWinner && (
+        <div className="god-ray-container active">
+          <div className="god-ray"></div>
+        </div>
+      )}
       <div className="mobile-results-container">
         <div className="mobile-result-header">
           <h1 className={`mobile-result-title ${isWinner ? 'win' : 'lose'}`}>
-            {isWinner ? '🏆 Victory!' : '💀 Eliminated'}
+            {isWinner ? 'Victory!' : 'Eliminated'}
           </h1>
           <p className="mobile-result-subtitle">
             Winner: {winner ? `${winner.slice(0,4)}…${winner.slice(-4)}` : '—'}
@@ -883,28 +905,27 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
             <div className="mobile-prize-won">{prize.toFixed(4)} SOL</div>
           )}
         </div>
-        
+
         {solscan && (
           <a href={solscan} target="_blank" rel="noreferrer" className="mobile-solscan-btn">
-            🔗 View on Solscan
+            View on Solscan
           </a>
         )}
-        
+
         <div className="mobile-result-stats">
           {rankText && <div className="stat">Rank: {rankText}</div>}
           <div className="stat">Kills: {wsState.kills?.[selfId] || 0}</div>
         </div>
-        
+
         <div className="mobile-result-actions">
-          <button className="mobile-btn-primary" onClick={onPlayAgain}>
-            🔄 Play Again
+          <button className="mobile-btn-primary" onClick={handlePlayAgain} disabled={playAgainBusy}>
+            {playAgainBusy ? 'Joining…' : 'Play Again'}
           </button>
           <button className="mobile-btn-secondary" onClick={onChangeTier}>
-            🏠 Menu
+            Menu
           </button>
         </div>
       </div>
     </div>
   );
 }
-

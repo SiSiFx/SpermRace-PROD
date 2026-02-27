@@ -8,9 +8,17 @@ dist.backup-*/
 build/
 
 # Environment variables
+# Never track real env files; allow example templates
 .env
 .env.local
 .env.*.local
+.env.backup
+*.env.production
+*.env.staging
+*.env.test
+*.env
+!*.env.example
+!**/.env.example
 
 # Logs
 *.log
@@ -30,6 +38,9 @@ Thumbs.db
 
 # Data
 packages/server/data/*
+# Some build paths nested server folder; ignore any data dirs under packages
+packages/**/data/*
+packages/server/packages/server/data/*
 
 # PM2
 .pm2/
@@ -40,3 +51,27 @@ pids/
 # Temporary files
 *.tmp
 .cache/
+.vercel
+
+# Coverage artifacts
+coverage/
+**/coverage/
+*.lcov
+coverage-final.json
+
+# Playwright artifacts
+test-results/
+playwright-report/
+playwright-screenshots/
+
+# Autonomous tmux artifacts
+.autonomous/
+
+# Test DB artifacts
+packages/server/test-*.db*
+
+# Vite timestamps
+*.timestamp-*.mjs
+
+# Codex scratch
+scripts/loadtest/.codex_write_test

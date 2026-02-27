@@ -1,8 +1,16 @@
 import { useEffect, useState } from 'react';
-// Base URL for backend API; prefer env, else infer by hostname, else same-origin /api
+// Base URL for backend API.
+// For any spermrace.io host (prod/dev/www), always use same-origin /api so hosting can proxy
+// and we avoid CORS issues when VITE_API_BASE points at api.spermrace.io.
 const API_BASE: string = (() => {
+  try {
+    const host = (window?.location?.hostname || '').toLowerCase();
+    if (host.endsWith('spermrace.io')) return '/api';
+  } catch {}
+
   const env = (import.meta as any).env?.VITE_API_BASE as string | undefined;
   if (env && typeof env === 'string' && env.trim()) return env.trim();
+
   try {
     const host = (window?.location?.hostname || '').toLowerCase();
     if (host.includes('dev.spermrace.io')) return 'https://dev.spermrace.io/api';
@@ -23,6 +31,14 @@ const SOLANA_CLUSTER: 'devnet' | 'mainnet' = (() => {
 import { WalletProvider, useWallet } from './WalletProvider';
 import { WsProvider, useWs } from './WsProvider';
 import NewGameView from './NewGameView';
+import { Leaderboard } from './Leaderboard';
+import { WarningCircle, CreditCard, LinkSimple } from 'phosphor-react';
+import { Modes } from './components/Modes';
+import { PlayerCard } from './components/PlayerCard';
+import { Landing } from './components/Landing';
+import './leaderboard.css';
+import './hero-effects.css';
+import './components/PlayerCard.css';
 
 type AppScreen = 'landing' | 'practice' | 'modes' | 'wallet' | 'lobby' | 'game' | 'results';
 
@@ -41,11 +57,8 @@ function AppInner() {
   const [solPrice, setSolPrice] = useState<number | null>(null);
   const { state: wsState, signAuthentication, leave } = useWs() as any;
   const { publicKey } = useWallet() as any;
-  const [toast, setToast] = useState<string | null>(null);
-  const showToast = (msg: string, duration = 1800) => {
-    setToast(msg);
-    window.setTimeout(() => setToast(null), duration);
-  };
+  const [toast] = useState<string | null>(null);
+  const [showLeaderboard, setShowLeaderboard] = useState<boolean>(false);
   // Loading progress for overlay (indefinite fill)
   const [loadProg, setLoadProg] = useState<number>(0);
   const overlayActive = (wsState.phase === 'connecting' || wsState.phase === 'authenticating' || wsState.entryFee.pending);
@@ -61,18 +74,6 @@ function AppInner() {
     }
     return () => { if (id) clearInterval(id); };
   }, [overlayActive]);
-  // Scope background animation to Landing only
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const bg = await import('./spermBackground');
-      if (cancelled) return;
-      if (screen === 'landing') bg.startSpermBackground?.();
-      else bg.stopSpermBackground?.();
-    })();
-    return () => { cancelled = true; };
-  }, [screen]);
-
   useEffect(() => {
     const fetchSol = async () => {
       try {
@@ -87,7 +88,6 @@ function AppInner() {
   }, []);
 
   const onPractice = () => setScreen('practice');
-  const onTournament = () => setScreen('modes');
 
   useEffect(() => {
     if (wsState.phase === 'lobby') setScreen('lobby');
@@ -98,22 +98,26 @@ function AppInner() {
     <div id="app-root">
       {/* Header wallet short address or simulation badge */}
       <HeaderWallet screen={screen} />
-      <div id="bg-particles" />
+      {screen === 'landing' && (
+        <>
+          <div className="hero-neon-glow" aria-hidden="true" />
+          <div className="hero-neon-glow-secondary" aria-hidden="true" />
+          <div className="hero-scanlines" aria-hidden="true" />
+        </>
+      )}
       {/* UNIFIED OVERLAY SYSTEM - Only ONE overlay shows at a time, priority: Error > Payment > Auth > Connecting */}
       {wsState.lastError ? (
         <div className="loading-overlay" style={{ display: 'flex', background: 'rgba(0,0,0,0.92)', backdropFilter: 'blur(8px)', zIndex: 10000 }}>
           <div className="modal-card" style={{
             padding: '28px 24px',
             maxWidth: '420px',
-            background: 'linear-gradient(135deg, rgba(239,68,68,0.12) 0%, rgba(251,146,60,0.12) 100%)',
-            border: '2px solid rgba(239,68,68,0.3)',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1)'
+            background: 'rgba(3,3,5,0.96)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            boxShadow: '0 24px 80px rgba(0,0,0,0.9)'
           }}>
             <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-              <div style={{ fontSize: '48px', marginBottom: '8px' }}>
-                {wsState.lastError.toLowerCase().includes('insufficient') ? '💸' : '⚠️'}
-              </div>
-              <div className="modal-title" style={{ fontSize: '24px', fontWeight: 800 }}>
+              <div className="modal-title" style={{ fontSize: '24px', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <WarningCircle size={24} weight="fill" />
                 {wsState.lastError.toLowerCase().includes('insufficient') ? 'Insufficient Funds' : 'Something Went Wrong'}
               </div>
             </div>
@@ -139,8 +143,8 @@ function AppInner() {
                 lineHeight: '1.5'
               }}>
                 {publicKey
-                  ? '🚀 Top up your wallet with SOL to continue racing'
-                  : '🔗 Connect a wallet or buy SOL to get started'}
+                  ? 'Top up your wallet with SOL to continue racing'
+                  : 'Connect a wallet or buy SOL to get started'}
               </div>
             )}
 
@@ -155,8 +159,8 @@ function AppInner() {
                       padding: '14px 20px',
                       fontSize: '15px',
                       fontWeight: 700,
-                      background: 'linear-gradient(90deg, #22d3ee 0%, #6366f1 100%)',
-                      boxShadow: '0 8px 20px rgba(34,211,238,0.3)',
+                    background: '#00F0FF',
+                    boxShadow: '0 8px 26px rgba(0,240,255,0.45)',
                       transition: 'all 0.2s ease'
                     }}
                     onMouseEnter={(e) => {
@@ -176,7 +180,10 @@ function AppInner() {
                         window.open('https://www.moonpay.com/buy/sol', '_blank');
                       }
                     }}
-                  >💳 Buy SOL</button>
+                  >
+                    <CreditCard size={18} weight="fill" style={{ marginRight: 8 }} />
+                    Buy SOL
+                  </button>
                   <button
                     className="btn-secondary"
                     style={{
@@ -213,8 +220,8 @@ function AppInner() {
             : 'Connecting…'
           }</div>
           {/* Smooth loading bar */}
-          <div style={{ width: 280, height: 8, borderRadius: 6, overflow: 'hidden', marginTop: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.08)' }}>
-            <div style={{ width: `${loadProg}%`, height: '100%', background: 'linear-gradient(90deg, #22d3ee, #14b8a6)', transition: 'width 100ms linear' }}></div>
+          <div style={{ width: 280, height: 8, borderRadius: 6, overflow: 'hidden', marginTop: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.04)' }}>
+            <div style={{ width: `${loadProg}%`, height: '100%', background: '#00F0FF', transition: 'width 100ms linear' }}></div>
           </div>
           {/* Only show auth buttons when ACTUALLY in auth phase (not during payment) */}
           {wsState.phase === 'authenticating' && !wsState.entryFee.pending && (
@@ -226,29 +233,29 @@ function AppInner() {
         </div>
       ) : null}
       {screen === 'landing' && (
-        <Landing
-          solPrice={solPrice}
-          onPractice={onPractice}
-          onTournament={onTournament}
-        />
+        <div className="screen active landing-container" id="landing-screen">
+          <Landing
+            solPrice={solPrice}
+            onPractice={onPractice}
+            onWallet={() => setScreen('wallet')}
+            onLeaderboard={() => setShowLeaderboard(true)}
+          />
+        </div>
       )}
       {screen === 'practice' && (
         <Practice onFinish={() => setScreen('results')} onBack={() => setScreen('landing')} />
       )}
-      {screen === 'modes' && (
-        <Modes onSelect={() => setScreen('wallet')} onClose={() => setScreen('landing')} onNotify={showToast} />
-      )}
       {screen === 'wallet' && (
-        <Wallet onConnected={() => setScreen('lobby')} onClose={() => setScreen('modes')} />
+        <Wallet onConnected={() => setScreen('lobby')} onClose={() => setScreen('landing')} />
       )}
       {screen === 'lobby' && (
-        <Lobby onStart={() => setScreen('game')} onBack={() => setScreen('modes')} />
+        <Lobby onStart={() => setScreen('game')} onBack={() => setScreen('landing')} />
       )}
       {screen === 'game' && (
         <Game onEnd={() => setScreen('results')} onRestart={() => setScreen('game')} />
       )}
       {screen === 'results' && (
-        <Results onPlayAgain={() => setScreen('practice')} onChangeTier={() => setScreen('modes')} />
+        <Results onPlayAgain={() => setScreen('practice')} onChangeTier={() => setScreen('landing')} />
       )}
       {/* Toast - appears ABOVE overlays for visibility */}
       {toast && (
@@ -256,13 +263,37 @@ function AppInner() {
           {toast}
         </div>
       )}
+
+      {/* Leaderboard Modal */}
+      {showLeaderboard && (
+        <Leaderboard
+          onClose={() => setShowLeaderboard(false)}
+          apiBase={API_BASE}
+          myWallet={publicKey || null}
+          isMobile={false}
+        />
+      )}
     </div>
   );
 }
 
 function HeaderWallet({ screen }: { screen: string }) {
   const { publicKey, disconnect } = useWallet() as any;
-  const style: React.CSSProperties = { position: 'fixed', top: 8, right: 12, zIndex: 50, background: 'rgba(0,0,0,0.4)', padding: '6px 10px', borderRadius: 8, color: '#00ffff', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 };
+  const style: React.CSSProperties = {
+    position: 'fixed',
+    top: 12,
+    right: 16,
+    zIndex: 50,
+    background: 'rgba(3,3,5,0.9)',
+    padding: '6px 10px',
+    borderRadius: 999,
+    border: '1px solid rgba(255,255,255,0.12)',
+    color: 'var(--text-secondary)',
+    fontSize: 12,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+  };
   if (publicKey) {
     const short = `${publicKey.slice(0,4)}…${publicKey.slice(-4)}`;
     return (
@@ -276,100 +307,6 @@ function HeaderWallet({ screen }: { screen: string }) {
     return <div style={style}>Simulation mode (no wallet)</div>;
   }
   return null;
-}
-
-function Landing({ solPrice, onPractice, onTournament }: { solPrice: number | null; onPractice: () => void; onTournament: () => void; }) {
-  const { publicKey, isConnecting } = useWallet();
-  const sendAnalytic = async (type: string, payload: any) => { try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, payload }) }); } catch {} };
-  const handleTournament = async () => {
-    // Go to tier selection first; wallet prompt will occur on Join
-    sendAnalytic('landing_cta_click', { publicKey: publicKey || null });
-    onTournament();
-  };
-
-  // Get player stats from localStorage
-  const getPlayerStats = () => {
-    try {
-      const stored = localStorage.getItem('spermrace_stats');
-      if (stored) return JSON.parse(stored);
-    } catch {}
-    return { totalGames: 0, wins: 0, losses: 0, totalPrizes: 0, totalKills: 0, history: [] };
-  };
-  const stats = getPlayerStats();
-  const winRate = stats.totalGames > 0 ? ((stats.wins / stats.totalGames) * 100).toFixed(1) : '0.0';
-
-  return (
-    <div className="screen active" id="landing-screen">
-      <div className="landing-container">
-        <div className="brand-section">
-          <h1 className="brand-title"><span className="text-gradient">SPERM</span><span className="text-accent">RACE</span><span className="text-gradient">.IO</span></h1>
-          <p className="brand-punchline">Battle Royale starts at birth 💥</p>
-          {stats.totalGames > 0 && (
-            <div style={{
-              display: 'flex',
-              gap: '12px',
-              justifyContent: 'center',
-              marginTop: '16px',
-              flexWrap: 'wrap'
-            }}>
-              <div style={{
-                background: 'rgba(34,211,238,0.15)',
-                border: '1px solid rgba(34,211,238,0.4)',
-                borderRadius: '8px',
-                padding: '8px 12px',
-                fontSize: '12px',
-                color: '#ffffff'
-              }}>
-                <div style={{ opacity: 0.7 }}>Games</div>
-                <div style={{ fontWeight: 700, fontSize: '16px' }}>{stats.totalGames}</div>
-              </div>
-              <div style={{
-                background: 'rgba(34,211,238,0.15)',
-                border: '1px solid rgba(34,211,238,0.4)',
-                borderRadius: '8px',
-                padding: '8px 12px',
-                fontSize: '12px',
-                color: '#ffffff'
-              }}>
-                <div style={{ opacity: 0.7 }}>Win Rate</div>
-                <div style={{ fontWeight: 700, fontSize: '16px' }}>{winRate}%</div>
-              </div>
-              <div style={{
-                background: 'rgba(34,211,238,0.15)',
-                border: '1px solid rgba(34,211,238,0.4)',
-                borderRadius: '8px',
-                padding: '8px 12px',
-                fontSize: '12px',
-                color: '#ffffff'
-              }}>
-                <div style={{ opacity: 0.7 }}>Kills</div>
-                <div style={{ fontWeight: 700, fontSize: '16px' }}>{stats.totalKills}</div>
-              </div>
-              {stats.totalPrizes > 0 && (
-                <div style={{
-                  background: 'linear-gradient(135deg, rgba(251,146,60,0.2), rgba(34,211,238,0.2))',
-                  border: '1px solid rgba(251,146,60,0.5)',
-                  borderRadius: '8px',
-                  padding: '8px 12px',
-                  fontSize: '12px',
-                  color: '#ffffff'
-                }}>
-                  <div style={{ opacity: 0.7 }}>💰 Prizes Won</div>
-                  <div style={{ fontWeight: 700, fontSize: '16px' }}>{stats.totalPrizes.toFixed(4)} SOL</div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        <div className="cta-section">
-          <button className="cta-primary" onClick={handleTournament} disabled={isConnecting}><span className="cta-text">{isConnecting ? 'Opening wallet…' : 'Enter Tournament'}</span><div className="cta-glow"/></button>
-          <button className="btn-secondary btn-small" onClick={onPractice}>Practice (Free)</button>
-          <div className="live-sol-price"><span className="price-label">SOL</span><span className="price-value">${solPrice?.toFixed(2) ?? '--'}</span></div>
-        </div>
-      </div>
-      {/* Removed separate landing wallet overlay - handled by global overlay system */}
-    </div>
-  );
 }
 
 function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBack: () => void }) {
@@ -412,6 +349,25 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
         <div className="lobby-container">
           <div className="lobby-header"><div className="lobby-title">Lobby</div><div className="lobby-status">{players.length}/{maxPlayers}</div></div>
           <div className="queue-bar"><div className="queue-left"><span className="queue-dot" /><span>{players.length}</span></div><div className="queue-center"><span>Queued</span></div><div className="queue-right"><span>Target</span><span>{maxPlayers}</span></div></div>
+
+          {/* Player Cards Grid for Practice Mode */}
+          <div className="player-cards-grid" style={{ marginBottom: '16px' }}>
+            {players.map((pid: string, index: number) => {
+              const name = pid.startsWith('BOT_') ? `Bot ${index}` : pid;
+              const isMe = pid === meId;
+              return (
+                <PlayerCard
+                  key={pid}
+                  playerId={pid}
+                  playerName={name}
+                  isMe={isMe}
+                  isReady={true}
+                  index={index}
+                />
+              );
+            })}
+          </div>
+
           <div className="lobby-orbit">
             <div className="orbit-center" />
             <div className="orbit-ring">
@@ -426,8 +382,8 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
           </div>
           {/* Progress bar mirrors countdown to make waiting easier */}
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
-            <div style={{ width: 320, height: 10, borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.08)' }}>
-              <div style={{ width: `${progressPct}%`, height: '100%', background: 'linear-gradient(90deg, #22d3ee, #14b8a6)', transition: 'width 300ms ease' }}></div>
+            <div style={{ width: 320, height: 10, borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.04)' }}>
+              <div style={{ width: `${progressPct}%`, height: '100%', background: '#00F0FF', transition: 'width 300ms ease' }}></div>
             </div>
           </div>
           <div className="lobby-footer"><button className="btn-secondary" onClick={onBack}>Back</button></div>
@@ -451,228 +407,6 @@ function Practice({ onFinish: _onFinish, onBack }: { onFinish: () => void; onBac
   return null;
 }
 
-function Modes({ onSelect: _onSelect, onClose, onNotify }: { onSelect: () => void; onClose: () => void; onNotify: (msg: string, duration?: number) => void }) {
-  const { publicKey, connect } = useWallet();
-  const { connectAndJoin, state: wsState } = useWs();
-  const [isJoining, setIsJoining] = useState<boolean>(false);
-  const [preflight, setPreflight] = useState<{ address: string | null; sol: number | null; configured: boolean } | null>(null);
-  const [preflightError, setPreflightError] = useState<boolean>(false);
-  useEffect(() => {
-    (async () => {
-      try {
-        const r = await fetch(`${API_BASE}/prize-preflight`);
-        if (!r.ok) throw new Error(`preflight ${r.status}`);
-        const j = await r.json();
-        setPreflight(j);
-        const misconfigured = !j?.configured || !j?.address || j?.sol == null;
-        setPreflightError(!!misconfigured);
-      } catch {
-        setPreflightError(true);
-      }
-    })();
-  }, []);
-  const tiers = [
-    { name: 'Micro Race', usd: 1, max: 16, dur: '2-3 min' },
-    { name: 'Nano Race', usd: 5, max: 32, dur: '3-4 min' },
-    { name: 'Mega Race', usd: 25, max: 32, dur: '4-6 min' },
-    { name: 'Championship', usd: 100, max: 16, dur: '5-8 min' },
-  ];
-  useEffect(() => {
-    if (wsState.phase === 'lobby' || wsState.phase === 'game') setIsJoining(false);
-  }, [wsState.phase]);
-  return (
-    <div className="screen active" id="mode-screen">
-      <div className="modes-sheet">
-        <div className="sheet-grip" />
-        <div className="modal-header"><h2 className="modal-title">Enter Sperm Race</h2><p className="modal-subtitle">Select a tier</p></div>
-        {(preflightError) && (
-          <div className="modal-subtitle" style={{ color: '#ff8080', marginBottom: 8 }}>Tournaments are temporarily unavailable (prize preflight issue).</div>
-        )}
-        {/* Overlay removed here; global overlay handles connecting/auth */}
-        <div className="tournament-grid">
-          {tiers.map((t, i) => {
-            const prize = (t.usd * t.max * 0.85).toFixed(2);
-            const cardGradients = [
-              'linear-gradient(135deg, rgba(34,211,238,0.15) 0%, rgba(99,102,241,0.15) 100%)',
-              'linear-gradient(135deg, rgba(99,102,241,0.18) 0%, rgba(244,63,94,0.18) 100%)', 
-              'linear-gradient(135deg, rgba(244,63,94,0.20) 0%, rgba(251,146,60,0.20) 100%)',
-              'linear-gradient(135deg, rgba(251,146,60,0.22) 0%, rgba(34,211,238,0.22) 100%)'
-            ];
-            const prizeGradients = [
-              'linear-gradient(90deg, rgba(34,211,238,0.25), rgba(99,102,241,0.25))',
-              'linear-gradient(90deg, rgba(99,102,241,0.28), rgba(244,63,94,0.28))',
-              'linear-gradient(90deg, rgba(244,63,94,0.30), rgba(251,146,60,0.30))',
-              'linear-gradient(90deg, rgba(251,146,60,0.32), rgba(34,211,238,0.32))'
-            ];
-            const buttonGradients = [
-              'linear-gradient(90deg, #22d3ee 0%, #6366f1 100%)',
-              'linear-gradient(90deg, #6366f1 0%, #f43f5e 100%)',
-              'linear-gradient(90deg, #f43f5e 0%, #fb923c 100%)',
-              'linear-gradient(90deg, #fb923c 0%, #22d3ee 100%)'
-            ];
-            return (
-              <div key={t.name} className="tournament-card" style={{
-                background: cardGradients[i],
-                border: '2px solid rgba(255,255,255,0.15)',
-                borderRadius: '20px',
-                padding: '24px',
-                position: 'relative',
-                overflow: 'hidden',
-                backdropFilter: 'blur(10px)',
-                boxShadow: '0 20px 40px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.1)'
-              }} data-ribbon={i===0? '🔥 HOT' : i===1? '⭐ POPULAR' : i===2? '💎 VIP' : '👑 ELITE'}>
-                
-                {/* Animated background orb */}
-                <div style={{
-                  position: 'absolute',
-                  top: '-50%',
-                  right: '-30%',
-                  width: '200px',
-                  height: '200px',
-                  background: prizeGradients[i],
-                  borderRadius: '50%',
-                  opacity: 0.3,
-                  filter: 'blur(60px)',
-                  animation: 'float 6s ease-in-out infinite'
-                }} />
-                
-                <div className="tournament-header" style={{ position: 'relative', zIndex: 2 }}>
-                  <div className="tournament-icon" style={{ fontSize: '32px', marginBottom: '8px' }}>🧬</div>
-                  <h3 className="tournament-title" style={{ fontSize: '24px', fontWeight: 800, marginBottom: '4px' }}>{t.name}</h3>
-                  <div className="tournament-badge" style={{ 
-                    background: 'rgba(255,255,255,0.2)', 
-                    padding: '4px 12px', 
-                    borderRadius: '20px', 
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    backdropFilter: 'blur(10px)'
-                  }}>Tier {i+1}</div>
-                </div>
-                
-                {/* Massive prize display */}
-                <div style={{ 
-                  textAlign: 'center', 
-                  margin: '20px 0', 
-                  position: 'relative', 
-                  zIndex: 2 
-                }}>
-                  <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.8)', marginBottom: '8px' }}>WIN UP TO</div>
-                  <div style={{ 
-                    fontSize: '48px', 
-                    fontWeight: 900, 
-                    background: buttonGradients[i],
-                    backgroundClip: 'text',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    textShadow: '0 4px 20px rgba(255,255,255,0.3)',
-                    lineHeight: 1,
-                    marginBottom: '4px'
-                  }}>${prize}</div>
-                  <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)' }}>Instant crypto payout</div>
-                </div>
-
-                <div className="tournament-details" style={{ position: 'relative', zIndex: 2 }}>
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    background: 'rgba(255,255,255,0.1)',
-                    padding: '12px 16px',
-                    borderRadius: '12px',
-                    marginBottom: '16px',
-                    backdropFilter: 'blur(10px)'
-                  }}>
-                    <div>
-                      <div style={{ fontSize: '18px', fontWeight: 700 }}>${t.usd.toFixed(2)}</div>
-                      <div style={{ fontSize: '11px', opacity: 0.8 }}>Entry fee</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '14px', fontWeight: 600 }}>{t.max} players max</div>
-                      <div style={{ fontSize: '11px', opacity: 0.8 }}>{t.dur} duration</div>
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  style={{
-                    width: '100%',
-                    padding: '16px 24px',
-                    background: buttonGradients[i],
-                    border: 'none',
-                    borderRadius: '16px',
-                    color: '#000',
-                    fontSize: '18px',
-                    fontWeight: 800,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                    cursor: 'pointer',
-                    position: 'relative',
-                    zIndex: 2,
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.3)',
-                    // Disable transition when animating to avoid conflicts
-                    transition: (publicKey && !isJoining && wsState.phase !== 'connecting' && wsState.phase !== 'authenticating') ? 'none' : 'all 0.2s ease',
-                    // Only set transform when NOT animating (animation will handle it)
-                    ...(!(publicKey && !isJoining && wsState.phase !== 'connecting' && wsState.phase !== 'authenticating') && { transform: 'translateY(0px)' }),
-                    // Add glowing animation when wallet is connected and ready
-                    animation: publicKey && !isJoining && wsState.phase !== 'connecting' && wsState.phase !== 'authenticating'
-                      ? 'buttonGlow 2s ease-in-out infinite, buttonPulse 2s ease-in-out infinite'
-                      : 'none'
-                  }}
-                  disabled={
-                    isJoining
-                    || wsState.phase === 'connecting'
-                    || wsState.phase === 'authenticating'
-                    || preflightError
-                    || (!!preflight && (!preflight.configured || !preflight.address || preflight.sol == null))
-                  }
-                  onClick={async () => {
-                    setIsJoining(true);
-                    const ok = publicKey ? true : await connect();
-                    if (!ok) {
-                      setIsJoining(false);
-                      onNotify('Wallet not detected. Please install or unlock your wallet.');
-                      return;
-                    }
-                    await connectAndJoin({ entryFeeTier: t.usd as any, mode: 'tournament' });
-                  }}
-                  onMouseEnter={(e) => {
-                    if (publicKey && !isJoining && wsState.phase !== 'connecting' && wsState.phase !== 'authenticating') {
-                      e.currentTarget.style.animation = 'none';
-                      e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)';
-                      e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.4), 0 0 35px rgba(34,211,238,0.8)';
-                    } else {
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                      e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.4)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (publicKey && !isJoining && wsState.phase !== 'connecting' && wsState.phase !== 'authenticating') {
-                      e.currentTarget.style.animation = 'buttonGlow 2s ease-in-out infinite, buttonPulse 2s ease-in-out infinite';
-                      e.currentTarget.style.transform = 'translateY(0px)';
-                      e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.3)';
-                    } else {
-                      e.currentTarget.style.transform = 'translateY(0px)';
-                      e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.3)';
-                    }
-                  }}
-                >{
-                  preflightError ? 'Service unavailable'
-                  : (preflight && (!preflight.configured || !preflight.address || preflight.sol == null)) ? 'Temporarily unavailable'
-                  : (isJoining || wsState.phase === 'connecting' || wsState.phase === 'authenticating') ? 'Joining…'
-                  : publicKey ? `🚀 ENTER RACE - READY!` : `🚀 ENTER RACE`
-                }</button>
-              </div>
-            );
-          })}
-        </div>
-        <div className="mode-footer">
-          <button className="btn-secondary" onClick={onClose}>Back</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function Wallet({ onConnected, onClose }: { onConnected: () => void; onClose: () => void }) {
   const { connect, publicKey } = useWallet();
   const tryConnect = async () => {
@@ -683,7 +417,15 @@ function Wallet({ onConnected, onClose }: { onConnected: () => void; onClose: ()
       <div className="modal-container">
         <div className="modal-header"><h2 className="modal-title">Connect Wallet</h2><p className="modal-subtitle">Sign in with Solana to continue</p></div>
         <div className="wallet-connect-section">
-          <button className="wallet-connect-btn" onClick={tryConnect}><div className="wallet-icon">🔗</div><div className="wallet-text"><div className="wallet-title">Connect</div><div className="wallet-subtitle">Phantom / Solflare / Coinbase • build wallet-refactor</div></div></button>
+          <button className="wallet-connect-btn" onClick={tryConnect}>
+            <div className="wallet-icon">
+              <LinkSimple size={18} weight="bold" />
+            </div>
+            <div className="wallet-text">
+              <div className="wallet-title">Connect</div>
+              <div className="wallet-subtitle">Phantom / Solflare / Coinbase • build wallet-refactor</div>
+            </div>
+          </button>
           {publicKey && <div className="practice-hint">Connected: {publicKey.slice(0,4)}…{publicKey.slice(-4)}</div>}
         </div>
         <button className="btn-secondary" onClick={onClose}>Back</button>
@@ -713,6 +455,24 @@ function Lobby({ onStart: _onStart, onBack }: { onStart: () => void; onBack: () 
           </div>
         ) : null}
         <div className="queue-bar"><div className="queue-left"><span className="queue-dot" /><span>{players.length}</span></div><div className="queue-center"><span>Queued</span></div><div className="queue-right"><span>Target</span><span>{state.lobby?.maxPlayers ?? 16}</span></div></div>
+        
+        {/* Player Cards Grid */}
+        <div className="player-cards-grid">
+          {players.map((pid: string, index: number) => {
+            const name = state.lobby?.playerNames?.[pid] || (pid.startsWith("guest-") ? "Guest" : pid.slice(0, 4) + "…" + pid.slice(-4));
+            const isMe = pid === state.playerId;
+            return (
+              <PlayerCard
+                key={pid}
+                playerId={pid}
+                playerName={name}
+                isMe={isMe}
+                isReady={true}
+                index={index}
+              />
+            );
+          })}
+        </div>
         <div className="lobby-orbit">
           <div className="orbit-center" />
           <div className="orbit-ring">
@@ -761,8 +521,160 @@ function Game({ onEnd, onRestart }: { onEnd: () => void; onRestart: () => void }
   );
 }
 
+// Helper component for tech-styled progress bar
+function TechProgressBar({ label, value, max, suffix = '', theme = 'cyan' }: {
+  label: string;
+  value: number;
+  max: number;
+  suffix?: string;
+  theme?: 'cyan' | 'gold' | 'danger';
+}) {
+  const percentage = Math.min(100, Math.max(0, (value / max) * 100));
+  const themeClass = theme === 'gold' ? 'gold' : theme === 'danger' ? 'danger' : '';
+
+  return (
+    <div className="tech-progress-bar">
+      <div className="tech-progress-label">
+        <span className="label-text">{label}</span>
+        <span className="label-value">{value}{suffix} / {max}{suffix}</span>
+      </div>
+      <div className="tech-progress-track">
+        <div className={`tech-progress-fill ${themeClass}`} style={{ width: `${percentage}%` }} />
+      </div>
+    </div>
+  );
+}
+
+// Helper component for tech gauge
+function TechGauge({ label, value, subtext, theme = 'cyan' }: {
+  label: string;
+  value: string | number;
+  subtext?: string;
+  theme?: 'cyan' | 'gold';
+}) {
+  const themeClass = theme === 'gold' ? 'gold' : 'accent';
+
+  return (
+    <div className="tech-gauge">
+      <div className="gauge-label">{label}</div>
+      <div className={`gauge-value ${themeClass}`}>{value}</div>
+      {subtext && <div className="gauge-subtext">{subtext}</div>}
+    </div>
+  );
+}
+
+// Stats display component
+function MatchStats({ wsState, selfId, isWinner }: {
+  wsState: any;
+  selfId: string;
+  isWinner: boolean;
+}) {
+  const initialPlayers = wsState.initialPlayers || [];
+  const totalPlayers = initialPlayers.length;
+  const myKills = wsState.kills?.[selfId] || 0;
+
+  // Calculate rank
+  let rank = 0;
+  try {
+    const order = wsState.eliminationOrder || [];
+    const uniqueOrder: string[] = [];
+    for (const pid of order) {
+      if (pid && !uniqueOrder.includes(pid)) uniqueOrder.push(pid);
+    }
+    const rankMap: Record<string, number> = {};
+    const winner = wsState.lastRound?.winnerId;
+    if (winner) rankMap[winner] = 1;
+    let r = 2;
+    for (let i = uniqueOrder.length - 1; i >= 0; i--) {
+      const pid = uniqueOrder[i];
+      if (pid && !rankMap[pid]) { rankMap[pid] = r; r++; }
+    }
+    rank = rankMap[selfId] || 0;
+  } catch {}
+
+  // Calculate performance rating
+  const getPerformanceRating = () => {
+    if (!rank) return { rating: 'N/A', stars: 0, class: '' };
+    const percentile = (totalPlayers - rank + 1) / totalPlayers;
+    if (percentile >= 0.8 || isWinner) return { rating: 'Excellent', stars: 5, class: 'excellent' };
+    if (percentile >= 0.6) return { rating: 'Good', stars: 4, class: 'good' };
+    if (percentile >= 0.4) return { rating: 'Average', stars: 3, class: 'average' };
+    return { rating: 'Keep Practicing', stars: 2, class: 'poor' };
+  };
+
+  const performance = getPerformanceRating();
+
+  return (
+    <div className="match-stats-dashboard">
+      {/* Performance Rating */}
+      <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+        <div className={`performance-rating ${performance.class}`}>
+          <div className="rating-stars">
+            {[1, 2, 3, 4, 5].map((star) => (
+              <span
+                key={star}
+                className={`rating-star ${star <= performance.stars ? 'active' : ''}`}
+              >
+                ★
+              </span>
+            ))}
+          </div>
+          <span className="rating-text">{performance.rating}</span>
+        </div>
+      </div>
+
+      {/* Tech Gauges */}
+      <div className="tech-gauge-container">
+        <TechGauge label="Rank" value={`#${rank}`} subtext={`of ${totalPlayers}`} theme={isWinner ? 'gold' : 'cyan'} />
+        <TechGauge label="Kills" value={myKills} subtext="eliminations" />
+        <TechGauge label="Survival" value={`${rank <= totalPlayers / 3 ? 'Top' : ''}${Math.round(((totalPlayers - rank + 1) / totalPlayers) * 100)}%`} subtext="of players" />
+      </div>
+
+      {/* Progress Bars */}
+      {totalPlayers > 0 && (
+        <>
+          <TechProgressBar
+            label="Placement"
+            value={totalPlayers - rank + 1}
+            max={totalPlayers}
+            suffix=""
+            theme={isWinner ? 'gold' : 'cyan'}
+          />
+          <TechProgressBar
+            label="Kill Performance"
+            value={myKills}
+            max={Math.max(5, Math.ceil(totalPlayers / 3))}
+            suffix=""
+            theme={myKills > 0 ? 'cyan' : 'danger'}
+          />
+        </>
+      )}
+
+      {/* Stats Grid */}
+      <div className="match-stats-grid">
+        <div className="stat-card">
+          <div className="stat-card-label">Final Position</div>
+          <div className={`stat-card-value ${isWinner ? 'gold' : ''}`}>#{rank}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-card-label">Total Players</div>
+          <div className="stat-card-value">{totalPlayers}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-card-label">Eliminations</div>
+          <div className="stat-card-value highlight">{myKills}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-card-label">Win Rate</div>
+          <div className="stat-card-value">{isWinner ? '100%' : '0%'}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onChangeTier: () => void }) {
-  const { state: wsState } = useWs();
+  const { state: wsState, connectAndJoin } = useWs();
   const { publicKey } = useWallet();
   const tx = wsState.lastRound?.txSignature;
   const winner = wsState.lastRound?.winnerId;
@@ -770,25 +682,28 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
   const solscan = tx ? `https://solscan.io/tx/${tx}${SOLANA_CLUSTER === 'devnet' ? '?cluster=devnet' : ''}` : null;
   const selfId = wsState.playerId || publicKey || '';
   const isWinner = !!winner && winner === selfId;
-  // Compute compact summary: your kills and rank if known (use wsState.playerId)
-  let rankText: string | null = null;
-  try {
-    const initial = wsState.initialPlayers || [];
-    const order = wsState.eliminationOrder || [];
-    if (initial.length) {
-      const uniqueOrder: string[] = [];
-      for (const pid of order) { if (pid && !uniqueOrder.includes(pid)) uniqueOrder.push(pid); }
-      const rankMap: Record<string, number> = {};
-      if (winner) rankMap[winner] = 1;
-      let r = 2;
-      for (let i = uniqueOrder.length - 1; i >= 0; i--) {
-        const pid = uniqueOrder[i];
-        if (pid && !rankMap[pid]) { rankMap[pid] = r; r++; }
-      }
-      const myRank = rankMap[selfId];
-      if (myRank) rankText = `Your rank: #${myRank}`;
+  const [playAgainBusy, setPlayAgainBusy] = useState(false);
+  const handlePlayAgain = async () => {
+    if (playAgainBusy) return;
+    if (wsState.phase !== 'ended') { onPlayAgain(); return; }
+    setPlayAgainBusy(true);
+    try {
+      let last: any = null;
+      try { last = JSON.parse(localStorage.getItem('sr_last_join') || 'null'); } catch { }
+      const lobby: any = wsState.lobby || null;
+      const entryFeeTier = (lobby?.entryFee ?? last?.entryFeeTier ?? 0) as any;
+      const mode = (lobby?.mode ?? last?.mode ?? (entryFeeTier === 0 ? 'practice' : 'tournament')) as any;
+      const guestName =
+        mode === 'practice'
+          ? (last?.guestName || localStorage.getItem('sr_guest_name') || lobby?.playerNames?.[wsState.playerId || ''] || 'Guest')
+          : undefined;
+      await connectAndJoin({ entryFeeTier, mode, ...(guestName ? { guestName } : {}) });
+    } catch {
+      onPlayAgain();
+    } finally {
+      setPlayAgainBusy(false);
     }
-  } catch {}
+  };
   return (
     <div className="screen active" id="round-end">
       <div className="modal-card">
@@ -796,18 +711,18 @@ function Results({ onPlayAgain, onChangeTier }: { onPlayAgain: () => void; onCha
         {solscan && (
           <div className="modal-subtitle"><a href={solscan} target="_blank" rel="noreferrer">View payout on Solscan</a></div>
         )}
-        {rankText && (
-          <div className="modal-subtitle">{rankText} • Kills: {wsState.kills?.[selfId] || 0}</div>
-        )}
-        <div className="round-actions"><button className="btn-primary" onClick={onPlayAgain}>Replay</button><button className="btn-secondary" onClick={onChangeTier}>Quit</button></div>
+
+        {/* Tech-styled Match Stats */}
+        <MatchStats wsState={wsState} selfId={selfId} isWinner={isWinner} />
+
+        <div className="round-actions">
+          <button className="btn-primary" onClick={handlePlayAgain} disabled={playAgainBusy}>{playAgainBusy ? 'Joining…' : 'Replay'}</button>
+          <button className="btn-secondary" onClick={onChangeTier}>Quit</button>
+        </div>
       </div>
     </div>
   );
 }
-
-
-
-
 
 
 

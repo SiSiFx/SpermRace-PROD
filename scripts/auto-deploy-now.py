@@ -5,24 +5,25 @@ SpermRace.io - Fully Automated Deployment (No Prompts)
 import os
 import sys
 import time
+from pathlib import Path
 
 # VPS Configuration
-VPS_IP = "93.180.133.94"
-VPS_USER = "root"
-VPS_PASSWORD = "yELys6TZvJzT!"
+VPS_IP = (os.environ.get("VPS_IP") or "").strip()
+VPS_USER = (os.environ.get("VPS_USER") or "root").strip()
+VPS_PASSWORD = (os.environ.get("VPS_PASSWORD") or "").strip()
 
 # Deployment Configuration
-DOMAIN = "spermrace.io"
-EMAIL = "admin@spermrace.io"
-SOLANA_RPC = "https://api.devnet.solana.com"  # Using devnet for initial testing
-PRIZE_WALLET = "11111111111111111111111111111111"  # Placeholder for testing
-PRIZE_SECRET = "test-secret-key"  # Placeholder for testing
-VERCEL_ORIGIN = ""  # Optional
+DOMAIN = (os.environ.get("DEPLOY_DOMAIN") or "").strip()
+EMAIL = (os.environ.get("DEPLOY_EMAIL") or "").strip()
+SOLANA_RPC = (os.environ.get("SOLANA_RPC_ENDPOINT") or "https://api.mainnet-beta.solana.com").strip()
+PRIZE_WALLET = (os.environ.get("PRIZE_POOL_WALLET") or "").strip()
+PRIZE_SECRET = (os.environ.get("PRIZE_POOL_SECRET_KEY") or "").strip()
+VERCEL_ORIGIN = (os.environ.get("VERCEL_ORIGIN") or "").strip()
 
 # Paths
-BASE_DIR = r"C:\Users\SISI\Documents\skidr.io fork"
-TARBALL_LOCAL = os.path.join(BASE_DIR, "spermrace-deploy.tar.gz")
-DEPLOY_SCRIPT_LOCAL = os.path.join(BASE_DIR, "scripts", "deploy-from-root.sh")
+REPO_ROOT = Path(__file__).resolve().parents[1]
+TARBALL_LOCAL = Path(os.environ.get("TARBALL_LOCAL") or (REPO_ROOT / "spermrace-deploy.tar.gz"))
+DEPLOY_SCRIPT_LOCAL = Path(os.environ.get("DEPLOY_SCRIPT_LOCAL") or (REPO_ROOT / "scripts" / "deploy-from-root.sh"))
 
 TARBALL_REMOTE = "/tmp/spermrace-deploy.tar.gz"
 DEPLOY_SCRIPT_REMOTE = "/tmp/deploy-from-root.sh"
@@ -43,16 +44,33 @@ def main():
         print("[ERROR] Required packages not installed.")
         sys.exit(1)
 
+    missing = []
+    if not VPS_IP:
+        missing.append("VPS_IP")
+    if not VPS_PASSWORD:
+        missing.append("VPS_PASSWORD")
+    if not DOMAIN:
+        missing.append("DEPLOY_DOMAIN")
+    if not EMAIL:
+        missing.append("DEPLOY_EMAIL")
+    if not PRIZE_WALLET:
+        missing.append("PRIZE_POOL_WALLET")
+    if not PRIZE_SECRET:
+        missing.append("PRIZE_POOL_SECRET_KEY")
+    if missing:
+        print("[ERROR] Missing required env vars:", ", ".join(missing))
+        sys.exit(1)
+
     # Check files
-    if not os.path.exists(TARBALL_LOCAL):
+    if not TARBALL_LOCAL.exists():
         print(f"[ERROR] Tarball not found: {TARBALL_LOCAL}")
         sys.exit(1)
 
-    if not os.path.exists(DEPLOY_SCRIPT_LOCAL):
+    if not DEPLOY_SCRIPT_LOCAL.exists():
         print(f"[ERROR] Deploy script not found: {DEPLOY_SCRIPT_LOCAL}")
         sys.exit(1)
 
-    tarball_size = os.path.getsize(TARBALL_LOCAL) / (1024 * 1024)
+    tarball_size = TARBALL_LOCAL.stat().st_size / (1024 * 1024)
     print(f"[OK] Tarball: {tarball_size:.2f} MB")
     print(f"[OK] Deploy script found")
     print()
@@ -79,13 +97,13 @@ def main():
         print_header("Step 1: Upload Tarball")
         print(f"Uploading {tarball_size:.2f} MB...")
         with SCPClient(ssh.get_transport(), progress=progress) as scp:
-            scp.put(TARBALL_LOCAL, TARBALL_REMOTE)
+            scp.put(str(TARBALL_LOCAL), TARBALL_REMOTE)
         print("\n[OK] Tarball uploaded\n")
 
         # Upload script
         print_header("Step 2: Upload Deploy Script")
         with SCPClient(ssh.get_transport()) as scp:
-            scp.put(DEPLOY_SCRIPT_LOCAL, DEPLOY_SCRIPT_REMOTE)
+            scp.put(str(DEPLOY_SCRIPT_LOCAL), DEPLOY_SCRIPT_REMOTE)
         print("[OK] Script uploaded\n")
 
         # Make executable

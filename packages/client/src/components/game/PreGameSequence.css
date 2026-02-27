@@ -1,0 +1,251 @@
+/**
+ * PreGameSequence - Styles for the pre-game experience
+ */
+
+.pre-game-sequence {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 100;
+}
+
+/* Map Overview Overlay */
+.map-overview-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 3rem;
+}
+
+/* Arena info card */
+.map-info-card {
+  background: linear-gradient(135deg, rgba(20, 25, 40, 0.9) 0%, rgba(15, 20, 35, 0.95) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 16px;
+  padding: 1.25rem 2rem;
+  text-align: center;
+  backdrop-filter: blur(20px);
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+}
+
+.map-info-title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: white;
+  margin: 0 0 0.25rem 0;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  background: linear-gradient(180deg, #ffffff 0%, #a0a8c0 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.map-info-subtitle {
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+/* Zone warning */
+.zone-warning {
+  margin-top: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1.25rem;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 50px;
+  backdrop-filter: blur(10px);
+}
+
+.zone-warning-icon {
+  font-size: 1.25rem;
+  animation: pulseWarning 1.5s ease-in-out infinite;
+}
+
+@keyframes pulseWarning {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.1);
+  }
+}
+
+.zone-warning-text {
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Player markers hint */
+.player-markers-hint {
+  position: absolute;
+  bottom: 3rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 1.5rem;
+}
+
+.player-marker-example {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 50px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  backdrop-filter: blur(10px);
+}
+
+.player-marker-example::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.player-marker-example.you {
+  color: #22d3ee;
+  border: 1px solid rgba(34, 211, 238, 0.3);
+}
+
+.player-marker-example.you::before {
+  background: #22d3ee;
+}
+
+.player-marker-example.enemy {
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.player-marker-example.enemy::before {
+  background: #ef4444;
+}
+
+/* Map overview progress bar */
+.map-overview-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+
+.map-overview-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #22d3ee 0%, #3b82f6 100%);
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.5);
+}
+
+/* Mobile adjustments */
+@media (max-width: 640px) {
+  .map-overview-overlay {
+    padding-top: 2rem;
+  }
+
+  .map-info-card {
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
+  }
+
+  .map-info-title {
+    font-size: 1.25rem;
+  }
+
+  .map-info-subtitle {
+    font-size: 0.75rem;
+  }
+
+  .zone-warning {
+    margin-top: 1rem;
+    padding: 0.625rem 1rem;
+  }
+
+  .zone-warning-icon {
+    font-size: 1rem;
+  }
+
+  .zone-warning-text {
+    font-size: 0.75rem;
+  }
+
+  .player-markers-hint {
+    bottom: 2rem;
+    gap: 1rem;
+  }
+
+  .player-marker-example {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.7rem;
+  }
+}
+
+@media (max-width: 380px) {
+  .map-info-card {
+    padding: 0.875rem 1.25rem;
+  }
+
+  .map-info-title {
+    font-size: 1.125rem;
+  }
+
+  .player-markers-hint {
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: center;
+  }
+}
+
+/* Ensure CountdownAnimation appears above everything */
+.pre-game-sequence .bru-countdown-overlay {
+  z-index: 1100;
+}
+
+/* Animation for map overview entry */
+@keyframes slideInFromTop {
+  from {
+    opacity: 0;
+    transform: translateY(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Animation for zone warning pulse */
+@keyframes zonePulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 20px 5px rgba(239, 68, 68, 0.2);
+  }
+}
+
+.zone-warning {
+  animation: zonePulse 2s ease-in-out infinite;
+}

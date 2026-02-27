@@ -1,0 +1,494 @@
+/**
+ * MobileScreenWrapper.css
+ * Premium screen transitions and loading states for mobile
+ */
+
+/* ==========================================
+   Screen Transitions
+   ========================================== */
+.mobile-screen-wrapper {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  will-change: transform, opacity;
+}
+
+/* Fade transition */
+.mobile-screen-wrapper.transition-fade.animating-in {
+  animation: screenFadeIn 0.3s ease-out forwards;
+}
+
+.mobile-screen-wrapper.transition-fade.animating-out {
+  animation: screenFadeOut 0.25s ease-in forwards;
+}
+
+/* Slide up transition */
+.mobile-screen-wrapper.transition-slide-up.animating-in {
+  animation: screenSlideUpIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.mobile-screen-wrapper.transition-slide-up.animating-out {
+  animation: screenSlideUpOut 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Slide down transition */
+.mobile-screen-wrapper.transition-slide-down.animating-in {
+  animation: screenSlideDownIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.mobile-screen-wrapper.transition-slide-down.animating-out {
+  animation: screenSlideDownOut 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Scale transition */
+.mobile-screen-wrapper.transition-scale.animating-in {
+  animation: screenScaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.mobile-screen-wrapper.transition-scale.animating-out {
+  animation: screenScaleOut 0.25s ease-in forwards;
+}
+
+/* ==========================================
+   Transition Keyframes
+   ========================================== */
+@keyframes screenFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes screenFadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes screenSlideUpIn {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes screenSlideUpOut {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(-20%);
+    opacity: 0;
+  }
+}
+
+@keyframes screenSlideDownIn {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes screenSlideDownOut {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(20%);
+    opacity: 0;
+  }
+}
+
+@keyframes screenScaleIn {
+  from {
+    transform: scale(0.92);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes screenScaleOut {
+  from {
+    transform: scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+}
+
+/* ==========================================
+   Loading States
+   ========================================== */
+.screen-loading-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(10px);
+  z-index: 100;
+}
+
+.loading-spinner-wrapper {
+  position: relative;
+  width: 64px;
+  height: 64px;
+}
+
+.loading-spinner-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  border-top-color: var(--bio-cyan, #22d3ee);
+  animation: spin 1s linear infinite;
+}
+
+.loading-spinner-ring.inner {
+  inset: 12px;
+  border-top-color: var(--bio-magenta, #e879f9);
+  animation-direction: reverse;
+  animation-duration: 0.8s;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-message {
+  margin-top: 24px;
+  color: var(--bio-white, #fff);
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  animation: pulseText 2s ease-in-out infinite;
+}
+
+@keyframes pulseText {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* ==========================================
+   Skeleton Loaders
+   ========================================== */
+.skeleton-loader {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.05) 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 8px;
+}
+
+.skeleton-loader.skeleton-circle {
+  border-radius: 50%;
+}
+
+.skeleton-loader.skeleton-text {
+  height: 1em;
+  border-radius: 4px;
+  max-width: 80%;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* ==========================================
+   Pressable/Tap Feedback
+   ========================================== */
+.pressable {
+  cursor: pointer;
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.15s ease-out;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pressable.pressed {
+  transform: scale(var(--press-scale, 0.95));
+}
+
+.pressable:focus-visible {
+  outline: 2px solid var(--bio-cyan, #22d3ee);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ==========================================
+   Full-Screen Loading Overlay
+   ========================================== */
+.loading-overlay-wrapper {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.9);
+  backdrop-filter: blur(20px);
+  animation: fadeIn 0.2s ease-out;
+}
+
+.loading-overlay-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding: 40px;
+}
+
+/* Animated background rings */
+.loading-rings {
+  position: absolute;
+  width: 120px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.loading-ring {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  animation: ringPulse 2s ease-out infinite;
+}
+
+.loading-ring:nth-child(1) {
+  border-top-color: var(--bio-cyan, #22d3ee);
+  border-left-color: var(--bio-cyan, #22d3ee);
+  animation-delay: 0s;
+}
+
+.loading-ring:nth-child(2) {
+  border-right-color: var(--bio-magenta, #e879f9);
+  border-bottom-color: var(--bio-magenta, #e879f9);
+  animation-delay: 0.5s;
+  width: 80%;
+  height: 80%;
+}
+
+.loading-ring:nth-child(3) {
+  border-top-color: var(--bio-lime, #84cc16);
+  border-bottom-color: var(--bio-lime, #84cc16);
+  animation-delay: 1s;
+  width: 60%;
+  height: 60%;
+}
+
+@keyframes ringPulse {
+  0% {
+    transform: scale(0.8) rotate(0deg);
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.2) rotate(180deg);
+    opacity: 0;
+  }
+}
+
+/* Central loading icon */
+.loading-icon {
+  position: relative;
+  z-index: 1;
+  width: 48px;
+  height: 48px;
+  color: var(--bio-cyan, #22d3ee);
+}
+
+.loading-circle {
+  stroke-dasharray: 60;
+  stroke-dashoffset: 60;
+  animation: circleFill 1.5s ease-in-out infinite;
+}
+
+@keyframes circleFill {
+  0% {
+    stroke-dashoffset: 60;
+    transform: rotate(0deg);
+  }
+  50% {
+    stroke-dashoffset: 0;
+    transform: rotate(180deg);
+  }
+  100% {
+    stroke-dashoffset: -60;
+    transform: rotate(360deg);
+  }
+}
+
+.loading-overlay-message {
+  position: relative;
+  z-index: 1;
+  color: var(--bio-white, #fff);
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin: 0;
+  animation: pulseText 2s ease-in-out infinite;
+}
+
+/* Progress bar */
+.loading-progress-container {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 200px;
+}
+
+.loading-progress-bar {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.loading-progress-fill {
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    var(--bio-cyan, #22d3ee),
+    var(--bio-magenta, #e879f9),
+    var(--bio-lime, #84cc16)
+  );
+  background-size: 200% 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease-out;
+  animation: progressShimmer 2s linear infinite;
+}
+
+@keyframes progressShimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+.loading-progress-text {
+  color: var(--bio-white-dim, rgba(255, 255, 255, 0.7));
+  font-size: 12px;
+  font-weight: 600;
+  font-family: monospace;
+}
+
+/* ==========================================
+   Staggered Children Animation
+   ========================================== */
+.stagger-children > * {
+  opacity: 0;
+  animation: staggerFadeIn 0.4s ease-out forwards;
+}
+
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 50ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 100ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 150ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 200ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 250ms; }
+.stagger-children > *:nth-child(7) { animation-delay: 300ms; }
+.stagger-children > *:nth-child(8) { animation-delay: 350ms; }
+
+@keyframes staggerFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ==========================================
+   Reduced Motion Support
+   ========================================== */
+@media (prefers-reduced-motion: reduce) {
+  .mobile-screen-wrapper,
+  .skeleton-loader,
+  .loading-ring,
+  .loading-circle,
+  .loading-progress-fill,
+  .loading-message,
+  .loading-overlay-message {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .pressable {
+    transition: opacity 0.2s ease;
+  }
+
+  .pressable.pressed {
+    opacity: 0.7;
+    transform: none;
+  }
+}
+
+/* ==========================================
+   Safe Area Support
+   ========================================== */
+@supports (padding: env(safe-area-inset-top)) {
+  .loading-overlay-content {
+    padding-top: calc(40px + env(safe-area-inset-top));
+    padding-bottom: calc(40px + env(safe-area-inset-bottom));
+  }
+}

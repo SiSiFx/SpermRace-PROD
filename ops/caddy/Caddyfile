@@ -4,21 +4,21 @@
 
 http://:8081 {
 	# Local HTTPS via Caddy internal CA
-    # HTTP only for local non-admin testing
+	# HTTP only for local non-admin testing
 
 	# Serve SPA
-	root * "C:\Users\SISI\Documents\skidr.io fork\packages\client\dist"
+	# Run Caddy from the repo root, or replace with an absolute path on your host.
+	root * ./packages/client/dist
 	file_server
 
 	# Reverse proxy WS
 	@ws {
 		path /ws
 	}
-    reverse_proxy @ws 127.0.0.1:8080
+	reverse_proxy @ws 127.0.0.1:8080
 
 	# Reverse proxy API
-    reverse_proxy /api/* 127.0.0.1:8080
+	reverse_proxy /api/* 127.0.0.1:8080
 }
-
 
 
