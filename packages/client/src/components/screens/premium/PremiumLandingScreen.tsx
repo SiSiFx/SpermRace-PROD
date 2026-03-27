@@ -69,13 +69,15 @@ export const PremiumLandingScreen = memo(function PremiumLandingScreen({
 
           <div className="landing-actions">
             <button className="landing-cta-primary" onClick={handlePrimary}>
-              {tier.usd === 0
-                ? 'Start practice'
-                : `Enter ${tier.name} room`}
-              {tier.prize && (
-                <span className="landing-cta-prize">→ {tier.prize}</span>
-              )}
-              {!tier.prize && <ArrowRight size={18} weight="bold" />}
+              <span key={tier.usd} className="landing-cta-content">
+                {tier.usd === 0
+                  ? 'Start practice'
+                  : `Enter ${tier.name} room`}
+                {tier.prize && (
+                  <span className="landing-cta-prize">→ {tier.prize}</span>
+                )}
+                {!tier.prize && <ArrowRight size={18} weight="bold" />}
+              </span>
             </button>
 
             {tier.usd !== 0 && (

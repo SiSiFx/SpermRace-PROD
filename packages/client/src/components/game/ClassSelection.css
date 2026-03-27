@@ -446,6 +446,30 @@
   }
 }
 
+/* ---- Entrance animations ---- */
+@keyframes cs-card-in {
+  from { opacity: 0; transform: translateY(22px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+
+.cs-header {
+  animation: cs-card-in 0.38s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.cs-cards > .cs-card:nth-child(1) {
+  animation: cs-card-in 0.42s 0.05s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.cs-cards > .cs-card:nth-child(2) {
+  animation: cs-card-in 0.42s 0.12s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.cs-cards > .cs-card:nth-child(3) {
+  animation: cs-card-in 0.42s 0.19s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.cs-confirm-row {
+  animation: cs-card-in 0.38s 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .cs-card,
   .cs-confirm {
@@ -453,6 +477,11 @@
   }
   .cs-stat-fill {
     transition: none;
+  }
+  .cs-header,
+  .cs-cards > .cs-card,
+  .cs-confirm-row {
+    animation: none;
   }
 }
 

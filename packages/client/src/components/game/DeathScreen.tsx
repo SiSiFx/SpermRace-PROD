@@ -6,10 +6,31 @@
 
 'use client';
 
-import { useEffect, useState, memo, useMemo } from 'react';
+import { useEffect, useState, memo, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sword, Timer, Ruler, Eye, ArrowLeft, ArrowsClockwise, ArrowCounterClockwise } from 'phosphor-react';
 import './DeathScreen.css';
+
+/** Counts from 0 to target over `duration` ms, starting after `delayMs` */
+function useCountUp(target: number, duration = 750, delayMs = 0): number {
+  const [value, setValue] = useState(0);
+  const rafRef = useRef<number>(0);
+  useEffect(() => {
+    let startTime: number | null = null;
+    const tick = (now: number) => {
+      if (startTime === null) startTime = now + delayMs;
+      const elapsed = now - startTime;
+      if (elapsed < 0) { rafRef.current = requestAnimationFrame(tick); return; }
+      const t = Math.min(1, elapsed / duration);
+      const eased = 1 - Math.pow(1 - t, 4); // ease-out-quart
+      setValue(Math.round(target * eased));
+      if (t < 1) rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [target, duration, delayMs]);
+  return value;
+}
 
 // Brutal one-liner verdict based on how the round went
 function getVerdict(ownTrail: boolean, kills: number, timeSurvived: number, placement: number, totalPlayers: number): string {
@@ -115,6 +136,15 @@ export const DeathScreen = memo(function DeathScreen({
     return placement + (s[(v - 20) % 10] || s[v] || s[0]);
   }, [placement]);
 
+  // Count-up animations — start when card appears (~700ms after mount)
+  const animatedKills = useCountUp(kills, 650, 700);
+  const animatedSeconds = useCountUp(Math.floor(timeSurvived), 800, 750);
+  const animatedTime = useMemo(() => {
+    const m = Math.floor(animatedSeconds / 60);
+    const s = animatedSeconds % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
+  }, [animatedSeconds]);
+
   const killerText = useMemo(() => {
     if (ownTrail) return 'OWN TRAIL';
     if (killerName) return killerName.toUpperCase();
@@ -219,8 +249,8 @@ export const DeathScreen = memo(function DeathScreen({
 
             {/* Stats */}
             <div className="death-stats">
-              <DeathStat label="KILLS" value={kills.toString()} icon={<Sword weight="fill" />} delay={0.6} />
-              <DeathStat label="SURVIVED" value={formattedTime} icon={<Timer weight="fill" />} delay={0.65} />
+              <DeathStat label="KILLS" value={animatedKills.toString()} icon={<Sword weight="fill" />} delay={0.6} />
+              <DeathStat label="SURVIVED" value={animatedTime} icon={<Timer weight="fill" />} delay={0.65} />
               {formattedDistance !== undefined && (
                 <DeathStat label="DISTANCE" value={formattedDistance} icon={<Ruler weight="fill" />} delay={0.7} />
               )}
