@@ -10,7 +10,14 @@ import bs58 from 'bs58';
 const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT || 'https://api.devnet.solana.com';
 
 // The public key of the prize pool wallet (custodial/program-owned)
-const PRIZE_POOL_WALLET = new PublicKey(process.env.PRIZE_POOL_WALLET || '5YKciEvHaGKC6xDntXqWTp3UEkGww5bU72Z7eckxR4j9');
+// Fatal in production if not set — never fall back to a hardcoded address
+if (!process.env.PRIZE_POOL_WALLET && process.env.NODE_ENV === 'production') {
+  console.error('FATAL: PRIZE_POOL_WALLET env var is required in production');
+  process.exit(1);
+}
+const PRIZE_POOL_WALLET = new PublicKey(
+  process.env.PRIZE_POOL_WALLET || 'DubhqCfABzPXKECoF8SznWudrosboRtuDRRZmjcBg2Mb' // dev-only placeholder
+);
 const PLATFORM_FEE_WALLET = process.env.PLATFORM_FEE_WALLET ? new PublicKey(process.env.PLATFORM_FEE_WALLET) : PRIZE_POOL_WALLET;
 
 // =================================================================================================
@@ -25,6 +32,10 @@ export class SmartContractService {
     this.connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
     this.prizePoolKeypair = null;
     const secret = process.env.PRIZE_POOL_SECRET_KEY;
+    if (!secret && process.env.NODE_ENV === 'production') {
+      console.error('FATAL: PRIZE_POOL_SECRET_KEY env var is required in production');
+      process.exit(1);
+    }
     if (secret) {
       try {
         // Accept base58 or JSON array formats

@@ -26,8 +26,9 @@ import { v4 as uuidv4 } from 'uuid';
 
 const PORT = parseInt(process.env.PORT || '8080', 10);
 const BROADCAST_INTERVAL = 1000 / 15; // 15 FPS to reduce bandwidth (25% reduction from 20 FPS)
-const NONCE_TTL_MS = parseInt(process.env.SIWS_NONCE_TTL_MS || '60000', 10);
+// Single TTL for all SIWS nonces (WS + HTTP paths must match)
 const SIWS_CHALLENGE_TTL_MS = parseInt(process.env.SIWS_CHALLENGE_TTL_MS || '120000', 10);
+const NONCE_TTL_MS = SIWS_CHALLENGE_TTL_MS;
 const AUTH_GRACE_MS = parseInt(process.env.AUTH_GRACE_MS || '60000', 10);
 const UNAUTH_MAX = parseInt(process.env.WS_UNAUTH_MAX || '3', 10);
 const SESSION_TOKEN_TTL_MS = parseInt(process.env.SESSION_TOKEN_TTL_MS || '300000', 10);
@@ -123,7 +124,8 @@ const paidPlayers = new Set<string>();
 const expectedLamportsByPlayerId = new Map<string, number>();
 const expectedTierByPlayerId = new Map<string, import('shared').EntryFeeTier>();
 const pendingPaymentByPlayerId = new Map<string, { paymentId: string; createdAt: number; lamports: number; tier: import('shared').EntryFeeTier }>();
-const usedPaymentIds = new Set<string>();
+const usedPaymentIds = new Map<string, number>(); // paymentId → timestamp; TTL-pruned hourly
+const PAYMENT_ID_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 
 // HTTP SIWS challenges and session handoff tokens
 type HttpSiwsChallenge = {
@@ -330,6 +332,17 @@ function cleanupSessionTokens(now = Date.now()): void {
     }
   } catch { }
 }
+
+function cleanupUsedPaymentIds(now = Date.now()): void {
+  try {
+    const cutoff = now - PAYMENT_ID_TTL_MS;
+    for (const [id, ts] of usedPaymentIds.entries()) {
+      if (ts < cutoff) usedPaymentIds.delete(id);
+    }
+  } catch { }
+}
+// Prune expired payment IDs every hour
+setInterval(() => cleanupUsedPaymentIds(), 60 * 60 * 1000);
 
 type Match = {
   matchId: string;
@@ -845,6 +858,10 @@ app.post('/api/siws-auth', limiterSensitive, async (req, res) => {
       res.status(401).json({ ok: false, error: 'Invalid or expired SIWS challenge' });
       return;
     }
+
+    // Consume immediately — prevents replay regardless of signature validity
+    httpSiwsChallenges.delete(nonce);
+
     if (challenge.message !== message) {
       res.status(401).json({ ok: false, error: 'SIWS challenge mismatch' });
       return;
@@ -865,9 +882,6 @@ app.post('/api/siws-auth', limiterSensitive, async (req, res) => {
       res.status(401).json({ ok: false, error: 'Invalid signature' });
       return;
     }
-
-    // Consume challenge (single-use) once auth succeeds
-    httpSiwsChallenges.delete(nonce);
 
     // Generate short-lived one-time WS handoff token
     const sessionToken = randomUUID();
@@ -1611,6 +1625,11 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
       log.debug(`[PAYMENT] Starting verification...`);
       const playerPk = new (await import('@solana/web3.js')).PublicKey(playerId);
       const expectedLamports = expectedLamportsByPlayerId.get(playerId);
+      // Guard: already paid (e.g. reconnect mid-verification)
+      if (paidPlayers.has(playerId)) {
+        ws.send(JSON.stringify({ type: 'error', payload: { message: 'Already joined — payment verified' } }));
+        return;
+      }
       const pending = pendingPaymentByPlayerId.get(playerId);
       if (pending && usedPaymentIds.has(pending.paymentId)) {
         ws.send(JSON.stringify({ type: 'error', payload: { message: 'Payment already used' } }));
@@ -1671,7 +1690,7 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
         log.info(`[PAYMENT] ✅ Adding player ${maskPk(playerId)} to paidPlayers set`);
         paidPlayers.add(playerId);
         if (pending) {
-          usedPaymentIds.add(pending.paymentId);
+          usedPaymentIds.set(pending.paymentId, Date.now());
           pendingPaymentByPlayerId.delete(playerId);
         }
         const tier = expectedTierByPlayerId.get(playerId);
