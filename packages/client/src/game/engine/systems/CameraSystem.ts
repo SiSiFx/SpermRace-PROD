@@ -67,7 +67,7 @@ export class CameraSystem extends System {
 
   private readonly _camera: CameraConfig;
   private _defaultZoom: number;
-  private _boostZoomOut: number = 0.9; // 10% zoom out when boosting
+  private _boostZoomOut: number = 0.80; // Clear zoom-out on boost so extra speed is perceptible
 
   constructor(config?: CameraSystemConfig) {
     super(SystemPriority.PHYSICS - 1);
@@ -81,7 +81,7 @@ export class CameraSystem extends System {
       y: 0,
       zoom: initialZoom,
       targetZoom: initialZoom,
-      smoothFactor: config?.smoothFactor ?? 0.1,
+      smoothFactor: config?.smoothFactor ?? 0.18,
       screenWidth: window.innerWidth,
       screenHeight: window.innerHeight,
       shakeIntensity: 0,

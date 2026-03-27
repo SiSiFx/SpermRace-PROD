@@ -5,30 +5,34 @@ import { SmartContractService } from '../src/SmartContractService.js';
 import { Lobby, EntryFeeTier, GameMode } from 'shared';
 import { randomUUID } from 'crypto';
 import fs from 'fs';
+import os from 'os';
+import path from 'path';
 
 describe('ELO Matchmaking', () => {
   let db: DatabaseService;
   let lobbyManager: LobbyManager;
   let smartContractService: SmartContractService;
+  let tempDir: string;
   let testDbPath: string;
 
   beforeEach(async () => {
-    // Create a temporary database for testing
-    testDbPath = `./test-elo-${randomUUID()}.db`;
-    db = new DatabaseService(testDbPath);
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spermrace-elo-'));
+    testDbPath = path.join(tempDir, `test-elo-${randomUUID()}.db`);
+    db = new DatabaseService(testDbPath, { enableWal: false, enableCacheRefresh: false });
     smartContractService = new SmartContractService();
     lobbyManager = new LobbyManager(smartContractService, db);
   });
 
   afterEach(() => {
-    // Clean up the test database
     try {
-      if (fs.existsSync(testDbPath)) {
-        fs.unlinkSync(testDbPath);
-      }
+      db?.close();
     } catch (e) {
-      // Ignore cleanup errors
     }
+
+    // Clean up temporary dir (includes any sqlite sidecars)
+    try {
+      if (tempDir && fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
+    } catch {}
   });
 
   describe('Player ELO initialization', () => {

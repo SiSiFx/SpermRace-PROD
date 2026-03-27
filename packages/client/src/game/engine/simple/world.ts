@@ -1,6 +1,7 @@
 import { Container, Graphics, type Application } from 'pixi.js';
 import type { Actor, Runtime } from './types';
 import { drawActorBody, drawArena, drawZone, pickColor } from './render';
+import { TRAIL_MIN_POINTS } from './constants';
 
 export function createActor(
   world: Container,
@@ -32,6 +33,7 @@ export function createActor(
     boosting: false,
     trail: [{ x, y }],
     trailAccumulator: 0,
+    trailMaxLength: TRAIL_MIN_POINTS,
     zoneExposure: 0,
     aiDecisionTimer: 0,
     aiTargetAngle: Math.random() * Math.PI * 2,

@@ -2,9 +2,6 @@
  * Premium Screens - Dark Casino Aesthetic
  */
 
-export { PremiumWelcomeScreen } from './premium/PremiumWelcomeScreen';
-export type { PremiumWelcomeScreenProps } from './premium/PremiumWelcomeScreen';
-
 export { PremiumLandingScreen } from './premium/PremiumLandingScreen';
 export type { PremiumLandingScreenProps } from './premium/PremiumLandingScreen';
 

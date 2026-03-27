@@ -9,15 +9,15 @@ import type { Trail } from '../components/Trail';
 import { addTrailPoint, cleanupExpiredTrailPoints } from '../components/Trail';
 import type { TrailPoint } from '../components/Trail';
 import type { Health } from '../components/Health';
-import { hasSpawnProtection, killEntity } from '../components/Health';
-import type { Collision } from '../components/Collision';
-import { CollisionLayer } from '../components/Collision';
+import { hasSpawnProtection } from '../components/Health';
 import type { Player } from '../components/Player';
 import type { Boost } from '../components/Boost';
 import type { Velocity } from '../components/Velocity';
 import { ComponentNames, createComponentMask } from '../components';
+import type { Entity } from '../core/Entity';
 import { SpatialGrid } from '../spatial/SpatialGrid';
-import { TRAIL_CONFIG, COLLISION_CONFIG, PLAYER_VISUAL_CONFIG } from '../config';
+import { BODY_COLLISION_CONFIG, PLAYER_VISUAL_CONFIG } from '../config';
+import { distanceToSegmentSquared } from '../view/math';
 
 /**
  * Trail system configuration
@@ -30,21 +30,32 @@ export interface TrailSystemConfig {
   enabled: boolean;
 }
 
-/**
- * Trail collision result
- */
-export interface TrailCollisionResult {
-  /** Entity that was hit */
-  victimId: string;
+export interface TrailHazardSegment {
+  ownerId: string;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  hitX: number;
+  hitY: number;
+  width: number;
+  isBodySegment: boolean;
+  segmentIndexFromHead: number;
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+  queryMark: number;
+}
 
-  /** Trail owner that killed */
-  killerId: string;
-
-  /** Collision point */
+export interface TrailNearestHazard {
+  ownerId: string;
   x: number;
-
-  /** Collision point */
   y: number;
+  width: number;
+  distanceSq: number;
+  isBodySegment: boolean;
+  segmentIndexFromHead: number;
 }
 
 /**
@@ -55,35 +66,29 @@ export class TrailSystem extends System {
   public readonly priority = SystemPriority.TRAIL;
 
   private readonly _config: TrailSystemConfig;
-  private readonly _collisions: TrailCollisionResult[] = [];
-
-  // Component masks
   private readonly _trailMask: number;
-  private readonly _positionTrailHealthMask: number;
-  private readonly _carWithCollisionMask: number;
+  private readonly _gridCellSize: number;
+  private readonly _gridCols: number;
+  private readonly _gridRows: number;
+  private readonly _hazardSegments: TrailHazardSegment[] = [];
+  private readonly _hazardBuckets: Map<number, number[]> = new Map();
+  private _hazardQueryMark: number = 0;
 
   constructor(config: TrailSystemConfig) {
     super(SystemPriority.TRAIL);
     this._config = config;
+    const gridConfig = config.spatialGrid.getConfig();
 
     this._trailMask = createComponentMask(ComponentNames.TRAIL);
-    this._positionTrailHealthMask = createComponentMask(
-      ComponentNames.POSITION,
-      ComponentNames.TRAIL,
-      ComponentNames.HEALTH
-    );
-    // Mask for cars that can collide with trails
-    this._carWithCollisionMask = createComponentMask(
-      ComponentNames.POSITION,
-      ComponentNames.HEALTH,
-      ComponentNames.COLLISION
-    );
+    this._gridCellSize = gridConfig.cellSize;
+    this._gridCols = gridConfig.gridCols;
+    this._gridRows = gridConfig.gridRows;
   }
 
   /**
    * Update trails and create new points
    */
-  update(dt: number): void {
+  update(_dt: number): void {
     if (!this._config.enabled) return;
 
     const now = Date.now();
@@ -105,55 +110,31 @@ export class TrailSystem extends System {
       // Don't emit during spawn protection
       if (health && hasSpawnProtection(health)) continue;
 
-      // Calculate tail tip position (trail emits from end of tail, not head center)
+      // Trail emits from the back edge of the head — the trail IS the visual tail.
+      // Newest points are near the head (thick, bright), oldest are far behind (thin, dim).
       const isBoosted = boost?.isBoosting ?? false;
-      const currentSpeed = Math.max(0, velocity?.speed ?? 0);
-      const speedNorm = Math.max(0, Math.min(1.45, currentSpeed / 315));
       const angle = velocity?.angle ?? 0;
 
-      // Match render-side tail length/stretch so visual tail and lethal trail stay coherent.
-      const baseTailLength = isBoosted
-        ? PLAYER_VISUAL_CONFIG.TAIL_LENGTH_BOOST
-        : PLAYER_VISUAL_CONFIG.TAIL_LENGTH;
-      const profileTailLength = baseTailLength * (isBoosted ? 1.12 : 1.02);
-      const speedStretch = isBoosted
-        ? 1 + speedNorm * 0.12
-        : 1 + speedNorm * 0.05;
-      const visualTailLength = profileTailLength * speedStretch;
+      // Back edge of the oval head
+      const headBackOffset = PLAYER_VISUAL_CONFIG.BODY_RADIUS * PLAYER_VISUAL_CONFIG.BODY_WIDTH_MULT;
 
-      // Back edge of the oval head in local space.
-      const bodyRadius = PLAYER_VISUAL_CONFIG.BODY_RADIUS;
-      const headBackOffset = bodyRadius * PLAYER_VISUAL_CONFIG.BODY_WIDTH_MULT - 1;
+      let tailTipX = position.x - Math.cos(angle) * headBackOffset;
+      let tailTipY = position.y - Math.sin(angle) * headBackOffset;
 
-      // Keep trail start near visible tail tip.
-      const totalTailOffset = headBackOffset + visualTailLength * 1.0;
-
-      // Calculate tail tip position (opposite direction of movement)
-      let tailTipX = position.x - Math.cos(angle) * totalTailOffset;
-      let tailTipY = position.y - Math.sin(angle) * totalTailOffset;
-
-      // Prevent teleport-like trail jumps when aim changes abruptly.
-      // This avoids giant zig-zag trail artifacts under fast turns.
+      // Clamp large jumps (teleports / physics glitches only — normal movement is ≤8px/frame)
       if (trail.points.length > 0) {
         const last = trail.points[trail.points.length - 1];
         const jx = tailTipX - last.x;
         const jy = tailTipY - last.y;
-        const maxJump = Math.max(60, visualTailLength * 0.34);
-        if (jx * jx + jy * jy > maxJump * maxJump) {
-          // Clamp abrupt direction changes instead of skipping emission.
-          // This preserves a continuous readable trail under hard turns.
+        if (jx * jx + jy * jy > 30 * 30) {
           const dist = Math.hypot(jx, jy) || 1;
-          const clamp = maxJump / dist;
-          tailTipX = last.x + jx * clamp;
-          tailTipY = last.y + jy * clamp;
+          tailTipX = last.x + (jx / dist) * 30;
+          tailTipY = last.y + (jy / dist) * 30;
         }
       }
 
       // Add trail point at tail tip
       addTrailPoint(trail, tailTipX, tailTipY, entity.id, isBoosted);
-
-      // Update spatial grid with trail points
-      this._updateTrailInSpatialGrid(entity, trail, player.color);
     }
 
     // Clean up expired points
@@ -164,113 +145,87 @@ export class TrailSystem extends System {
       cleanupExpiredTrailPoints(trail, now);
     }
 
-    // Check collisions
-    this._checkTrailCollisions(now);
+    // Build one shared hazard index for collision, AI, and danger UI.
+    this._rebuildHazardIndex(now, entities);
   }
 
-  /**
-   * Check for trail-car collisions using spatial grid
-   */
-  private _checkTrailCollisions(now: number): void {
-    const entities = this.entityManager.queryByMask(this._carWithCollisionMask);
+  forEachNearbySegment(
+    x: number,
+    y: number,
+    radius: number,
+    visitor: (segment: Readonly<TrailHazardSegment>) => boolean | void
+  ): void {
+    const queryMark = ++this._hazardQueryMark;
+    const minX = x - radius;
+    const maxX = x + radius;
+    const minY = y - radius;
+    const maxY = y + radius;
+    const minCellX = Math.max(0, Math.floor(minX / this._gridCellSize));
+    const maxCellX = Math.min(this._gridCols - 1, Math.floor(maxX / this._gridCellSize));
+    const minCellY = Math.max(0, Math.floor(minY / this._gridCellSize));
+    const maxCellY = Math.min(this._gridRows - 1, Math.floor(maxY / this._gridCellSize));
 
-    for (const entity of entities) {
-      const position = entity.getComponent<Position>(ComponentNames.POSITION);
-      const health = entity.getComponent<Health>(ComponentNames.HEALTH);
-      const collision = entity.getComponent<Collision>(ComponentNames.COLLISION);
+    for (let cellY = minCellY; cellY <= maxCellY; cellY++) {
+      for (let cellX = minCellX; cellX <= maxCellX; cellX++) {
+        const bucket = this._hazardBuckets.get(cellY * this._gridCols + cellX);
+        if (!bucket) continue;
 
-      if (!position || !health || !collision) continue;
-      if (!health.isAlive) continue;
-      if (hasSpawnProtection(health)) continue;
+        for (const segmentIndex of bucket) {
+          const segment = this._hazardSegments[segmentIndex];
+          if (!segment || segment.queryMark === queryMark) continue;
+          segment.queryMark = queryMark;
 
-      // Query nearby entities (including trail points)
-      const nearby = this._config.spatialGrid.getNearbyEntities(
-        position.x,
-        position.y,
-        collision.radius + 20 // Slightly larger radius for trail collision
-      );
-
-      for (const [nearbyId, nearbyData] of nearby.entries()) {
-        if (nearbyId === entity.id) continue; // Don't check against self
-
-        const nearbyEntity = this.entityManager.getEntity(nearbyId);
-        if (!nearbyEntity) continue;
-
-        const nearbyTrail = nearbyEntity.getComponent<Trail>(ComponentNames.TRAIL);
-        if (!nearbyTrail) continue;
-
-        // Check collision with trail points
-        for (const point of nearbyTrail.points) {
-          // Ignore recent points from self
-          // Use consistent 300ms matching server and COLLISION_CONFIG.SELF_IGNORE_MS
-          const SELF_IGNORE_MS = 300;
-          if (point.ownerId === entity.id && now - point.timestamp < SELF_IGNORE_MS) {
+          if (
+            segment.maxX < minX ||
+            segment.minX > maxX ||
+            segment.maxY < minY ||
+            segment.minY > maxY
+          ) {
             continue;
           }
 
-          // Ignore expired points
-          if (now - point.timestamp > nearbyTrail.lifetime) {
-            continue;
-          }
-
-          // Check collision
-          const dx = position.x - point.x;
-          const dy = position.y - point.y;
-          const combinedRadius = collision.radius + point.width;
-
-          if (dx * dx + dy * dy < combinedRadius * combinedRadius) {
-            // Collision detected!
-            this._collisions.push({
-              victimId: entity.id,
-              killerId: nearbyId,
-              x: point.x,
-              y: point.y,
-            });
-
-            // Mark health for death
-            killEntity(health, nearbyId, true);
-
-            break; // Only one collision per frame
+          if (visitor(segment) === false) {
+            return;
           }
         }
       }
     }
   }
 
-  /**
-   * Update trail points in spatial grid
-   * Each trail point is added as a separate entity for collision
-   */
-  private _updateTrailInSpatialGrid(entity: any, trail: Trail, color: number): void {
-    const position = entity.getComponent(ComponentNames.POSITION) as Position | undefined;
-    if (!position) return;
+  findNearestHazard(
+    x: number,
+    y: number,
+    radius: number,
+    options?: { ignoreOwnerId?: string }
+  ): TrailNearestHazard | null {
+    const radiusSq = radius * radius;
+    let nearest: TrailNearestHazard | null = null;
 
-    const collision = entity.getComponent(ComponentNames.COLLISION) as Collision | undefined;
-    if (!collision) return;
+    this.forEachNearbySegment(x, y, radius, (segment) => {
+      if (options?.ignoreOwnerId && segment.ownerId === options.ignoreOwnerId) {
+        return;
+      }
 
-    // Register trail points in spatial grid
-    for (const point of trail.points) {
-      this._config.spatialGrid.addEntity(
-        `trail-${entity.id}-${point.timestamp}`,
-        point.x,
-        point.y,
-        collision.radius
-      );
-    }
-  }
+      const hit = this._getClosestPointOnSegment(x, y, segment);
+      const distanceSq = distanceToSegmentSquared(x, y, segment.x1, segment.y1, segment.x2, segment.y2);
+      if (distanceSq > radiusSq) {
+        return;
+      }
 
-  /**
-   * Get all collisions this frame
-   */
-  getCollisions(): ReadonlyArray<TrailCollisionResult> {
-    return this._collisions;
-  }
+      if (!nearest || distanceSq < nearest.distanceSq) {
+        nearest = {
+          ownerId: segment.ownerId,
+          x: hit.x,
+          y: hit.y,
+          width: segment.width,
+          distanceSq,
+          isBodySegment: segment.isBodySegment,
+          segmentIndexFromHead: segment.segmentIndexFromHead,
+        };
+      }
+    });
 
-  /**
-   * Clear collisions (call after processing)
-   */
-  clearCollisions(): void {
-    this._collisions.length = 0;
+    return nearest;
   }
 
   /**
@@ -309,6 +264,92 @@ export class TrailSystem extends System {
 
       trail.points = [];
     }
+
+    this._hazardSegments.length = 0;
+    this._hazardBuckets.clear();
+  }
+
+  private _rebuildHazardIndex(now: number, entities: readonly Entity[]): void {
+    this._hazardSegments.length = 0;
+    this._hazardBuckets.clear();
+
+    for (const entity of entities) {
+      const trail = entity.getComponent<Trail>(ComponentNames.TRAIL);
+      if (!trail || trail.points.length < 2 || !trail.active) continue;
+
+      for (let index = 0; index < trail.points.length - 1; index++) {
+        const p1 = trail.points[index];
+        const p2 = trail.points[index + 1];
+        const pointAge = now - p1.timestamp;
+
+        if (pointAge > trail.lifetime) continue;
+
+        const width = Math.max(p1.width, p2.width);
+        const padding = width * 1.5;
+        const segment: TrailHazardSegment = {
+          ownerId: entity.id,
+          x1: p1.x,
+          y1: p1.y,
+          x2: p2.x,
+          y2: p2.y,
+          hitX: p1.x,
+          hitY: p1.y,
+          width,
+          isBodySegment: pointAge < BODY_COLLISION_CONFIG.BODY_SEGMENT_AGE_MS,
+          segmentIndexFromHead: trail.points.length - 1 - index,
+          minX: Math.min(p1.x, p2.x) - padding,
+          minY: Math.min(p1.y, p2.y) - padding,
+          maxX: Math.max(p1.x, p2.x) + padding,
+          maxY: Math.max(p1.y, p2.y) + padding,
+          queryMark: 0,
+        };
+
+        const segmentIndex = this._hazardSegments.push(segment) - 1;
+        this._indexSegment(segmentIndex, segment);
+      }
+    }
+  }
+
+  private _indexSegment(index: number, segment: TrailHazardSegment): void {
+    const minCellX = Math.max(0, Math.floor(segment.minX / this._gridCellSize));
+    const maxCellX = Math.min(this._gridCols - 1, Math.floor(segment.maxX / this._gridCellSize));
+    const minCellY = Math.max(0, Math.floor(segment.minY / this._gridCellSize));
+    const maxCellY = Math.min(this._gridRows - 1, Math.floor(segment.maxY / this._gridCellSize));
+
+    for (let cellY = minCellY; cellY <= maxCellY; cellY++) {
+      for (let cellX = minCellX; cellX <= maxCellX; cellX++) {
+        const bucketIndex = cellY * this._gridCols + cellX;
+        const bucket = this._hazardBuckets.get(bucketIndex);
+        if (bucket) {
+          bucket.push(index);
+        } else {
+          this._hazardBuckets.set(bucketIndex, [index]);
+        }
+      }
+    }
+  }
+
+  private _getClosestPointOnSegment(
+    x: number,
+    y: number,
+    segment: TrailHazardSegment
+  ): { x: number; y: number } {
+    const dx = segment.x2 - segment.x1;
+    const dy = segment.y2 - segment.y1;
+    const lengthSq = dx * dx + dy * dy;
+    if (lengthSq <= 1e-6) {
+      return { x: segment.x1, y: segment.y1 };
+    }
+
+    const t = Math.max(
+      0,
+      Math.min(1, ((x - segment.x1) * dx + (y - segment.y1) * dy) / lengthSq)
+    );
+
+    return {
+      x: segment.x1 + t * dx,
+      y: segment.y1 + t * dy,
+    };
   }
 }
 

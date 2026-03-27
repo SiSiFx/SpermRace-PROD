@@ -2,6 +2,9 @@ import {
   BOOST_MULTIPLIER,
   PLAYER_BASE_SPEED,
   TRAIL_MAX_POINTS,
+  TRAIL_MIN_POINTS,
+  TRAIL_GROW_RATE,
+  TRAIL_SHRINK_RATE,
   ZONE_DAMAGE_DELAY,
   ZONE_DELAY_SECONDS,
   ZONE_SHRINK_PER_SEC,
@@ -75,21 +78,12 @@ function updateActorPosition(runtime: Runtime, actor: Actor, dt: number): void {
   actor.x += actor.vx * dt;
   actor.y += actor.vy * dt;
 
+  // SLITHER STYLE: Wall = Death (not bounce)
   const r = actor.radius;
-  if (actor.x < r) {
-    actor.x = r;
-    actor.vx *= -0.2;
-  } else if (actor.x > runtime.worldWidth - r) {
-    actor.x = runtime.worldWidth - r;
-    actor.vx *= -0.2;
-  }
-
-  if (actor.y < r) {
-    actor.y = r;
-    actor.vy *= -0.2;
-  } else if (actor.y > runtime.worldHeight - r) {
-    actor.y = runtime.worldHeight - r;
-    actor.vy *= -0.2;
+  if (actor.x < r || actor.x > runtime.worldWidth - r ||
+      actor.y < r || actor.y > runtime.worldHeight - r) {
+    killActor(actor, null);
+    return;
   }
 
   if (actor.isPlayer && actor.alive) {
@@ -100,6 +94,13 @@ function updateActorPosition(runtime: Runtime, actor: Actor, dt: number): void {
 function updateTrail(actor: Actor, dt: number): void {
   if (!actor.alive) return;
 
+  // GROWTH MECHANIC: Trail grows when boosting, shrinks when not
+  if (actor.boosting) {
+    actor.trailMaxLength = Math.min(TRAIL_MAX_POINTS, actor.trailMaxLength + TRAIL_GROW_RATE * dt);
+  } else {
+    actor.trailMaxLength = Math.max(TRAIL_MIN_POINTS, actor.trailMaxLength - TRAIL_SHRINK_RATE * dt);
+  }
+
   actor.trailAccumulator += dt;
   if (actor.trailAccumulator >= 0.032) {
     actor.trailAccumulator = 0;
@@ -108,7 +109,14 @@ function updateTrail(actor: Actor, dt: number): void {
     const dy = actor.y - last.y;
     if (dx * dx + dy * dy >= 42) {
       actor.trail.push({ x: actor.x, y: actor.y });
-      if (actor.trail.length > TRAIL_MAX_POINTS) actor.trail.shift();
+      // Use dynamic max length instead of fixed constant
+      const maxLength = Math.floor(actor.trailMaxLength);
+      let removed = false;
+      while (actor.trail.length > maxLength) {
+        actor.trail.shift();
+        removed = true;
+      }
+      // Mark dirty if we added OR removed points
       actor.trailDirty = true;
     }
   }
@@ -150,6 +158,7 @@ function runCollisions(runtime: Runtime, dt: number): void {
 
   const stillAlive = getAliveActors(runtime);
 
+  // SLITHER STYLE: Head-to-head = Death for one (no bounce)
   for (let i = 0; i < stillAlive.length; i += 1) {
     for (let j = i + 1; j < stillAlive.length; j += 1) {
       const a = stillAlive[i];
@@ -158,16 +167,19 @@ function runCollisions(runtime: Runtime, dt: number): void {
       const minDist = (a.radius + b.radius) * 0.92;
       if (d2 > minDist * minDist) continue;
 
+      // Head-to-head collision - one dies
+      // Boosting player wins, or random if both/none boosting
       if (a.boosting && !b.boosting) {
         killActor(b, a);
       } else if (b.boosting && !a.boosting) {
         killActor(a, b);
       } else {
-        const n = normalize({ x: b.x - a.x, y: b.y - a.y });
-        a.vx -= n.x * 120;
-        a.vy -= n.y * 120;
-        b.vx += n.x * 120;
-        b.vy += n.y * 120;
+        // Both or neither boosting - random winner
+        if (Math.random() < 0.5) {
+          killActor(b, a);
+        } else {
+          killActor(a, b);
+        }
       }
     }
   }

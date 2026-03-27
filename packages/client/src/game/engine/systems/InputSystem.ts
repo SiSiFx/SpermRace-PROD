@@ -28,6 +28,13 @@ export interface PlayerInput {
 
   /** Input timestamp */
   timestamp: number;
+
+  /**
+   * Whether a real directional input is present.
+   * When false, boost state is still applied but targetAngle is NOT updated —
+   * the sperm keeps its current heading instead of snapping to targetX/Y.
+   */
+  hasDirection?: boolean;
 }
 
 /**
@@ -159,15 +166,14 @@ export class InputSystem extends System {
     boost: Boost,
     input: PlayerInput
   ): void {
-    // Calculate target angle from input
-    const dx = input.targetX - position.x;
-    const dy = input.targetY - position.y;
-    const targetAngle = Math.atan2(dy, dx);
+    // Only update heading when actual directional input is present
+    if (input.hasDirection !== false) {
+      const dx = input.targetX - position.x;
+      const dy = input.targetY - position.y;
+      velocity.targetAngle = Math.atan2(dy, dx);
+    }
 
-    // Update velocity target angle
-    velocity.targetAngle = targetAngle;
-
-    // Apply boost state
+    // Apply boost state regardless of direction
     if (input.boost) {
       startBoost(boost);
     } else {

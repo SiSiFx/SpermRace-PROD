@@ -81,9 +81,6 @@ export class SpatialGrid {
   /** Dirty flag for cells needing update */
   private readonly _dirtyCells: Set<number> = new Set();
 
-  /** Current frame for tracking */
-  private _currentFrame: number = 0;
-
   constructor(config: SpatialGridConfig) {
     this._cellSize = config.cellSize;
     this._worldWidth = config.worldWidth;
@@ -413,23 +410,15 @@ export class SpatialGrid {
   }
 
   /**
-   * Check if two cell arrays are equal
+   * Check if two cell arrays are equal.
+   * _getCellsForCircle always iterates in the same y→x scan order, so equal cell sets
+   * always produce identical array order — direct element comparison, zero allocations.
    */
   private _cellsEqual(cells1: number[], cells2: number[]): boolean {
-    if (cells1.length !== cells2.length) {
-      return false;
+    if (cells1.length !== cells2.length) return false;
+    for (let i = 0; i < cells1.length; i++) {
+      if (cells1[i] !== cells2[i]) return false;
     }
-
-    // Sort and compare
-    const sorted1 = [...cells1].sort((a, b) => a - b);
-    const sorted2 = [...cells2].sort((a, b) => a - b);
-
-    for (let i = 0; i < sorted1.length; i++) {
-      if (sorted1[i] !== sorted2[i]) {
-        return false;
-      }
-    }
-
     return true;
   }
 }

@@ -19,12 +19,12 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:8085',
         changeOrigin: false,
         secure: false,
       },
       '/ws': {
-        target: 'ws://localhost:8080',
+        target: 'ws://localhost:8085',
         ws: true,
         changeOrigin: false,
         secure: false,

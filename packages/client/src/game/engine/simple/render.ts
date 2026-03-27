@@ -46,25 +46,30 @@ export function drawActorBody(actor: Actor): void {
 }
 
 export function drawTrail(actor: Actor): void {
-  if (!actor.trailDirty) return;
   actor.trailG.clear();
+  
   if (actor.trail.length < 2) {
     actor.trailDirty = false;
     return;
   }
 
-  const points: number[] = [];
-  for (let i = 0; i < actor.trail.length; i += 1) {
-    points.push(actor.trail[i].x, actor.trail[i].y);
+  // Draw trail as filled circles at each point (no caps, no lines)
+  // This avoids all stroke cap issues
+  const trailRadius = Math.max(3, actor.radius * 0.5);
+  const alpha = actor.alive ? 0.7 : 0.25;
+  
+  for (let i = 0; i < actor.trail.length; i++) {
+    const p = actor.trail[i];
+    // Fade out toward tail end
+    const t = i / actor.trail.length; // 0 at head, 1 at tail
+    const pointAlpha = alpha * (1 - t * 0.5); // Fade to 50% at tail
+    
+    actor.trailG.circle(p.x, p.y, trailRadius).fill({ 
+      color: actor.color, 
+      alpha: pointAlpha 
+    });
   }
-
-  actor.trailG.poly(points).stroke({
-    color: actor.color,
-    width: Math.max(4, actor.radius * 0.82),
-    alpha: actor.alive ? 0.62 : 0.28,
-    cap: 'round',
-    join: 'round',
-  });
+  
   actor.trailDirty = false;
 }
 

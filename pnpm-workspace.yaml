@@ -1,4 +1,2 @@
 packages:
-  - 'packages/*'          # Core packages (core, shared)
-  - 'packages/environments/*'  # Environment backends
-  - 'packages/frontends/*'     # Frontend applications
+  - 'packages/*'

@@ -36,37 +36,16 @@
   width: 80px;
   height: 80px;
   border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, rgba(34, 211, 238, 0.12), rgba(34, 211, 238, 0.05));
-  border: 2px solid rgba(34, 211, 238, 0.4);
+  background: radial-gradient(circle at 30% 30%, rgba(34, 211, 238, 0.1), rgba(34, 211, 238, 0.04));
+  border: 2px solid rgba(34, 211, 238, 0.3);
   box-shadow:
-    0 0 20px rgba(34, 211, 238, 0.25),
-    inset 0 0 15px rgba(34, 211, 238, 0.08),
-    inset 0 0 30px rgba(0, 0, 0, 0.3);
+    0 0 8px rgba(34, 211, 238, 0.15),
+    inset 0 0 8px rgba(0, 0, 0, 0.2);
   transition: all 0.2s ease;
   position: relative;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   overflow: hidden;
-}
-
-/* Tactical scanline effect for joystick */
-.joystick-ring::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    rgba(34, 211, 238, 0.03) 2px,
-    rgba(34, 211, 238, 0.03) 4px
-  );
-  pointer-events: none;
-  border-radius: 50%;
-  animation: scanline-move 8s linear infinite;
 }
 
 /* Tech corners decoration */
@@ -83,14 +62,11 @@
 }
 
 .joystick-base.active .joystick-ring {
-  border-color: rgba(34, 211, 238, 0.8);
+  border-color: rgba(34, 211, 238, 0.6);
   box-shadow:
-    0 0 30px rgba(34, 211, 238, 0.4),
-    0 0 60px rgba(34, 211, 238, 0.2),
-    inset 0 0 25px rgba(34, 211, 238, 0.15),
-    inset 0 0 40px rgba(0, 0, 0, 0.4);
-  transform: scale(1.05);
-  animation: tactical-pulse 2s ease-in-out infinite;
+    0 0 12px rgba(34, 211, 238, 0.25),
+    inset 0 0 10px rgba(0, 0, 0, 0.3);
+  transform: scale(1.03);
 }
 
 .joystick-stick {
@@ -102,21 +78,18 @@
   margin-left: -20px;
   margin-top: -20px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, rgba(34, 211, 238, 0.9), rgba(6, 182, 212, 0.7));
-  border: 2px solid rgba(255, 255, 255, 0.6);
+  background: radial-gradient(circle at 35% 35%, rgba(34, 211, 238, 0.8), rgba(6, 182, 212, 0.6));
+  border: 2px solid rgba(255, 255, 255, 0.5);
   box-shadow:
-    0 4px 15px rgba(0, 0, 0, 0.5),
-    0 0 20px rgba(34, 211, 238, 0.4),
-    inset 0 2px 8px rgba(255, 255, 255, 0.3),
-    inset 0 0 15px rgba(34, 211, 238, 0.2);
+    0 4px 12px rgba(0, 0, 0, 0.4),
+    0 0 8px rgba(34, 211, 238, 0.2),
+    inset 0 2px 6px rgba(255, 255, 255, 0.2);
   pointer-events: none;
   z-index: 10;
   will-change: transform;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
 }
 
-/* Tech crosshair in stick center */
+/* Stick center */
 .joystick-stick::before {
   content: '';
   position: absolute;
@@ -125,18 +98,15 @@
   width: 8px;
   height: 8px;
   transform: translate(-50%, -50%);
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.4);
   border-radius: 50%;
-  box-shadow: 0 0 8px rgba(34, 211, 238, 0.6);
 }
 
 .joystick-base.active .joystick-stick {
-  background: radial-gradient(circle at 35% 35%, rgba(34, 211, 238, 1), rgba(6, 182, 212, 0.9));
+  background: radial-gradient(circle at 35% 35%, rgba(34, 211, 238, 0.9), rgba(6, 182, 212, 0.8));
   box-shadow:
-    0 6px 20px rgba(34, 211, 238, 0.6),
-    0 0 30px rgba(34, 211, 238, 0.4),
-    inset 0 2px 6px rgba(255, 255, 255, 0.4);
-  animation: stick-active-pulse 1.5s ease-in-out infinite;
+    0 4px 14px rgba(0, 0, 0, 0.4),
+    0 0 10px rgba(34, 211, 238, 0.3);
 }
 
 .joystick-hint {
@@ -146,12 +116,12 @@
   transform: translateX(-50%);
   font-size: 14px;
   font-weight: 700;
-  color: rgba(34, 211, 238, 0.7);
-  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9), 0 0 10px rgba(34, 211, 238, 0.4);
+  color: rgba(34, 211, 238, 0.6);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
   letter-spacing: 1.5px;
   white-space: nowrap;
   pointer-events: none;
-  opacity: 0.6;
+  opacity: 0.5;
   text-transform: uppercase;
 }
 
@@ -202,65 +172,32 @@
   height: 60px;
   border-radius: 50%;
   background: radial-gradient(circle at 30% 30%, rgba(251, 146, 60, 0.2), rgba(251, 146, 60, 0.1));
-  border: 2px solid rgba(251, 146, 60, 0.5);
+  border: 2px solid rgba(251, 146, 60, 0.4);
   box-shadow:
-    0 4px 20px rgba(251, 146, 60, 0.25),
-    inset 0 2px 8px rgba(255, 255, 255, 0.08),
-    inset 0 0 20px rgba(0, 0, 0, 0.3);
+    0 4px 12px rgba(251, 146, 60, 0.15),
+    inset 0 0 10px rgba(0, 0, 0, 0.2);
   pointer-events: none;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   overflow: hidden;
 }
 
-/* Scanline effect for boost button */
-.mobile-boost-button::after {
-  content: '';
-  position: absolute;
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    rgba(251, 146, 60, 0.03) 2px,
-    rgba(251, 146, 60, 0.03) 4px
-  );
-  pointer-events: none;
-  animation: scanline-move 8s linear infinite;
-}
-
 .mobile-boost-button.ready::before {
-  background: radial-gradient(circle at 30% 30%, rgba(34, 211, 238, 0.35), rgba(34, 211, 238, 0.15));
-  border-color: rgba(34, 211, 238, 0.7);
+  background: radial-gradient(circle at 30% 30%, rgba(34, 211, 238, 0.25), rgba(34, 211, 238, 0.1));
+  border-color: rgba(34, 211, 238, 0.5);
   box-shadow:
-    0 6px 30px rgba(34, 211, 238, 0.4),
-    0 0 50px rgba(34, 211, 238, 0.2),
-    inset 0 2px 8px rgba(255, 255, 255, 0.15),
-    inset 0 0 20px rgba(34, 211, 238, 0.1);
-}
-
-.mobile-boost-button.ready::after {
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    rgba(34, 211, 238, 0.04) 2px,
-    rgba(34, 211, 238, 0.04) 4px
-  );
+    0 4px 14px rgba(34, 211, 238, 0.2),
+    inset 0 0 8px rgba(34, 211, 238, 0.05);
 }
 
 .mobile-boost-button.pressed::before,
 .mobile-boost-button.ready:active::before {
-  transform: scale(1.08);
-  background: radial-gradient(circle at 30% 30%, rgba(0, 255, 136, 0.5), rgba(34, 211, 238, 0.3));
-  border-color: rgba(0, 255, 136, 0.9);
+  transform: scale(1.05);
+  background: radial-gradient(circle at 30% 30%, rgba(16, 185, 129, 0.35), rgba(34, 211, 238, 0.2));
+  border-color: rgba(16, 185, 129, 0.7);
   box-shadow:
-    0 8px 35px rgba(0, 255, 136, 0.5),
-    0 0 60px rgba(0, 255, 136, 0.3),
-    inset 0 3px 12px rgba(255, 255, 255, 0.25);
-  animation: boost-activate 0.3s ease-out;
+    0 4px 16px rgba(16, 185, 129, 0.3),
+    inset 0 2px 8px rgba(255, 255, 255, 0.15);
 }
 
 .mobile-boost-button:disabled {
@@ -319,12 +256,12 @@
 
 .cooldown-progress {
   fill: none;
-  stroke: rgba(34, 211, 238, 0.9);
+  stroke: rgba(34, 211, 238, 0.8);
   stroke-width: 2.5;
   stroke-linecap: round;
   stroke-dasharray: 200;
   transition: stroke-dashoffset 0.3s linear;
-  filter: drop-shadow(0 0 6px rgba(34, 211, 238, 0.6));
+  filter: drop-shadow(0 0 3px rgba(34, 211, 238, 0.4));
 }
 
 /* Touch hints (fade out after first interaction) */

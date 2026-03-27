@@ -14,10 +14,10 @@ export const MATCH_CONFIG = {
   ZONE_START_DELAY_MS: 6000,
 
   /** Zone warning duration before shrinking begins (ms) */
-  ZONE_WARNING_DURATION_MS: 1400,
+  ZONE_WARNING_DURATION_MS: 2500,
 
   /** Zone shrink duration (ms) */
-  ZONE_SHRINK_DURATION_MS: 19000,
+  ZONE_SHRINK_DURATION_MS: 28000,
 
   /** Minimum zone size (pixels) */
   ZONE_MIN_SIZE: 500,
@@ -29,7 +29,7 @@ export const MATCH_CONFIG = {
   SPAWN_GRACE_MS: 1200,
 
   /** Self-trail collision grace period (ms) */
-  SELF_COLLISION_GRACE_MS: 500,
+  SELF_COLLISION_GRACE_MS: 300,
 } as const;
 
 /**
@@ -38,16 +38,25 @@ export const MATCH_CONFIG = {
  */
 export const SPAWN_CONFIG = {
   /** Local player random spawn jitter around arena center (pixels) */
-  LOCAL_PLAYER_CENTER_JITTER: 260,
+  LOCAL_PLAYER_CENTER_JITTER: 300,
 
-  /** Bot spawn ring min distance from local player (pixels) */
-  BOT_MIN_DISTANCE: 280,
+  /** First clean bot ring distance from local player (pixels) */
+  BOT_FIRST_RING_DISTANCE: 500,
 
-  /** Bot spawn ring max distance from local player (pixels) */
-  BOT_MAX_DISTANCE: 760,
+  /** Second clean bot ring distance from local player (pixels) */
+  BOT_SECOND_RING_DISTANCE: 900,
+
+  /** Third ring for higher bot counts (pixels) */
+  BOT_THIRD_RING_DISTANCE: 1400,
+
+  /** Radial jitter per bot so the layout feels alive, not perfectly robotic */
+  BOT_RING_RADIUS_JITTER: 80,
+
+  /** Angular jitter in radians */
+  BOT_ANGLE_JITTER: 0.1,
 
   /** Padding from world edges for bot spawns (pixels) */
-  EDGE_PADDING: 200,
+  EDGE_PADDING: 320,
 } as const;
 
 /**
@@ -55,13 +64,13 @@ export const SPAWN_CONFIG = {
  */
 export const BOT_AI_TUNING = {
   /** How often bots reconsider decisions (ms) */
-  REACTION_DELAY_MS: 72,
+  REACTION_DELAY_MS: 120,
 
   /** Steering precision (0..1) */
-  ACCURACY: 0.9,
+  ACCURACY: 0.85,
 
   /** How often bots choose to pressure players (0..1) */
-  AGGRESSION: 0.82,
+  AGGRESSION: 0.60,
 
   /** Probability of ability usage checks resulting in casts (0..1) */
   ABILITY_USAGE_CHANCE: 0.45,
@@ -93,7 +102,7 @@ export const CAR_PHYSICS = {
   LATERAL_DRAG: 0.82,
 
   /** Turn speed (rad/second) */
-  TURN_SPEED: 4.8,
+  TURN_SPEED: 3.2,
 
   /** Turn rate with speed scaling */
   SPEED_TURN_SCALE: 0.18,
@@ -125,13 +134,13 @@ export const BOOST_CONFIG = {
   SPEED_MULTIPLIER: 1.8,
 
   /** Energy regeneration rate (energy/second) */
-  REGEN_RATE: 13,
+  REGEN_RATE: 17,
 
   /** Energy consumption rate (energy/second) */
   CONSUMPTION_RATE: 22,
 
   /** Instant boost energy reward for securing a kill */
-  KILL_REWARD_ENERGY: 24,
+  KILL_REWARD_ENERGY: 45,
 
   /** Boost trail width multiplier */
   TRAIL_WIDTH_MULTIPLIER: 2,
@@ -150,26 +159,26 @@ export const BOOST_CONFIG = {
  * Trail configuration
  */
 export const TRAIL_CONFIG = {
-  /** Trail lifetime (ms) */
-  LIFETIME_MS: 880,
+  /** Trail lifetime (ms) — how long a trail segment stays lethal */
+  LIFETIME_MS: 7000,
 
   /** Final circle trail lifetime (ms) */
-  FINAL_LIFETIME_MS: 760,
+  FINAL_LIFETIME_MS: 3000,
 
   /** Trail emit interval (ms) */
   EMIT_INTERVAL_MS: 12,
 
   /** Minimum distance between trail points (pixels) */
-  EMIT_DISTANCE: 5,
+  EMIT_DISTANCE: 4,
 
-  /** Base trail width */
-  BASE_WIDTH: 1.7,
+  /** Base trail width — wide enough to see and die on */
+  BASE_WIDTH: 5,
 
   /** Boosted trail width */
-  BOOSTED_WIDTH: 2.8,
+  BOOSTED_WIDTH: 9,
 
-  /** Maximum trail points per car */
-  MAX_POINTS: 500,
+  /** Maximum trail points per car — 7s at 315px/s ÷ 5px per point */
+  MAX_POINTS: 450,
 
   /** Trail fade out duration (ms) */
   FADE_OUT_DURATION_MS: 500,
@@ -219,8 +228,8 @@ export const COLLISION_CONFIG = {
   /** Car collision radius */
   CAR_RADIUS: 8,
 
-  /** Trail collision radius */
-  TRAIL_RADIUS: 3,
+  /** Trail collision radius — matches BASE_WIDTH so hitbox = visual */
+  TRAIL_RADIUS: 5,
 
   /** Powerup collision radius */
   POWERUP_RADIUS: 20,
@@ -316,13 +325,13 @@ export const ABILITY_CONFIG = {
  */
 export const POWERUP_CONFIG = {
   /** Spawn interval (ms) */
-  SPAWN_INTERVAL_MS: 2000,
+  SPAWN_INTERVAL_MS: 4000,
 
   /** Maximum powerups on map */
-  MAX_POWERUPS: 20,
+  MAX_POWERUPS: 12,
 
   /** Energy value */
-  ENERGY_VALUE: 30,
+  ENERGY_VALUE: 45,
 
   /** Powerup lifetime (ms) */
   LIFETIME_MS: 15000,
@@ -371,10 +380,10 @@ export const RENDER_CONFIG = {
   CAMERA_SMOOTH_FACTOR: 0.1,
 
   /** Default zoom */
-  DEFAULT_ZOOM: 1,
+  DEFAULT_ZOOM: 1.12,
 
   /** Mobile zoom */
-  MOBILE_ZOOM: 0.8,
+  MOBILE_ZOOM: 0.94,
 
   /** Maximum zoom */
   MAX_ZOOM: 2,
@@ -390,128 +399,224 @@ export const RENDER_CONFIG = {
  */
 
 /**
- * PICO-8 Color Palette
- * 16-color palette for retro aesthetic
+ * MICROSCOPE LAB Color Palette
+ * Clinical, scientific aesthetic - like viewing cells under a microscope
  */
+export const MICROSCOPE_PALETTE = {
+  // Core backgrounds
+  DEEP_BLACK: 0x0a0e1a,      // Deep microscope blue-black
+  SLIDE_DARK: 0x0f172a,      // Slightly lighter slide background
+
+  // Ambient lighting
+  AMBIENT_CYAN: 0x67e8f9,    // Clinical cyan light
+  AMBIENT_SOFT: 0x38bdf8,    // Softer blue light
+
+  // Cell/organism colors
+  MEMBRANE: 0xe0f2fe,        // Translucent cell membrane (white-blue)
+  CYTOPLASM: 0xbae6fd,       // Inner cell material
+  NUCLEUS: 0xfda4af,         // Pink stained nucleus
+  NUCLEUS_DARK: 0xf87171,    // Darker nucleus center
+
+  // Trail/bioluminescence
+  BIOLUM_CYAN: 0x22d3ee,     // Primary bioluminescent cyan
+  BIOLUM_TEAL: 0x14b8a6,     // Teal variant
+  BIOLUM_GREEN: 0x34d399,    // Green bioluminescence
+
+  // Zone/danger
+  ZONE_SAFE: 0x22d3ee,       // Safe zone cyan
+  ZONE_WARNING: 0xfbbf24,    // Warning amber
+  ZONE_DANGER: 0xf87171,     // Danger red
+
+  // Arena elements
+  PETRI_RIM: 0x334155,       // Petri dish rim
+  GRID_DOT: 0x1e293b,        // Measurement grid dots
+  RETICLE: 0x475569,         // Microscope reticle lines
+
+  // Particles/debris
+  DEBRIS_LIGHT: 0x94a3b8,    // Floating light particles
+  DEBRIS_DARK: 0x64748b,     // Darker debris
+  BUBBLE: 0xe0f2fe,          // Air bubbles
+
+  // Player colors (for multiplayer differentiation)
+  PLAYER_CYAN: 0x22d3ee,
+  PLAYER_PINK: 0xf472b6,
+  PLAYER_GREEN: 0x34d399,
+  PLAYER_AMBER: 0xfbbf24,
+  PLAYER_VIOLET: 0xa78bfa,
+  PLAYER_ROSE: 0xfb7185,
+  PLAYER_TEAL: 0x2dd4bf,
+  PLAYER_ORANGE: 0xfb923c,
+} as const;
+
+// Backwards compatibility alias
 export const PIXEL_PALETTE = {
-  BLACK: 0x000000,
-  DARK_BLUE: 0x1d2b53,
+  BLACK: MICROSCOPE_PALETTE.DEEP_BLACK,
+  DARK_BLUE: MICROSCOPE_PALETTE.SLIDE_DARK,
   DARK_PURPLE: 0x7e2553,
-  DARK_GREEN: 0x008751,
+  DARK_GREEN: MICROSCOPE_PALETTE.BIOLUM_TEAL,
   BROWN: 0xab5236,
-  DARK_GRAY: 0x5f574f,
-  LIGHT_GRAY: 0xc2c3c7,
-  WHITE: 0xfff1e8,
-  RED: 0xff004d,
-  ORANGE: 0xffa300,
-  YELLOW: 0xffec27,
-  GREEN: 0x00e436,
-  BLUE: 0x29adff,
-  INDIGO: 0x83769c,
-  PINK: 0xff77a8,
-  PEACH: 0xffccaa,
+  DARK_GRAY: MICROSCOPE_PALETTE.GRID_DOT,
+  LIGHT_GRAY: MICROSCOPE_PALETTE.DEBRIS_LIGHT,
+  WHITE: MICROSCOPE_PALETTE.MEMBRANE,
+  RED: MICROSCOPE_PALETTE.ZONE_DANGER,
+  ORANGE: MICROSCOPE_PALETTE.ZONE_WARNING,
+  YELLOW: 0xfde047,
+  GREEN: MICROSCOPE_PALETTE.BIOLUM_GREEN,
+  BLUE: MICROSCOPE_PALETTE.BIOLUM_CYAN,
+  INDIGO: MICROSCOPE_PALETTE.PLAYER_VIOLET,
+  PINK: MICROSCOPE_PALETTE.PLAYER_PINK,
+  PEACH: 0xfed7aa,
+} as const;
+
+/**
+ * Microscope visual effects configuration
+ */
+export const MICROSCOPE_VISUALS = {
+  // Background
+  BACKGROUND_COLOR: MICROSCOPE_PALETTE.DEEP_BLACK,
+  VIGNETTE_INTENSITY: 0.4,
+  VIGNETTE_RADIUS: 0.7,
+
+  // Grid/reticle
+  GRID_SPACING: 100,
+  GRID_DOT_SIZE: 2,
+  GRID_COLOR: MICROSCOPE_PALETTE.GRID_DOT,
+  RETICLE_COLOR: MICROSCOPE_PALETTE.RETICLE,
+
+  // Floating particles (debris in fluid)
+  PARTICLE_COUNT: 80,
+  PARTICLE_SIZE_MIN: 1,
+  PARTICLE_SIZE_MAX: 4,
+  PARTICLE_SPEED: 0.3,
+  PARTICLE_ALPHA: 0.15,
+
+  // Caustic light patterns
+  CAUSTIC_ENABLED: true,
+  CAUSTIC_INTENSITY: 0.08,
+  CAUSTIC_SPEED: 0.5,
+
+  // Cell rendering
+  MEMBRANE_ALPHA: 0.85,
+  MEMBRANE_GLOW: 0.2,
+  NUCLEUS_VISIBLE: true,
+  NUCLEUS_SIZE_RATIO: 0.4,
+
+  // Trail glow
+  TRAIL_GLOW_RADIUS: 8,
+  TRAIL_GLOW_ALPHA: 0.3,
+  TRAIL_BIOLUM_PULSE: true,
+
+  // Arena
+  ARENA_GLOW_COLOR: MICROSCOPE_PALETTE.PETRI_RIM,
+  ARENA_GLOW_WIDTH: 6,
 } as const;
 
 export const PLAYER_VISUAL_CONFIG = {
-  /** === BODY === */
-  /** Body radius (size of the sperm head) */
+  /** === BODY (CELL MEMBRANE) === */
+  /** Body radius (size of the cell) */
   BODY_RADIUS: 10,
 
   /** Body width multiplier (elongation for oval shape) */
-  BODY_WIDTH_MULT: 1.4,
+  BODY_WIDTH_MULT: 1.42,
 
   /** Body height multiplier */
-  BODY_HEIGHT_MULT: 1.0,
+  BODY_HEIGHT_MULT: 1.06,
 
-  /** === TAIL === */
+  /** === TAIL (FLAGELLUM) === */
   /** Tail length when not boosting */
-  TAIL_LENGTH: 146,
+  TAIL_LENGTH: 160,
 
   /** Tail length when boosting */
-  TAIL_LENGTH_BOOST: 232,
+  TAIL_LENGTH_BOOST: 240,
 
-  /** Number of tail segments - more segments for smoother motion */
-  TAIL_SEGMENTS: 36,
+  /** Number of tail segments - more segments for smoother organic motion */
+  TAIL_SEGMENTS: 42,
 
   /** Tail segments when boosting */
-  TAIL_SEGMENTS_BOOST: 54,
+  TAIL_SEGMENTS_BOOST: 60,
 
-  /** Tail wave amplitude (side-to-side motion) */
-  TAIL_AMPLITUDE: 1.9,
+  /** Tail wave amplitude (side-to-side motion) - organic undulation */
+  TAIL_AMPLITUDE: 10,
 
   /** Tail amplitude when boosting */
-  TAIL_AMPLITUDE_BOOST: 2.7,
+  TAIL_AMPLITUDE_BOOST: 15,
 
-  /** Tail wave speed */
-  TAIL_WAVE_SPEED: 5.6,
+  /** Tail wave speed - smooth organic motion */
+  TAIL_WAVE_SPEED: 31.4,
 
   /** Tail wave speed when boosting */
-  TAIL_WAVE_SPEED_BOOST: 7.0,
+  TAIL_WAVE_SPEED_BOOST: 44.0,
 
-  /** Base tail width (thickness at body) - should match body for smooth connection */
-  TAIL_BASE_WIDTH: 14,
+  /** Base tail width (thickness at body) */
+  TAIL_BASE_WIDTH: 8,
 
   /** Max dynamic tail stretch multiplier while boosting at high speed */
-  BOOST_TAIL_STRETCH_MAX: 1.38,
+  BOOST_TAIL_STRETCH_MAX: 1.4,
 
-  /** Turn-driven tail bend strength (higher = more readable directional bend) */
-  TAIL_TURN_BEND: 6.8,
+  /** Turn-driven tail bend strength */
+  TAIL_TURN_BEND: 5.5,
 
-  /** === COLORS === */
-  /** Default player color (cyan) */
-  DEFAULT_COLOR: PIXEL_PALETTE.BLUE,
+  /** === COLORS (MICROSCOPE) === */
+  /** Default player color (bioluminescent cyan) */
+  DEFAULT_COLOR: MICROSCOPE_PALETTE.BIOLUM_CYAN,
 
-  /** Default alpha for sperm body */
-  DEFAULT_ALPHA: 1.0,
+  /** Default alpha for cell body (translucent membrane) */
+  DEFAULT_ALPHA: 0.85,
 
-  /** Nucleus darkness factor (0-1, higher = darker) */
-  NUCLEUS_DARKEN_FACTOR: 0.25,
+  /** Nucleus color (pink stained) */
+  NUCLEUS_COLOR: MICROSCOPE_PALETTE.NUCLEUS,
+
+  /** Nucleus darkness factor */
+  NUCLEUS_DARKEN_FACTOR: 0.15,
+
+  /** Membrane edge glow */
+  MEMBRANE_GLOW_ALPHA: 0.25,
 
   /** === EFFECTS === */
   /** Shield radius */
-  SHIELD_RADIUS: 22,
+  SHIELD_RADIUS: 24,
 
-  /** Boost glow radius */
-  GLOW_RADIUS: 25,
+  /** Boost glow radius (bioluminescence) */
+  GLOW_RADIUS: 34,
 
   /** Spawn effect duration (ms) */
-  SPAWN_EFFECT_DURATION: 500,
+  SPAWN_EFFECT_DURATION: 600,
 
   /** Death burst particle count */
-  DEATH_BURST_PARTICLES: 16,
+  DEATH_BURST_PARTICLES: 20,
 
   /** === NAMEPLATE === */
-  /** Show player names above cars */
+  /** Show player names above cells */
   SHOW_NAMEPLATES: true,
 
   /** Nameplate offset Y (pixels above player) */
-  NAMEPLATE_OFFSET_Y: 30,
+  NAMEPLATE_OFFSET_Y: 35,
 
-  /** === HEAD POLISH === */
-  /** Corner inset for smooth pixel-rounded head */
-  HEAD_CORNER_INSET: 2,
+  /** === CELL MEMBRANE POLISH === */
+  /** Corner softness for organic cell shape */
+  HEAD_CORNER_INSET: 0,
 
-  /** Acrosome cap size in pixels */
-  ACROSOME_SIZE: 4,
+  /** Acrosome cap size (front tip) */
+  ACROSOME_SIZE: 5,
 
-  /** Boost glow padding around head */
-  BOOST_GLOW_PADDING: 4,
+  /** Boost glow padding around cell */
+  BOOST_GLOW_PADDING: 6,
 
   /** === TAIL POLISH === */
-  /** Inset from head back edge for tail attachment */
-  TAIL_ATTACHMENT_INSET: 2,
+  /** Inset from cell back edge for tail attachment */
+  TAIL_ATTACHMENT_INSET: 1,
 
   /** Inner highlight width as ratio of segment width */
-  TAIL_HIGHLIGHT_WIDTH_RATIO: 0.35,
+  TAIL_HIGHLIGHT_WIDTH_RATIO: 0.4,
 
-  /** Alpha for tail inner highlight */
-  TAIL_HIGHLIGHT_ALPHA: 0.25,
+  /** Alpha for tail inner highlight (bioluminescent core) */
+  TAIL_HIGHLIGHT_ALPHA: 0.35,
 
   /** Boost tip outer ring radius */
-  BOOST_TIP_RING_RADIUS: 3,
+  BOOST_TIP_RING_RADIUS: 4,
 
   /** Number of energy trail dots behind boost tip */
-  BOOST_ENERGY_TRAIL_DOTS: 3,
+  BOOST_ENERGY_TRAIL_DOTS: 4,
 } as const;
 
 /**

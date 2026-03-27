@@ -58,6 +58,9 @@ export class EntityManager {
    * Query cache for performance
    */
   private readonly _queryCache: Map<string, Entity[]> = new Map();
+  private _queryCacheHits: number = 0;
+  private _queryCacheMisses: number = 0;
+  private _queryCacheInvalidations: number = 0;
 
   /**
    * Maximum entities allowed (for performance)
@@ -77,6 +80,10 @@ export class EntityManager {
    * Create a new entity
    */
   createEntity(name?: string): Entity {
+    if (this._entities.size >= this._maxEntities && this._entityPool.length === 0) {
+      throw new Error(`Entity limit exceeded (${this._maxEntities})`);
+    }
+
     // Try to reuse from pool
     let entity: Entity;
     if (this._entityPool.length > 0) {
@@ -87,6 +94,7 @@ export class EntityManager {
       entity = new Entity(name);
     }
 
+    entity._setMaskChangeHandler(() => this._invalidateQueryCache());
     this._entities.set(entity.id, entity);
     this._activeEntities.add(entity);
     this._invalidateQueryCache();
@@ -128,6 +136,7 @@ export class EntityManager {
     this._entities.delete(entity.id);
     this._activeEntities.delete(entity);
     this._inactiveEntities.delete(entity);
+    entity._setMaskChangeHandler(null);
 
     // Add to pool if not too many
     if (this._entityPool.length < 1000) {
@@ -156,6 +165,7 @@ export class EntityManager {
     let result = this._queryCache.get(cacheKey);
 
     if (!result) {
+      this._queryCacheMisses++;
       result = [];
       for (const entity of this._activeEntities) {
         if (entity.active && entity.matchesMask(mask)) {
@@ -163,6 +173,8 @@ export class EntityManager {
         }
       }
       this._queryCache.set(cacheKey, result);
+    } else {
+      this._queryCacheHits++;
     }
 
     return result;
@@ -219,6 +231,7 @@ export class EntityManager {
    */
   clear(): void {
     for (const entity of this._entities.values()) {
+      entity._setMaskChangeHandler(null);
       entity.clearComponents();
       this._entityPool.push(entity);
     }
@@ -233,6 +246,8 @@ export class EntityManager {
    * Invalidate query cache (call when entities change)
    */
   _invalidateQueryCache(): void {
+    if (this._queryCache.size === 0) return;
+    this._queryCacheInvalidations++;
     this._queryCache.clear();
   }
 
@@ -242,7 +257,7 @@ export class EntityManager {
    * or at the start of each frame for guaranteed consistency
    */
   invalidateQueryCache(): void {
-    this._queryCache.clear();
+    this._invalidateQueryCache();
   }
 
   /**
@@ -261,6 +276,10 @@ export class EntityManager {
     inactive: number;
     toDestroy: number;
     pooled: number;
+    queryCacheEntries: number;
+    queryCacheHits: number;
+    queryCacheMisses: number;
+    queryCacheInvalidations: number;
   } {
     return {
       total: this._entities.size,
@@ -268,6 +287,10 @@ export class EntityManager {
       inactive: this._inactiveEntities.size,
       toDestroy: this._entitiesToDestroy.size,
       pooled: this._entityPool.length,
+      queryCacheEntries: this._queryCache.size,
+      queryCacheHits: this._queryCacheHits,
+      queryCacheMisses: this._queryCacheMisses,
+      queryCacheInvalidations: this._queryCacheInvalidations,
     };
   }
 }

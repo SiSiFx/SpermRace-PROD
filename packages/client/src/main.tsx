@@ -65,7 +65,7 @@ const isMobile = isMobileDevice();
 // Log which version is loading
 console.log(`🎮 Loading ${isMobile ? 'MOBILE' : 'PC'} optimized UI`);
 
-// Dynamically import the appropriate App component and styles
+// Load unified app with platform-specific styles
 const loadApp = async () => {
   const rootEl = document.getElementById('root');
   if (!rootEl) return;
@@ -73,29 +73,23 @@ const loadApp = async () => {
   const root = createRoot(rootEl);
 
   try {
+    // Load platform-specific styles
     if (isMobile) {
-      // Load mobile-specific styles and component
       await import('./mobile-game-fixes.css');
       await import('./styles-mobile.css');
       await import('./mobile-controls.css');
-      const { default: AppMobile } = await import('./AppMobile');
-      console.log('📱 Mobile app loaded');
-      root.render(
-        <AppErrorBoundary>
-          <AppMobile />
-        </AppErrorBoundary>
-      );
     } else {
-      // Load PC-specific styles and component
       await import('./styles-pc.css');
-      const { default: AppPC } = await import('./AppPC');
-      console.log('🖥️ PC app loaded');
-      root.render(
-        <AppErrorBoundary>
-          <AppPC />
-        </AppErrorBoundary>
-      );
     }
+
+    // Load unified app (handles both PC and mobile)
+    const { default: App } = await import('./AppUnified');
+    console.log(`🎮 ${isMobile ? 'Mobile' : 'PC'} app loaded (unified)`);
+    root.render(
+      <AppErrorBoundary>
+        <App />
+      </AppErrorBoundary>
+    );
   } catch (err) {
     console.error('Failed to load app:', err);
     rootEl.innerHTML = `<div style="padding:20px;color:#fff;background:#0a0e17;font-family:sans-serif;"><h2>Error Loading App</h2><pre style="color:#f66;white-space:pre-wrap;">${err}</pre></div>`;

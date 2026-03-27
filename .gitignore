@@ -29,6 +29,7 @@ pnpm-debug.log*
 # OS files
 .DS_Store
 Thumbs.db
+NUL
 
 # IDE
 .vscode/
@@ -75,3 +76,13 @@ packages/server/test-*.db*
 
 # Codex scratch
 scripts/loadtest/.codex_write_test
+
+# Database files (production data - never commit)
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# Output/screenshot artifacts
+output/
+packages/client/output/

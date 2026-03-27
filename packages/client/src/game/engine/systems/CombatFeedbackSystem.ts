@@ -16,6 +16,8 @@ import { activateKillPower } from '../components/KillPower';
 import { ComponentNames, createComponentMask } from '../components';
 import { BOOST_CONFIG } from '../config';
 import type { FloatingTextSystem } from './FloatingTextSystem';
+import type { SlowMotionSystem } from './SlowMotionSystem';
+import type { SoundSystem } from './SoundSystem';
 
 /**
  * Combat feedback event
@@ -116,8 +118,8 @@ export class CombatFeedbackSystem extends System {
   private _shakeOffset = { x: 0, y: 0 };
   private _shakeTime = 0;
 
-  // Sound state
-  private _audioContext: AudioContext | null = null;
+  // Hit freeze
+  private _slowMotion: SlowMotionSystem | null = null;
 
   // Kill streak tiers
   private readonly _streakTiers: KillStreakTier[] = [
@@ -146,6 +148,12 @@ export class CombatFeedbackSystem extends System {
       ComponentNames.HEALTH,
       ComponentNames.PLAYER
     );
+
+  }
+
+  /** Wire the slow-motion system so kills trigger a hit-freeze */
+  setSlowMotionSystem(sm: SlowMotionSystem): void {
+    this._slowMotion = sm;
   }
 
   /**
@@ -211,6 +219,7 @@ export class CombatFeedbackSystem extends System {
     // Get victim info for floating text position
     const victimEntity = this.entityManager.getEntity(victimId);
     const victimPos = victimEntity?.getComponent<Position>(ComponentNames.POSITION);
+    const killerPos = killerEntity?.getComponent<Position>(ComponentNames.POSITION);
 
     // Core loop reward: every confirmed kill grants score + instant boost + kill power.
     const killerHealth = killerEntity?.getComponent<Health>(ComponentNames.HEALTH);
@@ -262,6 +271,18 @@ export class CombatFeedbackSystem extends System {
       .filter(t => streak >= t.minKills)
       .sort((a, b) => b.minKills - a.minKills)[0];
 
+    // Spawn kill streak floating text at the KILLER's position
+    if (tier && killerPos) {
+      const floatingText = this._getFloatingTextSystem();
+      floatingText?.spawnText(
+        killerPos.x,
+        killerPos.y - 60,
+        tier.name,
+        `#${tier.color.toString(16).padStart(6, '0')}`,
+        { fontSize: 32, speed: 55, lifetime: 2.0 }
+      );
+    }
+
     // Create combat event
     const event: CombatEvent = {
       type: tier ? 'kill_streak' : 'kill',
@@ -288,8 +309,11 @@ export class CombatFeedbackSystem extends System {
       });
     }
 
+    // Hit freeze: 80ms at 8% speed — Vlambeer-style impact weight
+    this._slowMotion?.trigger(0.08, 80);
+
     if (this._config.enableSound) {
-      this._playKillSound(streak);
+      this._getSoundSystem()?.playKill(tier?.pitch ?? 1.0);
     }
   }
 
@@ -322,7 +346,7 @@ export class CombatFeedbackSystem extends System {
     }
 
     if (this._config.enableSound) {
-      this._playDeathSound();
+      this._getSoundSystem()?.playDeath();
     }
   }
 
@@ -360,46 +384,6 @@ export class CombatFeedbackSystem extends System {
   }
 
   /**
-   * Play kill sound with pitch variation based on streak
-   */
-  private _playKillSound(streak: number): void {
-    if (!this._config.enableSound) return;
-
-    try {
-      // Initialize audio context on first use
-      if (!this._audioContext) {
-        this._audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      }
-
-      const tier = this._streakTiers
-        .filter(t => streak >= t.minKills)
-        .sort((a, b) => b.minKills - a.minKills)[0];
-
-      const pitch = tier?.pitch ?? 1.0;
-
-      // Create oscillator for kill sound
-      const oscillator = this._audioContext.createOscillator();
-      const gainNode = this._audioContext.createGain();
-
-      oscillator.connect(gainNode);
-      gainNode.connect(this._audioContext.destination);
-
-      // Sound design: ascending ping for kills
-      oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(800 * pitch, this._audioContext.currentTime);
-      oscillator.frequency.exponentialRampToValueAtTime(1200 * pitch, this._audioContext.currentTime + 0.1);
-
-      gainNode.gain.setValueAtTime(0.3, this._audioContext.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, this._audioContext.currentTime + 0.15);
-
-      oscillator.start(this._audioContext.currentTime);
-      oscillator.stop(this._audioContext.currentTime + 0.15);
-    } catch (error) {
-      console.warn('[CombatFeedbackSystem] Failed to play kill sound:', error);
-    }
-  }
-
-  /**
    * Get floating text system via engine
    */
   private _getFloatingTextSystem(): FloatingTextSystem | null {
@@ -408,36 +392,10 @@ export class CombatFeedbackSystem extends System {
   }
 
   /**
-   * Play death sound
+   * Get sound system via engine
    */
-  private _playDeathSound(): void {
-    if (!this._config.enableSound) return;
-
-    try {
-      if (!this._audioContext) {
-        this._audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      }
-
-      // Create oscillator for death sound
-      const oscillator = this._audioContext.createOscillator();
-      const gainNode = this._audioContext.createGain();
-
-      oscillator.connect(gainNode);
-      gainNode.connect(this._audioContext.destination);
-
-      // Sound design: descending boom for deaths
-      oscillator.type = 'triangle';
-      oscillator.frequency.setValueAtTime(200, this._audioContext.currentTime);
-      oscillator.frequency.exponentialRampToValueAtTime(50, this._audioContext.currentTime + 0.3);
-
-      gainNode.gain.setValueAtTime(0.4, this._audioContext.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, this._audioContext.currentTime + 0.3);
-
-      oscillator.start(this._audioContext.currentTime);
-      oscillator.stop(this._audioContext.currentTime + 0.3);
-    } catch (error) {
-      console.warn('[CombatFeedbackSystem] Failed to play death sound:', error);
-    }
+  private _getSoundSystem(): SoundSystem | null {
+    return this.getEngine()?.getSystemManager()?.getSystem<SoundSystem>('sound') ?? null;
   }
 
   /**
@@ -484,8 +442,6 @@ export class CombatFeedbackSystem extends System {
    * Destroy system
    */
   destroy(): void {
-    this._audioContext?.close();
-    this._audioContext = null;
     this._events.length = 0;
     this._killStreaks.clear();
     this._lastKillTime.clear();

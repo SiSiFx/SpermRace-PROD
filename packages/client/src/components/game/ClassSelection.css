@@ -1,555 +1,481 @@
-/**
- * ClassSelection v2 - Premium Bento-Style Design
- * 
- * DESIGN SYSTEM:
- * - Background: Deep void (#0a0c12)
- * - Cards: Liquid glass with spotlight borders
- * - Accent colors per class (Cyan/Amber/Crimson)
- * - Typography: Inter/Satoshi with tight tracking
- */
+/* ============================================================
+   ClassSelection — class picker overlay
+   ============================================================ */
 
-/* ============================================
-   ROOT & CONTAINER
-   ============================================ */
+/* z-index scale reference:
+   canvas / game HUD  : 10–999
+   cs-root            : 2000   ← must beat all HUD layers
+*/
 
-.class-selection-v2 {
+.cs-root {
   position: fixed;
   inset: 0;
-  background: linear-gradient(180deg, #0a0c12 0%, #0d1118 50%, #0a0c12 100%);
-  z-index: 1000;
-  overflow: hidden;
+  z-index: 2000;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-}
-
-/* Ambient background glows */
-.ambient-glow {
-  position: fixed;
-  width: 600px;
-  height: 600px;
-  border-radius: 50%;
-  filter: blur(150px);
-  opacity: 0.15;
-  pointer-events: none;
-}
-
-.ambient-glow.balanced {
-  background: #22d3ee;
-  top: -200px;
-  left: -200px;
-  animation: ambientFloat 8s ease-in-out infinite;
-}
-
-.ambient-glow.sprinter {
-  background: #fbbf24;
-  top: 50%;
-  right: -300px;
-  animation: ambientFloat 10s ease-in-out infinite reverse;
-}
-
-.ambient-glow.tank {
-  background: #ef4444;
-  bottom: -200px;
-  left: 30%;
-  animation: ambientFloat 12s ease-in-out infinite;
-}
-
-@keyframes ambientFloat {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  33% { transform: translate(30px, -30px) scale(1.1); }
-  66% { transform: translate(-20px, 20px) scale(0.95); }
-}
-
-.selection-container {
-  width: 100%;
-  max-width: 1200px;
-  max-height: 100dvh;
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  overflow-y: auto;
-  padding: 8px;
-}
-
-/* Hide scrollbar */
-.selection-container::-webkit-scrollbar {
-  width: 6px;
-}
-.selection-container::-webkit-scrollbar-track {
-  background: transparent;
-}
-.selection-container::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
-}
-
-/* ============================================
-   HEADER
-   ============================================ */
-
-.selection-header {
-  display: flex;
-  flex-direction: column;
   align-items: flex-start;
-  gap: 12px;
+  justify-content: center;
+  /* Solid dark base prevents any game canvas bleeding through */
+  background-color: rgba(3, 7, 18, 0.98);
+  background-image:
+    radial-gradient(circle at 20% 15%, rgba(34, 211, 238, 0.08) 0%, transparent 30%),
+    radial-gradient(circle at 80% 20%, rgba(251, 191, 36, 0.08) 0%, transparent 30%),
+    radial-gradient(circle at 50% 95%, rgba(8, 47, 73, 0.35) 0%, transparent 50%);
+  padding: clamp(16px, 3.4vh, 30px) clamp(16px, 3vw, 28px) clamp(20px, 4vh, 36px);
+  overflow-y: auto;
+  font-family: var(--font-sans, 'Outfit', sans-serif);
+  color: #e2edf7;
 }
 
-.header-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 50px;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: rgba(255, 255, 255, 0.6);
+.cs-root,
+.cs-root * {
+  box-sizing: border-box;
 }
 
-.header-badge svg {
-  color: #fbbf24;
-  animation: sparkleRotate 3s linear infinite;
-}
-
-@keyframes sparkleRotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.header-title {
-  font-size: clamp(32px, 5vw, 48px);
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  color: #ffffff;
-  margin: 0;
-  line-height: 1.1;
-}
-
-.gradient-text {
-  display: block;
-  background: linear-gradient(135deg, #22d3ee 0%, #3b82f6 50%, #8b5cf6 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.header-subtitle {
-  font-size: 15px;
-  color: rgba(255, 255, 255, 0.5);
-  max-width: 500px;
-  line-height: 1.5;
-  margin: 0;
-}
-
-/* ============================================
-   BENTO GRID
-   ============================================ */
-
-.bento-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-  width: 100%;
-}
-
-/* Responsive: 2 columns on tablet */
-@media (max-width: 1024px) {
-  .bento-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-/* Responsive: 1 column on mobile */
-@media (max-width: 768px) {
-  .bento-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* ============================================
-   SPOTLIGHT CARD
-   ============================================ */
-
-.spotlight-card {
-  position: relative;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 24px;
-  overflow: hidden;
-  cursor: pointer;
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.spotlight-card::before {
+/* Subtle grid overlay */
+.cs-root::before {
   content: '';
-  position: absolute;
+  position: fixed;
   inset: 0;
-  background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, transparent 50%);
   pointer-events: none;
+  z-index: 0;
+  background-image:
+    linear-gradient(rgba(103, 232, 249, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(103, 232, 249, 0.04) 1px, transparent 1px);
+  background-size: 96px 96px;
+  mask-image: radial-gradient(ellipse 80% 80% at 50% 40%, black 30%, transparent 90%);
 }
 
-/* Spotlight border effect */
-.spotlight-border {
-  position: absolute;
+/* Vignette */
+.cs-root::after {
+  content: '';
+  position: fixed;
   inset: 0;
-  border-radius: 24px;
   pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.3s ease;
+  z-index: 0;
+  box-shadow:
+    inset 0 0 140px rgba(0, 0, 0, 0.7),
+    inset 0 0 0 1px rgba(148, 163, 184, 0.05);
 }
 
-.spotlight-card:hover .spotlight-border {
-  opacity: 1;
-}
-
-/* Card content */
-.card-content {
+/* ---- Shell ---- */
+.cs-shell {
   position: relative;
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
+  z-index: 1;
+  width: min(960px, 100%);
+  margin: 0 auto;
+  display: grid;
   gap: 20px;
 }
 
-/* Selected state */
-.spotlight-card.selected {
-  border-color: rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.spotlight-card.selected.balanced {
-  box-shadow: 
-    0 0 0 1px rgba(34, 211, 238, 0.3),
-    0 20px 60px rgba(34, 211, 238, 0.15),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
-}
-
-.spotlight-card.selected.sprinter {
-  box-shadow: 
-    0 0 0 1px rgba(251, 191, 36, 0.3),
-    0 20px 60px rgba(251, 191, 36, 0.15),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
-}
-
-.spotlight-card.selected.tank {
-  box-shadow: 
-    0 0 0 1px rgba(239, 68, 68, 0.3),
-    0 20px 60px rgba(239, 68, 68, 0.15),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
-}
-
-/* Selected badge */
-.selected-badge {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #10b981;
-  border-radius: 50%;
-  color: white;
-  font-size: 14px;
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
-  z-index: 10;
-}
-
-/* Holographic shimmer */
-.holographic-shimmer {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    105deg,
-    transparent 40%,
-    rgba(255, 255, 255, 0.1) 50%,
-    transparent 60%
-  );
-  pointer-events: none;
-}
-
-/* ============================================
-   CLASS TILE CONTENT
-   ============================================ */
-
-.class-tile {
-  min-height: 380px;
-}
-
-.tile-number {
-  position: absolute;
-  top: 20px;
-  left: 24px;
-  font-size: 14px;
-  font-weight: 700;
-  font-family: 'JetBrains Mono', monospace;
-  opacity: 0.5;
-}
-
-.tile-main {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-}
-
-.tile-visual {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 140px;
-}
-
-.tile-info {
+/* ---- Header ---- */
+.cs-header {
+  display: grid;
+  gap: 6px;
   text-align: center;
 }
 
-.tile-name {
-  font-size: 24px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  margin: 0 0 8px 0;
-  text-shadow: 0 0 30px currentColor;
-}
-
-.tile-description {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.5);
-  line-height: 1.5;
+.cs-title {
   margin: 0;
-  max-width: 220px;
+  font-size: clamp(1.9rem, 4vw, 3rem);
+  line-height: 1;
+  letter-spacing: -0.04em;
+  font-weight: 900;
+  color: #f8fbff;
+  text-wrap: balance;
 }
 
-/* Gauges row */
-.tile-gauges {
-  display: flex;
-  justify-content: center;
-  gap: 16px;
-  padding: 8px 0;
+.cs-subtitle {
+  margin: 0;
+  color: rgba(148, 163, 184, 0.78);
+  font-size: clamp(0.88rem, 1.4vw, 1rem);
 }
 
-/* Ability section */
-.tile-ability {
-  display: flex;
-  gap: 12px;
-  padding: 16px;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 12px;
-  margin-top: auto;
+/* ---- Cards grid ---- */
+.cs-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
 }
 
-.ability-line {
-  width: 3px;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
+/* ---- Individual card ---- */
+.cs-card {
+  --class-color: #22d3ee;
+  --class-rgb: 34 211 238;
 
-.ability-content {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.ability-name {
-  font-size: 13px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.ability-desc {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.4);
-  line-height: 1.4;
-}
-
-/* ============================================
-   CONFIRM BUTTON
-   ============================================ */
-
-.selection-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  padding-top: 8px;
-}
-
-.confirm-btn {
   position: relative;
-  padding: 2px;
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-  border: none;
-  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  border-radius: 24px;
+  border: 2px solid rgba(148, 163, 184, 0.11);
+  background:
+    linear-gradient(160deg, rgba(8, 18, 34, 0.97) 0%, rgba(5, 12, 24, 0.95) 100%);
+  color: #edf4fb;
+  text-align: left;
   cursor: pointer;
+  appearance: none;
   overflow: hidden;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow:
+    0 20px 50px rgba(2, 6, 23, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition:
+    transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.confirm-btn:hover {
-  box-shadow: 0 10px 40px rgba(59, 130, 246, 0.3);
-}
-
-.btn-glow {
+/* Color tint from class accent */
+.cs-card::before {
+  content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #ec4899 100%);
-  opacity: 0;
-  transition: opacity 0.3s ease;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 90% 10%, rgba(var(--class-rgb), 0.14) 0%, transparent 50%),
+    radial-gradient(circle at 10% 90%, rgba(var(--class-rgb), 0.06) 0%, transparent 40%);
+  border-radius: inherit;
+}
+
+/* Bottom ambient glow */
+.cs-card::after {
+  content: '';
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  bottom: -30%;
+  height: 50%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(var(--class-rgb), 0.16) 0%, transparent 70%);
+  pointer-events: none;
   filter: blur(20px);
 }
 
-.confirm-btn:hover .btn-glow {
-  opacity: 0.5;
+.cs-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(var(--class-rgb), 0.38);
+  box-shadow:
+    0 26px 64px rgba(2, 6, 23, 0.55),
+    0 0 0 1px rgba(var(--class-rgb), 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
-.btn-content {
+.cs-card:focus-visible {
+  outline: 2px solid var(--class-color);
+  outline-offset: 3px;
+}
+
+.cs-card.selected {
+  transform: translateY(-6px);
+  border-color: rgba(var(--class-rgb), 0.75);
+  box-shadow:
+    0 28px 72px rgba(2, 6, 23, 0.6),
+    0 0 0 1px rgba(var(--class-rgb), 0.35),
+    0 0 48px rgba(var(--class-rgb), 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* Keep content above pseudo-elements */
+.cs-card-header,
+.cs-preview-wrap,
+.cs-card-desc,
+.cs-stats,
+.cs-ability-pill {
   position: relative;
+  z-index: 1;
+}
+
+/* ---- Card header ---- */
+.cs-card-header {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 16px 32px;
-  background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
+  flex-wrap: wrap;
+}
+
+.cs-card-icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
   border-radius: 14px;
-  font-size: 16px;
+  background: rgba(var(--class-rgb), 0.12);
+  border: 1px solid rgba(var(--class-rgb), 0.22);
+  font-size: 1.45rem;
+  flex-shrink: 0;
+}
+
+.cs-card-name {
+  font-size: clamp(1.5rem, 2.6vw, 2rem);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: #f8fbff;
+}
+
+.cs-card-playstyle {
+  margin-left: auto;
+  font-size: 0.62rem;
   font-weight: 700;
-  color: white;
-  transition: background 0.3s ease;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(var(--class-rgb), 0.9);
+  background: rgba(var(--class-rgb), 0.12);
+  border: 1px solid rgba(var(--class-rgb), 0.25);
+  border-radius: 4px;
+  padding: 2px 7px;
+  line-height: 1.6;
+  white-space: nowrap;
 }
 
-.confirm-btn:hover .btn-content {
-  background: linear-gradient(135deg, #1e2535 0%, #131920 100%);
+/* ---- Canvas demo ---- */
+.cs-demo-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 300 / 80;
 }
 
-.btn-icon {
-  transition: transform 0.3s ease;
+/* ---- SVG preview ---- */
+.cs-preview-wrap {
+  border-radius: 16px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 40% 50%, rgba(var(--class-rgb), 0.08) 0%, transparent 60%),
+    linear-gradient(180deg, rgba(5, 12, 26, 0.96) 0%, rgba(3, 8, 18, 0.98) 100%);
+  border: 1px solid rgba(148, 163, 184, 0.08);
+  padding: 4px 0;
 }
 
-.confirm-btn:hover .btn-icon {
-  transform: translateX(4px);
+.cs-preview-svg {
+  display: block;
+  width: 100%;
+  height: 80px;
 }
 
-/* Keyboard hint */
-.keyboard-hint {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.3);
+/* ---- Description ---- */
+.cs-card-desc {
   margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.48;
+  color: rgba(203, 213, 225, 0.82);
+  text-wrap: pretty;
 }
 
-.keyboard-hint kbd {
+/* ---- Stat bars ---- */
+.cs-stats {
+  display: grid;
+  gap: 9px;
+}
+
+.cs-stat {
+  display: grid;
+  grid-template-columns: 48px 1fr 34px;
+  align-items: center;
+  gap: 10px;
+}
+
+.cs-stat-label {
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.65);
+}
+
+.cs-stat-pct {
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(var(--class-rgb), 0.8);
+  text-align: right;
+}
+
+.cs-stat-track {
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(10, 18, 36, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.08);
+}
+
+.cs-stat-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg,
+    rgba(var(--class-rgb), 0.7) 0%,
+    rgba(var(--class-rgb), 1) 100%
+  );
+  box-shadow: 0 0 12px rgba(var(--class-rgb), 0.5);
+  min-width: 6px; /* always visible even at 0% */
+  transition: width 350ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ---- Ability pill ---- */
+.cs-ability-pill {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 0;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(var(--class-rgb), 0.1);
+  border: 1px solid rgba(var(--class-rgb), 0.22);
+  color: rgba(224, 242, 254, 0.85);
+  font-size: 0.78rem;
+  line-height: 1.3;
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+
+.cs-ability-pill strong {
+  color: var(--class-color);
+  font-weight: 900;
+  margin-right: 3px;
+}
+
+.cs-ability-key {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 24px;
-  padding: 4px 8px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  margin-left: 8px;
+  padding: 1px 6px;
   border-radius: 6px;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.6);
-  margin: 0 2px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(10, 18, 36, 0.85);
+  color: rgba(203, 213, 225, 0.9);
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-style: normal;
+  letter-spacing: 0.04em;
 }
 
-/* ============================================
-   RESPONSIVE ADJUSTMENTS
-   ============================================ */
+/* ---- Confirm button ---- */
+.cs-confirm-row {
+  display: flex;
+  justify-content: center;
+  padding-top: 4px;
+}
 
-@media (max-width: 768px) {
-  .class-selection-v2 {
-    padding: 16px;
+.cs-confirm {
+  --class-color: #22d3ee;
+  --class-rgb: 34 211 238;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: 260px;
+  padding: 18px 40px;
+  border-radius: 20px;
+  border: 1px solid rgba(var(--class-rgb), 0.45);
+  background:
+    linear-gradient(160deg, rgba(var(--class-rgb), 0.24) 0%, rgba(var(--class-rgb), 0.12) 100%),
+    rgba(5, 12, 26, 0.85);
+  color: #f8fbff;
+  font-family: var(--font-sans, 'Outfit', sans-serif);
+  font-size: 1.05rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow:
+    0 16px 40px rgba(var(--class-rgb), 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1), border-color 160ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cs-confirm:hover {
+  transform: translateY(-2px);
+  border-color: rgba(var(--class-rgb), 0.72);
+  box-shadow:
+    0 22px 52px rgba(var(--class-rgb), 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.cs-confirm:active {
+  transform: translateY(0);
+}
+
+.cs-confirm:focus-visible {
+  outline: 2px solid var(--class-color);
+  outline-offset: 4px;
+}
+
+/* ---- Mobile: single column ---- */
+@media (max-width: 760px) {
+  .cs-root {
+    padding: 12px 12px 24px;
+    align-items: flex-start;
   }
 
-  .selection-header {
-    text-align: center;
-    align-items: center;
+  .cs-cards {
+    grid-template-columns: 1fr;
   }
 
-  .header-title {
-    font-size: 28px;
+  .cs-title {
+    font-size: clamp(1.75rem, 8vw, 2.4rem);
   }
 
-  .class-tile {
-    min-height: auto;
+  .cs-card-name {
+    font-size: 1.6rem;
   }
 
-  .card-content {
-    padding: 20px;
+  .cs-preview-svg {
+    height: 72px;
   }
 
-  .tile-visual {
-    height: 100px;
-  }
-
-  .tile-name {
-    font-size: 20px;
-  }
-
-  .tile-gauges {
-    gap: 12px;
-  }
-
-  .confirm-btn {
+  .cs-confirm {
     width: 100%;
+    min-width: unset;
+    padding: 16px 24px;
+  }
+}
+
+/* ---- Tablet: single column, constrained ---- */
+@media (max-width: 980px) and (min-width: 761px) {
+  .cs-cards {
+    grid-template-columns: 1fr;
+    max-width: 560px;
+    margin: 0 auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-card,
+  .cs-confirm {
+    transition: none;
+  }
+  .cs-stat-fill {
+    transition: none;
+  }
+}
+
+/* ─── Mobile sticky confirm ─── */
+@media (max-width: 640px) {
+  .cs-root {
+    padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
   }
 
-  .btn-content {
+  .cs-confirm-row {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(to top, rgba(3, 7, 18, 0.98) 70%, transparent);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  .cs-confirm {
+    width: 100%;
     justify-content: center;
-    padding: 14px 24px;
-  }
-}
-
-@media (max-width: 480px) {
-  .tile-gauges {
-    transform: scale(0.85);
-    gap: 8px;
-  }
-
-  .tile-ability {
-    padding: 12px;
-  }
-}
-
-/* Landscape mobile */
-@media (max-height: 600px) and (orientation: landscape) {
-  .class-selection-v2 {
-    padding: 12px;
-  }
-
-  .selection-container {
-    gap: 16px;
-  }
-
-  .header-title {
-    font-size: 24px;
-  }
-
-  .bento-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-
-  .class-tile {
-    min-height: auto;
-  }
-
-  .card-content {
-    padding: 16px;
-    gap: 12px;
-  }
-
-  .tile-visual {
-    height: 80px;
-  }
-
-  .tile-gauges {
-    transform: scale(0.7);
-    gap: 4px;
   }
 }

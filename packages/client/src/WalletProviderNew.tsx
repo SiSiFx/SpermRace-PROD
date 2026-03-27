@@ -36,6 +36,15 @@ const getRpcEndpoint = (): string => {
   return 'https://api.devnet.solana.com';
 };
 
+// WebSocket subscriptions (account-change) use the public Solana endpoint directly —
+// the /api/rpc proxy is HTTP-only so we override wsEndpoint separately.
+const getWsEndpoint = (): string => {
+  const cluster = getClusterType();
+  return cluster === 'mainnet-beta'
+    ? 'wss://api.mainnet-beta.solana.com'
+    : 'wss://api.devnet.solana.com';
+};
+
 // Get cluster type for display
 export const getClusterType = (): 'devnet' | 'mainnet-beta' => {
   const env = (import.meta as any).env?.VITE_SOLANA_CLUSTER as string | undefined;
@@ -61,6 +70,7 @@ interface Props {
  */
 export const WalletProviderNew: FC<Props> = ({ children }) => {
   const endpoint = useMemo(() => getRpcEndpoint(), []);
+  const wsEndpoint = useMemo(() => getWsEndpoint(), []);
 
   // Detect if we're on mobile
   const isMobile = useMemo(() => {
@@ -159,7 +169,7 @@ export const WalletProviderNew: FC<Props> = ({ children }) => {
   }, [isMobile]);
 
   return (
-    <ConnectionProvider endpoint={endpoint}>
+    <ConnectionProvider endpoint={endpoint} config={{ wsEndpoint }}>
       <SolanaWalletProvider
         wallets={wallets}
         onError={onError}

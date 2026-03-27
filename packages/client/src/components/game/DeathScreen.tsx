@@ -6,10 +6,23 @@
 
 'use client';
 
-import { useEffect, useState, memo, useMemo, useCallback } from 'react';
+import { useEffect, useState, memo, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sword, Timer, Ruler, Eye, ArrowLeft, ArrowsClockwise } from 'phosphor-react';
+import { Sword, Timer, Ruler, Eye, ArrowLeft, ArrowsClockwise, ArrowCounterClockwise } from 'phosphor-react';
 import './DeathScreen.css';
+
+// Brutal one-liner verdict based on how the round went
+function getVerdict(ownTrail: boolean, kills: number, timeSurvived: number, placement: number, totalPlayers: number): string {
+  const pick = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
+  if (ownTrail)              return pick(['Took yourself out.', 'Your own worst enemy.', 'Self-inflicted.']);
+  if (timeSurvived < 12)     return pick(['Barely had time to breathe.', 'Speed run.', 'New record. Bad kind.']);
+  if (placement === 2)       return pick(['So close.', 'Second is the first loser.', 'Almost.']);
+  if (kills >= 5)            return pick(['Went down swinging.', 'Took a crowd with you.', 'Plenty of damage dealt.']);
+  if (kills >= 2)            return pick(['At least you drew blood.', 'Took some with you.', 'Not your worst day.']);
+  if (kills === 1)           return pick(['One kill. Respectable.', 'You left a mark.', 'They remember you.']);
+  if (totalPlayers > 5 && placement <= Math.floor(totalPlayers * 0.3)) return pick(['Top third.', 'Decent run.', 'Mid pack.']);
+  return pick(['Next time.', 'Try again.', 'It happens.']);
+}
 
 export interface DeathScreenProps {
   placement: number;
@@ -24,6 +37,8 @@ export interface DeathScreenProps {
   onSpectate?: () => void;
   onLeave?: () => void;
   onChangeClass?: () => void;
+  /** Instant replay with same class — skips class selection */
+  onQuickReplay?: () => void;
 }
 
 export const DeathScreen = memo(function DeathScreen({
@@ -39,9 +54,27 @@ export const DeathScreen = memo(function DeathScreen({
   onSpectate,
   onLeave,
   onChangeClass,
+  onQuickReplay,
 }: DeathScreenProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [countdown, setCountdown] = useState(5);
+
+  // Brutal verdict — random but contextual, computed once on mount
+  const verdict = useMemo(
+    () => getVerdict(ownTrail, kills, timeSurvived, placement, totalPlayers),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
+  // Show own-trail explanation once — first time a player dies by their own trail
+  const [showOwnTrailTip] = useState(() => {
+    if (!ownTrail) return false;
+    try {
+      if (localStorage.getItem('spermrace_own_trail_explained')) return false;
+      localStorage.setItem('spermrace_own_trail_explained', '1');
+      return true;
+    } catch { return false; }
+  });
 
   useEffect(() => {
     const showTimer = setTimeout(() => setIsVisible(true), 100);
@@ -51,7 +84,10 @@ export const DeathScreen = memo(function DeathScreen({
   useEffect(() => {
     if (!isVisible) return;
     if (countdown <= 0) {
-      if (canSpectate && onSpectate) {
+      // Auto-action priority: quick replay > spectate > leave
+      if (onQuickReplay) {
+        onQuickReplay();
+      } else if (canSpectate && onSpectate) {
         onSpectate();
       } else if (onLeave) {
         onLeave();
@@ -147,6 +183,16 @@ export const DeathScreen = memo(function DeathScreen({
               <span className="death-total"> / {totalPlayers}</span>
             </motion.div>
 
+            {/* Brutal verdict */}
+            <motion.p
+              className="death-verdict"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.48 }}
+            >
+              {verdict}
+            </motion.p>
+
             {/* Killer info */}
             <motion.div
               className="death-killer"
@@ -158,6 +204,18 @@ export const DeathScreen = memo(function DeathScreen({
               {killerColor && <span className="death-killer-color" style={killerStyle} />}
               <span className="death-killer-name">{killerText}</span>
             </motion.div>
+
+            {/* Own-trail tip — shown once to explain the mechanic */}
+            {showOwnTrailTip && (
+              <motion.p
+                className="death-own-trail-tip"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.65 }}
+              >
+                Your trail becomes deadly 0.3s after you leave it — don't cross your own path.
+              </motion.p>
+            )}
 
             {/* Stats */}
             <div className="death-stats">
@@ -177,6 +235,22 @@ export const DeathScreen = memo(function DeathScreen({
               role="group"
               aria-label="Game options"
             >
+              {onQuickReplay && (
+                <motion.button
+                  onClick={onQuickReplay}
+                  className="death-btn quick-replay"
+                  aria-label={`Play again with same class — auto in ${countdown}s`}
+                  whileHover={{ scale: 1.02, y: -2 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <ArrowCounterClockwise weight="fill" size={20} />
+                  <span className="death-btn-content">
+                    <span className="death-btn-text">PLAY AGAIN</span>
+                    <span className="death-btn-subtitle">Same class · auto in {countdown}s</span>
+                  </span>
+                </motion.button>
+              )}
+
               {canSpectate && onSpectate && (
                 <motion.button
                   onClick={onSpectate}
@@ -213,14 +287,14 @@ export const DeathScreen = memo(function DeathScreen({
                 <motion.button
                   onClick={onLeave}
                   className="death-btn leave"
-                  aria-label={`Return to lobby - automatic in ${countdown} seconds`}
+                  aria-label="Return to lobby"
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                 >
                   <ArrowLeft weight="bold" size={20} />
                   <span className="death-btn-content">
                     <span className="death-btn-text">RETURN TO LOBBY</span>
-                    <span className="death-btn-subtitle">Auto in {countdown}s</span>
+                    <span className="death-btn-subtitle">See results &amp; exit</span>
                   </span>
                 </motion.button>
               )}

@@ -2,9 +2,6 @@
  * Pixel Game HUD Components - Retro pixel art in-game UI
  */
 
-export { PixelGameHud } from './PixelGameHud';
-export type { PixelGameHudProps } from './PixelGameHud';
-
 export { PixelMinimap } from './PixelMinimap';
 export type { PixelMinimapProps } from './PixelMinimap';
 

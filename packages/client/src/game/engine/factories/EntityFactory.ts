@@ -21,7 +21,13 @@ import { ComponentNames } from '../components';
 import { CollisionLayer, CollisionMask } from '../components/Collision';
 import { EntityType } from '../components/Player';
 import { EntityState } from '../components/Health';
-import { TRAIL_CONFIG, BOOST_CONFIG, COLLISION_CONFIG, MATCH_CONFIG, CAR_PHYSICS } from '../config';
+import { TRAIL_CONFIG, BOOST_CONFIG, COLLISION_CONFIG, MATCH_CONFIG, CAR_PHYSICS, PLAYER_VISUAL_CONFIG } from '../config';
+
+function getVisibleBodyCollisionRadius(sizeMultiplier: number): number {
+  // Keep the gameplay hit circle aligned with the visible sperm head.
+  const visibleBodyRadius = PLAYER_VISUAL_CONFIG.BODY_RADIUS * PLAYER_VISUAL_CONFIG.BODY_HEIGHT_MULT * 0.78;
+  return Math.max(COLLISION_CONFIG.CAR_RADIUS, visibleBodyRadius) * sizeMultiplier;
+}
 
 /**
  * Entity factory configuration
@@ -106,6 +112,7 @@ export class EntityFactory {
 
     // Get class stats
     const classStats = CLASS_STATS[classType];
+    const collisionRadius = getVisibleBodyCollisionRadius(classStats.sizeMultiplier);
 
     // Create entity
     const player = entityManager.createEntity(name);
@@ -129,7 +136,7 @@ export class EntityFactory {
 
     // Collision (apply class size multiplier)
     player.addComponent<Collision>(ComponentNames.COLLISION, {
-      radius: COLLISION_CONFIG.CAR_RADIUS * classStats.sizeMultiplier,
+      radius: collisionRadius,
       layer: CollisionLayer.PLAYER,
       mask: CollisionMask.CAR,
       enabled: true,
@@ -194,13 +201,31 @@ export class EntityFactory {
     const entityManager = this._config.entityManager;
 
     // Auto-generate name and color if not provided
-    const botName = name ?? `Bot${index}`;
-    const botColor = color ?? (0xff00ff + (index * 0x001111) & 0xffffff);
+    const BOT_NAMES = [
+      'Vex', 'Kira', 'Dax', 'Zara', 'Rook', 'Nova', 'Jett', 'Lyra',
+      'Colt', 'Fenn', 'Skye', 'Oryn', 'Blaze', 'Sable', 'Raze', 'Wren',
+    ];
+    const botName = name ?? BOT_NAMES[index % BOT_NAMES.length];
+    // Distinct bright colors readable on dark backgrounds
+    const COLOR_PALETTE = [
+      0xf472b6, // pink
+      0xfbbf24, // amber
+      0x4ade80, // green
+      0xfb923c, // orange
+      0xa78bfa, // purple
+      0xf87171, // red
+      0x2dd4bf, // teal
+      0xfde047, // yellow
+      0xa3e635, // lime
+      0x60a5fa, // blue
+    ];
+    const botColor = color ?? COLOR_PALETTE[index % COLOR_PALETTE.length];
 
     // Random class for bots (for variety)
     const allClasses = [SpermClassType.BALANCED, SpermClassType.SPRINTER, SpermClassType.TANK];
     const botClassType = classType ?? allClasses[Math.floor(Math.random() * allClasses.length)];
     const classStats = CLASS_STATS[botClassType];
+    const collisionRadius = getVisibleBodyCollisionRadius(classStats.sizeMultiplier);
 
     // Create entity
     const bot = entityManager.createEntity(botName);
@@ -224,7 +249,7 @@ export class EntityFactory {
 
     // Collision (apply class size multiplier)
     bot.addComponent<Collision>(ComponentNames.COLLISION, {
-      radius: COLLISION_CONFIG.CAR_RADIUS * classStats.sizeMultiplier,
+      radius: collisionRadius,
       layer: CollisionLayer.BOT,
       mask: CollisionMask.CAR,
       enabled: true,

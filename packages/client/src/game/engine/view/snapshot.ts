@@ -10,6 +10,12 @@ export function createInitialSnapshot(botCount: number): ViewSnapshot {
     status: 'playing',
     placement: 0,
     killer: null,
+    zonePhase: 'idle',
+    isPlayerOutside: false,
+    isPlayerInDanger: false,
+    timeUntilShrink: 0,
+    abilityCooldownPct: 0,
+    abilityActive: false,
   };
 }
 

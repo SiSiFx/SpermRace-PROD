@@ -12,12 +12,11 @@ import { isAbilityReady, AbilityType, ABILITY_CONFIG } from '../components/Abili
 import type { Boost } from '../components/Boost';
 import type { Player } from '../components/Player';
 import { EntityType } from '../components/Player';
-import { ZoneState } from './ZoneSystem';
 import { SpatialGrid } from '../spatial/SpatialGrid';
 import { ComponentNames, createComponentMask } from '../components';
 import type { Entity } from '../core/Entity';
-import type { Trail } from '../components/Trail';
 import type { ZoneSystem } from './ZoneSystem';
+import type { TrailSystem } from './TrailSystem';
 
 /**
  * AI behavior state
@@ -60,6 +59,12 @@ export interface BotAIState {
 
   /** Last ability check time */
   lastAbilityCheck: number;
+
+  /** Per-bot accuracy (0–1): sampled once at spawn for permanent personality */
+  accuracy: number;
+
+  /** Per-bot aggression (0–1): sampled once at spawn for permanent personality */
+  aggression: number;
 }
 
 /**
@@ -128,13 +133,15 @@ export class BotAISystem extends System {
   /**
    * Update bot AI
    */
-  update(dt: number): void {
+  update(_dt: number): void {
     const bots = this._getBotEntities();
     const targets = this._getTargetEntities();
+    const systemManager = this.getEngine()?.getSystemManager();
+    const now = Date.now();
 
     // Get zone state
-    const zoneSystem = this.getEngine()?.getSystemManager()?.getSystem<ZoneSystem>('zone');
-    const zoneState = zoneSystem?.getState() ?? ZoneState.IDLE;
+    const zoneSystem = systemManager?.getSystem<ZoneSystem>('zone');
+    const trailSystem = systemManager?.getSystem<TrailSystem>('trails');
     const zoneCenter = zoneSystem?.getCenter() ?? { x: 1750, y: 1250 };
     const zoneRadius = zoneSystem?.getCurrentRadius() ?? 1000;
 
@@ -152,30 +159,33 @@ export class BotAISystem extends System {
       // Get or create AI state
       let aiState = this._aiStates.get(bot.id);
       if (!aiState) {
+        // Sample a random personality for this bot — spread across the skill curve
+        // so the lobby feels varied (a few easy fish + a few apex predators)
         aiState = {
           state: AIState.ROAMING,
           targetId: null,
           targetPosition: null,
           lastDecision: 0,
           boostUntil: 0,
-          lastAbilityCheck: Date.now() + Math.random() * 2000,
+          lastAbilityCheck: now + Math.random() * 2000,
+          accuracy: 0.45 + Math.random() * 0.55,    // 0.45 → 1.0
+          aggression: 0.25 + Math.random() * 0.70,  // 0.25 → 0.95
         };
         this._aiStates.set(bot.id, aiState);
       }
 
-      const now = Date.now();
-
-      // Update AI decision
-      if (now - aiState.lastDecision >= this._config.reactionDelay) {
-        this._makeDecision(bot, position, velocity, health, aiState, targets, zoneState, zoneCenter, zoneRadius);
+      // Update AI decision — reaction delay also varies with accuracy (sharp bots react faster)
+      const reactionDelay = this._config.reactionDelay * (2.0 - aiState.accuracy);
+      if (now - aiState.lastDecision >= reactionDelay) {
+        this._makeDecision(position, aiState, targets, bot.id, trailSystem, zoneCenter, zoneRadius);
         aiState.lastDecision = now;
       }
 
       // Update target angle
-      this._updateSteering(bot, position, velocity, aiState, dt);
+      this._updateSteering(position, velocity, aiState);
 
       // Update boost
-      this._updateBoost(bot, boost, aiState, now);
+      this._updateBoost(boost, aiState, now);
 
       // Use abilities
       if (abilities && now - aiState.lastAbilityCheck > 500) {
@@ -204,23 +214,20 @@ export class BotAISystem extends System {
    * Make AI decision
    */
   private _makeDecision(
-    bot: Entity,
     position: Position,
-    velocity: Velocity,
-    health: Health,
     aiState: BotAIState,
     targets: Entity[],
-    zoneState: ZoneState,
+    selfId: string,
+    trailSystem: TrailSystem | undefined,
     zoneCenter: { x: number; y: number },
     zoneRadius: number
   ): void {
     // Check if in danger (outside zone)
-    const distFromZone = Math.sqrt(
-      Math.pow(position.x - zoneCenter.x, 2) +
-      Math.pow(position.y - zoneCenter.y, 2)
-    );
+    const dxToZone = position.x - zoneCenter.x;
+    const dyToZone = position.y - zoneCenter.y;
+    const zoneThreshold = zoneRadius * 0.8;
 
-    if (distFromZone > zoneRadius * 0.8) {
+    if (dxToZone * dxToZone + dyToZone * dyToZone > zoneThreshold * zoneThreshold) {
       // Head to zone
       aiState.state = AIState.HEADING_TO_ZONE;
       aiState.targetPosition = { ...zoneCenter };
@@ -228,34 +235,39 @@ export class BotAISystem extends System {
       return;
     }
 
-    // Check for nearby threats (trails)
-    const nearestThreat = this._findNearestThreat(position, 100);
-    if (nearestThreat) {
-      // Flee from threat
+    // Reynolds obstacle avoidance: accumulate repulsion forces from ALL nearby trail
+    // segments (not just the nearest one) so bots flow around multi-trail hazard fields.
+    const avoidForce = this._computeAvoidanceForce(position, 300, trailSystem);
+    if (avoidForce !== null) {
       aiState.state = AIState.FLEEING;
-      const fleeAngle = Math.atan2(
-        position.y - nearestThreat.y,
-        position.x - nearestThreat.x
-      );
-      aiState.targetPosition = {
-        x: position.x + Math.cos(fleeAngle) * 200,
-        y: position.y + Math.sin(fleeAngle) * 200,
-      };
+      const len = Math.hypot(avoidForce.x, avoidForce.y);
+      if (len > 0) {
+        aiState.targetPosition = {
+          x: position.x + (avoidForce.x / len) * 260,
+          y: position.y + (avoidForce.y / len) * 260,
+        };
+      }
       aiState.targetId = null;
       return;
     }
 
-    // Find target to chase
-    if (targets.length > 0 && Math.random() < this._config.aggression) {
-      const target = this._selectTarget(position, targets);
+    // Find target to chase (use per-bot aggression personality)
+    if (targets.length > 0 && Math.random() < aiState.aggression) {
+      const target = this._selectTarget(position, targets, selfId);
       if (target) {
         const pos = target.getComponent<Position>(ComponentNames.POSITION);
+        const vel = target.getComponent<Velocity>(ComponentNames.VELOCITY);
         if (pos) {
           aiState.state = AIState.CHASING;
           aiState.targetId = target.id;
+
+          // Predictive cutting: aim ahead of target using actual speed × time (0.8s).
+          // Speed-based lead means a boosted target gets a wider lead, a slow one gets less.
+          const leadDist = vel ? Math.min(600, vel.speed * 0.8) : 0;
+          const targetAngle = vel?.angle ?? 0;
           aiState.targetPosition = {
-            x: pos.x,
-            y: pos.y,
+            x: pos.x + Math.cos(targetAngle) * leadDist,
+            y: pos.y + Math.sin(targetAngle) * leadDist,
           };
           return;
         }
@@ -276,50 +288,51 @@ export class BotAISystem extends System {
   }
 
   /**
-   * Find nearest threat (trail point)
+   * Reynolds obstacle avoidance: sum repulsion vectors from all nearby trail segments.
+   * Each segment contributes a force proportional to 1/distance, pushing the bot away.
+   * Returns null when no segments are within the danger threshold.
    */
-  private _findNearestThreat(position: Position, radius: number): { x: number; y: number } | null {
-    const nearby = this._spatialGrid.getNearbyEntities(position.x, position.y, radius);
+  private _computeAvoidanceForce(
+    position: Position,
+    radius: number,
+    trailSystem: TrailSystem | undefined
+  ): { x: number; y: number } | null {
+    if (!trailSystem) return null;
 
-    for (const [id, data] of nearby) {
-      const entity = this.entityManager.getEntity(id);
-      if (!entity) continue;
+    const DANGER_DIST = 60; // px — segments inside this range trigger avoidance
+    const DANGER_DIST_SQ = DANGER_DIST * DANGER_DIST;
 
-      const trail = entity.getComponent<Trail>(ComponentNames.TRAIL);
-      if (trail && trail.points.length > 0) {
-        // Find closest point
-        let closestPoint = null;
-        let closestDist = Infinity;
+    let fx = 0;
+    let fy = 0;
+    let count = 0;
 
-        for (const point of trail.points) {
-          const dx = point.x - position.x;
-          const dy = point.y - position.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
+    trailSystem.forEachNearbySegment(position.x, position.y, radius, (seg) => {
+      // Use the pre-computed closest point on the segment
+      const dx = position.x - seg.hitX;
+      const dy = position.y - seg.hitY;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < 1 || distSq > DANGER_DIST_SQ) return;
+      const invDist = 1 / Math.sqrt(distSq);
+      // Force weight: stronger the closer the segment
+      fx += dx * invDist * invDist;
+      fy += dy * invDist * invDist;
+      count++;
+    });
 
-          if (dist < closestDist) {
-            closestDist = dist;
-            closestPoint = point;
-          }
-        }
-
-        if (closestPoint && closestDist < 50) {
-          return closestPoint;
-        }
-      }
-    }
-
-    return null;
+    if (count === 0) return null;
+    return { x: fx, y: fy };
   }
 
   /**
-   * Select target to chase
+   * Select target to chase — closest alive entity, excluding self
    */
-  private _selectTarget(position: Position, targets: Entity[]): Entity | null {
-    // Find closest alive target
+  private _selectTarget(position: Position, targets: Entity[], selfId: string): Entity | null {
     let closest: Entity | null = null;
-    let closestDist = Infinity;
+    let closestDistSq = Infinity;
 
     for (const target of targets) {
+      if (target.id === selfId) continue;
+
       const health = target.getComponent<Health>(ComponentNames.HEALTH);
       if (!health || !health.isAlive) continue;
 
@@ -328,10 +341,10 @@ export class BotAISystem extends System {
 
       const dx = pos.x - position.x;
       const dy = pos.y - position.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+      const distSq = dx * dx + dy * dy;
 
-      if (dist < closestDist) {
-        closestDist = dist;
+      if (distSq < closestDistSq) {
+        closestDistSq = distSq;
         closest = target;
       }
     }
@@ -343,11 +356,9 @@ export class BotAISystem extends System {
    * Update steering towards target
    */
   private _updateSteering(
-    bot: Entity,
     position: Position,
     velocity: Velocity,
-    aiState: BotAIState,
-    dt: number
+    aiState: BotAIState
   ): void {
     // Determine target position
     let targetX = aiState.targetPosition?.x;
@@ -359,16 +370,20 @@ export class BotAISystem extends System {
       targetY = position.y + Math.sin(velocity.angle) * 100;
     }
 
-    // Add some noise to target based on accuracy
-    if (Math.random() > this._config.accuracy) {
-      const noiseAngle = (Math.random() - 0.5) * 0.5;
+    // Apply proportional steering noise every frame using per-bot accuracy
+    // accuracy 1.0 = laser-precise; 0.45 = noticeably wobbly
+    {
+      const noiseMag = (1 - aiState.accuracy) * 0.6;
+      const noiseAngle = (Math.random() - 0.5) * noiseMag;
       const dx = targetX - position.x;
       const dy = targetY - position.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      const currentAngle = Math.atan2(dy, dx);
-      const newAngle = currentAngle + noiseAngle;
-      targetX = position.x + Math.cos(newAngle) * dist;
-      targetY = position.y + Math.sin(newAngle) * dist;
+      if (dist > 1) {
+        const currentAngle = Math.atan2(dy, dx);
+        const newAngle = currentAngle + noiseAngle;
+        targetX = position.x + Math.cos(newAngle) * dist;
+        targetY = position.y + Math.sin(newAngle) * dist;
+      }
     }
 
     // Set target angle
@@ -379,7 +394,7 @@ export class BotAISystem extends System {
   /**
    * Update boost usage
    */
-  private _updateBoost(bot: Entity, boost: Boost | undefined, aiState: BotAIState, now: number): void {
+  private _updateBoost(boost: Boost | undefined, aiState: BotAIState, now: number): void {
     if (!boost) return;
 
     // Stop boosting after timeout
@@ -414,12 +429,10 @@ export class BotAISystem extends System {
     targets: Entity[],
     now: number
   ): void {
-    const energy = boost?.energy ?? 100;
-
     // Shield when fleeing or low health
     if (Math.random() < this._config.abilityUsageChance) {
       if (isAbilityReady(abilities, AbilityType.SHIELD)) {
-        if (this._shouldUseShield(bot, position, targets)) {
+        if (this._shouldUseShield(position, targets)) {
           abilities.shield.ready = false;
           abilities.shield.cooldownUntil = now + ABILITY_CONFIG[AbilityType.SHIELD].cooldown;
           abilities.shield.activeUntil = now + ABILITY_CONFIG[AbilityType.SHIELD].duration;
@@ -473,7 +486,7 @@ export class BotAISystem extends System {
   /**
    * Determine if bot should use shield
    */
-  private _shouldUseShield(bot: Entity, position: Position, targets: Entity[]): boolean {
+  private _shouldUseShield(position: Position, targets: Entity[]): boolean {
     // Use shield if nearby enemy or in danger
     for (const target of targets) {
       const pos = target.getComponent<Position>(ComponentNames.POSITION);
@@ -540,7 +553,8 @@ export class BotAISystem extends System {
   }
 
   /**
-   * Get target entities (alive players)
+   * Get all alive entities as potential targets (players AND other bots).
+   * Bot self-exclusion is handled in _selectTarget via selfId.
    */
   private _getTargetEntities(): Entity[] {
     const entities = this.entityManager.queryByMask(this._targetMask);
@@ -549,7 +563,7 @@ export class BotAISystem extends System {
     for (const entity of entities) {
       const health = entity.getComponent<Health>(ComponentNames.HEALTH);
       const player = entity.getComponent<Player>(ComponentNames.PLAYER);
-      if (health && health.isAlive && player && player.type === EntityType.PLAYER) {
+      if (health && health.isAlive && player) {
         targets.push(entity);
       }
     }

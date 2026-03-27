@@ -158,13 +158,13 @@ export function PracticeModeSelection({ onSelectSolo, onBack, onNotify }: Practi
                 width: '100%',
                 maxWidth: 900,
                 background: 'rgba(10, 20, 35, 0.6)',
-                border: '1px solid rgba(0, 245, 255, 0.15)',
+                border: '1px solid rgba(34, 211, 238, 0.15)',
                 borderRadius: 24,
                 padding: isMobile ? '24px' : '40px',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                boxShadow: '0 0 40px rgba(0,0,0,0.5), inset 0 0 20px rgba(0, 245, 255, 0.05)',
+                boxShadow: '0 0 20px rgba(0,0,0,0.4), inset 0 0 10px rgba(34, 211, 238, 0.03)',
                 position: 'relative',
                 height: 'auto',
                 margin: isMobile ? 'auto 0' : '0' // Center vertically if space allows
@@ -199,11 +199,11 @@ export function PracticeModeSelection({ onSelectSolo, onBack, onNotify }: Practi
                     <div style={{
                         fontSize: isMobile ? 10 : 12,
                         letterSpacing: '0.4em',
-                        color: '#00f5ff',
+                        color: '#22d3ee',
                         marginBottom: 12,
                         textTransform: 'uppercase',
                         fontWeight: 700,
-                        textShadow: '0 0 10px rgba(0, 245, 255, 0.4)'
+                        textShadow: '0 0 6px rgba(34, 211, 238, 0.3)'
                     }}>
                         TRAINING GROUNDS
                     </div>
@@ -217,7 +217,7 @@ export function PracticeModeSelection({ onSelectSolo, onBack, onNotify }: Practi
                         background: 'linear-gradient(180deg, #fff 0%, #a5f3fc 100%)',
                         WebkitBackgroundClip: 'text',
                         WebkitTextFillColor: 'transparent',
-                        filter: 'drop-shadow(0 0 20px rgba(0, 245, 255, 0.3))'
+                        filter: 'drop-shadow(0 0 10px rgba(34, 211, 238, 0.2))'
                     }}>
                         SELECT MODE
                     </h1>
@@ -233,8 +233,8 @@ export function PracticeModeSelection({ onSelectSolo, onBack, onNotify }: Practi
                                     gap: 10,
                                     padding: isMobile ? '10px 14px' : '10px 16px',
                                     borderRadius: 999,
-                                    border: '1px solid rgba(0, 245, 255, 0.24)',
-                                    background: 'rgba(0, 245, 255, 0.06)',
+                                    border: '1px solid rgba(34, 211, 238, 0.24)',
+                                    background: 'rgba(34, 211, 238, 0.06)',
                                     color: 'rgba(255,255,255,0.9)',
                                     fontWeight: 800,
                                     letterSpacing: '0.06em',
@@ -322,18 +322,18 @@ export function PracticeModeSelection({ onSelectSolo, onBack, onNotify }: Practi
                             gap: isMobile ? 16 : 0,
                             borderRadius: 20,
                             border: '1px solid',
-                            borderColor: isDisabled ? 'rgba(255,255,255,0.05)' : (hovered === 'multi' ? '#00ff88' : 'rgba(0, 255, 136, 0.3)'),
+                            borderColor: isDisabled ? 'rgba(255,255,255,0.05)' : (hovered === 'multi' ? '#10b981' : 'rgba(16, 185, 129, 0.3)'),
                             background: isDisabled
                                 ? 'rgba(0,0,0,0.2)'
                                 : (hovered === 'multi'
-                                    ? 'linear-gradient(145deg, rgba(0, 255, 136, 0.1) 0%, rgba(0, 255, 136, 0.02) 100%)'
-                                    : 'linear-gradient(145deg, rgba(0, 255, 136, 0.05) 0%, rgba(0, 255, 136, 0.01) 100%)'),
+                                    ? 'linear-gradient(145deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.02) 100%)'
+                                    : 'linear-gradient(145deg, rgba(16, 185, 129, 0.05) 0%, rgba(16, 185, 129, 0.01) 100%)'),
                             cursor: isDisabled ? 'wait' : 'pointer',
                             transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                             transform: !isDisabled && !isMobile && hovered === 'multi' ? 'translateY(-4px)' : 'none',
                             opacity: isDisabled ? 0.6 : 1,
                             position: 'relative',
-                            boxShadow: !isDisabled && !isMobile && hovered === 'multi' ? '0 10px 30px -10px rgba(0, 255, 136, 0.3)' : 'none',
+                            boxShadow: !isDisabled && !isMobile && hovered === 'multi' ? '0 10px 30px -10px rgba(16, 185, 129, 0.3)' : 'none',
                             minHeight: isMobile ? 0 : 300
                         }}
                     >
@@ -341,8 +341,8 @@ export function PracticeModeSelection({ onSelectSolo, onBack, onNotify }: Practi
                             position: 'absolute',
                             top: isMobile ? 12 : 16,
                             right: 16,
-                            background: '#00ff88',
-                            color: '#001a0f',
+                            background: '#10b981',
+                            color: '#064e3b',
                             fontSize: 10,
                             fontWeight: 800,
                             padding: '4px 8px',
@@ -356,15 +356,15 @@ export function PracticeModeSelection({ onSelectSolo, onBack, onNotify }: Practi
                             width: isMobile ? 48 : 80,
                             height: isMobile ? 48 : 80,
                             borderRadius: isMobile ? 12 : '50%',
-                            background: 'rgba(0, 255, 136, 0.1)',
+                            background: 'rgba(16, 185, 129, 0.1)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             marginBottom: isMobile ? 0 : 24,
-                            border: '1px solid rgba(0, 255, 136, 0.3)',
+                            border: '1px solid rgba(16, 185, 129, 0.3)',
                             flexShrink: 0
                         }}>
-                            <GlobeHemisphereWest size={isMobile ? 24 : 40} weight="duotone" color="#00ff88" />
+                            <GlobeHemisphereWest size={isMobile ? 24 : 40} weight="duotone" color="#10b981" />
                         </div>
                         <div>
                             <h3 style={{ fontSize: isMobile ? 18 : 24, fontWeight: 700, color: '#fff', margin: '0 0 4px 0', fontFamily: 'Orbitron, sans-serif' }}>MULTIPLAYER</h3>
@@ -395,12 +395,12 @@ export function PracticeModeSelection({ onSelectSolo, onBack, onNotify }: Practi
                     }}>
                         <div style={{
                             background: '#111827', // Solid dark for better readability
-                            border: '1px solid rgba(0, 245, 255, 0.3)',
+                            border: '1px solid rgba(34, 211, 238, 0.3)',
                             borderRadius: 24,
                             padding: 40,
                             width: '100%',
                             maxWidth: 400,
-                            boxShadow: '0 0 50px rgba(0, 245, 255, 0.15)',
+                            boxShadow: '0 0 20px rgba(34, 211, 238, 0.1)',
                             position: 'relative',
                             animation: 'scaleIn 0.2s ease-out'
                         }}>
@@ -425,14 +425,14 @@ export function PracticeModeSelection({ onSelectSolo, onBack, onNotify }: Practi
                                     width: 72,
                                     height: 72,
                                     borderRadius: '50%',
-                                    background: 'rgba(0, 245, 255, 0.1)',
+                                    background: 'rgba(34, 211, 238, 0.1)',
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    border: '1px solid rgba(0, 245, 255, 0.3)',
-                                    boxShadow: '0 0 20px rgba(0, 245, 255, 0.2)'
+                                    border: '1px solid rgba(34, 211, 238, 0.3)',
+                                    boxShadow: '0 0 20px rgba(34, 211, 238, 0.2)'
                                 }}>
-                                    <User size={36} color="#00f5ff" weight="duotone" />
+                                    <User size={36} color="#22d3ee" weight="duotone" />
                                 </div>
 
                                 <div style={{ textAlign: 'center' }}>
@@ -464,7 +464,7 @@ export function PracticeModeSelection({ onSelectSolo, onBack, onNotify }: Practi
                                             fontFamily: 'monospace',
                                             transition: 'border-color 0.2s'
                                         }}
-                                        onFocus={e => e.target.style.borderColor = '#00f5ff'}
+                                        onFocus={e => e.target.style.borderColor = '#22d3ee'}
                                         onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
                                         autoFocus
                                     />
@@ -477,15 +477,15 @@ export function PracticeModeSelection({ onSelectSolo, onBack, onNotify }: Practi
                                             borderRadius: 12,
                                             background: (!guestName.trim() || isJoining)
                                                 ? 'rgba(255,255,255,0.1)'
-                                                : 'linear-gradient(135deg, #00f5ff 0%, #00ff88 100%)',
-                                            color: (!guestName.trim() || isJoining) ? 'rgba(255,255,255,0.3)' : '#001a0f',
+                                                : 'linear-gradient(135deg, #22d3ee 0%, #10b981 100%)',
+                                            color: (!guestName.trim() || isJoining) ? 'rgba(255,255,255,0.3)' : '#064e3b',
                                             border: 'none',
                                             fontSize: 16,
                                             fontWeight: 800,
                                             letterSpacing: '0.05em',
                                             cursor: (!guestName.trim() || isJoining) ? 'not-allowed' : 'pointer',
                                             transition: 'all 0.2s',
-                                            boxShadow: (!guestName.trim() || isJoining) ? 'none' : '0 0 20px rgba(0, 245, 255, 0.3)'
+                                            boxShadow: (!guestName.trim() || isJoining) ? 'none' : '0 0 20px rgba(34, 211, 238, 0.3)'
                                         }}
                                     >
                                         {isJoining ? 'JOINING...' : 'ENTER ARENA'}

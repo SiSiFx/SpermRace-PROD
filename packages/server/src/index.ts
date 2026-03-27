@@ -2,6 +2,8 @@ import 'dotenv/config.js';
 import { WebSocketServer, WebSocket } from 'ws';
 import http from 'http';
 import { randomUUID, createHash } from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -69,6 +71,11 @@ if (IS_PRODUCTION) {
     console.error('[FATAL] ENABLE_DEV_BOTS must be false in production');
     process.exit(1);
   }
+  const rpcUrl = process.env.SOLANA_RPC_ENDPOINT || '';
+  if (!rpcUrl || rpcUrl.includes('devnet')) {
+    console.error('[FATAL] SOLANA_RPC_ENDPOINT must be set to a mainnet endpoint in production (got:', rpcUrl || 'unset', ')');
+    process.exit(1);
+  }
 }
 
 // Single HTTP server hosting both API and WebSocket (path /ws)
@@ -85,13 +92,18 @@ const wss = new WebSocketServer({
 const smartContractService = new SmartContractService();
 
 // Database for leaderboards and player stats
-const DB_PATH = process.env.DB_PATH || './packages/server/data/spermrace.db';
+const LEGACY_DATA_DIR = path.resolve(process.cwd(), 'packages/server/data');
+const DEFAULT_DATA_DIR = path.resolve(process.cwd(), 'data');
+const DATA_DIR = fs.existsSync(LEGACY_DATA_DIR) ? LEGACY_DATA_DIR : DEFAULT_DATA_DIR;
+const DB_PATH = (process.env.DB_PATH || '').trim() || path.join(DATA_DIR, 'spermrace.db');
+try { fs.mkdirSync(path.dirname(DB_PATH), { recursive: true }); } catch { }
 const db = new DatabaseService(DB_PATH);
 log.info(`[DB] Using database: ${DB_PATH}`);
 
 const lobbyManager = new LobbyManager(smartContractService, db);
 const BUILD_SHA = (process.env.GIT_SHA || process.env.COMMIT_SHA || process.env.VERCEL_GIT_COMMIT_SHA || process.env.RENDER_GIT_COMMIT || '').toString() || undefined;
-const AUDIT_DIR = process.env.AUDIT_DIR || './packages/server/data/audit';
+const AUDIT_DIR = (process.env.AUDIT_DIR || '').trim() || path.join(DATA_DIR, 'audit');
+try { fs.mkdirSync(AUDIT_DIR, { recursive: true }); } catch { }
 const audit = new AuditLogger({ dir: AUDIT_DIR, build: BUILD_SHA });
 const pendingSockets = new Set<WebSocket>();
 const playerIdToSocket = new Map<string, WebSocket>();
@@ -555,6 +567,27 @@ app.use(rateLimit({ windowMs: 60_000, max: 120, standardHeaders: true, legacyHea
 const limiterSensitive = rateLimit({ windowMs: 60_000, max: 60, standardHeaders: true, legacyHeaders: false });
 const limiterAnalytics = rateLimit({ windowMs: 60_000, max: 30, standardHeaders: true, legacyHeaders: false });
 app.use(express.json({ limit: '256kb' }));
+
+// ================================================================================================
+// Solana RPC proxy — keeps the Helius API key server-side, never in the client bundle
+// ================================================================================================
+const limiterRpc = rateLimit({ windowMs: 1_000, max: 30, standardHeaders: true, legacyHeaders: false });
+app.post('/api/rpc', limiterRpc, async (req, res) => {
+  const rpcUrl = process.env.SOLANA_RPC_ENDPOINT || 'https://api.devnet.solana.com';
+  try {
+    const upstream = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body),
+      signal: AbortSignal.timeout(10_000),
+    });
+    const data = await upstream.json();
+    res.status(upstream.status).json(data);
+  } catch (e: any) {
+    log.warn('[RPC proxy] upstream error:', e?.message);
+    res.status(502).json({ jsonrpc: '2.0', error: { code: -32603, message: 'RPC proxy error' }, id: req.body?.id ?? null });
+  }
+});
 
 let cachedPrice: { usd: number | null; ts: number } = { usd: null, ts: 0 };
 app.get('/api/sol-price', limiterSensitive, async (_req, res) => {

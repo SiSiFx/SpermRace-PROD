@@ -822,11 +822,11 @@ html, body {
    ========================================= */
 
 ::selection {
-  background: var(--accent-primary);
-  color: #ffffff;
+  background: rgba(201, 147, 61, 0.55);
+  color: #f8fbff;
 }
 
 ::-moz-selection {
-  background: var(--accent-primary);
-  color: #ffffff;
+  background: rgba(201, 147, 61, 0.55);
+  color: #f8fbff;
 }

@@ -61,6 +61,7 @@ export class Entity {
    * Map of component name to component instance
    */
   private readonly _components: Map<string, any> = new Map();
+  private _onMaskChange: (() => void) | null = null;
 
   constructor(name?: string) {
     this.id = generateEntityId();
@@ -78,11 +79,15 @@ export class Entity {
    * Add a component to this entity
    */
   addComponent<T>(componentName: string, component: T): this {
+    const prevMask = this._componentMask;
     if (this._components.has(componentName)) {
       // Silently replace duplicate component
     }
     this._components.set(componentName, component);
     this._componentMask |= getComponentBit(componentName);
+    if (this._componentMask !== prevMask) {
+      this._notifyMaskChange();
+    }
     return this;
   }
 
@@ -111,8 +116,16 @@ export class Entity {
    * Remove a component from this entity
    */
   removeComponent(componentName: string): this {
+    if (!this._components.has(componentName)) {
+      return this;
+    }
+
+    const prevMask = this._componentMask;
     this._components.delete(componentName);
     this._componentMask &= ~getComponentBit(componentName);
+    if (this._componentMask !== prevMask) {
+      this._notifyMaskChange();
+    }
     return this;
   }
 
@@ -127,8 +140,13 @@ export class Entity {
    * Clear all components from this entity
    */
   clearComponents(): this {
+    if (this._componentMask === 0) {
+      return this;
+    }
+
     this._components.clear();
     this._componentMask = 0;
+    this._notifyMaskChange();
     return this;
   }
 
@@ -137,6 +155,7 @@ export class Entity {
    */
   destroy(): void {
     this.active = false;
+    this._notifyMaskChange();
   }
 
   /**
@@ -147,6 +166,18 @@ export class Entity {
     this._componentMask = 0;
     this.active = true;
   }
+
+  /**
+   * Internal hook used by EntityManager so query caches are invalidated when
+   * component membership changes.
+   */
+  _setMaskChangeHandler(handler: (() => void) | null): void {
+    this._onMaskChange = handler;
+  }
+
+  private _notifyMaskChange(): void {
+    this._onMaskChange?.();
+  }
 }
 
 /**
@@ -156,7 +187,7 @@ export class EntityFactory {
   /**
    * Create a player car entity with all required components
    */
-  static createPlayerCar(x: number, y: number, angle: number): Entity {
+  static createPlayerCar(_x: number, _y: number, _angle: number): Entity {
     const entity = new Entity('player_car');
     // Components will be added by the systems that need them
     return entity;
@@ -165,7 +196,7 @@ export class EntityFactory {
   /**
    * Create a bot car entity
    */
-  static createBotCar(x: number, y: number, angle: number): Entity {
+  static createBotCar(_x: number, _y: number, _angle: number): Entity {
     const entity = new Entity('bot_car');
     return entity;
   }
@@ -173,7 +204,7 @@ export class EntityFactory {
   /**
    * Create a trail segment entity
    */
-  static createTrailSegment(x: number, y: number, ownerId: string): Entity {
+  static createTrailSegment(_x: number, _y: number, _ownerId: string): Entity {
     const entity = new Entity('trail_segment');
     return entity;
   }
@@ -181,7 +212,7 @@ export class EntityFactory {
   /**
    * Create a powerup entity
    */
-  static createPowerup(type: string, x: number, y: number): Entity {
+  static createPowerup(type: string, _x: number, _y: number): Entity {
     const entity = new Entity(`powerup_${type}`);
     return entity;
   }

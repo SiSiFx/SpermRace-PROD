@@ -1,6 +1,6 @@
 import { GameState, PlayerInput, EntryFeeTier, Player, GameItem, GameMode } from 'shared';
 import { PlayerEntity } from './Player.js';
-import { BotController } from './BotController.js';
+import { BotController, type BotTrailQuery } from './BotController.js';
 import { CollisionSystem } from './CollisionSystem.js';
 import { LatencyCompensation } from './LatencyCompensation.js';
 import { SmartContractService } from './SmartContractService.js';
@@ -69,6 +69,52 @@ const DNA_WALL_MARGIN = 200;
 const SPERM_COLLISION_RADIUS = S_COLLISION.SPERM_COLLISION_RADIUS;
 const DNA_ITEM_RADIUS = 10;
 const DNA_PICKUP_RADIUS = SPERM_COLLISION_RADIUS + DNA_ITEM_RADIUS;
+
+type BotTrailGridEntry = { playerId: string; x: number; y: number };
+
+class BotTrailSpatialQuery implements BotTrailQuery {
+  private readonly grid = new Map<string, BotTrailGridEntry[]>();
+
+  constructor(players: PlayerEntity[], private readonly cellSize: number) {
+    for (const player of players) {
+      if (!player.isAlive || player.trail.length === 0) continue;
+      for (const point of player.trail) {
+        const key = this.getKey(point.x, point.y);
+        const cell = this.grid.get(key);
+        const entry = { playerId: player.id, x: point.x, y: point.y };
+        if (cell) cell.push(entry);
+        else this.grid.set(key, [entry]);
+      }
+    }
+  }
+
+  hasPointNear(x: number, y: number, radius: number, excludePlayerId?: string): boolean {
+    const radiusSq = radius * radius;
+    const minCellX = Math.floor((x - radius) / this.cellSize);
+    const maxCellX = Math.floor((x + radius) / this.cellSize);
+    const minCellY = Math.floor((y - radius) / this.cellSize);
+    const maxCellY = Math.floor((y + radius) / this.cellSize);
+
+    for (let cellX = minCellX; cellX <= maxCellX; cellX++) {
+      for (let cellY = minCellY; cellY <= maxCellY; cellY++) {
+        const cell = this.grid.get(`${cellX},${cellY}`);
+        if (!cell) continue;
+        for (const entry of cell) {
+          if (excludePlayerId && entry.playerId === excludePlayerId) continue;
+          const dx = entry.x - x;
+          const dy = entry.y - y;
+          if ((dx * dx + dy * dy) < radiusSq) return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  private getKey(x: number, y: number): string {
+    return `${Math.floor(x / this.cellSize)},${Math.floor(y / this.cellSize)}`;
+  }
+}
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 // GameWorld Class
@@ -373,6 +419,14 @@ export class GameWorld {
       this.playersArrayCache.push(player);
     }
     const playersArray = this.playersArrayCache;
+    const count = playersArray.length;
+    const playerIndexById = new Map<string, number>();
+    const alivePlayers: PlayerEntity[] = [];
+    for (let i = 0; i < count; i++) {
+      const player = playersArray[i];
+      playerIndexById.set(player.id, i);
+      if (player.isAlive) alivePlayers.push(player);
+    }
 
     // -1. Drive bot AI before physics so inputs are ready for the tick
     if (this.bots.size > 0) {
@@ -383,6 +437,9 @@ export class GameWorld {
       const itemsArray = this.itemsArrayCache;
       const worldWidth = this.gameState.world.width || WORLD_WIDTH;
       const worldHeight = this.gameState.world.height || WORLD_HEIGHT;
+      const trailQuery = alivePlayers.length > 1
+        ? new BotTrailSpatialQuery(alivePlayers, S_COLLISION.GRID_CELL_SIZE)
+        : undefined;
       this.bots.forEach(bot => {
         try {
           bot.update(deltaTime, {
@@ -390,6 +447,7 @@ export class GameWorld {
             players: playersArray,
             worldWidth,
             worldHeight,
+            trailQuery,
           });
         } catch (e) {
           try { console.warn('[BOT] update error for', bot.id, e); } catch {}
@@ -399,14 +457,11 @@ export class GameWorld {
 
     // 0. Schooling (flocking buff) - compute per-player speed multipliers before physics
     // OPTIMIZATION: Use spatial partitioning to reduce O(n²) complexity with 8+ bots
-    const count = playersArray.length;
     const SCHOOL_RADIUS = 300;
     const SCHOOL_RADIUS_SQ = SCHOOL_RADIUS * SCHOOL_RADIUS;
     const ANGLE_THRESHOLD = 0.5; // radians
     const neighborCounts: number[] = new Array(count).fill(0);
 
-    // Only compute schooling for alive players
-    const alivePlayers = playersArray.filter(p => p.isAlive);
     const alivePlayersCount = alivePlayers.length;
 
     // Skip expensive calculation if very few players
@@ -451,10 +506,10 @@ export class GameWorld {
               const rawDiff = angle1 - angle2;
               const angleDiff = Math.abs(Math.atan2(Math.sin(rawDiff), Math.cos(rawDiff)));
               if (angleDiff < ANGLE_THRESHOLD) {
-                const idx1 = playersArray.indexOf(p1);
-                const idx2 = playersArray.indexOf(p2);
-                if (idx1 >= 0) neighborCounts[idx1]++;
-                if (idx2 >= 0) neighborCounts[idx2]++;
+                const idx1 = playerIndexById.get(p1.id);
+                const idx2 = playerIndexById.get(p2.id);
+                if (idx1 !== undefined) neighborCounts[idx1]++;
+                if (idx2 !== undefined) neighborCounts[idx2]++;
               }
             }
           }
@@ -498,10 +553,7 @@ export class GameWorld {
       latencyComp.cleanupExpiredPings(playerId);
     }
 
-    // 1.5. Resolve player-vs-player collisions (bump/bounce logic)
-    this.collisionSystem.checkPlayerCollisions(this.players);
-
-    // 2. Detect collisions (walls & trails) with lag compensation
+    // 2. Detect collisions (walls, trails, AND body collisions) with lag compensation
     // Build lag-compensated positions for all players
     const lagCompensatedPositions = new Map<string, { x: number; y: number }>();
     const now = Date.now();
@@ -809,56 +861,63 @@ export class GameWorld {
   private spawnInitialPlayers(playerIds: string[], mode: GameMode): void {
     const width = this.gameState.world.width || this.baseWorldWidth || WORLD_WIDTH;
     const height = this.gameState.world.height || this.baseWorldHeight || WORLD_HEIGHT;
-    const minDim = Math.min(width, height);
-    const wallMargin = Math.min(240, Math.max(120, Math.floor(minDim * 0.08)));
     const center = { x: width / 2, y: height / 2 };
-    const insideMaxR = Math.max(180, Math.floor(minDim / 2 - wallMargin));
 
     const n = Array.isArray(playerIds) ? playerIds.length : 0;
     if (n <= 0) return;
 
-    // Ring count scales with lobby size so spacing stays sane even in compact practice arenas.
-    const ringCount = n <= 12 ? 1 : n <= 24 ? 2 : 3;
-    const baseRadii =
-      ringCount === 1
-        ? [Math.floor(insideMaxR * 0.42)]
-        : ringCount === 2
-          ? [Math.floor(insideMaxR * 0.30), Math.floor(insideMaxR * 0.55)]
-          : [Math.floor(insideMaxR * 0.24), Math.floor(insideMaxR * 0.44), Math.floor(insideMaxR * 0.64)];
+    // Battle royale edge spawning: players spawn around arena perimeter facing inward
+    const perimeter = (width + height) * 2;
+    const spacing = perimeter / n;
 
-    const radii = baseRadii.map(r => Math.max(220, Math.min(insideMaxR, r)));
-    const rotation = Math.random() * Math.PI * 2;
+    // Spawn depth from edge scales with player count
+    const spawnDepth = n <= 8 ? 150 : n <= 16 ? 120 : n <= 32 ? 100 : 80;
 
-    // Distribute player ids across rings (outer rings slightly larger capacity).
-    const ringBuckets: string[][] = Array.from({ length: ringCount }, () => []);
+    // Random starting offset for position variety between rounds
+    const startOffset = Math.random() * perimeter;
+
     for (let i = 0; i < n; i++) {
-      const ringIdx = ringCount === 1 ? 0 : ringCount === 2 ? (i % 2) : (i % 3);
-      ringBuckets[ringIdx].push(playerIds[i]);
-    }
+      const perimeterPos = (startOffset + i * spacing) % perimeter;
+      const { x, y } = this.perimeterToCoords(perimeterPos, spawnDepth, width, height);
 
-    for (let rIdx = 0; rIdx < ringBuckets.length; rIdx++) {
-      const ids = ringBuckets[rIdx];
-      if (!ids.length) continue;
-      const r = radii[Math.min(rIdx, radii.length - 1)];
-      const step = (Math.PI * 2) / ids.length;
-      const ringRot = rotation + (rIdx * step * 0.5);
+      // Face toward center for natural BR convergence
+      const angleTowardCenter = Math.atan2(center.y - y, center.x - x);
 
-      for (let j = 0; j < ids.length; j++) {
-        const theta = ringRot + j * step;
-        const x = Math.max(wallMargin, Math.min(width - wallMargin, center.x + Math.cos(theta) * r));
-        const y = Math.max(wallMargin, Math.min(height - wallMargin, center.y + Math.sin(theta) * r));
-        const angleTowardCenter = Math.atan2(center.y - y, center.x - x);
+      const player = new PlayerEntity(playerIds[i], { x, y }, angleTowardCenter);
+      try {
+        if (this.roundGoAtMs) player.spawnAtMs = this.roundGoAtMs;
+      } catch { }
+      this.players.set(playerIds[i], player);
 
-        const player = new PlayerEntity(ids[j], { x, y }, angleTowardCenter);
-        try {
-          if (this.roundGoAtMs) player.spawnAtMs = this.roundGoAtMs;
-        } catch { }
-        this.players.set(ids[j], player);
-
-        if (typeof ids[j] === 'string' && ids[j].startsWith('BOT_')) {
-          this.bots.set(ids[j], new BotController(player));
-        }
+      if (typeof playerIds[i] === 'string' && playerIds[i].startsWith('BOT_')) {
+        this.bots.set(playerIds[i], new BotController(player));
       }
+    }
+  }
+
+  /**
+   * Convert perimeter position to x,y coordinates.
+   * Perimeter wraps: top edge (0 to w), right edge (w to w+h),
+   * bottom edge (w+h to 2w+h), left edge (2w+h to 2w+2h).
+   */
+  private perimeterToCoords(
+    pos: number,
+    depth: number,
+    w: number,
+    h: number
+  ): { x: number; y: number } {
+    if (pos < w) {
+      // Top edge: left to right
+      return { x: pos, y: depth };
+    } else if (pos < w + h) {
+      // Right edge: top to bottom
+      return { x: w - depth, y: pos - w };
+    } else if (pos < w * 2 + h) {
+      // Bottom edge: right to left
+      return { x: w - (pos - w - h), y: h - depth };
+    } else {
+      // Left edge: bottom to top
+      return { x: depth, y: h - (pos - w * 2 - h) };
     }
   }
 
@@ -908,8 +967,11 @@ export class GameWorld {
    * Update the estimated RTT for a player based on client input timestamps.
    */
   public updatePlayerRtt(playerId: string, clientTimestamp: number): void {
+    if (!Number.isFinite(clientTimestamp)) return;
     const now = Date.now();
     const rtt = now - clientTimestamp;
+    // Reject timestamps more than 30s old or more than 5s in the future
+    if (rtt < -5000 || rtt > 30000) return;
 
     // Smooth the RTT value (exponential moving average)
     const currentRtt = this.playerRttMs.get(playerId) || 0;

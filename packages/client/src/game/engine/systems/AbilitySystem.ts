@@ -13,6 +13,8 @@ import { setBoostEnergy } from '../components/Boost';
 import type { Trail } from '../components/Trail';
 import { ComponentNames, createComponentMask } from '../components';
 import type { Entity } from '../core/Entity';
+import type { Player } from '../components/Player';
+import type { SoundSystem } from './SoundSystem';
 
 /**
  * Ability activation request
@@ -201,6 +203,20 @@ export class AbilitySystem extends System {
     const abilities = entity.getComponent<Abilities>(ComponentNames.ABILITIES);
 
     if (!position || !velocity || !abilities) return;
+
+    // Sound: only for local player
+    const player = entity.getComponent<Player>(ComponentNames.PLAYER);
+    if (player?.isLocal) {
+      const sound = this.getEngine()?.getSystemManager()?.getSystem<SoundSystem>('sound') ?? null;
+      if (sound) {
+        switch (type) {
+          case AbilityType.DASH:      sound.playDash();   break;
+          case AbilityType.SHIELD:    sound.playShield(); break;
+          case AbilityType.TRAP:      sound.playTrap();   break;
+          case AbilityType.OVERDRIVE: sound.playDash();   break; // reuse dash whoosh, louder feel
+        }
+      }
+    }
 
     switch (type) {
       case AbilityType.DASH:

@@ -10,6 +10,7 @@ import { angularDistance } from '../components/Velocity';
 import type { Renderable } from '../components/Renderable';
 import { RenderLayer } from '../components/Renderable';
 import type { Trail } from '../components/Trail';
+import type { TrailPoint } from '../components/Trail';
 import { getTrailAlpha } from '../components/Trail';
 import type { Player } from '../components/Player';
 import { EntityType } from '../components/Player';
@@ -29,12 +30,13 @@ import type { PowerupData } from './PowerupSystem';
 import type { Entity } from '../core/Entity';
 import type { ZoneSystem } from './ZoneSystem';
 import type { SpatialGrid } from '../spatial/SpatialGrid';
-import { PLAYER_VISUAL_CONFIG, TRAIL_EFFECTS } from '../config/GameConstants';
+import { PLAYER_VISUAL_CONFIG, TRAIL_EFFECTS, MICROSCOPE_PALETTE, MICROSCOPE_VISUALS } from '../config/GameConstants';
 import { PostProcessingSystem, createPostProcessingSystem } from './PostProcessingSystem';
 import type { KillPower } from '../components/KillPower';
 import { getKillPowerGrowthMult } from '../components/KillPower';
 import type { SpermClass } from '../components/SpermClass';
 import { SpermClassType } from '../components/SpermClass';
+import type { TrailSystem } from './TrailSystem';
 
 /**
  * Sperm car visual configuration
@@ -107,15 +109,42 @@ interface EntityGraphics {
   /** Smoothed visual facing angle (head/container) */
   visualAngle: number;
 
-  /** Tail lateral bend state for spring-like smooth motion */
-  tailBend: number;
-
-  /** Tail bend velocity for damping */
-  tailBendVelocity: number;
-
-  /** Position history for slither.io-style body (world coords) */
-  positionHistory: Array<{ x: number; y: number }>;
+  /** Cache key for the last head geometry draw */
+  bodyDrawKey: string;
 }
+
+interface TrailGraphicsCache {
+  graphics: GraphicsType;
+  pointCount: number;
+  oldestTimestamp: number;
+  newestTimestamp: number;
+  fadeBucket: number;
+  cullKey: string;
+}
+
+interface OffscreenIndicatorSpec {
+  color: number;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  x3: number;
+  y3: number;
+  pulseX: number;
+  pulseY: number;
+  pulseSize: number;
+  pulseAlpha: number;
+  key: string;
+}
+
+const TRAIL_REDRAW_INTERVAL_MS = 80;
+const TRAIL_CULL_BUCKET_SIZE = 160;
+const TRAIL_APPEND_REDRAW_POINTS = 3;
+const TRAIL_APPEND_REDRAW_INTERVAL_MS = 120;
+const TRAIL_FX_SCAN_LIMIT = 24;
+const TRAIL_FX_SAMPLE_LIMIT = 6;
+const OFFSCREEN_INDICATOR_BUCKET_SIZE = 10;
+const OFFSCREEN_INDICATOR_PULSE_HZ = 12;
 
 /**
  * Enhanced render system for PIXI.js rendering
@@ -133,7 +162,16 @@ export class RenderSystem extends System {
   private readonly _entityGraphics: Map<string, EntityGraphics> = new Map();
 
   // Trail graphics cache
-  private readonly _trailGraphics: Map<string, GraphicsType> = new Map();
+  private readonly _trailGraphics: Map<string, TrailGraphicsCache> = new Map();
+  private _trailRedrawsLastFrame: number = 0;
+  private _trailReuseSkipsLastFrame: number = 0;
+  private _bodyRedrawsLastFrame: number = 0;
+  private _bodyReuseSkipsLastFrame: number = 0;
+  private _offscreenIndicators: GraphicsType | null = null;
+  private _offscreenIndicatorDrawKey: string = '';
+  private _offscreenIndicatorRedrawsLastFrame: number = 0;
+  private _offscreenIndicatorReuseSkipsLastFrame: number = 0;
+  private _offscreenIndicatorCountLastFrame: number = 0;
 
   // Particle pool
   private readonly _particlePool = getParticlePool();
@@ -159,6 +197,7 @@ export class RenderSystem extends System {
   private _fps: number = 60;
   private _fpsTime: number = 0;
   private _fpsFrames: number = 0;
+  private _fpsElement: HTMLDivElement | null = null;
 
   // Background graphics
   private _backgroundGraphics: GraphicsType | null = null;
@@ -251,6 +290,7 @@ export class RenderSystem extends System {
       z-index: 1000;
     `;
     this._config.uiContainer.appendChild(fpsElement);
+    this._fpsElement = fpsElement;
   }
 
   /**
@@ -269,7 +309,7 @@ export class RenderSystem extends System {
   }
 
   /**
-   * Draw retro starfield background with grid
+   * Draw the arena as a microscope slide with a readable combat bowl.
    */
   private _drawBackgroundGrid(): void {
     if (!this._backgroundGraphics) return;
@@ -280,50 +320,78 @@ export class RenderSystem extends System {
     const engine = this.getEngine();
     const worldSize = engine?.getWorldSize() ?? { width: 8000, height: 6000 };
 
-    // 1. Deep space background
-    grid.rect(0, 0, worldSize.width, worldSize.height).fill({
-      color: 0x000000, // PICO-8 Black
+    const centerX = worldSize.width / 2;
+    const centerY = worldSize.height / 2;
+    const dishRadius = Math.min(worldSize.width, worldSize.height) * 0.34;
+
+    grid.rect(0, 0, worldSize.width, worldSize.height).fill({ color: MICROSCOPE_PALETTE.DEEP_BLACK });
+
+    // Soft ambient wash so the world reads as fluid rather than flat black.
+    grid.circle(centerX, centerY, dishRadius * 1.24).fill({
+      color: MICROSCOPE_PALETTE.AMBIENT_SOFT,
+      alpha: 0.035,
+    });
+    grid.circle(centerX, centerY, dishRadius).fill({
+      color: MICROSCOPE_PALETTE.SLIDE_DARK,
+      alpha: 0.72,
     });
 
-    // 2. Retro Grid (dots)
-    const gridSize = 100;
-    const dotSize = 2;
-    for (let x = 0; x <= worldSize.width; x += gridSize) {
-      for (let y = 0; y <= worldSize.height; y += gridSize) {
-        grid.rect(x, y, dotSize, dotSize).fill({
-          color: 0x1d2b53, // Dark blue
-          alpha: 0.5
-        });
-      }
-    }
+    grid.ellipse(centerX - dishRadius * 0.22, centerY - dishRadius * 0.18, dishRadius * 0.62, dishRadius * 0.32).fill({
+      color: MICROSCOPE_PALETTE.AMBIENT_CYAN,
+      alpha: 0.045,
+    });
+    grid.ellipse(centerX + dishRadius * 0.16, centerY + dishRadius * 0.22, dishRadius * 0.52, dishRadius * 0.26).fill({
+      color: MICROSCOPE_PALETTE.BIOLUM_TEAL,
+      alpha: 0.04,
+    });
 
-    // 3. Distant Stars (static)
-    // Use a pseudo-random seed to keep stars consistent
-    const starCount = 1000;
-    const seed = 12345; 
-    for (let i = 0; i < starCount; i++) {
-      // Simple LCG for deterministic "random" numbers
-      const r1 = ((seed + i * 9301 + 49297) % 233280) / 233280;
-      const r2 = ((seed + i * 49297 + 9301) % 233280) / 233280;
-      
-      const x = r1 * worldSize.width;
-      const y = r2 * worldSize.height;
-      
-      // Twinkle effect based on time
-      const twinkle = Math.sin(this._time * 2 + i) > 0.9;
-      const color = twinkle ? 0xfff1e8 : 0x5f574f; // White or Dark Gray
-      
-      grid.rect(x, y, 2, 2).fill({
-        color: color,
-        alpha: twinkle ? 0.8 : 0.4
+    // Reticle and dish rings give players spatial reference near the action.
+    grid.moveTo(centerX, 0).lineTo(centerX, worldSize.height).stroke({
+      width: 2,
+      color: MICROSCOPE_PALETTE.RETICLE,
+      alpha: 0.12,
+    });
+    grid.moveTo(0, centerY).lineTo(worldSize.width, centerY).stroke({
+      width: 2,
+      color: MICROSCOPE_PALETTE.RETICLE,
+      alpha: 0.12,
+    });
+
+    for (const ratio of [0.26, 0.52, 0.78]) {
+      grid.circle(centerX, centerY, dishRadius * ratio).stroke({
+        width: ratio === 0.78 ? 2 : 1,
+        color: MICROSCOPE_PALETTE.RETICLE,
+        alpha: ratio === 0.78 ? 0.16 : 0.08,
       });
     }
 
-    // 4. Border
-    grid.rect(0, 0, worldSize.width, worldSize.height).stroke({
+    const gridSize = 140;
+    for (let x = gridSize; x < worldSize.width; x += gridSize) {
+      for (let y = gridSize; y < worldSize.height; y += gridSize) {
+        const dx = x - centerX;
+        const dy = y - centerY;
+        const dist = Math.hypot(dx, dy);
+        const alpha = dist < dishRadius ? 0.2 : 0.08;
+        const radius = dist < dishRadius ? 1.5 : 1;
+        grid.circle(x, y, radius).fill({ color: MICROSCOPE_PALETTE.GRID_DOT, alpha });
+      }
+    }
+
+    grid.circle(centerX, centerY, dishRadius).stroke({
+      width: 18,
+      color: MICROSCOPE_PALETTE.PETRI_RIM,
+      alpha: 0.18,
+    });
+    grid.circle(centerX, centerY, dishRadius - 24).stroke({
+      width: 3,
+      color: MICROSCOPE_PALETTE.MEMBRANE,
+      alpha: 0.12,
+    });
+
+    grid.rect(6, 6, worldSize.width - 12, worldSize.height - 12).stroke({
       width: 4,
-      color: 0x7e2553, // Dark purple
-      alpha: 1.0,
+      color: MICROSCOPE_PALETTE.MEMBRANE,
+      alpha: 0.08,
     });
   }
 
@@ -355,22 +423,19 @@ export class RenderSystem extends System {
   }
 
   /**
-   * Initialize post-processing effects
+   * Initialize post-processing effects - disabled for performance
    */
   private _initPostProcessing(): void {
-    // Apply post-processing to world container
     this._postProcessing = createPostProcessingSystem(this._config.worldContainer, {
-      // NOTE: CRT shader currently crashes in some environments (attribute mismatch).
-      // Keep post-processing off until the filter pipeline is stabilized.
       crtEnabled: false,
       vignetteEnabled: false,
-      vignetteIntensity: 0.0,
+      vignetteIntensity: 0,
       filmGrainEnabled: false,
     });
   }
 
   /**
-   * Update zone visualization with retro pixel style
+   * Update zone visualization - simple and performant
    */
   private _updateZoneVisualization(): void {
     if (!this._zoneGraphics) return;
@@ -388,46 +453,32 @@ export class RenderSystem extends System {
 
     const { currentRadius, center, state } = zoneInfo;
 
-    // Colors
-    const baseColor = state === 'warning' ? 0xffa300 : (state === 'shrinking' ? 0xff004d : 0x00e436);
-    const alpha = state === 'warning'
-      ? 0.4 + Math.sin(this._time * 8) * 0.2
-      : (state === 'shrinking' ? 0.35 : 0.25);
-
-    // Pixelated Circle Approximation using blocks
-    // Fewer segments for blockier look
-    const circumference = 2 * Math.PI * currentRadius;
-    const blockSize = 32;
-    const numSegments = Math.floor(circumference / blockSize);
-
-    for (let i = 0; i < numSegments; i++) {
-        const angle = (i / numSegments) * Math.PI * 2 + this._time * 0.1;
-        const x = center.x + Math.cos(angle) * currentRadius;
-        const y = center.y + Math.sin(angle) * currentRadius;
-
-        // Main boundary blocks
-        zone.rect(x - 8, y - 8, 16, 16).fill({
-            color: baseColor,
-            alpha: alpha
-        });
-
-        // Flashing danger indicators
-        if (state === 'shrinking' || state === 'warning') {
-            const pulse = Math.sin(this._time * 10 + i * 0.5) > 0;
-            if (pulse && i % 3 === 0) {
-                 zone.rect(x - 12, y - 12, 24, 24).stroke({
-                     width: 4,
-                     color: 0xff004d, // Red
-                     alpha: 0.6
-                 });
-            }
-        }
+    // Idle: visible guide ring so players can see the zone boundary
+    if (state === 'idle') {
+      zone.circle(center.x, center.y, currentRadius).stroke({ width: 2, color: 0xffffff, alpha: 0.22 });
+      return;
     }
 
-    // Center marker (Pixel Cross)
-    const markerSize = 20;
-    zone.rect(center.x - markerSize, center.y - 4, markerSize * 2, 8).fill({ color: baseColor, alpha: 0.5 });
-    zone.rect(center.x - 4, center.y - markerSize, 8, markerSize * 2).fill({ color: baseColor, alpha: 0.5 });
+    // Simple colors — final state uses red instead of cyan
+    const baseColor = state === 'warning' ? 0xfbbf24 : (state === 'shrinking' ? 0xf87171 : 0xef4444);
+    const alpha = state === 'warning' ? 0.5 : (state === 'shrinking' ? 0.6 : 0.8);
+
+    // Simple circle stroke - no complex per-segment rendering
+    zone.circle(center.x, center.y, currentRadius).stroke({
+      width: state === 'shrinking' ? 4 : (state === 'final' ? 3 : 2),
+      color: baseColor,
+      alpha: alpha
+    });
+
+    // Danger pulse for shrinking
+    if (state === 'shrinking') {
+      const pulse = (Math.sin(this._time * 6) + 1) * 0.5;
+      zone.circle(center.x, center.y, currentRadius + 5).stroke({
+        width: 2,
+        color: 0xf87171,
+        alpha: 0.2 + pulse * 0.2
+      });
+    }
   }
 
   /**
@@ -510,6 +561,7 @@ export class RenderSystem extends System {
    */
   update(dt: number): void {
     this._time += dt;
+    const now = Date.now();
 
     // Update FPS
     this._updateFPS(dt);
@@ -533,13 +585,13 @@ export class RenderSystem extends System {
     this._particlePool.update(dt);
 
     // Render all entities
-    this._renderCars();
+    this._renderCars(now);
 
     // Render powerups
-    this._renderPowerups();
+    this._renderPowerups(now);
 
     // Render trails
-    this._renderTrails();
+    this._renderTrails(now);
 
     // Render effects
     this._renderEffects();
@@ -583,30 +635,14 @@ export class RenderSystem extends System {
     }
 
     // 2. Trail Proximity Danger
-    const engine = this.getEngine();
-    const spatialGrid = (engine as any)?.getSpatialGrid() as SpatialGrid | undefined;
-    if (spatialGrid) {
-        const nearby = spatialGrid.getNearbyEntities(localPos.x, localPos.y, 100);
-        let maxTrailDanger = 0;
-        for (const [id] of nearby) {
-            if (id === localPlayerId) continue;
-            const other = this.entityManager.getEntity(id);
-            const trail = other?.getComponent<Trail>(ComponentNames.TRAIL);
-            if (trail && trail.points.length > 0) {
-                // Find closest point in trail
-                for (const pt of trail.points) {
-                    const dx = pt.x - localPos.x;
-                    const dy = pt.y - localPos.y;
-                    const distSq = dx * dx + dy * dy;
-                    if (distSq < 60 * 60) { // Within 60px of a trail
-                        const d = Math.sqrt(distSq);
-                        const trailDanger = Math.max(0, Math.min(1, (60 - d) / 40));
-                        maxTrailDanger = Math.max(maxTrailDanger, trailDanger);
-                    }
-                }
-            }
-        }
-        totalDanger = Math.max(totalDanger, maxTrailDanger);
+    const trailSystem = systemManager?.getSystem<TrailSystem>('trails');
+    const nearestTrail = trailSystem?.findNearestHazard(localPos.x, localPos.y, 100, {
+      ignoreOwnerId: localPlayerId,
+    });
+    if (nearestTrail) {
+        const d = Math.sqrt(nearestTrail.distanceSq);
+        const trailDanger = Math.max(0, Math.min(1, (60 - d) / 40));
+        totalDanger = Math.max(totalDanger, trailDanger);
     }
 
     this._postProcessing?.setDangerIntensity(totalDanger);
@@ -623,13 +659,13 @@ export class RenderSystem extends System {
     if (!overlayLayer) return;
 
     // Use a dedicated graphics object for indicators
-    let indicators = overlayLayer.getChildByName('offscreen-indicators') as GraphicsType;
+    let indicators = this._offscreenIndicators;
     if (!indicators) {
         indicators = new Graphics();
         indicators.name = 'offscreen-indicators';
         overlayLayer.addChild(indicators);
+        this._offscreenIndicators = indicators;
     }
-    indicators.clear();
 
     const entities = this.entityManager.queryByMask(this._carMask);
     const camConfig = this._camera.getCameraConfig();
@@ -643,6 +679,10 @@ export class RenderSystem extends System {
     const viewBottom = camConfig.y + halfHeight;
 
     const indicatorRadius = 800; // Only show if within 800px
+    const pulseBucket = Math.floor(this._time * OFFSCREEN_INDICATOR_PULSE_HZ);
+    const pulseTime = pulseBucket / OFFSCREEN_INDICATOR_PULSE_HZ;
+    const pulse = 1 + Math.sin(pulseTime * 10) * 0.2;
+    const indicatorSpecs: OffscreenIndicatorSpec[] = [];
 
     for (const entity of entities) {
         if (entity.id === this._camera.getTarget()) continue;
@@ -683,23 +723,62 @@ export class RenderSystem extends System {
         const y2 = worldAnchor.y + Math.sin(angle + 2.5) * size;
         const x3 = worldAnchor.x + Math.cos(angle - 2.5) * size;
         const y3 = worldAnchor.y + Math.sin(angle - 2.5) * size;
-        indicators
-          .moveTo(x1, y1)
-          .lineTo(x2, y2)
-          .lineTo(x3, y3)
-          .closePath()
-          .fill({
-            color: player.color,
-            alpha: 0.8
+        const pulseSize = 4 / Math.max(0.001, camConfig.zoom);
+        indicatorSpecs.push({
+          color: player.color,
+          x1,
+          y1,
+          x2,
+          y2,
+          x3,
+          y3,
+          pulseX: worldAnchor.x - pulseSize / 2,
+          pulseY: worldAnchor.y - pulseSize / 2,
+          pulseSize,
+          pulseAlpha: 0.9 * pulse,
+          key: [
+            player.color.toString(16),
+            Math.round(x1 / OFFSCREEN_INDICATOR_BUCKET_SIZE),
+            Math.round(y1 / OFFSCREEN_INDICATOR_BUCKET_SIZE),
+            Math.round(x2 / OFFSCREEN_INDICATOR_BUCKET_SIZE),
+            Math.round(y2 / OFFSCREEN_INDICATOR_BUCKET_SIZE),
+            Math.round(x3 / OFFSCREEN_INDICATOR_BUCKET_SIZE),
+            Math.round(y3 / OFFSCREEN_INDICATOR_BUCKET_SIZE),
+            pulseBucket,
+          ].join(':'),
+        });
+    }
+
+    this._offscreenIndicatorCountLastFrame = indicatorSpecs.length;
+    const drawKey = indicatorSpecs.length === 0
+      ? 'empty'
+      : indicatorSpecs.map((spec) => spec.key).join('|');
+    if (drawKey === this._offscreenIndicatorDrawKey) {
+      this._offscreenIndicatorRedrawsLastFrame = 0;
+      this._offscreenIndicatorReuseSkipsLastFrame = 1;
+      return;
+    }
+
+    this._offscreenIndicatorDrawKey = drawKey;
+    this._offscreenIndicatorRedrawsLastFrame = 1;
+    this._offscreenIndicatorReuseSkipsLastFrame = 0;
+    indicators.clear();
+
+    for (const spec of indicatorSpecs) {
+      indicators
+        .moveTo(spec.x1, spec.y1)
+        .lineTo(spec.x2, spec.y2)
+        .lineTo(spec.x3, spec.y3)
+        .closePath()
+        .fill({
+          color: spec.color,
+          alpha: 0.8,
         });
 
-        // Small indicator pulse
-        const pulse = 1 + Math.sin(this._time * 10) * 0.2;
-        const pulseSize = 4 / Math.max(0.001, camConfig.zoom);
-        indicators.rect(worldAnchor.x - pulseSize / 2, worldAnchor.y - pulseSize / 2, pulseSize, pulseSize).fill({
-            color: 0xffffff,
-            alpha: 0.9 * pulse
-        });
+      indicators.rect(spec.pulseX, spec.pulseY, spec.pulseSize, spec.pulseSize).fill({
+        color: 0xffffff,
+        alpha: spec.pulseAlpha,
+      });
     }
   }
 
@@ -760,9 +839,8 @@ export class RenderSystem extends System {
       this._fpsFrames = 0;
       this._fpsTime = 0;
 
-      const fpsElement = this._config.uiContainer.querySelector('.fps-counter');
-      if (fpsElement) {
-        fpsElement.textContent = `FPS: ${this._fps}`;
+      if (this._fpsElement) {
+        this._fpsElement.textContent = `FPS: ${this._fps}`;
       }
     }
   }
@@ -770,8 +848,10 @@ export class RenderSystem extends System {
   /**
    * Render cars
    */
-  private _renderCars(): void {
+  private _renderCars(now: number): void {
     const entities = this.entityManager.queryByMask(this._carMask);
+    let bodyRedraws = 0;
+    let bodyReuseSkips = 0;
 
     for (const entity of entities) {
       const position = entity.getComponent<Position>(ComponentNames.POSITION);
@@ -782,6 +862,7 @@ export class RenderSystem extends System {
       const abilities = entity.getComponent<Abilities>(ComponentNames.ABILITIES);
       const killPower = entity.getComponent<KillPower>(ComponentNames.KILL_POWER);
       const spermClass = entity.getComponent<SpermClass>(ComponentNames.SPERM_CLASS);
+      const trail = entity.getComponent<Trail>(ComponentNames.TRAIL);
 
       if (!position || !velocity || !player) continue;
 
@@ -793,8 +874,7 @@ export class RenderSystem extends System {
       }
 
       // Update graphics
-      this._updateCarGraphics(
-        entity.id,
+      const bodyRedrawn = this._updateCarGraphics(
         graphics,
         position,
         velocity,
@@ -803,9 +883,22 @@ export class RenderSystem extends System {
         boost,
         abilities,
         killPower,
-        spermClass
+        spermClass,
+        trail,
+        now
       );
+
+      if (health?.isAlive ?? true) {
+        if (bodyRedrawn) {
+          bodyRedraws++;
+        } else {
+          bodyReuseSkips++;
+        }
+      }
     }
+
+    this._bodyRedrawsLastFrame = bodyRedraws;
+    this._bodyReuseSkipsLastFrame = bodyReuseSkips;
   }
 
   /**
@@ -836,21 +929,23 @@ export class RenderSystem extends System {
     glow.visible = false;
     container.addChild(glow);
 
-    // Nameplate
-    const nameplate = document.createElement('div');
-    nameplate.className = 'car-nameplate';
-    nameplate.textContent = player.name;
-    nameplate.style.cssText = `
-      position: absolute;
-      color: #fff;
-      font-size: 12px;
-      font-weight: 600;
-      text-shadow: 0 1px 3px rgba(0,0,0,0.8);
-      pointer-events: none;
-      white-space: nowrap;
-      opacity: 0.8;
-    `;
-    this._config.uiContainer.appendChild(nameplate);
+    let nameplate: HTMLDivElement | undefined;
+    if (PLAYER_VISUAL_CONFIG.SHOW_NAMEPLATES) {
+      nameplate = document.createElement('div');
+      nameplate.className = 'car-nameplate';
+      nameplate.textContent = player.name;
+      nameplate.style.cssText = `
+        position: absolute;
+        color: #fff;
+        font-size: 12px;
+        font-weight: 600;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+        pointer-events: none;
+        white-space: nowrap;
+        opacity: 0.8;
+      `;
+      this._config.uiContainer.appendChild(nameplate);
+    }
 
     // Add to car layer
     const carLayer = this._layers.get(RenderLayer.CARS);
@@ -866,9 +961,7 @@ export class RenderSystem extends System {
       glow,
       nameplate,
       visualAngle: 0,
-      tailBend: 0,
-      tailBendVelocity: 0,
-      positionHistory: [],
+      bodyDrawKey: '',
     };
   }
 
@@ -876,7 +969,6 @@ export class RenderSystem extends System {
    * Update car graphics
    */
   private _updateCarGraphics(
-    entityId: string,
     graphics: EntityGraphics,
     position: Position,
     velocity: Velocity,
@@ -885,10 +977,11 @@ export class RenderSystem extends System {
     boost: Boost | undefined,
     abilities: Abilities | undefined,
     killPower: KillPower | undefined,
-    spermClass: SpermClass | undefined
-  ): void {
+    spermClass: SpermClass | undefined,
+    trail: Trail | undefined,
+    now: number
+  ): boolean {
     const { container, body, tail, shield, glow, nameplate } = graphics;
-    const now = Date.now();
     const growthMult = killPower ? getKillPowerGrowthMult(killPower, now) : 1.0;
     const hasKillPowerGlow = killPower?.active && killPower.glowIntensity > 0;
 
@@ -909,25 +1002,6 @@ export class RenderSystem extends System {
     graphics.visualAngle = this._lerpAngle(graphics.visualAngle, targetVisualAngle, facingLerp);
     container.rotation = graphics.visualAngle;
 
-    // === SLITHER.IO STYLE: Update position history ===
-    const maxHistoryLen = boost?.isBoosting ? 45 : 35;
-    const minDist = 4; // Min distance between history points
-    const history = graphics.positionHistory;
-
-    if (history.length === 0) {
-      history.push({ x: position.x, y: position.y });
-    } else {
-      const last = history[history.length - 1];
-      const dx = position.x - last.x;
-      const dy = position.y - last.y;
-      if (dx * dx + dy * dy >= minDist * minDist) {
-        history.push({ x: position.x, y: position.y });
-        if (history.length > maxHistoryLen) {
-          history.shift();
-        }
-      }
-    }
-
     // Visibility
     const isVisible = health?.isAlive ?? true;
     container.visible = isVisible;
@@ -938,23 +1012,30 @@ export class RenderSystem extends System {
       nameplate.style.display = isVisible ? 'block' : 'none';
     }
 
-    if (!isVisible) return;
+    if (!isVisible) return false;
 
-    // Draw retro sperm head (apply class size multiplier)
-    this._drawSpermHead(body, player, boost?.isBoosting ?? false, classSizeMult * growthMult);
+    const bodySizeMult = classSizeMult * growthMult;
+    const bodyDrawKey = `${player.color}:${boost?.isBoosting ? 1 : 0}:${bodySizeMult.toFixed(3)}:${player.isLocal ? 1 : 0}`;
+    let bodyRedrawn = false;
+    if (graphics.bodyDrawKey !== bodyDrawKey) {
+      this._drawSpermHead(body, player, boost?.isBoosting ?? false, bodySizeMult);
+      graphics.bodyDrawKey = bodyDrawKey;
+      bodyRedrawn = true;
+    }
 
     // Keep head locked forward like a sperm head (no independent banking).
     const turnDiff = angularDistance(graphics.visualAngle, velocity.targetAngle);
     body.rotation = 0;
 
-    // Draw slither.io style body using position history (with class and kill power multipliers)
-    this._drawSlitherBody(
+    // Draw a short connector into the real trail so the player reads as one tail, not two.
+    this._drawTailConnector(
       tail,
       player.color,
       boost?.isBoosting ?? false,
-      graphics,
       position,
-      classSizeMult * growthMult
+      graphics.visualAngle,
+      trail,
+      bodySizeMult
     );
 
     // Draw shield if active
@@ -1009,43 +1090,47 @@ export class RenderSystem extends System {
       nameplate.style.left = `${screenPos.x}px`;
       nameplate.style.top = `${screenPos.y - 30}px`;
     }
+
+    return bodyRedrawn;
   }
 
   /**
-   * Draw clean sperm head - simple oval with highlight, no donut effect.
+   * Draw sperm head — bioluminescent cell under microscope
    */
   private _drawSpermHead(bodyGraphics: GraphicsType, player: Player, isBoosting: boolean, sizeMult: number = 1.0): void {
     bodyGraphics.clear();
 
-    const rx = 10 * sizeMult;  // Slightly bigger head (scaled by class)
-    const ry = 7 * sizeMult;
+    const baseRadius = PLAYER_VISUAL_CONFIG.BODY_RADIUS * sizeMult;
+    const rx = baseRadius * PLAYER_VISUAL_CONFIG.BODY_WIDTH_MULT;
+    const ry = baseRadius * PLAYER_VISUAL_CONFIG.BODY_HEIGHT_MULT;
+    const color = player.color;
 
-    // Boost glow
+    // Outer bioluminescent glow (large, very soft)
+    bodyGraphics.ellipse(0, 0, rx + 12, ry + 8).fill({ color, alpha: 0.05 });
+    bodyGraphics.ellipse(0, 0, rx + 6, ry + 4).fill({ color, alpha: 0.12 });
+
+    // Boost outer ring
     if (isBoosting) {
-      bodyGraphics.ellipse(0, 0, rx + 5, ry + 4).fill({
-        color: player.color,
-        alpha: 0.25,
-      });
+      bodyGraphics.ellipse(0, 0, rx + 8, ry + 6).stroke({ width: 1.7, color, alpha: 0.5 });
     }
 
-    // Main head - solid color
-    bodyGraphics.ellipse(0, 0, rx, ry).fill({
-      color: player.color,
-      alpha: 1.0,
-    });
+    // Main head body
+    bodyGraphics.ellipse(0, 0, rx, ry).fill({ color, alpha: 0.92 });
 
-    // Subtle white outline for visibility
-    bodyGraphics.ellipse(0, 0, rx, ry).stroke({
-      width: 1.5,
-      color: 0xffffff,
-      alpha: 0.4,
-    });
+    // Acrosome cap — brighter front half
+    bodyGraphics.ellipse(rx * 0.18, 0, rx * 0.58, ry * 0.82).fill({ color: 0xffffff, alpha: 0.1 });
 
-    // Single highlight spot for 3D depth (top-front)
-    bodyGraphics.ellipse(3, -2, rx * 0.35, ry * 0.3).fill({
-      color: 0xffffff,
-      alpha: 0.35,
-    });
+    // Edge stroke for cell membrane look
+    bodyGraphics.ellipse(0, 0, rx, ry).stroke({ width: 1.2, color: 0xffffff, alpha: 0.4 });
+
+    // Highlight spot (top-right, like light catching a wet cell)
+    bodyGraphics.ellipse(rx * 0.28, -ry * 0.28, rx * 0.22, ry * 0.2).fill({ color: 0xffffff, alpha: 0.5 });
+
+    // Local player identity ring — bright outer ring so you always know which one is you
+    if (player.isLocal) {
+      bodyGraphics.ellipse(0, 0, rx + 9, ry + 6).stroke({ width: 2.5, color: 0xffffff, alpha: 0.55 });
+      bodyGraphics.ellipse(0, 0, rx + 14, ry + 10).stroke({ width: 1.2, color: 0xffffff, alpha: 0.18 });
+    }
   }
 
   /**
@@ -1064,104 +1149,104 @@ export class RenderSystem extends System {
   }
 
   /**
-   * Draw slither.io-style body that follows the head's actual path.
-   * The body IS the trail - smooth, responsive, addictive movement.
+   * Tail connector is no longer needed — the trail IS the visual tail,
+   * emitting from the back of the head and tapering behind it.
    */
-  private _drawSlitherBody(
+  private _drawTailConnector(
     tailGraphics: GraphicsType,
     color: number,
     isBoosting: boolean,
-    graphics: EntityGraphics,
     currentPos: Position,
+    visualAngle: number,
+    trail: Trail | undefined,
     growthMult: number = 1.0
   ): void {
     tailGraphics.clear();
 
-    const history = graphics.positionHistory;
-    if (history.length < 2) return;
+    const latestPoint = trail?.points[trail.points.length - 1];
+    if (!latestPoint) return;
 
-    // Transform world positions to local coordinates (relative to head)
-    const headX = currentPos.x;
-    const headY = currentPos.y;
-    const angle = graphics.visualAngle;
-    const cosA = Math.cos(-angle);
-    const sinA = Math.sin(-angle);
+    const headBackX = -PLAYER_VISUAL_CONFIG.BODY_RADIUS * PLAYER_VISUAL_CONFIG.BODY_WIDTH_MULT * growthMult;
+    const dx = latestPoint.x - currentPos.x;
+    const dy = latestPoint.y - currentPos.y;
+    const cos = Math.cos(-visualAngle);
+    const sin = Math.sin(-visualAngle);
+    const localX = dx * cos - dy * sin;
+    const localY = dx * sin + dy * cos;
+    const gap = Math.hypot(localX - headBackX, localY);
 
-    // Convert history to local space
-    const localPts: Array<{ x: number; y: number }> = [];
-    for (let i = history.length - 1; i >= 0; i--) {
-      const wx = history[i].x - headX;
-      const wy = history[i].y - headY;
-      // Rotate to local space
-      const lx = wx * cosA - wy * sinA;
-      const ly = wx * sinA + wy * cosA;
-      localPts.push({ x: lx, y: ly });
+    if (!Number.isFinite(gap) || gap < 2 || gap > 96) {
+      return;
     }
 
-    // Body parameters - thick like slither.io!
-    // Apply growth multiplier for kill power effect
-    const baseHeadWidth = isBoosting ? 14 : 12;
-    const baseTailWidth = isBoosting ? 4 : 3;
-    const headWidth = baseHeadWidth * growthMult;  // Thick body near head
-    const tailWidth = baseTailWidth * growthMult;  // Thin at the end
+    const connectorWidth = Math.max(2.4, latestPoint.width * 0.9);
 
-    // Draw outer glow first
-    for (let i = 0; i < localPts.length - 1; i++) {
-      const t = i / (localPts.length - 1);
-      const width = headWidth - (headWidth - tailWidth) * t;
+    // Build a sine-wave wiggle path from head to trail tip (flagellum motion)
+    const WAVE_SEGMENTS = 18;
+    const tailWaveSpeed = isBoosting
+      ? PLAYER_VISUAL_CONFIG.TAIL_WAVE_SPEED_BOOST
+      : PLAYER_VISUAL_CONFIG.TAIL_WAVE_SPEED;
+    const tailAmplitude = isBoosting
+      ? PLAYER_VISUAL_CONFIG.TAIL_AMPLITUDE_BOOST
+      : PLAYER_VISUAL_CONFIG.TAIL_AMPLITUDE;
 
-      tailGraphics.moveTo(localPts[i].x, localPts[i].y);
-      tailGraphics.lineTo(localPts[i + 1].x, localPts[i + 1].y);
-      tailGraphics.stroke({
-        width: width + 4,
-        color: color,
-        alpha: 0.2,
-        cap: 'round',
-        join: 'round',
-      });
+    // Perpendicular axis relative to the connector direction (in local space)
+    const connDx = localX - headBackX;
+    const connDy = localY - 0;
+    const connLen = Math.hypot(connDx, connDy) || 1;
+    const perpX = -connDy / connLen;
+    const perpY = connDx / connLen;
+
+    const wavePoints: Array<{ x: number; y: number }> = [];
+    for (let i = 0; i <= WAVE_SEGMENTS; i++) {
+      const t = i / WAVE_SEGMENTS;
+      const baseX = headBackX + connDx * t;
+      const baseY = connDy * t;
+      // Amplitude envelope: zero at head, peak at ~60%, gentle taper at tip
+      const envelope = t * Math.pow(1 - t * 0.55, 1.4);
+      const waveAmp = tailAmplitude * envelope * growthMult;
+      const wavePhase = this._time * tailWaveSpeed - t * Math.PI * 3.8;
+      const wave = Math.sin(wavePhase) * waveAmp;
+      wavePoints.push({ x: baseX + perpX * wave, y: baseY + perpY * wave });
     }
 
-    // Draw main body
-    for (let i = 0; i < localPts.length - 1; i++) {
-      const t = i / (localPts.length - 1);
-      const width = headWidth - (headWidth - tailWidth) * t;
-      const alpha = 1.0 - t * 0.15;  // Slight fade
+    const drawWavePath = (g: GraphicsType) => {
+      if (wavePoints.length < 2) return;
+      g.moveTo(wavePoints[0].x, wavePoints[0].y);
+      for (let i = 1; i < wavePoints.length; i++) {
+        g.lineTo(wavePoints[i].x, wavePoints[i].y);
+      }
+    };
 
-      tailGraphics.moveTo(localPts[i].x, localPts[i].y);
-      tailGraphics.lineTo(localPts[i + 1].x, localPts[i + 1].y);
-      tailGraphics.stroke({
-        width: width,
-        color: color,
-        alpha: alpha,
-        cap: 'round',
-        join: 'round',
-      });
-    }
+    // Outer glow pass
+    drawWavePath(tailGraphics);
+    tailGraphics.stroke({
+      width: connectorWidth + (isBoosting ? 4 : 3),
+      color,
+      alpha: isBoosting ? 0.28 : 0.2,
+      cap: 'round',
+      join: 'round',
+    });
 
-    // Inner highlight for depth (slither.io style)
-    for (let i = 0; i < localPts.length - 1; i += 2) {
-      const t = i / (localPts.length - 1);
-      const width = (headWidth - (headWidth - tailWidth) * t) * 0.4;
+    // Core flagellum
+    drawWavePath(tailGraphics);
+    tailGraphics.stroke({
+      width: connectorWidth,
+      color,
+      alpha: 0.86,
+      cap: 'round',
+      join: 'round',
+    });
 
-      tailGraphics.moveTo(localPts[i].x, localPts[i].y - 1);
-      tailGraphics.lineTo(localPts[i + 1].x, localPts[i + 1].y - 1);
-      tailGraphics.stroke({
-        width: width,
-        color: 0xffffff,
-        alpha: 0.25,
-        cap: 'round',
-      });
-    }
-
-    // Boost sparkles at the tip
-    if (isBoosting && localPts.length > 3) {
-      const tipIdx = localPts.length - 1;
-      const tip = localPts[tipIdx];
-      tailGraphics.circle(tip.x, tip.y, 3).fill({
-        color: 0xffffff,
-        alpha: 0.6 + Math.sin(this._time * 15) * 0.3,
-      });
-    }
+    // Inner bioluminescent highlight
+    drawWavePath(tailGraphics);
+    tailGraphics.stroke({
+      width: Math.max(1, connectorWidth * 0.34),
+      color: 0xffffff,
+      alpha: 0.26,
+      cap: 'round',
+      join: 'round',
+    });
   }
 
   /**
@@ -1244,28 +1329,36 @@ export class RenderSystem extends System {
     const radius = PLAYER_VISUAL_CONFIG.SHIELD_RADIUS;
     const pulse = 0.6 + Math.sin(this._time * 8) * 0.2;
 
-    const r = radius;
-    // Outer square outline
-    shieldGraphics.rect(-r, -r, r * 2, r * 2).stroke({
-      width: 4,
-      color: 0x00ffff,
+    // Organic cell-membrane shield — elliptical to match sperm head shape
+    const rx = radius * 2.2;
+    const ry = radius * 1.6;
+
+    // Outer diffuse halo
+    shieldGraphics.ellipse(0, 0, rx + 10, ry + 7).fill({ color: 0x00e5ff, alpha: pulse * 0.07 });
+
+    // Mid glow ring
+    shieldGraphics.ellipse(0, 0, rx + 4, ry + 3).stroke({
+      width: 3,
+      color: 0x00e5ff,
+      alpha: pulse * 0.45,
+    });
+
+    // Core membrane ring
+    shieldGraphics.ellipse(0, 0, rx, ry).stroke({
+      width: 2.5,
+      color: 0x7fffff,
       alpha: pulse,
     });
 
-    // Inner square outline
-    const r2 = r - 6;
-    shieldGraphics.rect(-r2, -r2, r2 * 2, r2 * 2).stroke({
-      width: 2,
-      color: 0x00ffff,
-      alpha: pulse * 0.7,
-    });
+    // Inner fill (barely visible — like a soap bubble)
+    shieldGraphics.ellipse(0, 0, rx, ry).fill({ color: 0x00ffff, alpha: pulse * 0.06 });
 
-    // Corner accents (pixel look)
-    const cornerSize = 4;
-    shieldGraphics.rect(-r - 2, -r - 2, cornerSize, cornerSize).fill({ color: 0xffffff });
-    shieldGraphics.rect(r - 2, -r - 2, cornerSize, cornerSize).fill({ color: 0xffffff });
-    shieldGraphics.rect(-r - 2, r - 2, cornerSize, cornerSize).fill({ color: 0xffffff });
-    shieldGraphics.rect(r - 2, r - 2, cornerSize, cornerSize).fill({ color: 0xffffff });
+    // Top-left sheen arc highlight
+    shieldGraphics.ellipse(-rx * 0.14, -ry * 0.42, rx * 0.55, ry * 0.32).stroke({
+      width: 1.5,
+      color: 0xffffff,
+      alpha: pulse * 0.5,
+    });
   }
 
   /**
@@ -1289,9 +1382,21 @@ export class RenderSystem extends System {
   /**
    * Render trails with retro pixel blocks
    */
-  private _renderTrails(): void {
+  private _renderTrails(now: number): void {
     const entities = this.entityManager.queryByMask(this._trailMask);
-    const now = Date.now();
+    const camConfig = this._camera.getCameraConfig();
+    const zoom = Math.max(0.001, camConfig.zoom);
+    const cullMargin = 260;
+    const halfWidth = (camConfig.screenWidth / 2) / zoom;
+    const halfHeight = (camConfig.screenHeight / 2) / zoom;
+    const viewLeft = camConfig.x - halfWidth - cullMargin;
+    const viewRight = camConfig.x + halfWidth + cullMargin;
+    const viewTop = camConfig.y - halfHeight - cullMargin;
+    const viewBottom = camConfig.y + halfHeight + cullMargin;
+    const fadeBucket = Math.floor(now / TRAIL_REDRAW_INTERVAL_MS);
+    const cullKey = this._getTrailCullKey(viewLeft, viewRight, viewTop, viewBottom);
+    let redrawCount = 0;
+    let reuseCount = 0;
 
     for (const entity of entities) {
       const trail = entity.getComponent<Trail>(ComponentNames.TRAIL);
@@ -1299,18 +1404,24 @@ export class RenderSystem extends System {
 
       if (!trail || !player) continue;
 
-      let trailGraphics = this._trailGraphics.get(entity.id);
-      if (!trailGraphics) {
-        trailGraphics = new Graphics();
-        trailGraphics.label = `trail_${entity.id}`;
+      let trailCache = this._trailGraphics.get(entity.id);
+      if (!trailCache) {
+        const graphics = new Graphics();
+        graphics.label = `trail_${entity.id}`;
         const trailsLayer = this._layers.get(RenderLayer.TRAILS);
         if (trailsLayer) {
-          trailsLayer.addChild(trailGraphics);
+          trailsLayer.addChild(graphics);
         }
-        this._trailGraphics.set(entity.id, trailGraphics);
+        trailCache = {
+          graphics,
+          pointCount: -1,
+          oldestTimestamp: -1,
+          newestTimestamp: -1,
+          fadeBucket: -1,
+          cullKey: '',
+        };
+        this._trailGraphics.set(entity.id, trailCache);
       }
-
-      trailGraphics.clear();
 
       const trailColor = trail.color;
 
@@ -1320,124 +1431,347 @@ export class RenderSystem extends System {
       else if (trailColor === 0xFF4500 || trailColor === 0xFF0000) effectType = 'fire';
       else if (trailColor === 0xFFFF00) effectType = 'lightning';
 
-      // Draw trail as continuous slither-style ribbons and split only on large jumps.
-      if (trail.points.length >= 2) {
-        const isLocalTrail = player.isLocal;
-        const trailWidth = Math.max(1.25, trail.baseWidth * (isLocalTrail ? 1.08 : 0.96));
-        const maxGapSq = 52 * 52;
-        const visualLifetime = Math.min(trail.lifetime, isLocalTrail ? 420 : 340);
-        const active = trail.points
-          .map((p) => ({
-            p,
-            alpha: Number.isFinite(p?.x) && Number.isFinite(p?.y)
-              ? getTrailAlpha(p, visualLifetime, now)
-              : 0,
-          }))
-          .filter((entry) => entry.alpha > 0.22);
+      const oldestTimestamp = trail.points[0]?.timestamp ?? -1;
+      const newestTimestamp = trail.points[trail.points.length - 1]?.timestamp ?? -1;
+      const appendedPoints = Math.max(0, trail.points.length - Math.max(0, trailCache.pointCount));
+      const removedPoints = Math.max(0, Math.max(0, trailCache.pointCount) - trail.points.length);
+      const oldestAgeDelta = trailCache.oldestTimestamp < 0
+        ? Number.POSITIVE_INFINITY
+        : oldestTimestamp - trailCache.oldestTimestamp;
+      const newestAgeDelta = trailCache.newestTimestamp < 0
+        ? Number.POSITIVE_INFINITY
+        : newestTimestamp - trailCache.newestTimestamp;
+      const needsRedraw = (
+        trailCache.pointCount < 0 ||
+        (trail.points.length < 2 && trailCache.pointCount !== trail.points.length) ||
+        appendedPoints >= TRAIL_APPEND_REDRAW_POINTS ||
+        removedPoints >= TRAIL_APPEND_REDRAW_POINTS ||
+        oldestAgeDelta >= TRAIL_APPEND_REDRAW_INTERVAL_MS ||
+        newestAgeDelta >= TRAIL_APPEND_REDRAW_INTERVAL_MS ||
+        trailCache.fadeBucket !== fadeBucket ||
+        trailCache.cullKey !== cullKey
+      );
 
-        if (active.length >= 2) {
-          const segments: Array<typeof active> = [];
-          let current: typeof active = [active[0]];
+      if (needsRedraw) {
+        redrawCount++;
+        trailCache.graphics.clear();
 
-          for (let i = 1; i < active.length; i++) {
-            const prev = current[current.length - 1];
-            const cur = active[i];
-            const dx = cur.p.x - prev.p.x;
-            const dy = cur.p.y - prev.p.y;
-
-            // Split hard on teleports only; keep temporal continuity to avoid dotty trails.
-            if (dx * dx + dy * dy > maxGapSq) {
-              if (current.length >= 2) segments.push(current);
-              current = [cur];
-            } else {
-              current.push(cur);
-            }
-          }
-          if (current.length >= 2) {
-            segments.push(current);
-          }
-
-          for (const seg of segments) {
-            const poly: Array<{ x: number; y: number }> = [];
-            let alphaSum = 0;
-            let alphaCount = 0;
-
-            for (let i = 0; i < seg.length; i++) {
-              const point = seg[i]?.p;
-              const alpha = seg[i].alpha;
-              if (!point) continue;
-
-              poly.push({ x: point.x, y: point.y });
-              alphaSum += alpha;
-              alphaCount++;
-            }
-
-            if (poly.length >= 2 && alphaCount > 0) {
-              const avgAlpha = alphaSum / alphaCount;
-              const glowAlpha = isLocalTrail ? 0.16 : 0.11;
-              const coreAlpha = isLocalTrail ? 0.72 : 0.54;
-              const highlightAlpha = isLocalTrail ? 0.16 : 0.08;
-              this._drawPolylineSegment(trailGraphics, poly, trailWidth + 0.4, trailColor, avgAlpha * glowAlpha);
-              this._drawPolylineSegment(trailGraphics, poly, trailWidth, trailColor, avgAlpha * coreAlpha);
-              this._drawPolylineSegment(
-                trailGraphics,
-                poly,
-                Math.max(0.55, trailWidth * 0.24),
-                0xffffff,
-                avgAlpha * highlightAlpha
-              );
-            }
+        if (trail.points.length >= 2) {
+          const active = this._collectVisibleTrailPoints(
+            trail,
+            now,
+            viewLeft,
+            viewRight,
+            viewTop,
+            viewBottom
+          );
+          if (active.length >= 2) {
+            this._drawTrailGeometry(trailCache.graphics, trail, player.isLocal, active);
           }
         }
 
-        // Spawn particles for special effects
-        for (let i = 0; i < trail.points.length; i++) {
-          const p = trail.points[i];
-          const alpha = getTrailAlpha(p, visualLifetime, now);
-          if (alpha <= 0) continue;
+        trailCache.pointCount = trail.points.length;
+        trailCache.oldestTimestamp = oldestTimestamp;
+        trailCache.newestTimestamp = newestTimestamp;
+        trailCache.fadeBucket = fadeBucket;
+        trailCache.cullKey = cullKey;
+      } else {
+        reuseCount++;
+      }
 
-          // Boost sparkles
-          if (p.isBoosted && Math.random() < 0.04) {
-            const sparkleSize = 2;
-            trailGraphics.rect(p.x - sparkleSize/2, p.y - sparkleSize/2, sparkleSize, sparkleSize).fill({
-              color: 0xffffff,
-              alpha: alpha * 0.55,
-            });
-          }
+      this._spawnTrailFx(
+        trail,
+        effectType,
+        now,
+        viewLeft,
+        viewRight,
+        viewTop,
+        viewBottom
+      );
+    }
 
-          // Fire/Gold particles
-          if (Math.random() < 0.03 && (effectType === 'gold' || effectType === 'fire')) {
-            const pType = effectType === 'fire' ? ParticleType.SMOKE : ParticleType.SPARK;
-            const pColor = effectType === 'fire' ? 0xFF4500 : 0xFFD700;
+    this._trailRedrawsLastFrame = redrawCount;
+    this._trailReuseSkipsLastFrame = reuseCount;
 
-            this._particlePool.spawn({
-              type: pType,
-              x: p.x + (Math.random() - 0.5) * 10,
-              y: p.y + (Math.random() - 0.5) * 10,
-              vx: (Math.random() - 0.5) * 10,
-              vy: (Math.random() - 0.5) * 10,
-              life: 0.5,
-              decay: 2,
-              startSize: 2,
-              endSize: 0,
-              size: 2,
-              color: pColor,
-              alpha: alpha,
-              rotation: 0,
-              rotationSpeed: 0,
-              gravity: effectType === 'fire' ? -20 : 0,
-              active: true
-            });
-          }
+    // Clean up trail graphics for destroyed entities
+    for (const [entityId, cache] of this._trailGraphics) {
+      if (!this.entityManager.hasEntity(entityId)) {
+        cache.graphics.destroy();
+        this._trailGraphics.delete(entityId);
+      }
+    }
+  }
+
+  private _getTrailCullKey(
+    viewLeft: number,
+    viewRight: number,
+    viewTop: number,
+    viewBottom: number
+  ): string {
+    return [
+      Math.floor(viewLeft / TRAIL_CULL_BUCKET_SIZE),
+      Math.floor(viewRight / TRAIL_CULL_BUCKET_SIZE),
+      Math.floor(viewTop / TRAIL_CULL_BUCKET_SIZE),
+      Math.floor(viewBottom / TRAIL_CULL_BUCKET_SIZE),
+    ].join(':');
+  }
+
+  private _collectVisibleTrailPoints(
+    trail: Trail,
+    now: number,
+    viewLeft: number,
+    viewRight: number,
+    viewTop: number,
+    viewBottom: number
+  ): Array<{ p: TrailPoint; alpha: number }> {
+    const active: Array<{ p: TrailPoint; alpha: number }> = [];
+
+    for (const point of trail.points) {
+      if (!Number.isFinite(point?.x) || !Number.isFinite(point?.y)) {
+        continue;
+      }
+
+      const alpha = getTrailAlpha(point, trail.lifetime, now);
+      if (alpha <= 0) {
+        continue;
+      }
+
+      if (
+        point.x < viewLeft ||
+        point.x > viewRight ||
+        point.y < viewTop ||
+        point.y > viewBottom
+      ) {
+        continue;
+      }
+
+      active.push({ p: point, alpha });
+    }
+
+    return active;
+  }
+
+  private _drawTrailGeometry(
+    trailGraphics: GraphicsType,
+    trail: Trail,
+    isLocalTrail: boolean,
+    active: Array<{ p: TrailPoint; alpha: number }>
+  ): void {
+    const maxGapSq = 200 * 200;
+    const segments: Array<typeof active> = [];
+    let current: typeof active = [active[0]];
+
+    for (let i = 1; i < active.length; i++) {
+      const prev = current[current.length - 1];
+      const cur = active[i];
+      const dx = cur.p.x - prev.p.x;
+      const dy = cur.p.y - prev.p.y;
+
+      // Split hard on teleports only; keep temporal continuity to avoid dotty trails.
+      if (dx * dx + dy * dy > maxGapSq) {
+        if (current.length >= 2) segments.push(current);
+        current = [cur];
+      } else {
+        current.push(cur);
+      }
+    }
+    if (current.length >= 2) {
+      segments.push(current);
+    }
+
+    // Tapered flagellum: active[0]=oldest(thin tip), active[n-1]=newest(thick near head)
+    const localMult = isLocalTrail ? 1.05 : 1.16;
+    const maxWidth = Math.max(2.4, trail.baseWidth * localMult);
+    const minWidth = isLocalTrail ? 1.4 : 1.8;
+    const dangerGlowAlpha = isLocalTrail ? 0.24 : 0.3;
+    const coreAlpha = isLocalTrail ? 0.92 : 0.96;
+    const highlightAlpha = isLocalTrail ? 0.3 : 0.26;
+    const threatHaloAlpha = isLocalTrail ? 0.1 : 0.28;
+    // Opponent trails get a red outer warning halo so they read as DEADLY at a glance
+    const haloColor = isLocalTrail ? trail.color : 0xff2222;
+
+    for (const seg of segments) {
+      if (seg.length < 2) continue;
+      const n = seg.length;
+
+      const buckets = 5;
+      for (let bucket = 0; bucket < buckets; bucket++) {
+        const frac = bucket / (buckets - 1);
+        const startIdx = Math.floor((bucket / buckets) * n);
+        const endIdx = Math.min(Math.floor(((bucket + 1) / buckets) * n), n - 1);
+
+        if (endIdx - startIdx < 1) continue;
+
+        const width = minWidth + (maxWidth - minWidth) * frac;
+        const subPoly: Array<{ x: number; y: number }> = [];
+        let alphaSum = 0;
+
+        for (let i = startIdx; i <= endIdx; i++) {
+          const pt = seg[i]?.p;
+          if (!pt) continue;
+          subPoly.push({ x: pt.x, y: pt.y });
+          alphaSum += seg[i].alpha;
+        }
+
+        if (subPoly.length < 2) continue;
+
+        // Catmull-Rom spline smoothing — eliminates angular kinks at sharp turns
+        const drawPoly = subPoly.length >= 4 ? this._catmullRomSmooth(subPoly, 2) : subPoly;
+
+        const bucketAlpha = alphaSum / (endIdx - startIdx + 1);
+
+        this._drawPolylineSegment(
+          trailGraphics,
+          drawPoly,
+          width + (isLocalTrail ? 3 : 6),
+          haloColor,
+          bucketAlpha * threatHaloAlpha
+        );
+        this._drawPolylineSegment(
+          trailGraphics,
+          drawPoly,
+          width + 3.2,
+          trail.color,
+          bucketAlpha * dangerGlowAlpha
+        );
+        this._drawPolylineSegment(
+          trailGraphics,
+          drawPoly,
+          width,
+          trail.color,
+          bucketAlpha * coreAlpha
+        );
+
+        if (frac >= 0.4) {
+          this._drawPolylineSegment(
+            trailGraphics,
+            drawPoly,
+            Math.max(0.8, width * 0.35),
+            0xffffff,
+            bucketAlpha * highlightAlpha
+          );
+        }
+
+        if (!isLocalTrail) {
+          this._drawPolylineSegment(
+            trailGraphics,
+            drawPoly,
+            Math.max(1.1, width * 0.58),
+            MICROSCOPE_PALETTE.MEMBRANE,
+            bucketAlpha * 0.1
+          );
         }
       }
     }
+  }
 
-    // Clean up trail graphics for destroyed entities
-    for (const [entityId, graphics] of this._trailGraphics) {
-      if (!this.entityManager.hasEntity(entityId)) {
-        graphics.destroy();
-        this._trailGraphics.delete(entityId);
+  /**
+   * Catmull-Rom spline: insert `subdiv` smooth points between each pair of control points.
+   * Eliminates angular kinks on sharp trail turns.
+   */
+  private _catmullRomSmooth(
+    pts: Array<{ x: number; y: number }>,
+    subdiv: number
+  ): Array<{ x: number; y: number }> {
+    const n = pts.length;
+    const result: Array<{ x: number; y: number }> = [pts[0]];
+    const step = 1 / (subdiv + 1);
+    for (let i = 0; i < n - 1; i++) {
+      const p0 = pts[Math.max(0, i - 1)];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = pts[Math.min(n - 1, i + 2)];
+      for (let s = 1; s <= subdiv; s++) {
+        const t = s * step;
+        const t2 = t * t;
+        const t3 = t2 * t;
+        result.push({
+          x: 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3),
+          y: 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * t + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3),
+        });
+      }
+      result.push(pts[i + 1]);
+    }
+    return result;
+  }
+
+  private _spawnTrailFx(
+    trail: Trail,
+    effectType: string,
+    now: number,
+    viewLeft: number,
+    viewRight: number,
+    viewTop: number,
+    viewBottom: number
+  ): void {
+    let sampled = 0;
+    const minIndex = Math.max(0, trail.points.length - TRAIL_FX_SCAN_LIMIT);
+
+    for (let i = trail.points.length - 1; i >= minIndex && sampled < TRAIL_FX_SAMPLE_LIMIT; i--) {
+      const point = trail.points[i];
+      if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+        continue;
+      }
+
+      if (
+        point.x < viewLeft ||
+        point.x > viewRight ||
+        point.y < viewTop ||
+        point.y > viewBottom
+      ) {
+        continue;
+      }
+
+      const alpha = getTrailAlpha(point, trail.lifetime, now);
+      if (alpha <= 0) {
+        continue;
+      }
+
+      sampled++;
+
+      if (point.isBoosted && Math.random() < 0.04) {
+        this._particlePool.spawn({
+          type: ParticleType.SPARK,
+          x: point.x + (Math.random() - 0.5) * 6,
+          y: point.y + (Math.random() - 0.5) * 6,
+          vx: (Math.random() - 0.5) * 8,
+          vy: (Math.random() - 0.5) * 8,
+          life: 0.18,
+          decay: 5,
+          startSize: 2,
+          endSize: 0,
+          size: 2,
+          color: 0xffffff,
+          alpha: alpha * 0.55,
+          rotation: 0,
+          rotationSpeed: 0,
+          gravity: 0,
+          active: true,
+        });
+      }
+
+      if (Math.random() < 0.03 && (effectType === 'gold' || effectType === 'fire')) {
+        const pType = effectType === 'fire' ? ParticleType.SMOKE : ParticleType.SPARK;
+        const pColor = effectType === 'fire' ? 0xFF4500 : 0xFFD700;
+
+        this._particlePool.spawn({
+          type: pType,
+          x: point.x + (Math.random() - 0.5) * 10,
+          y: point.y + (Math.random() - 0.5) * 10,
+          vx: (Math.random() - 0.5) * 10,
+          vy: (Math.random() - 0.5) * 10,
+          life: 0.5,
+          decay: 2,
+          startSize: 2,
+          endSize: 0,
+          size: 2,
+          color: pColor,
+          alpha,
+          rotation: 0,
+          rotationSpeed: 0,
+          gravity: effectType === 'fire' ? -20 : 0,
+          active: true,
+        });
       }
     }
   }
@@ -1720,17 +2054,27 @@ export class RenderSystem extends System {
   /**
    * Render powerups (DNA helix collectibles)
    */
-  private _renderPowerups(): void {
+  private _renderPowerups(now: number): void {
     if (!this._powerupSystem) return;
 
     const powerups = this._powerupSystem.getPowerups();
     const effectsLayer = this._layers.get(RenderLayer.POWERUPS);
     if (!effectsLayer) return;
 
-    const now = Date.now();
+    const camConfig = this._camera.getCameraConfig();
+    const zoom = Math.max(0.001, camConfig.zoom);
+    const cullMargin = 180;
+    const halfWidth = (camConfig.screenWidth / 2) / zoom;
+    const halfHeight = (camConfig.screenHeight / 2) / zoom;
+    const viewLeft = camConfig.x - halfWidth - cullMargin;
+    const viewRight = camConfig.x + halfWidth + cullMargin;
+    const viewTop = camConfig.y - halfHeight - cullMargin;
+    const viewBottom = camConfig.y + halfHeight + cullMargin;
+    const activePowerupIds = new Set<string>();
 
     for (const powerup of powerups) {
       if (powerup.collected) continue;
+      activePowerupIds.add(powerup.entityId);
 
       let graphics = this._powerupGraphics.get(powerup.entityId);
       if (!graphics) {
@@ -1739,13 +2083,23 @@ export class RenderSystem extends System {
         effectsLayer.addChild(graphics.container);
       }
 
+      const isVisible = (
+        powerup.x >= viewLeft &&
+        powerup.x <= viewRight &&
+        powerup.y >= viewTop &&
+        powerup.y <= viewBottom
+      );
+      graphics.container.visible = isVisible;
+      if (!isVisible) {
+        continue;
+      }
+
       this._updatePowerupGraphics(graphics, powerup, now);
     }
 
     // Clean up graphics for collected/removed powerups
     for (const [id, graphicsData] of this._powerupGraphics) {
-      const exists = powerups.find(p => p.entityId === id && !p.collected);
-      if (!exists) {
+      if (!activePowerupIds.has(id)) {
         graphicsData.container.destroy();
         this._powerupGraphics.delete(id);
       }
@@ -1878,6 +2232,13 @@ export class RenderSystem extends System {
     visibleEntities: number;
     visibleNameplates: number;
     trailGraphics: number;
+    trailRedraws: number;
+    trailReuseSkips: number;
+    bodyRedraws: number;
+    bodyReuseSkips: number;
+    offscreenIndicatorCount: number;
+    offscreenIndicatorRedraws: number;
+    offscreenIndicatorReuseSkips: number;
     hasBackground: boolean;
     hasZone: boolean;
     hasParticles: boolean;
@@ -1891,7 +2252,9 @@ export class RenderSystem extends System {
     let visibleNameplates = 0;
     for (const graphics of this._entityGraphics.values()) {
       if (graphics.container.visible) visibleEntities += 1;
-      if (graphics.nameplate?.style.display !== 'none') visibleNameplates += 1;
+      if (graphics.nameplate && graphics.nameplate.style.display !== 'none') {
+        visibleNameplates += 1;
+      }
     }
 
     return {
@@ -1900,6 +2263,13 @@ export class RenderSystem extends System {
       visibleEntities,
       visibleNameplates,
       trailGraphics: this._trailGraphics.size,
+      trailRedraws: this._trailRedrawsLastFrame,
+      trailReuseSkips: this._trailReuseSkipsLastFrame,
+      bodyRedraws: this._bodyRedrawsLastFrame,
+      bodyReuseSkips: this._bodyReuseSkipsLastFrame,
+      offscreenIndicatorCount: this._offscreenIndicatorCountLastFrame,
+      offscreenIndicatorRedraws: this._offscreenIndicatorRedrawsLastFrame,
+      offscreenIndicatorReuseSkips: this._offscreenIndicatorReuseSkipsLastFrame,
       hasBackground: this._backgroundGraphics !== null,
       hasZone: this._zoneGraphics !== null,
       hasParticles: this._particleGraphics !== null,
@@ -1933,6 +2303,8 @@ export class RenderSystem extends System {
       this._zoneGraphics.destroy({ children: true, texture: false });
       this._zoneGraphics = null;
     }
+    this._offscreenIndicators = null;
+    this._offscreenIndicatorDrawKey = '';
 
     // Clear particle pool before destroying its Graphics handle.
     // This avoids calling Graphics.clear() after the underlying context is gone.
@@ -1957,8 +2329,8 @@ export class RenderSystem extends System {
     this._entityGraphics.clear();
 
     // Clean up trail graphics
-    for (const graphics of this._trailGraphics.values()) {
-      graphics.destroy({ children: true, texture: false });
+    for (const cache of this._trailGraphics.values()) {
+      cache.graphics.destroy({ children: true, texture: false });
     }
     this._trailGraphics.clear();
 
@@ -1981,10 +2353,10 @@ export class RenderSystem extends System {
     }
 
     // Remove FPS counter
-    const fpsElement = this._config.uiContainer.querySelector('.fps-counter');
-    if (fpsElement && fpsElement.parentNode) {
-      fpsElement.parentNode.removeChild(fpsElement);
+    if (this._fpsElement && this._fpsElement.parentNode) {
+      this._fpsElement.parentNode.removeChild(this._fpsElement);
     }
+    this._fpsElement = null;
   }
 }
 

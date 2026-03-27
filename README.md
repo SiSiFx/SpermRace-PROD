@@ -51,9 +51,9 @@ spermrace/
 ├── packages/
 │   ├── client/              # Frontend (Vite + React + Canvas)
 │   │   ├── src/
-│   │   │   ├── App.tsx              # PC version
-│   │   │   ├── AppMobile.tsx        # Mobile version
-│   │   │   ├── NewGameView.tsx      # Canvas game rendering
+│   │   │   ├── main.tsx             # Client entrypoint
+│   │   │   ├── AppUnified.tsx       # Single adaptive app shell
+│   │   │   ├── game/engine/         # ECS engine + view layer
 │   │   │   ├── WsProvider.tsx       # WebSocket connection
 │   │   │   ├── WalletProvider.tsx   # Solana wallet
 │   │   │   └── *.css                # Styling
@@ -89,6 +89,13 @@ spermrace/
 - **Solana wallet** (Phantom recommended)
 - **VPS** for production deployment (optional)
 
+### Edgegap (optional migration path)
+
+This repo supports an Edgegap-backed WebSocket flow via a Vercel matchmaker endpoint.
+
+- Migration guide: `docs/EDGEGAP_MIGRATION.md`
+- Change trace: `docs/EDGEGAP_MIGRATION_TRACE.md`
+
 ### Development Setup
 
 ```bash
@@ -109,8 +116,18 @@ pnpm --filter server dev
 # Terminal 2: Client
 pnpm --filter client dev
 
-# Visit http://localhost:5173
+# Visit http://localhost:5174
 ```
+
+### Cleanup (recommended after running tests/builds)
+
+```bash
+python3 scripts/cleanup-local-artifacts.py --apply
+```
+
+### Notes for agentic coders
+
+See `AGENTS.md` for the current repo map, commands that work, and “don’t touch” areas.
 
 ### Production Deployment
 

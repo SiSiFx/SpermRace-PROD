@@ -18,6 +18,9 @@ export interface GameViewWrapperProps {
 
   /** Called when exit is requested */
   onExit?: () => void;
+
+  /** Called when game ends with stats (death or win) */
+  onGameEnd?: (stats: any) => void;
 }
 
 /**
@@ -28,6 +31,7 @@ export const GameViewWrapper = memo(function GameViewWrapperComponent({
   meIdOverride,
   onReplay,
   onExit,
+  onGameEnd,
 }: GameViewWrapperProps) {
   const flagsRef = useRef(getFeatureFlags());
   const [gameError, setGameError] = useState<string | null>(null);
@@ -41,14 +45,13 @@ export const GameViewWrapper = memo(function GameViewWrapperComponent({
     }
   }, []);
 
-  const handleGameEnd = useCallback((_stats: any) => {
+  const handleGameEnd = useCallback((stats: any) => {
     try {
-      // Keep the player inside the in-game end overlay (replay/exit).
-      // Auto-exiting here causes abrupt returns to menu and breaks game-first flow.
+      onGameEnd?.(stats);
     } catch (error) {
       console.error('[GameViewWrapper] Error in onGameEnd callback:', error);
     }
-  }, []);
+  }, [onGameEnd]);
 
   const handlePlayerDeath = useCallback((killer: string | null) => {
     try {

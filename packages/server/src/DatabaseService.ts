@@ -46,6 +46,8 @@ interface LeaderboardEntry {
 
 export class DatabaseService {
   private db: Database.Database;
+  private cacheRefreshTimer: NodeJS.Timeout | null = null;
+  private isClosed = false;
   private leaderboardCache: {
     wins: LeaderboardEntry[];
     earnings: LeaderboardEntry[];
@@ -55,9 +57,24 @@ export class DatabaseService {
   };
   private readonly CACHE_TTL = 60000; // 60 seconds
 
-  constructor(dbPath: string) {
+  constructor(
+    dbPath: string,
+    options?: {
+      enableWal?: boolean;
+      enableCacheRefresh?: boolean;
+    }
+  ) {
+    const enableWal = options?.enableWal ?? true;
+    const enableCacheRefresh = options?.enableCacheRefresh ?? true;
+
     this.db = new Database(dbPath);
-    this.db.pragma('journal_mode = WAL'); // Better performance
+    // WAL is great for production performance, but it leaves `*.db-wal` + `*.db-shm` sidecars.
+    // For tests, set `enableWal: false` to avoid persistent artifacts.
+    try {
+      this.db.pragma(`journal_mode = ${enableWal ? 'WAL' : 'DELETE'}`);
+    } catch {
+      // Some SQLite configurations (or :memory:) may not accept all modes. Ignore.
+    }
     this.initSchema();
     
     this.leaderboardCache = {
@@ -69,7 +86,9 @@ export class DatabaseService {
     };
 
     // Start background refresh
-    this.startCacheRefresh();
+    if (enableCacheRefresh) {
+      this.startCacheRefresh();
+    }
   }
 
   private initSchema() {
@@ -336,8 +355,17 @@ export class DatabaseService {
 
   // Background cache refresh
   private startCacheRefresh(): void {
-    setInterval(() => {
+    // Initial refresh
+    this.refreshCache('wins', 100);
+    this.refreshCache('earnings', 100);
+    this.refreshCache('kills', 100);
+    this.refreshCache('skillRating', 100);
+    this.leaderboardCache.lastRefresh = Date.now();
+    console.log('[DB] ✅ Cache refresh started (60s interval)');
+
+    this.cacheRefreshTimer = setInterval(() => {
       try {
+        if (this.isClosed) return;
         this.refreshCache('wins', 100);
         this.refreshCache('earnings', 100);
         this.refreshCache('kills', 100);
@@ -348,14 +376,6 @@ export class DatabaseService {
         console.error('[DB] ❌ Cache refresh failed:', error);
       }
     }, this.CACHE_TTL);
-
-    // Initial refresh
-    this.refreshCache('wins', 100);
-    this.refreshCache('earnings', 100);
-    this.refreshCache('kills', 100);
-    this.refreshCache('skillRating', 100);
-    this.leaderboardCache.lastRefresh = Date.now();
-    console.log('[DB] ✅ Cache refresh started (60s interval)');
   }
 
   // Get recent games
@@ -660,6 +680,12 @@ export class DatabaseService {
   }
 
   close(): void {
+    if (this.isClosed) return;
+    this.isClosed = true;
+    if (this.cacheRefreshTimer) {
+      clearInterval(this.cacheRefreshTimer);
+      this.cacheRefreshTimer = null;
+    }
     this.db.close();
   }
 }

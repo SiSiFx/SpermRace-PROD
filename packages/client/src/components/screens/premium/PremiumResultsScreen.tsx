@@ -5,7 +5,7 @@
 
 import { useState, useEffect, memo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, Skull, Target, Sword, ArrowCounterClockwise, House, Crown, Sparkle, ArrowSquareOut, CheckCircle } from 'phosphor-react';
+import { Trophy, Skull, Target, Sword, ArrowCounterClockwise, House, Crown, Sparkle, ArrowSquareOut, CheckCircle, Timer } from 'phosphor-react';
 import { GlassCard, PremiumButton, StatBadge } from '../../ui/premium';
 import { useWallet } from '../../../WalletProvider';
 import { useWs } from '../../../WsProvider';
@@ -16,16 +16,39 @@ const springPage = { type: 'spring' as const, stiffness: 100, damping: 20 };
 const springIcon = { type: 'spring' as const, stiffness: 200, damping: 12 };
 const springTitle = { type: 'spring' as const, stiffness: 80, damping: 20 };
 
+export interface PracticeStats {
+  placement: number;
+  kills: number;
+  duration: number;
+  winner: boolean;
+  killerName: string | null;
+  totalPlayers: number;
+}
+
 export interface PremiumResultsScreenProps {
   onPlayAgain: () => void;
   onChangeTier: () => void;
+  practiceStats?: PracticeStats;
 }
 
 const SOLANA_CLUSTER: 'devnet' | 'mainnet' = (globalThis as any).SOLANA_CLUSTER || 'mainnet';
 
+function fmtDuration(ms: number) {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  return `${m}:${String(s % 60).padStart(2, '0')}`;
+}
+
+function ordinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
 export const PremiumResultsScreen = memo(function PremiumResultsScreen({
   onPlayAgain,
   onChangeTier,
+  practiceStats,
 }: PremiumResultsScreenProps) {
   const { state: wsState } = useWs();
   const { publicKey } = useWallet();
@@ -33,13 +56,16 @@ export const PremiumResultsScreen = memo(function PremiumResultsScreen({
   const [playAgainBusy, setPlayAgainBusy] = useState(false);
   const [confettiActive, setConfettiActive] = useState(false);
 
-  const tx = wsState.lastRound?.txSignature;
-  const winner = wsState.lastRound?.winnerId;
-  const prize = wsState.lastRound?.prizeAmount;
+  // Practice mode uses local stats; tournament mode uses WS state
+  const isPractice = !!practiceStats;
+
+  const tx = isPractice ? null : wsState.lastRound?.txSignature;
+  const winner = isPractice ? null : wsState.lastRound?.winnerId;
+  const prize = isPractice ? null : wsState.lastRound?.prizeAmount;
   const solscan = tx ? `https://solscan.io/tx/${tx}${SOLANA_CLUSTER === 'devnet' ? '?cluster=devnet' : ''}` : null;
   const selfId = wsState.playerId || publicKey || '';
-  const isWinner = !!winner && winner === selfId;
-  const myKills = wsState.kills?.[selfId] || 0;
+  const isWinner = isPractice ? practiceStats.winner : (!!winner && winner === selfId);
+  const myKills = isPractice ? practiceStats.kills : (wsState.kills?.[selfId] || 0);
 
   // Initial load animation
   useEffect(() => {
@@ -86,7 +112,7 @@ export const PremiumResultsScreen = memo(function PremiumResultsScreen({
 
   const handlePlayAgain = async () => {
     if (playAgainBusy) return;
-    if (wsState.phase !== 'ended') {
+    if (isPractice || wsState.phase !== 'ended') {
       onPlayAgain();
       return;
     }
@@ -99,38 +125,45 @@ export const PremiumResultsScreen = memo(function PremiumResultsScreen({
   // Calculate rank
   let rankText: string | null = null;
   let rankNum: number | null = null;
-  try {
-    const initial = wsState.initialPlayers || [];
-    const order = wsState.eliminationOrder || [];
-    if (initial.length) {
-      const uniqueOrder: string[] = [];
-      for (const pid of order) {
-        if (pid && !uniqueOrder.includes(pid)) uniqueOrder.push(pid);
-      }
-      const rankMap: Record<string, number> = {};
-      if (winner) rankMap[winner] = 1;
-      let r = 2;
-      for (let i = uniqueOrder.length - 1; i >= 0; i--) {
-        const pid = uniqueOrder[i];
-        if (pid && !rankMap[pid]) {
-          rankMap[pid] = r;
-          r++;
+  if (isPractice) {
+    rankNum = practiceStats.placement;
+    rankText = `#${practiceStats.placement}`;
+  } else {
+    try {
+      const initial = wsState.initialPlayers || [];
+      const order = wsState.eliminationOrder || [];
+      if (initial.length) {
+        const uniqueOrder: string[] = [];
+        for (const pid of order) {
+          if (pid && !uniqueOrder.includes(pid)) uniqueOrder.push(pid);
+        }
+        const rankMap: Record<string, number> = {};
+        if (winner) rankMap[winner] = 1;
+        let r = 2;
+        for (let i = uniqueOrder.length - 1; i >= 0; i--) {
+          const pid = uniqueOrder[i];
+          if (pid && !rankMap[pid]) {
+            rankMap[pid] = r;
+            r++;
+          }
+        }
+        const myRank = rankMap[selfId];
+        if (myRank) {
+          rankText = `#${myRank}`;
+          rankNum = myRank;
         }
       }
-      const myRank = rankMap[selfId];
-      if (myRank) {
-        rankText = `#${myRank}`;
-        rankNum = myRank;
-      }
-    }
-  } catch { }
+    } catch { }
+  }
 
-  const winnerName = winner
-    ? (wsState.lobby?.playerNames?.[winner] ||
-      (typeof winner === 'string' && winner.length >= 12
-        ? `${winner.slice(0, 6)}...${winner.slice(-6)}`
-        : winner))
-    : '—';
+  const winnerName = isPractice
+    ? (practiceStats.winner ? 'YOU' : (practiceStats.killerName || 'Trail'))
+    : (winner
+      ? (wsState.lobby?.playerNames?.[winner] ||
+        (typeof winner === 'string' && winner.length >= 12
+          ? `${winner.slice(0, 6)}...${winner.slice(-6)}`
+          : winner))
+      : '—');
 
   return (
     <motion.div
@@ -205,10 +238,14 @@ export const PremiumResultsScreen = memo(function PremiumResultsScreen({
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.3 }}
         >
-          {isWinner ? 'You dominated the arena!' : 'Better luck next time'}
+          {isWinner
+            ? (isPractice ? `Last cell standing · ${fmtDuration(practiceStats!.duration)}` : 'You dominated the arena!')
+            : (isPractice
+              ? `${ordinal(practiceStats!.placement)} of ${practiceStats!.totalPlayers} · ${practiceStats!.kills} kill${practiceStats!.kills !== 1 ? 's' : ''} · ${fmtDuration(practiceStats!.duration)}`
+              : 'Better luck next time')}
         </motion.p>
 
-        {/* Winner/Prize Card */}
+        {/* Winner/Result Card */}
         <motion.div
           initial={{ y: 30, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -226,24 +263,30 @@ export const PremiumResultsScreen = memo(function PremiumResultsScreen({
               {isWinner ? (
                 <>
                   <Crown size={20} weight="fill" className="premium-crown-icon" />
-                  <span>YOUR PRIZE</span>
+                  <span>{isPractice ? 'VICTOR' : 'YOUR PRIZE'}</span>
                 </>
               ) : (
                 <>
                   <Sparkle size={20} weight="fill" />
-                  <span>MATCH WINNER</span>
+                  <span>{isPractice ? (isWinner ? 'VICTOR' : 'KILLED BY') : (isWinner ? 'YOUR PRIZE' : 'MATCH WINNER')}</span>
                 </>
               )}
             </div>
 
             <div className="premium-winner-name">{winnerName}</div>
 
-            {typeof prize === 'number' && prize > 0 && (
-              <div className={`premium-prize-amount ${isWinner ? 'winner' : ''}`}>
-                <span className="premium-prize-plus">+</span>
-                <span className="premium-prize-value">{displayPrize.toFixed(4)}</span>
-                <span className="premium-prize-unit">SOL</span>
+            {isPractice ? (
+              <div className="premium-practice-info">
+                <span>{practiceStats!.totalPlayers} players · Practice</span>
               </div>
+            ) : (
+              typeof prize === 'number' && prize > 0 && (
+                <div className={`premium-prize-amount ${isWinner ? 'winner' : ''}`}>
+                  <span className="premium-prize-plus">+</span>
+                  <span className="premium-prize-value">{displayPrize.toFixed(4)}</span>
+                  <span className="premium-prize-unit">SOL</span>
+                </div>
+              )
             )}
           </GlassCard>
         </motion.div>
@@ -273,6 +316,15 @@ export const PremiumResultsScreen = memo(function PremiumResultsScreen({
             size="lg"
             glow={myKills >= 5}
           />
+          {isPractice && !isWinner && (
+            <StatBadge
+              label="SURVIVED"
+              value={fmtDuration(practiceStats!.duration)}
+              icon={<Timer size={24} weight="duotone" />}
+              color="default"
+              size="lg"
+            />
+          )}
         </motion.div>
 
         {/* Blockchain Link - Prominent Green Badge */}

@@ -117,9 +117,12 @@ export class PhysicsSystem extends System {
       const velocity = entity.getComponent<Velocity>(ComponentNames.VELOCITY);
       if (!velocity) continue;
 
-      // Smoothly interpolate towards target angle
-      const turnFactor = 0.8;
-      velocity.angle = this._lerpAngle(velocity.angle, velocity.targetAngle, turnFactor);
+      // Angular velocity turn — caps how fast you can change direction per second
+      const maxTurnThisFrame = CAR_PHYSICS.TURN_SPEED * dt;
+      let diff = velocity.targetAngle - velocity.angle;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      velocity.angle += Math.sign(diff) * Math.min(Math.abs(diff), maxTurnThisFrame);
     }
   }
 
@@ -211,16 +214,6 @@ export class PhysicsSystem extends System {
     if (hitBoundary) {
       velocity.angle = Math.atan2(velocity.vy, velocity.vx);
     }
-  }
-
-  /**
-   * Interpolate angle (handles wrapping)
-   */
-  private _lerpAngle(current: number, target: number, factor: number): number {
-    let diff = target - current;
-    while (diff < -Math.PI) diff += Math.PI * 2;
-    while (diff > Math.PI) diff -= Math.PI * 2;
-    return current + diff * factor;
   }
 
   /**

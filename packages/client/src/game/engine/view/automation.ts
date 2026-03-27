@@ -8,6 +8,7 @@ export function installAutomationHooks(host: HTMLDivElement, gameRef: GameRef, m
   const w = window as any;
   const previousRenderToText = w.render_game_to_text;
   const previousAdvanceTime = w.advanceTime;
+  const previousGetGameDebugInfo = w.get_game_debug_info;
 
   const canvas = host.querySelector('canvas') as HTMLCanvasElement | null;
   const onMouseMove = (e: MouseEvent) => {
@@ -39,11 +40,18 @@ export function installAutomationHooks(host: HTMLDivElement, gameRef: GameRef, m
     active.advanceTime(Number.isFinite(ms) ? ms : 1000 / 60);
   };
 
+  w.get_game_debug_info = () => {
+    const active = gameRef.current;
+    if (!active) return null;
+    return active.getEngine().getDebugInfo();
+  };
+
   return () => {
     if (canvas) {
       canvas.removeEventListener('mousemove', onMouseMove);
     }
     w.render_game_to_text = previousRenderToText;
     w.advanceTime = previousAdvanceTime;
+    w.get_game_debug_info = previousGetGameDebugInfo;
   };
 }

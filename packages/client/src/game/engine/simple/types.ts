@@ -48,6 +48,7 @@ export type Actor = {
   boosting: boolean;
   trail: Vec2[];
   trailAccumulator: number;
+  trailMaxLength: number;
   zoneExposure: number;
   aiDecisionTimer: number;
   aiTargetAngle: number;

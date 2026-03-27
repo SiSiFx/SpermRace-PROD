@@ -200,10 +200,8 @@ export class DeathEffectSystem extends System {
     // Haptic feedback
     this._triggerHaptic('heavy');
 
-    // Sound effect
-    if (this._audioManager && this._audioManager.playDeath) {
-      this._audioManager.playDeath();
-    }
+    // Note: kill/death sounds are handled by CombatFeedbackSystem to avoid duplicates.
+    // Spawn/pickup sounds are still handled via _audioManager.
 
     // Check for final kill (victory condition)
     // We check after the current death is registered, so aliveCount === 1 means one winner
@@ -417,6 +415,18 @@ export class DeathEffectSystem extends System {
           return { id: entity.id, x: position.x, y: position.y, color: player.color };
         }
       }
+    }
+    return null;
+  }
+
+  /**
+   * Find the local player entity
+   */
+  private _findLocalPlayer(): any {
+    const entities = this.entityManager.queryByMask(this._mask);
+    for (const entity of entities) {
+      const player = entity.getComponent<any>(ComponentNames.PLAYER);
+      if (player?.isLocal) return entity;
     }
     return null;
   }

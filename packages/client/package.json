@@ -10,7 +10,7 @@
     "demo": "cross-env NODE_OPTIONS=\"--experimental-global-webcrypto\" vite --mode demo --port 5174",
     "prod": "cross-env NODE_OPTIONS=\"--experimental-global-webcrypto\" vite build --mode production && vite preview --mode production --port 5174",
     "build": "vite build",
-    "build:check": "tsc && vite build",
+    "build:check": "tsc -p tsconfig.build.json && vite build",
     "build:dev": "tsc && vite build --mode development",
     "build:demo": "tsc && vite build --mode demo",
     "build:prod": "tsc && vite build --mode production",

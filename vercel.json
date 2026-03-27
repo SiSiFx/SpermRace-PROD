@@ -4,6 +4,10 @@
   "installCommand": "pnpm install",
   "routes": [
     {
+      "src": "/api/edgegap/(.*)",
+      "dest": "/api/edgegap/$1"
+    },
+    {
       "src": "/api/(.*)",
       "dest": "https://spermrace.io/api/$1"
     },

@@ -1,15 +1,15 @@
 import { z } from 'zod';
 
 // Primitives
-export const vector2Schema = z.object({ x: z.number(), y: z.number() });
+export const vector2Schema = z.object({ x: z.number().finite(), y: z.number().finite() });
 
 export const playerInputSchema = z.object({
   target: vector2Schema,
   accelerate: z.boolean(),
   boost: z.boolean().optional(),
   drift: z.boolean().optional(),
-  // Optional client timestamp for RTT measurement and lag compensation
-  clientTimestamp: z.number().optional(),
+  // Optional client timestamp for RTT measurement — must be finite
+  clientTimestamp: z.number().finite().optional(),
 });
 
 export const entryFeeTierSchema = z.union([

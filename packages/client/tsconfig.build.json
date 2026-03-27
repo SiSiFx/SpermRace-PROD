@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "verbatimModuleSyntax": false
+  },
+  "include": ["src/main.tsx"],
+  "exclude": ["src/test", "**/*.test.ts", "**/*.test.tsx"]
+}

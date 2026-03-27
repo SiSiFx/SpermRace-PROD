@@ -103,7 +103,6 @@ export class GameEngine {
 
   /** Game state */
   private _state: GameState = GameState.UNINITIALIZED;
-  private _targetState: GameState | null = null;
 
   /** Time tracking */
   private _lastTime: number = 0;
@@ -309,10 +308,6 @@ export class GameEngine {
     this._accumulator += frameTime;
     this._timeStats.accumulator = this._accumulator * 1000;
 
-    // Invalidate query cache at the start of each frame
-    // This ensures consistency when components are added/removed from entities
-    this._entityManager.invalidateQueryCache();
-
     // Fixed timestep physics updates
     let physicsSteps = 0;
     const maxPhysicsSteps = 10; // Prevent excessive steps
@@ -446,7 +441,6 @@ export class GameEngine {
    * Set internal state and notify listeners
    */
   private _setState(state: GameState, data?: any): void {
-    const oldState = this._state;
     this._state = state;
 
     // Notify systems

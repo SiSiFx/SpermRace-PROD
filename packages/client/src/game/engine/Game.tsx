@@ -9,7 +9,7 @@ import { GameEngine, GameState } from './core/GameEngine';
 import { EntityManager } from './core/EntityManager';
 import { SystemManager } from './core/System';
 import { PhysicsSystem } from './systems/PhysicsSystem';
-import { ZoneSystem } from './systems/ZoneSystem';
+import { ZoneSystem, ZoneState } from './systems/ZoneSystem';
 import { TrailSystem } from './systems/TrailSystem';
 import { RenderSystem } from './systems/RenderSystem';
 import { AbilitySystem } from './systems/AbilitySystem';
@@ -40,14 +40,14 @@ import { getAbilityProgress } from './components/Abilities';
 import {
   getDefaultZoom,
   BOT_AI_TUNING,
-  SPAWN_CONFIG,
   COLLISION_CONFIG,
   MATCH_CONFIG,
   ARENA_CONFIG,
+  SPAWN_CONFIG,
 } from './config';
 import type { Container } from 'pixi.js';
 import { CollisionLayer, CollisionMask } from './components/Collision';
-import { EntityFactory, type EntityFactoryConfig, type CreatePlayerOptions, type CreateBotOptions } from './factories';
+import { EntityFactory, type EntityFactoryConfig, type CreatePlayerOptions } from './factories';
 import type { Position as PositionComponent } from './components/Position';
 import { SpermClassType } from './components/SpermClass';
 
@@ -171,12 +171,16 @@ export class Game {
     // Create systems
     this._createSystems();
 
+    // Generate spread spawn points for all entities at once
+    const totalEntities = 1 + (this._config.botCount ?? 5);
+    const spawnPoints = this._generateSpawnPoints(totalEntities);
+
     // Create player
-    this._createPlayer();
+    this._createPlayer(spawnPoints[0]);
 
     // Create bots
     for (let i = 0; i < (this._config.botCount ?? 5); i++) {
-      this._createBot(i);
+      this._createBot(i, spawnPoints[i + 1]);
     }
 
     // Start zone
@@ -352,6 +356,7 @@ export class Game {
       deathShakeIntensity: 8,
     });
     this._systemManager.addSystem(this._combatFeedback, 'combatFeedback');
+    this._combatFeedback.setSlowMotionSystem(this._slowMotion);
 
     // Render system (must be last)
     if (this._app && this._worldContainer && this._uiContainer) {
@@ -372,42 +377,79 @@ export class Game {
   }
 
   /**
+   * Generate spawn points scattered independently across 60% of the arena.
+   * No entity is the center of the universe — everyone drops at a random position
+   * with a minimum separation gap so they don't instantly collide.
+   */
+  private _generateSpawnPoints(count: number): Array<{ x: number; y: number }> {
+    const { worldWidth, worldHeight } = this._config;
+    const pad = SPAWN_CONFIG.EDGE_PADDING;
+    const minSep = 600; // minimum px between any two spawns
+    const usableW = worldWidth * 0.6;
+    const usableH = worldHeight * 0.6;
+    const offsetX = (worldWidth - usableW) / 2;
+    const offsetY = (worldHeight - usableH) / 2;
+
+    const points: Array<{ x: number; y: number }> = [];
+    const maxAttempts = 80;
+
+    for (let i = 0; i < count; i++) {
+      let placed = false;
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const x = Math.max(pad, Math.min(worldWidth - pad,
+          offsetX + Math.random() * usableW));
+        const y = Math.max(pad, Math.min(worldHeight - pad,
+          offsetY + Math.random() * usableH));
+
+        // Reject if too close to any existing spawn
+        let tooClose = false;
+        for (const p of points) {
+          const dx = p.x - x;
+          const dy = p.y - y;
+          if (dx * dx + dy * dy < minSep * minSep) { tooClose = true; break; }
+        }
+        if (!tooClose) { points.push({ x, y }); placed = true; break; }
+      }
+      // Fallback: place anywhere valid if separation can't be satisfied
+      if (!placed) {
+        points.push({
+          x: Math.max(pad, Math.min(worldWidth - pad, offsetX + Math.random() * usableW)),
+          y: Math.max(pad, Math.min(worldHeight - pad, offsetY + Math.random() * usableH)),
+        });
+      }
+    }
+
+    return points;
+  }
+
+  /**
    * Create player entity
    */
-  private _createPlayer(): void {
-    const centerX = this._config.worldWidth * 0.5;
-    const centerY = this._config.worldHeight * 0.5;
-    const jitter = SPAWN_CONFIG.LOCAL_PLAYER_CENTER_JITTER;
+  private _createPlayer(spawnPos: { x: number; y: number }): void {
     const playerOptions: CreatePlayerOptions = {
       name: this._config.playerName ?? 'Player',
       color: this._config.playerColor ?? 0x22d3ee,
       isLocal: true,
-      // Spawn around arena center so practice starts as an immediate fight
-      // and avoids early zone eliminations near map corners.
-      x: centerX + (Math.random() * 2 - 1) * jitter,
-      y: centerY + (Math.random() * 2 - 1) * jitter,
-      // Apply selected class type
+      x: spawnPos.x,
+      y: spawnPos.y,
       classType: this._config.classType ?? SpermClassType.BALANCED,
     };
 
     const playerId = this._entityFactory.createPlayer(playerOptions);
     this._playerId = playerId;
 
-    // Get player entity to find spawn position for spatial grid
     const player = this._entityManager.getEntity(playerId);
     if (player) {
       const position = player.getComponent<PositionComponent>(ComponentNames.POSITION);
+      const collision = player.getComponent<Collision>(ComponentNames.COLLISION);
       if (position) {
         this._playerSpawn = { x: position.x, y: position.y };
-        // Add to spatial grid
         this._engine.getSpatialGrid().addEntity(
           playerId,
           position.x,
           position.y,
-          COLLISION_CONFIG.CAR_RADIUS
+          collision?.radius ?? COLLISION_CONFIG.CAR_RADIUS
         );
-
-        // Camera should follow local player. Snap immediately so the first frame shows gameplay.
         this._camera.setPosition(position.x, position.y);
         this._camera.setTarget(playerId);
       }
@@ -417,38 +459,21 @@ export class Game {
   /**
    * Create bot entity
    */
-  private _createBot(index: number): void {
-    const botOptions: CreateBotOptions = { index, name: `Bot${index}` };
-
-    // Practice feel: spawn bots within view so it instantly feels like a battle,
-    // instead of scattering everyone across an 8k arena.
-    if (this._playerSpawn) {
-      const { worldWidth, worldHeight } = this._config;
-      const cx = this._playerSpawn.x;
-      const cy = this._playerSpawn.y;
-
-      const angle = Math.random() * Math.PI * 2;
-      const spawnMin = SPAWN_CONFIG.BOT_MIN_DISTANCE;
-      const spawnMax = SPAWN_CONFIG.BOT_MAX_DISTANCE;
-      const edgePadding = SPAWN_CONFIG.EDGE_PADDING;
-      // Keep bots close enough to be seen quickly on a 720p viewport.
-      const r = spawnMin + Math.random() * (spawnMax - spawnMin);
-      const x = Math.max(edgePadding, Math.min(worldWidth - edgePadding, cx + Math.cos(angle) * r));
-      const y = Math.max(edgePadding, Math.min(worldHeight - edgePadding, cy + Math.sin(angle) * r));
-
-      botOptions.x = x;
-      botOptions.y = y;
-    }
-
-    const botId = this._entityFactory.createBot(botOptions);
+  private _createBot(index: number, spawnPos: { x: number; y: number }): void {
+    const botId = this._entityFactory.createBot({ index, x: spawnPos.x, y: spawnPos.y });
     this._botIds.push(botId);
 
-    // Get bot entity to find spawn position for spatial grid
     const bot = this._entityManager.getEntity(botId);
     if (bot) {
       const position = bot.getComponent<PositionComponent>(ComponentNames.POSITION);
+      const collision = bot.getComponent<Collision>(ComponentNames.COLLISION);
       if (position) {
-        this._engine.getSpatialGrid().addEntity(botId, position.x, position.y, COLLISION_CONFIG.CAR_RADIUS);
+        this._engine.getSpatialGrid().addEntity(
+          botId,
+          position.x,
+          position.y,
+          collision?.radius ?? COLLISION_CONFIG.CAR_RADIUS
+        );
       }
     }
   }
@@ -705,6 +730,29 @@ export class Game {
    */
   getFloatingTextSystem(): FloatingTextSystem | null {
     return this._floatingText ?? null;
+  }
+
+  getZoneInfo(): { state: ZoneState; distanceFromPlayer: number; timeUntilNextPhaseMs: number; center: { x: number; y: number }; radius: number } | null {
+    if (!this._zone || !this._playerId) return null;
+    const playerEntity = this._entityManager.getEntity(this._playerId);
+    const pos = playerEntity?.getComponent<PositionComponent>(ComponentNames.POSITION);
+    if (!pos) return null;
+    return {
+      state: this._zone.getState(),
+      distanceFromPlayer: this._zone.getDistanceFromZone(pos.x, pos.y),
+      timeUntilNextPhaseMs: this._zone.getTimeUntilNextPhase(),
+      center: this._zone.getCenter(),
+      radius: this._zone.getCurrentRadius(),
+    };
+  }
+
+  getSoundSystem(): SoundSystem | null {
+    return this._sound ?? null;
+  }
+
+  /** Resume audio context — call this inside a user gesture */
+  async resumeAudio(): Promise<void> {
+    await this._sound?.resume();
   }
 
   /**

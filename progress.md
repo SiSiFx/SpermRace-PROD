@@ -1,252 +1,164 @@
-Original prompt: ok this one was wrong can you at elast make it look like a slither io sperm
+Original prompt: actually the core game look is pretyy abd and very not playable
 
-## 2026-02-20
-- Switched visual tail to an always-on slither-style sprite tail (smooth segmented stroke with taper, mild wave, turn bias, boost lengthening) in `packages/client/src/NewGameView.tsx`.
-- Updated head styling for a cleaner sperm-like look: oval head, subtle stroke/highlight, inner core, boost aura.
-- Reworked trail rendering pipeline in `renderTrail()`:
-  - sanitize invalid points
-  - sort by time/expiresAt (stabilize server ordering)
-  - split segments on large gaps (prevents giant angular teleport lines)
-  - densify gaps for smoother continuous lines
-  - draw two-layer smooth trail (glow + core) with rounded joins
-  - preserve enemy proximity glow checks on cleaned segments
-- Next verification step: build + Playwright screenshots + inspect for residual angular artifacts.
+- 2026-03-12: Initial audit started on the local ECS practice game.
+- Findings so far:
+  - Arena render is visually flat and low-contrast.
+  - Camera default zoom is wide enough to reduce close-combat readability.
+  - HUD uses small glass pills and all-caps labels that look stylish but are not easy to parse during play.
+  - Need browser screenshots and a real playability pass before choosing changes.
 
-## 2026-02-21
-- Current prompt: "calude coede is running the core game what left need to do on spermracce audit all of it prepare it for a codex that will run autonomously on tmux"
-- Audit + stabilization completed for autonomous execution baseline.
+- 2026-03-12: Applied first gameplay readability/playability pass.
+- Changes made:
+  - Practice spawns now form a contested local cluster instead of scattering everyone across the full arena.
+  - Camera default zoom was tightened and boost zoom-out was reduced.
+  - Player head/body visuals were scaled up and background rendering now reads like a microscope / petri-dish arena.
+  - Radar was enlarged and HUD hierarchy was rebuilt around a clearer alive counter and objective state.
+  - Pre-game sequence duration was cut substantially to reduce dead time before control.
+- Browser verification:
+  - `/home/sisi/output/playwright/spermrace-gameplay-live-after.png` shows multiple enemies on-screen at spawn instead of an empty field.
+  - `/home/sisi/output/playwright/spermrace-gameplay-motion-after.png` confirms the new camera/HUD remain readable under movement.
+  - Live snapshot after the change showed nearest opponents roughly `259px` to `547px` away, versus the earlier `2096px` to `5029px` spread.
 
-### Code/runtime fixes applied
-- Fixed server TypeScript build blockers:
-  - `packages/server/src/DatabaseService.ts`: renamed duplicate ELO helper to `calculateExpectedScoreMultiPlayer`.
-  - `packages/server/src/GameWorld.ts`: removed redeclared `aliveCount` conflict (`alivePlayersCount` now used for schooling loop).
-- Restored backward-compatible test construction path:
-  - `packages/server/src/LobbyManager.ts`: DB dependency is now optional via `fallbackEloStore`.
-- Fixed Vitest path resolution drift:
-  - `packages/server/vitest.config.ts`: added alias for `shared/dist`.
+- 2026-03-12: Applied trail readability / collision honesty pass.
+- Changes made:
+  - Trail width and density were increased so the lethal path is not a hairline.
+  - Entity collision radius now follows the visible sperm head more closely instead of a much smaller hidden circle.
+  - Initial spatial-grid registration now uses the real entity collision radius.
+  - Tail connectors now visibly bridge each sperm body into its newest trail point.
+  - Controls hint now explains the actual rule: head contact with any trail is lethal.
+- Browser verification:
+  - `/home/sisi/output/playwright/spermrace-trail-clarity-live.png` shows trails attached to bodies and enemy trails reading as wider hazards around the fight cluster.
 
-### Automation + tmux prep
-- Added `scripts/autonomous-smoke.sh`:
-  - waits for healthz
-  - runs `test-integration.js`
-  - runs Playwright smoke (pc, optional mobile)
-- Added `scripts/autonomous-tmux.sh` with: `bootstrap|start|stop|status|attach|smoke`
-  - starts server/client panes
-  - runs recurring smoke loop in checks window
-  - optional codex command window via `CODEX_CMD`
-- Added `docs/AUTONOMOUS_TMUX_AUDIT_2026-02-21.md` (status, findings, remaining work, usage).
-- Updated `RUNBOOK.md` with autonomous tmux commands.
+- 2026-03-12: Rebuilt practice class selection so classes read as distinct playstyles instead of abstract stat cards.
+- Changes made:
+  - Rewrote class copy around match identity, kill plan, and class-specific ability language.
+  - Added animated per-class preview lanes that show body weight and trail style before spawn.
+  - Replaced the old stat dots with readable `Speed / Pressure / Turn` meter rows.
+  - Added a fixed selected-genome dock with class summary, risk, best-for guidance, and a stronger deploy CTA.
+  - Tightened the layout for 1024x768 and lowered the desktop collapse breakpoint so 3-card comparison still works on smaller laptops.
+- Browser verification:
+  - `/home/sisi/output/playwright/spermrace-class-selection-redesign.png` now shows all three classes side-by-side with visible stats and a compact summary dock on a 1024x768 viewport.
+  - The generic canvas-only game test client still reports the pre-existing `net::ERR_CONNECTION_REFUSED` console error during local preview; no new class-selection-specific runtime error was introduced.
 
-### Playwright stabilization
-- Pinned `playwright` to `1.56.1` to match `@playwright/test` and avoid runner mismatch.
-- Installed Playwright browsers.
-- Updated stale selectors in `playwright/tests/landing.spec.ts` for current landing UI (`Spermrace Tournament Room`, `Practice mode`).
+- 2026-03-12: Rebuilt the premium landing so it sells the game before the wallet flow.
+- Changes made:
+  - Replaced the centered headline-plus-price-pills layout with a split-screen landing that explains the game loop, free onboarding path, room ladder, and win condition.
+  - Added a stronger hero, trust/proof cards, a live round-briefing panel, and a room selector that updates the main CTA and summary copy.
+  - Added lower-page flow cards and fixed the landing container to scroll internally so the room selector and supporting sections are actually reachable.
+  - Follow-up trim pass removed the over-explanatory copy, deleted the extra flow section, and tightened the first fold so it reads like a game entry screen instead of a long pitch.
+- Browser verification:
+  - `/home/sisi/output/playwright/spermrace-landing-redesign-desktop.png` verifies the new first fold on desktop.
+  - `/home/sisi/output/playwright/spermrace-landing-redesign-desktop-scroll.png` verifies the room selector and flow section after scrolling.
+  - `/home/sisi/output/playwright/spermrace-landing-redesign-mobile.png` and `/home/sisi/output/playwright/spermrace-landing-redesign-mobile-scroll.png` verify the mobile hero and mobile room ladder.
+  - Selecting `Practice` updates the primary CTA to `Start practice` and the secondary CTA to `View leaderboard`.
+  - The same pre-existing local preview console error remains: `net::ERR_CONNECTION_REFUSED`.
 
-### Verification results
-- `pnpm build`: PASS
-- `pnpm --filter server test`: FAIL (7 tests failing, 2 suites failing)
-- `pnpm --filter client test`: FAIL (many failures; large backlog)
-- `pnpm exec playwright test -c playwright.config.ts --reporter=line`: PASS (2/2)
+- 2026-03-12: Applied teach-impeccable context and rebuilt the landing again with a harsher, shorter direction.
+- Changes made:
+  - Created `/home/sisi/projects/spermrace-clean/AGENTS.md` with persistent design context: ruthless / premium / predatory, game-first, no SaaS or sportsbook feel.
+  - Replaced the previous multi-layer landing with a simpler two-panel entry screen: brutal headline, short rule line, compact fact strip, arena panel, and room rail.
+  - Removed repeated explanatory copy so the page reads as a fast game decision instead of a long pitch.
+- Browser verification:
+  - `/home/sisi/output/playwright/spermrace-landing-impeccable-desktop.png` verifies the simplified desktop landing.
+  - `/home/sisi/output/playwright/spermrace-landing-impeccable-mobile.png` verifies the simplified mobile first fold.
+  - `/home/sisi/output/playwright/spermrace-landing-impeccable-mobile-scroll.png` verifies the lower mobile room rail.
+  - Selecting `Practice` still updates the primary CTA to `Start practice` and the secondary CTA to `View leaderboard`.
 
-### Remaining TODO (next agent)
-1. Fix remaining server test failures:
-   - `test/botPerformance.test.ts` (`@jest/globals` under Vitest)
-   - `test/collisionPerformance.test.ts` (stale dist import path)
-   - 5 assertion mismatches (bandwidth %, trail avoidance, ELO conservation, latency RTT, skill-rating deltas/leaderboard).
-2. Triage and stabilize client test suite (separate real regressions vs stale assertions/mocks).
-3. Address local CSP/API mismatch (`/api/sol-price` fetch blocked against `spermrace.io` in local preview).
-4. Consolidate stale architecture/deployment docs (multiple conflicting docs still present).
-- Follow-up fix: integration smoke now resolves `ws` from server workspace if root `ws` is absent (`test-integration.js`, `scripts/test-integration.js`).
-- Verified unattended loop with `scripts/autonomous-tmux.sh start` + `status`: smoke cycle completed and logged `[smoke] success`.
+- 2026-03-12: Rebuilt the premium lobby/dashboard to match the new ruthless gold/ink landing direction.
+- Changes made:
+  - Replaced the old glass-casino stack in `PremiumLobbyScreen` with a two-panel war-room layout: hard status slab on the left, roster chamber on the right.
+  - Preserved the existing websocket-driven lobby logic while removing the old `GlassCard` / `PremiumButton` composition from the lobby surface.
+  - Added a dev-only screen bootstrap in `AppUnified.tsx` so `?screen=lobby&previewLobby=tournament` or `?previewLobby=practice` can render the dashboard directly for design/testing.
+  - Added mocked tournament and practice preview states inside `PremiumLobbyScreen` for browser verification without a live wallet/join flow.
+  - Fixed the roster footer layout after the first screenshot pass so the bottom rule and queue explanation read as a deliberate stacked block instead of a squeezed flex row.
+- Browser verification:
+  - `/home/sisi/output/playwright/spermrace-lobby-tournament-desktop-v3.png` verifies the redesigned tournament dashboard on desktop.
+  - `/home/sisi/output/playwright/spermrace-lobby-practice-mobile.png` verifies the redesigned practice dashboard on mobile width.
+  - `/home/sisi/output/playwright/spermrace-landing-impeccable-current.png` and `/home/sisi/output/playwright/spermrace-landing-impeccable-current-mobile.png` confirm the landing still renders correctly after the preview-route addition.
+  - The browser still reports the pre-existing `net::ERR_CONNECTION_REFUSED` for `http://100.107.79.25:8089/api/sol-price` plus the harmless Lit dev-mode warning during local preview.
 
-## 2026-02-21 (non-core production readiness audit pass)
-- Current prompt: "first start to do it yourself audit waht left execpt the core game for a aful production readiness"
-- Completed a deep non-core production-readiness audit with exact file/line evidence.
-- Added canonical audit report:
-  - `docs/PRODUCTION_READINESS_AUDIT_2026-02-21.md`
-- Added ready-to-run autonomous Codex prompt for tmux:
-  - `docs/CODEX_TMUX_AUTONOMOUS_PROMPT_2026-02-21.md`
+- 2026-03-12: Applied redesign-existing-projects pass to the main landing for a less dashboard-like, more predatory entry flow.
+- Changes made:
+  - Replaced the old balanced split layout with an unboxed left hero and one dominant right-side hunt board.
+  - Turned room selection into expandable hunt rows instead of price-pill / plan-card UI.
+  - Kept the landing terse: one brutal rule line, one CTA pair, compact fact strip, and integrated arena preview.
+  - Reworked the right panel into a two-zone combat surface with selected-room state, winner-takes summary, arena vignette, and room ladder in a single shell.
+- Browser verification:
+  - `/home/sisi/output/playwright/spermrace-landing-redesign-existing-desktop.png` verifies the new asymmetrical desktop landing.
+  - `/home/sisi/output/playwright/spermrace-landing-redesign-existing-mobile.png` verifies the mobile first fold.
+  - `/home/sisi/output/playwright/spermrace-landing-redesign-existing-mobile-scroll.png` and `/home/sisi/output/playwright/spermrace-landing-redesign-existing-mobile-rooms.png` verify the lower mobile board and room rail.
+  - The selected default room remains `Competitor`, the primary CTA remains `Enter $5 room`, and the existing local preview console error still appears: `net::ERR_CONNECTION_REFUSED`.
 
-### Fresh verification snapshot
-- `pnpm build`: PASS (chunk-size warning on large `HowToPlayOverlay` bundle)
-- `pnpm --filter server test`: FAIL (`6 failed | 135 passed`, 141 total)
-- `pnpm --filter client test`: FAIL (`66 failed | 291 passed`, 357 total)
-- `pnpm exec playwright test -c playwright.config.ts --reporter=line`: PASS (`2 passed`), with CSP warning logs for `https://spermrace.io/api/sol-price`
-- `pnpm audit --audit-level high`: FAIL (`9 vulnerabilities`, `2 high`)
+- 2026-03-12: Applied core practice-mode optimization pass to reduce repeated trail work.
+- Changes made:
+  - Replaced duplicate trail scanning with one shared hazard-segment index rebuilt once per tick in `TrailSystem`.
+  - Moved `CollisionSystem` trail/body kills onto that shared index instead of rescanning every trail array per entity.
+  - Switched `BotAISystem` threat lookup to the shared nearest-hazard query instead of raw trail scans.
+  - Tightened `RenderSystem` hot paths by caching the FPS DOM node, culling offscreen trail points before drawing, and reusing the shared nearest-hazard query for danger intensity.
+  - Removed the ECS per-frame query-cache wipe in `GameEngine` and moved cache invalidation to actual entity/component membership changes in `Entity` + `EntityManager`.
+  - Added query-cache counters to engine debug info plus a dev-only tools-panel readout and automation hook so cache behavior can be verified from the browser.
+  - Added a coarse trail-graphics cache in `RenderSystem` so trail ribbons are not fully rebuilt on every steady-state frame; redraws now batch around fade/cull/append windows while trail FX still sample only the newest visible points.
+  - Removed a few touched-file TypeScript leftovers so the changed gameplay systems do not add new compile noise on top of the existing engine backlog.
+- Browser verification:
+  - `/home/sisi/output/web-game-optimize/shot-0.png` shows the optimized practice match still rendering attached lethal trails and live opponents after class deploy.
+  - `/home/sisi/output/web-game-optimize/state-0.json` confirms gameplay survived the refactor: status `running`, local player alive, local kills `1`, and nearby opponents still updating.
+  - `/home/sisi/output/web-game-optimize/errors-0.json` only captured the same pre-existing `net::ERR_CONNECTION_REFUSED` fetch failure.
+  - `/home/sisi/output/web-game-optimize-cache-2/shot-0.png` and `/home/sisi/output/web-game-optimize-cache-2/state-0.json` confirm the practice match still runs after the ECS cache change.
+  - Direct browser debug readout after 200 stepped frames reported `queryCacheEntries: 11`, `queryCacheMisses: 11`, `queryCacheHits: 3123`, `queryCacheInvalidations: 0`, which confirms cached query reuse across steady-state frames.
+  - Direct browser debug readout after 60 stepped gameplay frames reported `trailRedraws: 0` and `trailReuseSkips: 10` on a normal 16.67ms frame, which confirms the new trail cache is skipping full ribbon rebuilds across steady-state gameplay.
+- Notes:
+  - The stock `develop-web-game` Playwright wrapper produced artifacts successfully but hung during Chrome teardown on this machine once the page had loaded; the orphaned headless profile was cleaned up after capture.
+  - The wrapper also cannot reliably click the class-selection CTA in this build because it uses a non-forced DOM click with a short timeout; direct Playwright verification was used for the steady-state trail-cache readout.
+  - Filtered TypeScript checks for `TrailSystem`, `CollisionSystem`, `BotAISystem`, `Entity`, `EntityManager`, `GameEngine`, `NewGameViewECS`, and `automation` returned clean after the cleanup pass. The broader client compile still has long-standing unused-symbol errors elsewhere, especially in `RenderSystem` and other engine files.
 
-### Top blockers identified (outside core game)
-1. Secrets in tracked files (`.env.backup`, `packages/client/.env.production`)
-2. No production CI quality gate (only `ws-regression-dev.yml`)
-3. Red test baseline (server/client)
-4. SIWS/session hardening gaps (nonce not validated in HTTP auth path; token in WS query and reusable)
-5. Stale/deviated deployment scripts and conflicting runtime configs
+- 2026-03-16: Applied next render optimization pass for car geometry reuse and powerup culling.
+- Changes made:
+  - Reused one frame timestamp across `RenderSystem` car, trail, and powerup passes instead of calling `Date.now()` separately in each hot loop.
+  - Cached sperm-head geometry by draw state (`color / boosting / size`) so unchanged heads are not cleared and repainted every frame.
+  - Added body redraw/reuse counters to render debug snapshots for direct verification from `render_game_to_text`.
+  - Culled off-screen powerup rendering and replaced the old `powerups.find(...)` cleanup path with a set-based cleanup pass.
+- Browser verification:
+  - `/home/sisi/output/playwright/spermrace-body-cache-3step/shot-0.png` shows the practice arena still rendering correctly after class confirm and deterministic stepping.
+  - `/home/sisi/output/playwright/spermrace-body-cache-3step/state-0.json` captured a running match after three `advanceTime(1000 / 60)` steps with `bodyRedraws: 0`, `bodyReuseSkips: 10`, `visibleEntities: 10`, and the local player alive.
+  - `/home/sisi/output/playwright/spermrace-body-cache-3step/errors-0.json` only captured the same pre-existing `net::ERR_CONNECTION_REFUSED` fetch failure.
+- Notes:
+  - A warm-up stepped frame still redraws all 10 bodies, which is expected because the per-entity head cache is cold on first paint.
+  - The direct Playwright path remains more reliable than the stock wrapper on this machine because the wrapper still struggles with the class-confirm click and browser teardown.
 
-### Next-agent TODO (strict order)
-1. Resolve P0 items from `docs/PRODUCTION_READINESS_AUDIT_2026-02-21.md`
-2. Run full verification set after each focused change
-3. Keep `progress.md` updated with command outputs and remaining risk
+- 2026-03-16: Applied off-screen indicator caching pass.
+- Changes made:
+  - Replaced per-frame `getChildByName()` lookup and unconditional overlay redraws with a dedicated cached off-screen indicator graphics handle.
+  - Quantized off-screen marker geometry and pulse timing into a draw key so unchanged edge markers reuse the previous graphics instead of calling `clear()` and rebuilding every frame.
+  - Added off-screen indicator count/redraw/reuse counters to `RenderSystem` debug snapshots for direct verification from `render_game_to_text`.
+- Browser verification:
+  - `/home/sisi/output/playwright/spermrace-indicator-cache-live/shot-0.png` shows the arena still rendering correctly with off-screen arrows visible after class confirm and countdown.
+  - `/home/sisi/output/playwright/spermrace-indicator-cache-live/state-0.json` captured `offscreenIndicatorCount: 3`, `offscreenIndicatorRedraws: 0`, and `offscreenIndicatorReuseSkips: 1` on the stepped verification frame, while trails also stayed cached (`trailRedraws: 0`, `trailReuseSkips: 10`).
+  - `/home/sisi/output/playwright/spermrace-indicator-cache-live/errors-0.json` only captured the same pre-existing `net::ERR_CONNECTION_REFUSED` fetch failure.
+- Notes:
+  - The filtered `tsc` run still only reports the long-standing unused-symbol backlog in `RenderSystem.ts`; this pass did not add a new compile failure.
 
-## 2026-02-21 (P0.1 - secrets/config hygiene)
-- Removed exposed secret material from tracked env files:
-  - `.env.backup`: replaced `PRIZE_POOL_SECRET_KEY` value with placeholder.
-  - `packages/client/.env.production`: removed embedded Helius API key and switched to non-secret RPC endpoint.
-- Hardened ignore rules in root `.gitignore`:
-  - Added `.env.backup`, `*.env.production`, `*.env.staging`, `*.env.test`.
-  - Added coverage ignores: `coverage/`, `**/coverage/`, `*.lcov`, `coverage-final.json`.
-- Added safe sample env strategy:
-  - `packages/client/.env.production.example`
-  - `packages/server/.env.production.example`
+- 2026-03-16: Visual polish + landing redesign pass.
+- Changes made:
+  - **Tail wiggling animation** — `_drawTailConnector` in `RenderSystem.ts` now builds a sine-wave path (18 segments) using `TAIL_WAVE_SPEED`, `TAIL_AMPLITUDE` config values. Amplitude envelope tapers to zero at head, peaks at ~60% of connector, reduces slightly at tip. Looks organic/alive now.
+  - **Shield visual** — replaced ugly square rect outline with organic oval shield (ellipse-based glow rings matching sperm head shape). Looks like a soap bubble membrane, not a hitbox.
+  - **Player self-highlight** — local player head now draws a double white ring (bright inner + faint outer) so you always know which sperm is you. Included in body draw key cache so it stays efficient.
+  - **HUD "Tributes Left" → "Alive"** — `NewGameViewECS.tsx` alive counter kicker changed from Hunger Games language to on-theme "Alive".
+  - **Pre-game copy** — "TRIBUTES IDENTIFIED" → "CELLS DETECTED", "ALL TRIBUTES FROZEN" → "ALL CELLS LOCKED" for biological theme.
+  - **Landing redesign** — `PremiumLandingScreen.tsx` + CSS rewritten from scratch. Stripped from 2-column layout (headline + arena preview + 5-card room list) down to one brutal fold: eyebrow, big headline, rule line, gold CTA with prize, secondary link, compact tier picker row. 833-line CSS → ~190 lines.
+- Browser verification:
+  - `/home/sisi/output/playwright/spermrace-new-landing2.png` — new landing: one fold, headline, gold "Enter $5 room → $42" CTA, tier strip visible, animated sperm background.
+  - `/home/sisi/output/playwright/spermrace-gameplay-v3.png` — early game: tail wiggling on bots, local player (cyan) has white double-ring, alive counter shows correctly.
+  - `/home/sisi/output/playwright/spermrace-gameplay-trails.png` — mid-game: green sperm shows clear sine-wave tail, yellow bot has new circular/oval shield (not square), kill feed working.
 
-Verification commands run:
-- `rg -n "PRIZE_POOL_SECRET_KEY=.*[A-Za-z0-9]{40,}|api-key=" .env.backup packages/client/.env.production packages/client/.env.production.example packages/server/.env.production.example || true`
-  - Result: no matches for high-entropy key values in these files.
-- `pnpm build`
-  - Result: FAIL (client build killed with exit 137 / OOM in this environment).
-- `pnpm --filter server build`
-  - Result: PASS.
-- `git check-ignore -v --no-index .env.backup packages/client/.env.production packages/client/coverage/index.html`
-  - Result: PASS (all matched expected ignore rules).
-
-Remaining risk:
-- Full root `pnpm build` currently unstable locally due client build OOM (non-functional regression not indicated; environment capacity issue to revisit in broader stabilization).
-
-## 2026-02-21 (P0.2 - CI gate)
-- Added new GitHub Actions workflow: `.github/workflows/ci-mainline.yml`.
-- Workflow covers required production gate jobs while leaving existing `ws-regression-dev.yml` intact:
-  - Build (`pnpm build`)
-  - Server tests (`pnpm --filter server test`)
-  - Client tests (`pnpm --filter client test`)
-  - Playwright smoke PC (`pnpm exec playwright test -c playwright.config.ts --project=pc`)
-  - Security audit (`pnpm audit --audit-level high`)
-
-Verification commands run:
-- `pnpm --filter server test`
-  - Result: FAIL (`6 failed | 8 passed` files, `11 failed | 130 passed` tests, 95.44s).
-  - Key failing suites still match backlog: `test/botPerformance.test.ts`, `test/collisionPerformance.test.ts`.
-- `pnpm audit --audit-level high`
-  - Result: FAIL in this environment due network resolution (`EAI_AGAIN` to `registry.npmjs.org`), so audit could not execute.
-
-Remaining risk:
-- CI gate exists but will remain red until server/client test backlog is reduced.
-- Audit job behavior in CI should be valid with network access, but local verification is currently blocked by transient DNS/network failure.
-
-## 2026-02-21 (P0.3 - SIWS/session auth hardening)
-- Hardened SIWS domain + nonce validation in `packages/server/src/AuthService.ts`:
-  - SIWS domains now env-driven via `SIWS_DOMAINS` (default fallback `spermrace.io`).
-  - `getMessageToSign()` now signs for the configured primary domain.
-  - `verifySignature()` now supports expected nonce binding and allowed-domain set checks.
-- Hardened HTTP SIWS challenge flow in `packages/server/src/index.ts`:
-  - Added server-side challenge store (`httpSiwsChallenges`) with TTL (`SIWS_CHALLENGE_TTL_MS`).
-  - `/api/siws-challenge` now persists issued nonce/message metadata and returns `expiresIn`.
-  - `/api/siws-auth` now requires nonce, validates issued challenge exists + unexpired, verifies message equality with issued challenge, verifies signature with expected nonce, and consumes challenge on success.
-- Reduced replay risk for HTTP→WS token handoff in `packages/server/src/index.ts`:
-  - Session tokens now include expiry metadata and optional client-IP binding (`SESSION_TOKEN_BIND_IP`, enabled by default).
-  - WS handshake now consumes session tokens immediately (single-use).
-  - Added optional WS token pickup from `sec-websocket-protocol` format `token.<value>` while keeping query-param compatibility.
-
-Verification commands run:
-- `pnpm --filter server build`
-  - Initial run: FAIL (TypeScript implicit `any` in new WS protocol parsing)
-  - Follow-up fix applied and rerun: PASS.
-- `pnpm --filter server exec vitest run test/auth.test.ts --reporter=verbose`
-  - Result: PASS (2/2 tests).
-
-Remaining risk:
-- No dedicated integration test yet for the new HTTP SIWS challenge/token lifecycle (challenge issue → auth → one-time WS token consumption). Consider adding a focused server integration test.
-
-## 2026-02-21 (P0.4 - Server test stabilization: skill rating, bot avoidance, bandwidth)
-Tuning tests to align with intended non-core behavior and remove flakiness. No core gameplay logic changed.
-
-Changes:
-- packages/server/test/skillRating.test.ts:
-  - Allow equality in two assertions where ELO updates can round to equal magnitudes when K-factors are equal (favorite win / underdog win).
-  - Ensure leaderboard test refreshes cache and includes seeded players by bumping their total_games.
-- packages/server/test/bandwidth.test.ts:
-  - Correct frequency reduction expectation (20→15 FPS is 25% less frequent, not 33%).
-- packages/server/test/botTrailAvoidance.test.ts:
-  - Make integration test robust to randomized reaction delay and safe-angle equivalence; consider drift-engaged as acceptable panic response.
-
-Verification (commands):
-- pnpm --filter server test
-
-Results:
-- PASS (all server tests green locally). Some stderr logs from price fetch are expected in offline CI but do not fail assertions.
-
-Remaining risks:
-- Adjustments are confined to non-core assertions and test setup; gameplay physics and AI logic remain unchanged.
-- One test uses cache refresh via private method access; acceptable in test context.
-
-## 2026-02-21 (P0.1c - remove hardcoded deploy credentials)
-- Removed a real VPS password accidentally committed in deploy helpers:
-  - `scripts/auto-deploy.py`: now requires `VPS_IP` and prompts (hidden) for `VPS_PASSWORD` if not set; paths are repo-relative by default.
-  - `scripts/auto-deploy-now.py`: now requires env vars (`VPS_IP`, `VPS_PASSWORD`, `DEPLOY_DOMAIN`, `DEPLOY_EMAIL`, `PRIZE_POOL_WALLET`, `PRIZE_POOL_SECRET_KEY`) and uses repo-relative paths by default.
-  - `upload-now.bat`, `deploy-vps.ps1`, `upload-vps.ps1`: removed embedded password and machine-specific paths; use env vars / prompt instead.
-
-Verification commands run:
-- `rg -n "yELys6TZvJzT|test-secret-key" -S .`
-  - Result: no matches.
-- `python3 -m py_compile scripts/auto-deploy.py scripts/auto-deploy-now.py`
-  - Result: PASS.
-
-Remaining risk:
-- These deploy helper scripts remain optional/legacy; canonical deploy path should continue to be repo-relative shell scripts under `scripts/` and `ops/`.
-
-## 2026-02-21 (P0.5 - deploy script portability)
-- `scripts/deploy-vps.sh`: removed `rg` dependency (uses `grep -E` for placeholder checks) so minimal VPS installs still work.
-
-Verification commands run:
-- `bash -n scripts/deploy-vps.sh scripts/autonomous-check-loop.sh scripts/autonomous-tmux.sh scripts/autonomous-smoke.sh`
-  - Result: PASS.
-
-## 2026-02-25 (P0.3 - Server test stabilization: remove network-dependent SOL price fetch)
-Eliminated server-test flakiness caused by external SOL price sources being unreachable during CI/offline runs. No production behavior changes unless explicitly configured.
-
-Changes:
-- `packages/server/src/SmartContractService.ts`: support `SOL_PRICE_USD_OVERRIDE` to bypass network price fetch when set.
-- `packages/server/vitest.config.ts`: add `test/setup.ts` and migrate deprecated `poolOptions` to Vitest 4 pool options.
-- `packages/server/test/setup.ts`: set a default `SOL_PRICE_USD_OVERRIDE=100` for tests (only).
-
-Verification (commands):
-- `pnpm --filter server test`
-
-Results:
-- PASS (`144 passed | 3 skipped`, `147` total).
-
-Remaining risks:
-- If `SOL_PRICE_USD_OVERRIDE` is accidentally set in production, it will mask real price-source issues; keep it unset outside tests/emergency ops.
-
-## 2026-02-25 (P0.6 - Client + Playwright stabilization; CI gate now green locally)
-Goal: get the CI gate commands from `docs/PRODUCTION_READINESS_AUDIT_2026-02-21.md` to pass reliably without changing core gameplay.
-
-Changes:
-- Fixed countdown overlay styling/test drift:
-  - `packages/client/src/components/CountdownAnimation.tsx`: aligned CSS class names, added stable test ids.
-  - `packages/client/src/components/CountdownAnimation.css`: added missing scanline overlay styling.
-  - `packages/client/src/test/CountdownAnimation.test.tsx`: replaced brittle inline-style selectors with stable selectors.
-- Fixed stale UI test expectations (non-gameplay):
-  - `packages/client/src/test/PlayerCard.test.tsx`: updated expected `STATUS/READY/WAITING` copy.
-- Restored hero-effects compatibility selectors without impacting visuals:
-  - `packages/client/src/App.tsx`: add `landing-container` wrapper class for selectors.
-  - `packages/client/src/components/Landing.tsx`: use `<header>` for the hero block, add `.brand-title` + `data-text`, add accessible `aria-label="SPERM RACE"`.
-  - `packages/client/src/components/Modes.tsx`: add legacy `.mode-card` class alongside new tier card classes.
-- Playwright reliability hardening:
-  - `playwright.config.ts`: baseURL is now env-driven (`PLAYWRIGHT_BASE_URL`, `PLAYWRIGHT_PORT`) and defaults to IPv6 loopback for local stability.
-  - `playwright.config.ts`: webServer now starts Vite preview directly (`pnpm --filter client exec vite preview ...`) with host derived from `PLAYWRIGHT_BASE_URL`, avoiding host/port mismatch with existing dev servers.
-  - `packages/client/src/components/screens/premium/PremiumLandingScreen.tsx`: brand element now exposes a stable accessible heading name via `role="heading"` + `aria-label="SPERM RACE"` (used by smoke tests).
-- Local environment stability:
-  - Ran `pnpm store prune` to reclaim disk space after Playwright browser downloads filled the filesystem.
-
-Verification commands run (results):
-- `pnpm build`
-  - Result: PASS (warnings only: large chunk + Rollup PURE annotation warnings in deps)
-- `pnpm --filter server test`
-  - Result: PASS (`144 passed | 3 skipped`)
-- `pnpm --filter client test`
-  - Result: PASS (`20 passed`, `379 tests`)
-- `pnpm exec playwright test -c playwright.config.ts --reporter=line`
-  - Result: PASS (`2 passed`)
-- `pnpm audit --audit-level high`
-  - Result: PASS at high threshold (`6 vulnerabilities: 2 low | 4 moderate`)
-
-Remaining risks / notes:
-- Playwright browser logs intermittently mention CSS preload failures for mobile chunks (e.g. `mobile-controls.*.css`). Tests still pass, but this should be triaged if it correlates with real user asset loading issues in production.
+- 2026-03-16: Tuned practice spawn layout and camera distance.
+- Changes made:
+  - Reduced default desktop/mobile camera zoom so the opening arena reads wider instead of feeling cramped.
+  - Increased boost zoom-out slightly so acceleration creates more breathing room.
+  - Replaced the old noisy single-ring bot spawn layout with cleaner concentric rings and smaller jitter, so the first seconds feel staged instead of messy.
+  - Reduced local player center jitter and increased edge padding so the opening cluster is cleaner and less lopsided.
+- Browser verification:
+  - `/home/sisi/output/playwright/spermrace-spawn-camera-state/state-0.json` captured the tuned opening with camera zoom `1.12` and nearest opponents at roughly `315px`, `323px`, `355px`, `488px`, and `529px`.
+  - `/home/sisi/output/playwright/spermrace-spawn-camera-state/errors-0.json` only captured the same pre-existing `net::ERR_CONNECTION_REFUSED` fetch failure.
+- Notes:
+  - The stock `develop-web-game` wrapper still failed on the class confirm click; direct forced-click verification was used again.
+  - Filtered `tsc` for `Game.tsx`, `GameConstants.ts`, and `CameraSystem.ts` returned no touched-file errors.

@@ -15,77 +15,69 @@
 /* Modern Gaming UI for SpermRace.io */
 
 :root {
-  /* 🧬 BIO-CYBERPUNK PALETTE - High-Fidelity Redesign */
+  /* Premium Palette - Desaturated for elegance */
 
-  /* Backgrounds - Void Depth */
-  --bg-primary: #050508;
-  /* Void Black */
-  --bg-secondary: #0a0a0f;
-  /* Abyssal */
-  --bg-tertiary: #12121a;
-  /* Deep Space */
-  --bg-glass: rgba(0, 255, 255, 0.02);
-  /* Cyan-tinted frost */
-  --bg-glass-hover: rgba(0, 255, 255, 0.05);
-  /* Active frost */
+  /* Backgrounds */
+  --bg-primary: #09090b;
+  /* zinc-950 */
+  --bg-secondary: #18181b;
+  /* zinc-900 */
+  --bg-tertiary: #27272a;
+  /* zinc-800 */
+  --bg-glass: rgba(34, 211, 238, 0.02);
+  /* sky tinted frost */
+  --bg-glass-hover: rgba(34, 211, 238, 0.04);
+  /* hover state */
 
-  /* Borders - Tech Precision */
-  --border-dim: rgba(57, 255, 20, 0.08);
-  /* Toxic green dim */
-  --border-bright: rgba(57, 255, 20, 0.25);
-  /* Toxic glow */
-  --border: rgba(57, 255, 20, 0.15);
-  /* Standard border */
+  /* Borders */
+  --border-dim: rgba(16, 185, 129, 0.08);
+  /* emerald dim */
+  --border-bright: rgba(16, 185, 129, 0.2);
+  /* emerald bright */
+  --border: rgba(16, 185, 129, 0.12);
+  /* standard border */
 
-  /* Bio-Tech Accents */
-  --primary: #f0f0f5;
-  /* Lab White */
-  --accent: #39ff14;
-  /* Toxic Green - Primary Bio */
-  --accent-cyan: #00ffff;
-  /* Electric Cyan - Tech Energy */
-  --accent-purple: #bf00ff;
-  /* Plasma Purple - Mutation */
-  --accent-amber: #ff9500;
-  /* Warning Amber */
-  --gold: #ffd700;
-  /* Winner Gold */
-  --danger: #ff073a;
-  /* Critical Error Red */
-  --success: #39ff14;
-  /* Bio Success */
-  --warning: #ff9500;
-  /* Alert Amber */
+  /* Accents - Desaturated from pure neon */
+  --primary: #fafafa;
+  /* zinc-50 */
+  --accent: #10b981;
+  /* emerald-500 (was toxic green) */
+  --accent-cyan: #22d3ee;
+  /* cyan-400 (was pure cyan) */
+  --accent-purple: #ec4899;
+  /* pink-500 (was pure magenta) */
+  --accent-amber: #f59e0b;
+  /* amber-500 */
+  --gold: #fbbf24;
+  /* amber-400 */
+  --danger: #ef4444;
+  /* red-500 */
+  --success: #10b981;
+  /* emerald-500 */
+  --warning: #f59e0b;
+  /* amber-500 */
 
   /* Text Hierarchy */
-  --text-primary: #f0f0f5;
-  /* Lab White */
-  --text-secondary: #8a8a95;
-  /* Sterile Gray */
-  --text-muted: #4a4a55;
-  /* Dim Gray */
-  --text-bio: #39ff14;
-  /* Bio accent text */
-  --text-tech: #00ffff;
-  /* Tech accent text */
+  --text-primary: #fafafa;
+  /* zinc-50 */
+  --text-secondary: #a1a1aa;
+  /* zinc-400 */
+  --text-muted: #71717a;
+  /* zinc-500 */
+  --text-bio: #10b981;
+  /* emerald-500 */
+  --text-tech: #22d3ee;
+  /* cyan-400 */
 
-  /* Effects - Living UI */
-  --shadow-premium: 0 20px 50px -10px rgba(0, 0, 0, 0.9);
-  --glow-bio: 0 0 30px rgba(57, 255, 20, 0.4);
-  /* Toxic glow */
-  --glow-tech: 0 0 30px rgba(0, 255, 255, 0.4);
-  /* Cyan glow */
-  --glow-danger: 0 0 30px rgba(255, 7, 58, 0.5);
-  /* Error glow */
-  --glow-subtle: 0 0 20px rgba(57, 255, 20, 0.15);
-
-  /* Scanline & CRT Effects */
-  --scanline-opacity: 0.03;
-  --scanline-color: #39ff14;
+  /* Effects - Reduced intensity */
+  --shadow-premium: 0 20px 50px -10px rgba(0, 0, 0, 0.8);
+  --glow-bio: 0 0 12px rgba(16, 185, 129, 0.3);
+  --glow-tech: 0 0 12px rgba(34, 211, 238, 0.3);
+  --glow-danger: 0 0 12px rgba(239, 68, 68, 0.4);
+  --glow-subtle: 0 0 8px rgba(16, 185, 129, 0.1);
 
   /* Layout */
   --radius: 12px;
-  /* Slightly sharper corners for tech feel */
   --radius-sm: 8px;
   --radius-lg: 20px;
 }
@@ -99,7 +91,7 @@ body {
   overflow: hidden;
 }
 
-/* Bio-Cyberpunk Scanline Overlay - ENHANCED */
+/* Subtle noise texture - removed scanlines */
 body::before {
   content: '';
   position: fixed;
@@ -109,41 +101,9 @@ body::before {
   height: 100%;
   pointer-events: none;
   z-index: 9999;
-  background: repeating-linear-gradient(
-    0deg,
-    rgba(57, 255, 20, 0.03) 0px,
-    rgba(57, 255, 20, 0.03) 1px,
-    transparent 1px,
-    transparent 3px
-  );
-  animation: scanline-flicker 8s ease-in-out infinite;
-}
-
-/* Second layer: organic noise overlay */
-body::after {
-  content: '';
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 9998;
-  opacity: 0.4;
-  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><filter id="organicNoise"><feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch"/></filter><rect width="200" height="200" filter="url(%23organicNoise)"/></svg>');
-  mix-blend-mode: soft-light;
-  animation: organic-drift 20s ease-in-out infinite;
-}
-
-@keyframes scanline-flicker {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 0.8; }
-}
-
-@keyframes organic-drift {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  33% { transform: translate(-10px, -10px) scale(1.02); }
-  66% { transform: translate(10px, 10px) scale(0.98); }
+  opacity: 0.015;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><filter id="noise"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" stitchTiles="stitch"/></filter><rect width="64" height="64" filter="url(%23noise)"/></svg>');
+  mix-blend-mode: overlay;
 }
 
 /* Critical blink animation */
@@ -175,39 +135,31 @@ h1, h2, h3, h4, h5, h6,
 
 /* 🧬 Bio-Cyberpunk Animations */
 
-/* Breathing life effect for UI elements */
+/* Subtle breathing for UI elements */
 @keyframes bio-breathe {
   0%, 100% {
-    box-shadow: 0 0 20px rgba(57, 255, 20, 0.2), inset 0 0 10px rgba(57, 255, 20, 0.05);
-    border-color: rgba(57, 255, 20, 0.3);
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.15);
+    border-color: rgba(16, 185, 129, 0.2);
   }
   50% {
-    box-shadow: 0 0 40px rgba(57, 255, 20, 0.4), inset 0 0 20px rgba(57, 255, 20, 0.1);
-    border-color: rgba(57, 255, 20, 0.5);
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.25);
+    border-color: rgba(16, 185, 129, 0.3);
   }
 }
 
-/* Tech data pulse effect */
+/* Subtle tech pulse */
 @keyframes tech-pulse {
   0%, 100% {
     opacity: 1;
-    text-shadow: 0 0 10px rgba(0, 255, 255, 0.6);
+    text-shadow: 0 0 6px rgba(34, 211, 238, 0.4);
   }
   50% {
-    opacity: 0.7;
-    text-shadow: 0 0 20px rgba(0, 255, 255, 0.9), 0 0 30px rgba(0, 255, 255, 0.5);
+    opacity: 0.9;
+    text-shadow: 0 0 10px rgba(34, 211, 238, 0.5);
   }
 }
 
-/* CRT scanline sweep */
-@keyframes scanline-sweep {
-  0% {
-    transform: translateY(-100%);
-  }
-  100% {
-    transform: translateY(100vh);
-  }
-}
+/* Removed CRT scanline-sweep - was AI slop */
 
 /* DNA helix rotation */
 @keyframes dna-rotate {
@@ -215,40 +167,22 @@ h1, h2, h3, h4, h5, h6,
   to { transform: rotate(360deg); }
 }
 
-/* Cell membrane pulse */
+/* Subtle membrane pulse */
 @keyframes membrane-pulse {
   0%, 100% {
     transform: scale(1);
-    border-color: rgba(57, 255, 20, 0.3);
+    border-color: rgba(16, 185, 129, 0.2);
   }
   50% {
-    transform: scale(1.05);
-    border-color: rgba(57, 255, 20, 0.6);
+    transform: scale(1.02);
+    border-color: rgba(16, 185, 129, 0.35);
   }
 }
 
-/* Glitch effect for critical states */
-@keyframes glitch {
-  0%, 100% {
-    transform: translate(0);
-    filter: hue-rotate(0deg);
-  }
-  20% {
-    transform: translate(-2px, 2px);
-    filter: hue-rotate(90deg);
-  }
-  40% {
-    transform: translate(2px, -2px);
-    filter: hue-rotate(180deg);
-  }
-  60% {
-    transform: translate(-2px, -2px);
-    filter: hue-rotate(270deg);
-  }
-  80% {
-    transform: translate(2px, 2px);
-    filter: hue-rotate(360deg);
-  }
+/* Subtle pulse for emphasis */
+@keyframes subtle-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.85; }
 }
 
 /* Organic float animation */
@@ -264,33 +198,29 @@ h1, h2, h3, h4, h5, h6,
   }
 }
 
-/* Enhanced button glow */
+/* Subtle button glow */
 @keyframes bio-glow {
   0%, 100% {
     box-shadow:
-      0 0 20px rgba(57, 255, 20, 0.4),
-      0 0 40px rgba(57, 255, 20, 0.2),
-      inset 0 0 15px rgba(57, 255, 20, 0.1);
+      0 0 8px rgba(16, 185, 129, 0.2),
+      inset 0 0 6px rgba(16, 185, 129, 0.05);
   }
   50% {
     box-shadow:
-      0 0 30px rgba(57, 255, 20, 0.6),
-      0 0 60px rgba(57, 255, 20, 0.4),
-      inset 0 0 25px rgba(57, 255, 20, 0.2);
+      0 0 12px rgba(16, 185, 129, 0.3),
+      inset 0 0 10px rgba(16, 185, 129, 0.08);
   }
 }
 
 /* 🧬 PREMIUM BIO-CYBERPUNK ANIMATIONS (AA Quality) */
 
-/* Holographic shimmer effect */
+/* Subtle shimmer effect */
 @keyframes holographic-shimmer {
   0% {
     background-position: -200% center;
-    filter: hue-rotate(0deg);
   }
   100% {
     background-position: 200% center;
-    filter: hue-rotate(360deg);
   }
 }
 
@@ -309,22 +239,17 @@ h1, h2, h3, h4, h5, h6,
   }
 }
 
-/* Plasma ripple effect */
+/* Subtle ripple effect */
 @keyframes plasma-ripple {
-  0% {
+  0%, 100% {
     transform: scale(1);
-    opacity: 0.8;
-    box-shadow: 0 0 20px rgba(57, 255, 20, 0.4);
+    opacity: 0.9;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.25);
   }
   50% {
-    transform: scale(1.05);
+    transform: scale(1.02);
     opacity: 1;
-    box-shadow: 0 0 40px rgba(57, 255, 20, 0.6), 0 0 60px rgba(0, 255, 255, 0.4);
-  }
-  100% {
-    transform: scale(1);
-    opacity: 0.8;
-    box-shadow: 0 0 20px rgba(57, 255, 20, 0.4);
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.35);
   }
 }
 
@@ -340,29 +265,7 @@ h1, h2, h3, h4, h5, h6,
   }
 }
 
-/* Chromatic aberration glitch */
-@keyframes chromatic-glitch {
-  0%, 100% {
-    text-shadow:
-      2px 0 rgba(255, 0, 0, 0.3),
-      -2px 0 rgba(0, 255, 255, 0.3);
-  }
-  25% {
-    text-shadow:
-      -2px 0 rgba(255, 0, 0, 0.3),
-      2px 0 rgba(0, 255, 255, 0.3);
-  }
-  50% {
-    text-shadow:
-      2px 0 rgba(0, 255, 0, 0.3),
-      -2px 0 rgba(255, 0, 255, 0.3);
-  }
-  75% {
-    text-shadow:
-      -2px 0 rgba(0, 255, 0, 0.3),
-      2px 0 rgba(255, 0, 255, 0.3);
-  }
-}
+/* Removed chromatic-glitch - was AI slop */
 
 /* DNA strand rotation */
 @keyframes dna-strand {
@@ -422,15 +325,15 @@ h1, h2, h3, h4, h5, h6,
   }
 }
 
-/* Breathing border */
+/* Subtle border breathing */
 @keyframes border-breathe {
   0%, 100% {
-    border-color: rgba(57, 255, 20, 0.3);
-    box-shadow: 0 0 10px rgba(57, 255, 20, 0.2);
+    border-color: rgba(16, 185, 129, 0.2);
+    box-shadow: 0 0 6px rgba(16, 185, 129, 0.15);
   }
   50% {
-    border-color: rgba(0, 255, 255, 0.6);
-    box-shadow: 0 0 20px rgba(0, 255, 255, 0.4);
+    border-color: rgba(34, 211, 238, 0.3);
+    box-shadow: 0 0 10px rgba(34, 211, 238, 0.2);
   }
 }
 
@@ -454,30 +357,13 @@ h1, h2, h3, h4, h5, h6,
   }
 }
 
-/* Victory glow cascade */
+/* Victory glow - subtle */
 @keyframes victory-cascade {
-  0% {
-    box-shadow:
-      0 0 20px rgba(0, 255, 255, 0.4),
-      0 0 40px rgba(57, 255, 20, 0.2);
+  0%, 100% {
+    box-shadow: 0 0 12px rgba(34, 211, 238, 0.3);
   }
-  33% {
-    box-shadow:
-      0 0 40px rgba(0, 255, 255, 0.6),
-      0 0 80px rgba(57, 255, 20, 0.4),
-      0 0 120px rgba(191, 0, 255, 0.2);
-  }
-  66% {
-    box-shadow:
-      0 0 60px rgba(57, 255, 20, 0.8),
-      0 0 100px rgba(0, 255, 255, 0.6),
-      0 0 140px rgba(191, 0, 255, 0.4);
-  }
-  100% {
-    box-shadow:
-      0 0 80px rgba(191, 0, 255, 0.6),
-      0 0 120px rgba(0, 255, 255, 0.4),
-      0 0 160px rgba(57, 255, 20, 0.2);
+  50% {
+    box-shadow: 0 0 20px rgba(34, 211, 238, 0.4);
   }
 }
 
@@ -500,19 +386,19 @@ h1, h2, h3, h4, h5, h6,
 
 @keyframes holo-cyan {
   0%, 100% {
-    box-shadow: 0 0 20px rgba(0, 240, 255, 0.4), inset 0 0 10px rgba(0, 240, 255, 0.1);
+    box-shadow: 0 0 8px rgba(34, 211, 238, 0.25);
   }
   50% {
-    box-shadow: 0 0 40px rgba(0, 240, 255, 0.7), inset 0 0 20px rgba(0, 240, 255, 0.2);
+    box-shadow: 0 0 14px rgba(34, 211, 238, 0.4);
   }
 }
 
 @keyframes holo-purple {
   0%, 100% {
-    box-shadow: 0 0 20px rgba(168, 85, 247, 0.4), inset 0 0 10px rgba(168, 85, 247, 0.1);
+    box-shadow: 0 0 8px rgba(236, 72, 153, 0.25);
   }
   50% {
-    box-shadow: 0 0 40px rgba(168, 85, 247, 0.7), inset 0 0 20px rgba(168, 85, 247, 0.2);
+    box-shadow: 0 0 14px rgba(236, 72, 153, 0.4);
   }
 }
 
@@ -775,56 +661,19 @@ body {
 .brand-badge {
   display: inline-block;
   padding: 10px 20px;
-  background:
-    linear-gradient(135deg, rgba(57, 255, 20, 0.12) 0%, rgba(0, 255, 255, 0.08) 100%),
-    repeating-linear-gradient(
-      90deg,
-      transparent,
-      transparent 2px,
-      rgba(57, 255, 20, 0.05) 2px,
-      rgba(57, 255, 20, 0.05) 4px
-    );
+  background: rgba(16, 185, 129, 0.08);
   border: 1px solid var(--accent);
   border-radius: 24px;
   font-size: 11px;
   font-weight: 700;
   color: var(--accent);
   margin-bottom: 32px;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  animation: bio-breathe 3s ease-in-out infinite, holographic-shimmer 8s linear infinite;
-  box-shadow:
-    0 0 20px rgba(57, 255, 20, 0.3),
-    0 0 40px rgba(57, 255, 20, 0.15),
-    inset 0 0 20px rgba(57, 255, 20, 0.05);
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.15);
   position: relative;
-  overflow: hidden;
-}
-
-/* Micro-organic particles in badge */
-.brand-badge::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: -100%;
-  width: 50%;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent);
-  transform: translateY(-50%);
-  animation: energy-flow 3s ease-in-out infinite;
-}
-
-.brand-badge::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: radial-gradient(circle at 30% 50%, rgba(57, 255, 20, 0.1), transparent 50%);
-  pointer-events: none;
 }
 
 .brand-title {
@@ -836,25 +685,20 @@ body {
   background:
     linear-gradient(135deg,
       var(--text-primary) 0%,
-      var(--accent) 25%,
-      var(--accent-cyan) 50%,
-      var(--accent-purple) 75%,
+      var(--accent) 40%,
+      var(--accent-cyan) 60%,
       var(--text-primary) 100%
     );
   background-size: 200% auto;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  filter:
-    drop-shadow(0 0 30px rgba(57, 255, 20, 0.5))
-    drop-shadow(0 0 60px rgba(0, 255, 255, 0.3));
-  animation:
-    tech-pulse 4s ease-in-out infinite,
-    holographic-shimmer 12s linear infinite;
+  filter: drop-shadow(0 0 12px rgba(16, 185, 129, 0.3));
+  animation: holographic-shimmer 12s linear infinite;
   position: relative;
 }
 
-/* Premium glow layer */
+/* Subtle glow layer */
 .brand-title::before {
   content: attr(data-text);
   position: absolute;
@@ -865,16 +709,14 @@ body {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  filter: blur(20px);
-  opacity: 0.6;
-  animation: bio-breathe 4s ease-in-out infinite;
+  filter: blur(8px);
+  opacity: 0.4;
 }
 
-/* Chromatic aberration effect on hover */
+/* Subtle hover effect */
 .brand-title:hover {
   animation:
     tech-pulse 4s ease-in-out infinite,
-    chromatic-glitch 0.3s ease-in-out infinite,
     holographic-shimmer 6s linear infinite;
 }
 

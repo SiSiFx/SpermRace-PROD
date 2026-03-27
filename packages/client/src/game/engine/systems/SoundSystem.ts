@@ -11,6 +11,9 @@ import { ComponentNames, createComponentMask } from '../components';
 import type { Boost } from '../components/Boost';
 import type { Player } from '../components/Player';
 import type { Health } from '../components/Health';
+import { ZoneState } from './ZoneSystem';
+import type { ZoneSystem } from './ZoneSystem';
+import type { CollisionSystem } from './CollisionSystem';
 
 /**
  * Sound system configuration
@@ -33,6 +36,12 @@ export class SoundSystem extends System {
   // Boost sound state
   private _boostOscillators: { osc: OscillatorNode; gain: GainNode; filter: BiquadFilterNode } | null = null;
   private _isBoosting: boolean = false;
+
+  // Zone sound state
+  private _lastZoneState: ZoneState = ZoneState.IDLE;
+
+  // Collision sound cooldown (ms) to avoid stacking thud sounds
+  private _lastCollisionSoundAt: number = 0;
 
   // Masks
   private readonly _playerMask: number;
@@ -69,15 +78,19 @@ export class SoundSystem extends System {
   /**
    * Update loop
    */
-  update(dt: number): void {
-    if (!this._audioContext || this._audioContext.state === 'suspended') {
-        // Try to resume if suspended (requires interaction, might fail silently)
-        // this._audioContext?.resume().catch(() => {});
+  update(_dt: number): void {
+    if (!this._audioContext || this._audioContext.state !== 'running') {
         return;
     }
 
     // Check player boost state
     this._updateBoostSound();
+
+    // Zone phase transition sounds
+    this._updateZoneSound();
+
+    // Car-car collision thud
+    this._updateCollisionSound();
   }
 
   /**
@@ -240,6 +253,300 @@ export class SoundSystem extends System {
 
     osc.start(t);
     osc.stop(t + 0.2);
+  }
+
+  /**
+   * Play death sound (descending whoosh)
+   */
+  playDeath(): void {
+    if (!this._audioContext || !this._masterGain) return;
+    const ctx = this._audioContext;
+    const now = ctx.currentTime;
+
+    // Main descending osc
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(200, now);
+    osc.frequency.exponentialRampToValueAtTime(40, now + 0.4);
+    gain.gain.setValueAtTime(0.4, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+    osc.connect(gain);
+    gain.connect(this._masterGain);
+    osc.start(now);
+    osc.stop(now + 0.4);
+
+    // Short noise burst
+    const noiseOsc = ctx.createOscillator();
+    const noiseFilter = ctx.createBiquadFilter();
+    const noiseGain = ctx.createGain();
+    noiseOsc.type = 'sawtooth';
+    noiseOsc.frequency.setValueAtTime(880, now);
+    noiseFilter.type = 'lowpass';
+    noiseFilter.frequency.setValueAtTime(400, now);
+    noiseGain.gain.setValueAtTime(0.2, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+    noiseOsc.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(this._masterGain);
+    noiseOsc.start(now);
+    noiseOsc.stop(now + 0.15);
+  }
+
+  /**
+   * Play kill chime (ascending). `pitch` scales all frequencies — streak tiers pass 1.0–1.8.
+   */
+  playKill(pitch: number = 1.0): void {
+    if (!this._audioContext || !this._masterGain) return;
+    const ctx = this._audioContext;
+    const now = ctx.currentTime;
+
+    // Primary chime
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(440 * pitch, now);
+    osc.frequency.exponentialRampToValueAtTime(880 * pitch, now + 0.3);
+    gain.gain.setValueAtTime(0.25, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+    osc.connect(gain);
+    gain.connect(this._masterGain);
+    osc.start(now);
+    osc.stop(now + 0.3);
+
+    // Decay tail
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(880 * pitch, now + 0.05);
+    osc2.frequency.exponentialRampToValueAtTime(1760 * pitch, now + 0.25);
+    gain2.gain.setValueAtTime(0.1, now + 0.05);
+    gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+    osc2.connect(gain2);
+    gain2.connect(this._masterGain);
+    osc2.start(now + 0.05);
+    osc2.stop(now + 0.35);
+  }
+
+  /**
+   * Play victory arpeggio
+   */
+  playVictory(): void {
+    const ctx = this._audioContext;
+    const master = this._masterGain;
+    if (!ctx || !master) return;
+    const now = ctx.currentTime;
+    const freqs = [440, 550, 660];
+
+    freqs.forEach((freq, i) => {
+      const t = now + i * 0.12;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, t);
+      gain.gain.setValueAtTime(0.3, t);
+      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
+      osc.connect(gain);
+      gain.connect(master);
+      osc.start(t);
+      osc.stop(t + 0.3);
+    });
+  }
+
+  /**
+   * Play shield bubble activation — rising harmonic hum
+   */
+  playShield(): void {
+    const ctx = this._audioContext;
+    const master = this._masterGain;
+    if (!ctx || !master) return;
+    const t = ctx.currentTime;
+
+    // Root tone — rises one octave
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(260, t);
+    osc1.frequency.exponentialRampToValueAtTime(520, t + 0.18);
+    gain1.gain.setValueAtTime(0.22, t);
+    gain1.gain.exponentialRampToValueAtTime(0.01, t + 0.45);
+    osc1.connect(gain1);
+    gain1.connect(master);
+    osc1.start(t);
+    osc1.stop(t + 0.45);
+
+    // Perfect 5th overtone — adds "shield" character
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(390, t);
+    osc2.frequency.exponentialRampToValueAtTime(780, t + 0.18);
+    gain2.gain.setValueAtTime(0.10, t);
+    gain2.gain.exponentialRampToValueAtTime(0.01, t + 0.35);
+    osc2.connect(gain2);
+    gain2.connect(master);
+    osc2.start(t);
+    osc2.stop(t + 0.35);
+  }
+
+  /**
+   * Play dash whoosh — brief bright sweep
+   */
+  playDash(): void {
+    const ctx = this._audioContext;
+    const master = this._masterGain;
+    if (!ctx || !master) return;
+    const t = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    const filter = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(180, t);
+    osc.frequency.exponentialRampToValueAtTime(600, t + 0.1);
+
+    // High-pass so it reads as a "whoosh" not a thud
+    filter.type = 'highpass';
+    filter.frequency.setValueAtTime(300, t);
+
+    gain.gain.setValueAtTime(0.28, t);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.14);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(master);
+    osc.start(t);
+    osc.stop(t + 0.14);
+  }
+
+  /**
+   * Play trap placement — mechanical click + tick
+   */
+  playTrap(): void {
+    const ctx = this._audioContext;
+    const master = this._masterGain;
+    if (!ctx || !master) return;
+    const t = ctx.currentTime;
+
+    // Low thud (body of the click)
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = 'triangle';
+    osc1.frequency.setValueAtTime(120, t);
+    osc1.frequency.exponentialRampToValueAtTime(40, t + 0.06);
+    gain1.gain.setValueAtTime(0.35, t);
+    gain1.gain.exponentialRampToValueAtTime(0.01, t + 0.08);
+    osc1.connect(gain1);
+    gain1.connect(master);
+    osc1.start(t);
+    osc1.stop(t + 0.08);
+
+    // High tick (placement click)
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'square';
+    osc2.frequency.setValueAtTime(1200, t + 0.04);
+    gain2.gain.setValueAtTime(0.12, t + 0.04);
+    gain2.gain.exponentialRampToValueAtTime(0.01, t + 0.10);
+    osc2.connect(gain2);
+    gain2.connect(master);
+    osc2.start(t + 0.04);
+    osc2.stop(t + 0.10);
+  }
+
+  /**
+   * Play collision thud when the local player bounces off another car.
+   * Throttled to 150ms so rapid multi-hit collisions don't stack.
+   */
+  private _updateCollisionSound(): void {
+    const collision = this.getEngine()?.getSystemManager()?.getSystem<CollisionSystem>('collision');
+    if (!collision) return;
+
+    // Only care about car-car collisions, not trail deaths
+    const carCollisions = collision.getCollisions().filter(c => c.type === 'car');
+    if (carCollisions.length === 0) return;
+
+    const now = Date.now();
+    if (now - this._lastCollisionSoundAt < 150) return;
+
+    // Find local player ID — search for entity with player.isLocal=true
+    let localPlayerId: string | null = null;
+    for (const entity of this.entityManager.queryByMask(this._playerMask)) {
+      const player = entity.getComponent<Player>(ComponentNames.PLAYER);
+      if (player?.isLocal) { localPlayerId = entity.id; break; }
+    }
+
+    const hasLocalCollision = localPlayerId
+      ? carCollisions.some(c => c.victimId === localPlayerId || c.killerId === localPlayerId)
+      : false;
+
+    if (hasLocalCollision) {
+      this._lastCollisionSoundAt = now;
+      this.playCollision(0.6);
+    }
+  }
+
+  /**
+   * Detect zone state transitions and fire one-shot audio cues.
+   */
+  private _updateZoneSound(): void {
+    const zone = this.getEngine()?.getSystemManager()?.getSystem<ZoneSystem>('zone');
+    if (!zone) return;
+
+    const state = zone.getState();
+    if (state === this._lastZoneState) return;
+
+    if (state === ZoneState.WARNING) {
+      this._playZoneWarning();
+    } else if (state === ZoneState.SHRINKING) {
+      this._playZoneShrink();
+    }
+
+    this._lastZoneState = state;
+  }
+
+  /** Low rumbling pulse when zone enters WARNING phase */
+  private _playZoneWarning(): void {
+    const ctx = this._audioContext;
+    const master = this._masterGain;
+    if (!ctx || !master) return;
+    try {
+      const t = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(80, t);
+      osc.frequency.exponentialRampToValueAtTime(120, t + 0.6);
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.35, t + 0.1);
+      gain.gain.linearRampToValueAtTime(0, t + 0.8);
+      osc.connect(gain);
+      gain.connect(master);
+      osc.start(t);
+      osc.stop(t + 0.8);
+    } catch {}
+  }
+
+  /** Harsh descending tone when zone starts SHRINKING */
+  private _playZoneShrink(): void {
+    const ctx = this._audioContext;
+    const master = this._masterGain;
+    if (!ctx || !master) return;
+    try {
+      const t = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(220, t);
+      osc.frequency.exponentialRampToValueAtTime(55, t + 0.5);
+      gain.gain.setValueAtTime(0.3, t);
+      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.5);
+      osc.connect(gain);
+      gain.connect(master);
+      osc.start(t);
+      osc.stop(t + 0.5);
+    } catch {}
   }
 
   /**

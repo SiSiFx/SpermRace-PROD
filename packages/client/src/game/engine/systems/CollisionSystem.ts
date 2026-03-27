@@ -7,20 +7,17 @@ import { System, SystemPriority } from '../core/System';
 import type { Position } from '../components/Position';
 import type { Velocity } from '../components/Velocity';
 import type { Collision } from '../components/Collision';
-import { CollisionLayer, shouldCollide, circleCollisionTest } from '../components/Collision';
-import type { Trail } from '../components/Trail';
-import type { TrailPoint } from '../components/Trail';
+import { shouldCollide, circleCollisionTest } from '../components/Collision';
 import type { Health } from '../components/Health';
 import { killEntity, hasSpawnProtection } from '../components/Health';
-import type { Player } from '../components/Player';
-import { EntityType } from '../components/Player';
 import type { Boost } from '../components/Boost';
 import { setBoostEnergy } from '../components/Boost';
 import { SpatialGrid } from '../spatial/SpatialGrid';
 import { ComponentNames, createComponentMask } from '../components';
-import { TRAIL_CONFIG, BODY_COLLISION_CONFIG } from '../config';
+import { BODY_COLLISION_CONFIG } from '../config';
 import type { ZoneSystem } from './ZoneSystem';
 import { distanceToSegmentSquared } from '../view/math';
+import type { TrailSystem } from './TrailSystem';
 
 /**
  * Collision result
@@ -87,8 +84,6 @@ export class CollisionSystem extends System {
 
   // Component masks
   private readonly _carMask: number;
-  private readonly _trailMask: number;
-  private readonly _powerupMask: number;
 
   constructor(spatialGrid: SpatialGrid) {
     super(SystemPriority.COLLISION);
@@ -106,22 +101,12 @@ export class CollisionSystem extends System {
       ComponentNames.PLAYER
     );
 
-    this._trailMask = createComponentMask(
-      ComponentNames.TRAIL
-    );
-
-    this._powerupMask = createComponentMask(
-      ComponentNames.POSITION,
-      ComponentNames.COLLISION,
-      ComponentNames.HEALTH,
-      ComponentNames.PLAYER
-    );
   }
 
   /**
    * Update collisions
    */
-  update(dt: number): void {
+  update(_dt: number): void {
     // Clear previous frame results
     this._collisions.length = 0;
     this._nearMisses = [];
@@ -153,6 +138,8 @@ export class CollisionSystem extends System {
    */
   private _checkTrailCollisions(now: number): void {
     const cars = this.entityManager.queryByMask(this._carMask);
+    const trailSystem = this.getEngine()?.getSystemManager()?.getSystem<TrailSystem>('trails');
+    if (!trailSystem) return;
 
     for (const car of cars) {
       const position = car.getComponent<Position>(ComponentNames.POSITION);
@@ -167,96 +154,67 @@ export class CollisionSystem extends System {
       if (hasSpawnProtection(health)) continue;
 
       let hitDetected = false;
+      let nearestNearMissDistance = Number.POSITIVE_INFINITY;
 
-      // Get nearby entities (potential trail owners)
-      const nearby = this._config.spatialGrid.getNearbyEntities(
-        position.x,
-        position.y,
-        collision.radius + 50
-      );
+      trailSystem.forEachNearbySegment(position.x, position.y, collision.radius + 50, (segment) => {
+        const isSelfTrail = segment.ownerId === car.id;
 
-      for (const [nearbyId, nearbyData] of nearby) {
-        if (hitDetected) break;
-
-        const nearbyEntity = this.entityManager.getEntity(nearbyId);
-        if (!nearbyEntity) continue;
-
-        const trail = nearbyEntity.getComponent<Trail>(ComponentNames.TRAIL);
-        if (!trail || trail.points.length === 0) continue;
-
-        const isSelfTrail = nearbyId === car.id;
-
-        // Check collision with trail segments (CCD for robustness)
-        // We check segments between i and i+1 to prevent tunneling
-        for (let i = 0; i < trail.points.length - 1; i++) {
-          const p1 = trail.points[i];
-          const p2 = trail.points[i + 1];
-          const p1Age = now - p1.timestamp;
-
-          // Ignore expired segments
-          if (p1Age > trail.lifetime) continue;
-
-          // Determine if this is a "body" segment (recent) or "old trail" (lethal)
-          // We use p1 (older point) to characterize the segment
-          const isBodySegment = p1Age < BODY_COLLISION_CONFIG.BODY_SEGMENT_AGE_MS;
-          const segmentIndex = trail.points.length - 1 - i; // Index from head (0 = newest)
-
-          // Self-collision handling
-          if (isSelfTrail) {
-            // Skip grace segments near head (prevents instant self-death on spawn/turns)
-            if (segmentIndex < BODY_COLLISION_CONFIG.SELF_COLLISION_GRACE_SEGMENTS) {
-              continue;
-            }
-            // Only self-collide with older body segments (makes tight turns dangerous)
-            if (isBodySegment) continue;
-          } else {
-            // Enemy collision: ignore very recent points from self (already handled by isSelfTrail)
-            if (p1.ownerId === car.id && p1Age < TRAIL_CONFIG.EMIT_INTERVAL_MS * 2) {
-              continue;
-            }
+        if (isSelfTrail) {
+          if (segment.segmentIndexFromHead < BODY_COLLISION_CONFIG.SELF_COLLISION_GRACE_SEGMENTS) {
+            return;
           }
-
-          // Calculate combined radius
-          const radiusMult = isBodySegment ? BODY_COLLISION_CONFIG.SEGMENT_RADIUS_MULT : 1.0;
-          // Use max width of segment ends for safety
-          const segmentWidth = Math.max(p1.width, p2.width);
-          const combinedRadius = collision.radius + segmentWidth * radiusMult;
-          const combinedRadiusSq = combinedRadius * combinedRadius;
-
-          // Calculate distance to segment (CCD)
-          const distSq = distanceToSegmentSquared(position.x, position.y, p1.x, p1.y, p2.x, p2.y);
-          const dist = Math.sqrt(distSq);
-
-          // Near-miss detection (for dopamine feedback)
-          const nearMissThreshold = BODY_COLLISION_CONFIG.NEAR_MISS_THRESHOLD_PX;
-          if (dist > combinedRadius && dist < combinedRadius + nearMissThreshold && !isSelfTrail) {
-            this._nearMisses.push({
-              entityId: car.id,
-              distance: dist - combinedRadius,
-              timestamp: now,
-            });
-          }
-
-          // Collision check
-          if (distSq < combinedRadiusSq) {
-            // Collision detected!
-            const collisionType = isBodySegment ? 'body' : 'trail';
-
-            this._collisions.push({
-              victimId: car.id,
-              killerId: isSelfTrail ? car.id : nearbyId, // Self-collision = killed by self
-              x: p1.x, // Use p1 as impact approximation
-              y: p1.y,
-              type: collisionType,
-              timestamp: now,
-            });
-
-            // Mark health for death
-            killEntity(health, isSelfTrail ? car.id : nearbyId, true);
-            hitDetected = true;
-            break;
+          if (segment.isBodySegment) {
+            return;
           }
         }
+
+        const radiusMult = segment.isBodySegment ? BODY_COLLISION_CONFIG.SEGMENT_RADIUS_MULT : 1.0;
+        const combinedRadius = collision.radius + segment.width * radiusMult;
+        const combinedRadiusSq = combinedRadius * combinedRadius;
+        const distSq = distanceToSegmentSquared(
+          position.x,
+          position.y,
+          segment.x1,
+          segment.y1,
+          segment.x2,
+          segment.y2
+        );
+
+        if (!isSelfTrail) {
+          const dist = Math.sqrt(distSq);
+          const surfaceDistance = dist - combinedRadius;
+          if (
+            surfaceDistance > 0 &&
+            surfaceDistance < BODY_COLLISION_CONFIG.NEAR_MISS_THRESHOLD_PX
+          ) {
+            nearestNearMissDistance = Math.min(nearestNearMissDistance, surfaceDistance);
+          }
+        }
+
+        if (distSq >= combinedRadiusSq) {
+          return;
+        }
+
+        this._collisions.push({
+          victimId: car.id,
+          killerId: isSelfTrail ? car.id : segment.ownerId,
+          x: segment.hitX,
+          y: segment.hitY,
+          type: segment.isBodySegment ? 'body' : 'trail',
+          timestamp: now,
+        });
+
+        killEntity(health, isSelfTrail ? car.id : segment.ownerId, true);
+        hitDetected = true;
+        return false;
+      });
+
+      if (!hitDetected && Number.isFinite(nearestNearMissDistance)) {
+        this._nearMisses.push({
+          entityId: car.id,
+          distance: nearestNearMissDistance,
+          timestamp: now,
+        });
       }
     }
   }
@@ -284,7 +242,7 @@ export class CollisionSystem extends System {
         col1.radius + 50
       );
 
-      for (const [nearbyId, nearbyData] of nearby) {
+      for (const [nearbyId] of nearby) {
         // Skip self
         if (nearbyId === car1.id) continue;
 

@@ -285,7 +285,7 @@ describe('BotController - Trail Avoidance', () => {
 
 // Helper functions to access private methods for testing
 function testDetectPanic(controller: BotController, sense: any): boolean {
-  return (controller as any).detectPanic(sense, 0.016);
+  return (controller as any).detectPanic(sense, controller.player.sperm.position);
 }
 
 function testFindSafeEvasionDirection(controller: BotController, sense: any): number {

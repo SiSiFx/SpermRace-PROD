@@ -1,18 +1,28 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { DatabaseService } from '../src/DatabaseService.js';
-import { unlinkSync, existsSync } from 'fs';
 import { randomUUID } from 'crypto';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 
 describe('Skill Rating System', () => {
-  const TEST_DB_PATH = `./test-skills-${randomUUID()}.db`;
   let db: DatabaseService;
+  let tempDir: string;
+  let testDbPath: string;
 
   beforeEach(() => {
-    // Clean up test database if it exists
-    if (existsSync(TEST_DB_PATH)) {
-      unlinkSync(TEST_DB_PATH);
-    }
-    db = new DatabaseService(TEST_DB_PATH);
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spermrace-skills-'));
+    testDbPath = path.join(tempDir, `test-skills-${randomUUID()}.db`);
+    db = new DatabaseService(testDbPath, { enableWal: false, enableCacheRefresh: false });
+  });
+
+  afterEach(() => {
+    try {
+      db?.close();
+    } catch {}
+    try {
+      if (tempDir && fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
+    } catch {}
   });
 
   describe('ELO Calculation', () => {

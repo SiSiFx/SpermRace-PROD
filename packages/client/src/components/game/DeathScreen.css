@@ -136,9 +136,33 @@
   font-family: var(--font-display);
   font-size: 16px;
   font-weight: 700;
-  color: var(--accent-red);
+  color: var(--text-primary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+/* Brutal verdict */
+.death-verdict {
+  margin: -8px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(248, 251, 255, 0.38);
+  letter-spacing: 0.04em;
+  font-style: italic;
+}
+
+/* Own-trail mechanic explanation (shown once) */
+.death-own-trail-tip {
+  margin: -4px 0 0;
+  padding: 8px 12px;
+  background: rgba(220, 38, 38, 0.08);
+  border: 1px solid rgba(220, 38, 38, 0.2);
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(252, 165, 165, 0.85);
+  text-align: center;
+  line-height: 1.5;
 }
 
 /* =========================================
@@ -147,7 +171,7 @@
 
 .death-stats {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
   gap: 10px;
   margin: 24px 0;
 }
@@ -240,39 +264,63 @@
   letter-spacing: 0.02em;
 }
 
-/* Spectate Button */
+.death-btn:focus-visible {
+  outline: 2px solid rgba(201, 147, 61, 0.8);
+  outline-offset: 2px;
+}
+
+/* Quick Replay Button — primary gold CTA */
+.death-btn.quick-replay {
+  background: linear-gradient(135deg, #c9933d 0%, #b07a28 100%);
+  color: #08090d;
+  box-shadow: 0 0 20px rgba(201, 147, 61, 0.25), 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.death-btn.quick-replay:hover {
+  background: linear-gradient(135deg, #f0d59c 0%, #c9933d 100%);
+  box-shadow: 0 0 40px rgba(240, 213, 156, 0.35), 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+/* Spectate Button — secondary outlined */
 .death-btn.spectate {
-  background: linear-gradient(135deg, var(--accent-red) 0%, #b91c1c 100%);
-  color: #ffffff;
-  box-shadow: 0 4px 16px color-mix(in srgb, var(--accent-red) 30%, transparent);
+  background: rgba(201, 147, 61, 0.08);
+  border: 1px solid rgba(201, 147, 61, 0.35);
+  color: rgba(240, 213, 156, 0.9);
+  box-shadow: none;
 }
 
 .death-btn.spectate:hover {
-  box-shadow: 0 6px 20px color-mix(in srgb, var(--accent-red) 45%, transparent);
+  background: rgba(201, 147, 61, 0.14);
+  border-color: rgba(201, 147, 61, 0.6);
+  color: #f0d59c;
 }
 
-/* Change Class Button */
+/* Change Class Button — ghost outlined */
 .death-btn.change-class {
-  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-  color: #ffffff;
-  box-shadow: 0 4px 16px color-mix(in srgb, #6366f1 30%, transparent);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-secondary);
+  box-shadow: none;
 }
 
 .death-btn.change-class:hover {
-  box-shadow: 0 6px 20px color-mix(in srgb, #6366f1 45%, transparent);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: var(--text-primary);
 }
 
-/* Leave Button */
+/* Leave Button — minimal text */
 .death-btn.leave {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: var(--text-secondary);
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  padding-top: 10px;
+  padding-bottom: 10px;
+  min-height: 40px;
 }
 
 .death-btn.leave:hover {
-  border-color: var(--accent-red);
-  color: var(--accent-red);
-  background: rgba(220, 38, 68, 0.05);
+  color: var(--text-secondary);
 }
 
 /* =========================================
@@ -292,7 +340,7 @@
 
 .death-progress-bar {
   height: 100%;
-  background: linear-gradient(90deg, var(--accent-red), #ef4444);
+  background: linear-gradient(90deg, #c9933d, #f0d59c);
 }
 
 /* =========================================
@@ -419,7 +467,7 @@
   }
 
   .death-stats {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
     gap: 8px;
     margin: 16px 0;
   }
@@ -463,5 +511,23 @@
 
   .death-btn-subtitle {
     font-size: 8px;
+  }
+}
+
+/* =========================================
+   REDUCED MOTION
+   ========================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .death-bg-effect {
+    animation: none;
+  }
+
+  .death-btn {
+    transition: none;
+  }
+
+  .death-progress-bar {
+    transition: none;
   }
 }

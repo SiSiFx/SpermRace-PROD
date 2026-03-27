@@ -1,252 +1,272 @@
-# SKIDR.IO DEVELOPMENT PLAN - CLAUDE MEMORY
+# SpermRace.io — Dev Reference
 
-## 🎯 PROJECT OVERVIEW
+## What this game is
 
-**Skidr.io** is a drift-based battle royale car game with cryptocurrency tournaments, as defined in BUSINESS_PLAN.md. Players control cars that create trails when drifting, and touching any trail eliminates the player. Last car standing wins the tournament prize pool.
+Browser-based battle royale. Players control a sperm cell (Slither.io style) — always moving forward, steer with mouse/joystick. You leave a trail behind you. Touching anyone's trail (including your own after a grace period) = instant death. Last one alive wins the crypto prize pool.
 
-## 📋 COMPREHENSIVE TODO LIST
-
-### **PHASE 1: CORE GAME ENGINE (Week 1-2)**
-
-#### 🚗 **Car Physics & Movement**
-- [ ] Create Car class with drift mechanics
-  - [ ] Point-to-steer mouse controls (calculate target angle from mouse position)
-  - [ ] Smooth angle interpolation for realistic drifting
-  - [ ] Constant forward movement at 200px/second base speed
-  - [ ] Drift rate tuning (3.0 multiplier for responsive feel)
-  - [ ] World boundary constraints (4000x4000 arena)
-
-- [ ] Trail System Implementation
-  - [ ] TrailPoint interface with x, y, timestamp properties
-  - [ ] Trail creation every 15 pixels of movement
-  - [ ] Trail expiration after 8-15 seconds (configurable)
-  - [ ] Trail cleanup optimization for performance
-  - [ ] Boost trails (thicker, last 2-3 seconds longer)
-
-#### 🎮 **Game Loop & State Management**
-- [ ] 60fps server-side game loop using setInterval
-- [ ] Player state management (position, angle, alive status)
-- [ ] Delta time calculations for frame-rate independent physics
-- [ ] Game state serialization for network transmission
-- [ ] Round system with automatic start/end detection
-
-#### 💥 **Collision Detection System**
-- [ ] Point-to-line distance algorithm for trail collision
-- [ ] Spatial partitioning for performance with 32+ players
-- [ ] Self-collision protection (skip last 3 trail points)
-- [ ] Collision response (instant elimination)
-- [ ] Performance optimization for real-time gameplay
-
-#### 🏁 **Battle Royale Mechanics**
-- [ ] Shrinking arena implementation
-  - [ ] Arena size reduction every 30-60 seconds
-  - [ ] Visual warning system before shrink
-  - [ ] Player elimination when outside arena
-  - [ ] Final arena size balancing (100x100 minimum)
-
-- [ ] Round Management System
-  - [ ] Match start when 8+ players join
-  - [ ] Winner determination (last alive)
-  - [ ] 3-second countdown between rounds
-  - [ ] Player respawn system for new rounds
-
-### **PHASE 2: NETWORKING & MULTIPLAYER (Week 2-3)**
-
-#### 🌐 **Server Architecture**
-- [ ] WebSocket server setup with ws library
-- [ ] Connection management (connect/disconnect handling)
-- [ ] Player authentication and session management
-- [ ] Message routing and validation
-- [ ] Anti-cheat input validation
-
-#### 📡 **Real-time Synchronization**
-- [ ] Server-authoritative movement validation
-- [ ] Client-side prediction for smooth gameplay
-- [ ] RTT measurement and compensation
-- [ ] Frame interpolation for consistent experience
-- [ ] Network optimization for <50ms latency
-
-#### 🎯 **Game State Broadcasting**
-- [ ] Efficient game state serialization
-- [ ] Player position updates at 60fps
-- [ ] Trail data synchronization
-- [ ] Arena status broadcasting
-- [ ] Tournament status updates
-
-### **PHASE 3: TOURNAMENT SYSTEM (Week 3-4)**
-
-#### 💰 **Payment Integration**
-- [ ] Solana wallet connection (Phantom, Backpack support)
-- [ ] Thirdweb Connect integration
-- [ ] SIWS (Sign-In With Solana) authentication
-- [ ] Real-time SOL/USD price feeds (CoinGecko API)
-- [ ] Transaction handling and validation
-
-#### 🏆 **Tournament Structure**
-- [ ] Multi-tier tournament system
-  - [ ] Bronze: $1 USD (16 players max)
-  - [ ] Silver: $5 USD (32 players max)  
-  - [ ] Gold: $25 USD (32 players max)
-  - [ ] Diamond: $100 USD (16 players max)
-
-- [ ] Tournament Mechanics
-  - [ ] Entry fee collection and validation
-  - [ ] Player matchmaking and lobbies
-  - [ ] Tournament countdown and start
-  - [ ] Winner-takes-most payout (85% to winner)
-  - [ ] Automated prize distribution
-
-#### 🔐 **Smart Contracts**
-- [ ] Tournament escrow contract development
-- [ ] Automated payout system
-- [ ] Security audit and testing
-- [ ] Gas fee optimization
-- [ ] Multi-signature safety features
-
-### **PHASE 4: CLIENT INTERFACE (Week 4-5)**
-
-#### 🎨 **Game Rendering**
-- [ ] HTML5 Canvas rendering engine
-- [ ] Car sprite rendering with rotation
-- [ ] Trail visualization with fade effects
-- [ ] Arena boundary rendering
-- [ ] Smooth camera following system
-
-#### 🖱️ **User Interface**
-- [ ] Tournament selection screen
-- [ ] Wallet connection interface
-- [ ] Real-time balance display
-- [ ] Tournament lobby with player list
-- [ ] In-game HUD (player count, arena timer)
-
-#### 📱 **Responsive Design**
-- [ ] Mobile-friendly controls
-- [ ] Adaptive UI scaling
-- [ ] Touch input optimization
-- [ ] Performance optimization for mobile devices
-
-### **PHASE 5: FEATURES & POLISH (Week 5-6)**
-
-#### 🎮 **Game Modes**
-- [ ] Practice Mode (free play, no crypto)
-- [ ] Tournament Mode (paid entry with prizes)
-- [ ] Spectator Mode (watch ongoing matches)
-- [ ] Replay system for epic eliminations
-
-#### 📊 **Analytics & Stats**
-- [ ] Player statistics tracking
-- [ ] Tournament history
-- [ ] Leaderboard system
-- [ ] Performance metrics dashboard
-
-#### 🛡️ **Security & Anti-Cheat**
-- [ ] Server-side input validation
-- [ ] Movement speed limits
-- [ ] Suspicious behavior detection
-- [ ] Rate limiting and DDoS protection
-
-### **PHASE 6: COMMUNITY & LAUNCH (Week 6-7)**
-
-#### 👥 **Community Features**
-- [ ] Discord server integration
-- [ ] Player profiles and achievements
-- [ ] Referral system ($1 bonus for referrals)
-- [ ] Community tournaments
-
-#### 🚀 **Launch Preparation**
-- [ ] Beta testing with 100 users
-- [ ] Performance stress testing (64 concurrent players)
-- [ ] Security audit completion
-- [ ] Documentation and support materials
-
-## 🛠️ TECHNICAL ARCHITECTURE
-
-### **Frontend Stack**
-```
-├── Vite + TypeScript (build system)
-├── HTML5 Canvas (rendering)
-├── WebSocket (networking)
-├── Thirdweb Connect (wallet integration)
-└── Responsive CSS (mobile support)
-```
-
-### **Backend Stack**
-```
-├── Node.js + TypeScript (game server)
-├── WebSocket Server (real-time communication)
-├── Express.js (REST API for tournaments)
-├── Solana Web3.js (blockchain integration)
-└── VPS hosting (cost-effective scaling)
-```
-
-### **Database Schema**
-```
-Players: id, wallet, stats, tournament_history
-Tournaments: id, tier, prize_pool, status, participants
-Matches: id, tournament_id, winner, duration, eliminations
-```
-
-## 🎯 SUCCESS METRICS
-
-### **Technical KPIs**
-- [ ] Support 32+ concurrent players with <50ms latency
-- [ ] 99.9% uptime during tournament hours
-- [ ] Sub-100ms response time for all API calls
-- [ ] Zero security vulnerabilities in smart contracts
-
-### **Business KPIs**
-- [ ] 100+ beta users providing feedback
-- [ ] 10+ successful tournaments per day
-- [ ] $1,000+ monthly revenue within 3 months
-- [ ] 30%+ monthly retention rate for paying users
-
-## 🚨 CRITICAL DEPENDENCIES
-
-### **Must-Have Before Launch**
-- [ ] Smart contract security audit
-- [ ] Legal compliance review
-- [ ] Tournament payout testing with real SOL
-- [ ] Anti-cheat system validation
-- [ ] Backup server infrastructure
-
-### **Risk Mitigation**
-- [ ] Automated backups every hour
-- [ ] Emergency maintenance procedures
-- [ ] Customer support documentation
-- [ ] Incident response protocols
-
-## 📈 DEVELOPMENT PRIORITIES
-
-### **P0 (Critical - Must Launch)**
-1. Core drift car physics and trail collision
-2. Tournament system with crypto payouts
-3. Real-time multiplayer with 32+ players
-4. Security and anti-cheat systems
-
-### **P1 (High - Launch Week)**
-1. Polish and performance optimization
-2. Mobile responsiveness
-3. Practice mode for onboarding
-4. Basic community features
-
-### **P2 (Medium - Post-Launch)**
-1. Advanced statistics and analytics
-2. Additional tournament tiers
-3. Cosmetic items and customization
-4. Regional server expansion
-
-### **P3 (Low - Future Versions)**
-1. NFT integration for achievements  
-2. Team tournaments and guilds
-3. Streaming integration
-4. Mobile app development
+**Entry fees:** $1 / $5 / $25 / $100 (paid in SOL)
+**Winner payout:** ~10x entry fee (85% winner, 15% platform fee)
+**Match length:** ~3-6 minutes
+**Players:** up to 32 per lobby
+**Classes:** Balanced (Shield), Sprinter (Dash), Tank (Overdrive) — persisted via localStorage
 
 ---
 
-## 🎮 CORE GAME VISION
+## Repo layout
 
-**"Create the most skill-based, fast-paced crypto gaming experience where pure driving ability determines winners, not luck or wallet size. Every 3-6 minute tournament should feel fair, exciting, and financially rewarding for skilled players."**
+```
+packages/
+  client/     Vite + React + PixiJS (WebGL rendering) — deployed to Vercel
+  server/     Node.js + WebSocket game server — deployed via PM2 on VPS
+  shared/     Zod schemas + shared constants
+```
 
-This todo list represents approximately 6-7 weeks of focused development to create a minimum viable product (MVP) ready for beta testing and community feedback. The modular approach allows for iterative development and early testing of core mechanics before adding complexity.
+---
 
-Last Updated: August 22, 2025
+## Client architecture
+
+```
+src/
+  AppUnified.tsx            Screen router: landing | practice-solo | wallet | lobby | game | results
+  WsProvider.tsx            WebSocket connection + state (auth, lobby, game, payment)
+  WalletProviderNew.tsx     Solana wallet adapter (Phantom, Solflare, Coinbase, Trust, WalletConnect, Mobile)
+
+  game/engine/
+    NewGameViewECS.tsx      Main React wrapper — class selection, input loop, win overlay, death screen
+    NewGameViewECS.css      Game overlay styles (win overlay, controls hint, class selection)
+    Game.tsx                ECS engine — registers all systems, spawns entities, game loop
+
+    systems/                15 ECS systems (priority-ordered):
+      InputSystem.ts          Mouse/touch/gamepad → PlayerInput (hasDirection flag prevents drift)
+      PhysicsSystem.ts        Velocity movement, angle interpolation, drift feel
+      CameraSystem.ts         Smooth follow + zoom
+      ZoneSystem.ts           Shrinking arena — warns then kills outside zone
+      TrailSystem.ts          Emits trail points at tail tip, spatial grid collision → kills
+      PowerupSystem.ts        Powerup spawning + collection
+      AbilitySystem.ts        Shield / Dash / Trap / Overdrive cooldowns + sound dispatch
+      CollisionSystem.ts      Car-to-car bouncing + boundary bounce
+      BotAISystem.ts          Bot pathfinding, steering, ability usage
+      DeathEffectSystem.ts    Death particles + effects
+      CombatFeedbackSystem.ts Kill/damage visual feedback
+      SoundSystem.ts          Web Audio API — all sounds (boost, kill, death, zone, abilities)
+      FloatingTextSystem.ts   Damage numbers + kill text
+      SlowMotionSystem.ts     Time-dilation on kills
+      RenderSystem.ts         PixiJS rendering — trails, sperm head, sine-wave tail, HUD
+
+    factories/
+      EntityFactory.ts      Creates player + bot entities with all ECS components
+    config/
+      GameConstants.ts      All tuning values (see Key Config below)
+
+  components/
+    screens/premium/        Landing, Lobby, Results screens
+    game/
+      ClassSelection.tsx    3-card class picker with animated canvas demos + playstyle badges
+      DeathScreen.tsx       Post-death overlay
+      PreGameSequence.tsx   Pre-match countdown
+      KillFeed.tsx          In-game kill announcements
+      Leaderboard.tsx       Global leaderboard
+      MiniMap.tsx           Radar
+      ZoneIndicator.tsx     Zone warning UI
+```
+
+---
+
+## How the game loop works
+
+**System update order (every frame):**
+Input → Physics → Camera → Zone → Trail (collision) → Powerup → Ability → Collision → BotAI → DeathEffect → CombatFeedback → Sound → FloatingText → SlowMotion → Render
+
+**Movement:** `position += velocity * dt`. Heading angle interpolates toward target (drift feel). `hasDirection` flag on PlayerInput prevents angle update when no mouse input, stopping rightward drift.
+
+**Trail:** Points emitted every 4px of movement. Lifetime 7000ms. Width 5px base, 9px boosted. Spatial grid for O(1) collision. Opponent trails rendered with red halo (0xff2222) to signal lethality.
+
+**Tail:** 18-segment sine-wave flagellum driven by `this._time`. Amplitude envelope peaks at ~60% of length, tapers at tip. Boost increases amplitude (10→15) and wave speed (31.4→44.0 rad/s).
+
+**Collision:** carRadius 8px + trailPointWidth 5-9px. Self-collision ignored for 300ms. Spawn invincibility: built into TrailSystem.
+
+---
+
+## Key Config (GameConstants.ts)
+
+```
+CAR_PHYSICS.BASE_SPEED = 315 px/s
+CAR_PHYSICS.BOOST_SPEED = 620 px/s
+CAR_PHYSICS.MAX_SPEED = 680 px/s
+CAR_PHYSICS.TURN_SPEED = 3.2 rad/s
+
+TRAIL_CONFIG.LIFETIME_MS = 7000
+TRAIL_CONFIG.BASE_WIDTH = 5
+TRAIL_CONFIG.BOOSTED_WIDTH = 9
+TRAIL_CONFIG.MAX_POINTS = 450
+
+BOOST_CONFIG.MAX_ENERGY = 100
+BOOST_CONFIG.REGEN_RATE = 17 energy/s
+BOOST_CONFIG.CONSUMPTION_RATE = 22 energy/s
+BOOST_CONFIG.KILL_REWARD_ENERGY = 45
+
+SPAWN_CONFIG.EDGE_PADDING = 320         // global via _generateSpawnPoints()
+SPAWN_CONFIG.BOT_FIRST_RING = 500       // defined but ring spawn not used in practice
+Arena: 60% of arena used, 600px min separation between spawns
+
+MATCH_CONFIG.ZONE_START_DELAY_MS = 6000
+MATCH_CONFIG.ZONE_SHRINK_DURATION_MS = 28000
+MATCH_CONFIG.ZONE_MIN_SIZE = 500
+MATCH_CONFIG.ZONE_SHRINK_RATE = 30 px/s
+
+Abilities:
+  DASH      cooldown 3s   duration 150ms   600px/s
+  SHIELD    cooldown 8s   duration 1500ms
+  TRAP      cooldown 5s   instant
+  OVERDRIVE cooldown 10s  duration 3000ms  2x trail width
+
+Arena sizes:
+  Desktop: 8000 × 6000 px
+  Mobile:  3500 × 7700 px
+```
+
+---
+
+## Sounds (SoundSystem.ts — all Web Audio API, no files)
+
+| Method | Trigger |
+|--------|---------|
+| `_startBoostSound()` | Boost held — turbine roar |
+| `playKill(pitch?)` | Kill confirmed — ascending chime, pitch scales with streak |
+| `playDeath()` | Local player dies — descending whoosh |
+| `playCollision()` | Car-to-car bounce |
+| `playPickup()` | Powerup collected |
+| `playVictory()` | Win — 3-note arpeggio |
+| `playShield()` | Shield ability activated |
+| `playDash()` | Dash ability activated |
+| `playTrap()` | Trap placed |
+| `_playZoneWarning()` | Zone about to shrink |
+| `_playZoneShrink()` | Zone actively shrinking |
+
+---
+
+## Game flow (client)
+
+```
+Landing → (practice) → Class selection* → Game → Death/Win overlay → Results
+         → (tournament) → Wallet → Lobby → Class selection* → Game → Results
+
+*Class selection skipped if localStorage has 'spermrace_last_class'
+```
+
+**Win overlay:** VICTORY stamp → 3s countdown → auto-exits to Results. Manual CONTINUE button skips countdown.
+
+**Kill streaks:** DOUBLE KILL (2+) → TRIPLE KILL (3+) → MEGA KILL (5+) → ULTRA KILL (7+) → GODLIKE (10+)
+
+**Debug mode:** `?tools=1` or `?debug=1` or `?devtools=1` in URL
+
+---
+
+## Security (implemented)
+
+- SIWS (Sign-In With Solana) auth on all WebSocket connections — nonce TTL 60s, replay protection
+- Rate limiting: auth 3/min, join 10/min, input 60/s per socket
+- Zod schema validates all WS messages (64KB payload cap). `vector2Schema` uses `.finite()` — NaN/Infinity rejected.
+- `clientTimestamp` bounds checked server-side: rejected if >30s old or >5s in future
+- Solana RPC proxied through `/api/rpc` — Helius API key never in client bundle
+- Production guards: `SKIP_ENTRY_FEE`, `ENABLE_DEV_BOTS`, devnet RPC all fatal-exit in production
+- Payment dedup: `usedPaymentIds` Set prevents double-spend; on-chain verification with 40 retries
+- Guest sessions: UUID resume token, 24h TTL, practice-mode only (entryFeeTier === 0)
+
+---
+
+## Server API endpoints
+
+```
+POST /api/rpc                    Solana RPC proxy (30 req/s rate limit)
+GET  /api/sol-price              SOL/USD price (30s cache)
+GET  /api/healthz                Health
+GET  /api/readyz                 Readiness (checks RPC)
+GET  /api/ws-healthz             WebSocket alive count
+GET  /api/version                Build info
+GET  /api/prize-preflight        Prize pool address + balance
+GET  /api/leaderboard/wins       Top by wins
+GET  /api/leaderboard/earnings   Top by earnings
+GET  /api/leaderboard/kills      Top by kills
+GET  /api/leaderboard/skill-rating
+GET  /api/player/:wallet/stats
+GET  /api/stats                  Global totals
+GET  /api/metrics                Prometheus metrics (ops-auth required)
+POST /api/analytics
+POST /api/siws-auth              HTTP SIWS auth (mobile-friendly)
+GET  /api/siws-challenge
+POST /api/dev/test-payout        Dev only
+```
+
+---
+
+## Server internals
+
+- WebSocket server on port 8080 (path `/ws`), shared HTTP server with Express API
+- Server-authoritative for multiplayer; client runs local ECS simulation for practice
+- PM2 process: `spermrace-server-ws`
+- `SmartContractService.ts` — entry fee tx creation + on-chain verification + prize payout
+- `AuthService.ts` — SIWS signature verification (NaCl)
+- `GameWorld.ts` — authoritative game state, player physics, lag compensation
+- `LobbyManager.ts` — lobby lifecycle, bot filling, surge rules
+- `DatabaseService.ts` — SQLite (better-sqlite3) for leaderboards + player stats
+- `AuditLogger.ts` — append-only audit log for critical events
+
+---
+
+## Deployment
+
+**Client:** Vercel (auto-deploy on push to main)
+**Server:** VPS via PM2 at /opt/spermrace
+
+```bash
+# Dev
+pnpm --filter client dev     # http://localhost:5174
+pnpm --filter server dev     # ws://localhost:8080
+
+# Build
+pnpm --filter shared build   # build first — client + server depend on it
+pnpm --filter client build
+pnpm --filter server build
+
+# Production
+pm2 restart spermrace-server-ws
+pm2 logs spermrace-server-ws
+```
+
+**Required server env vars (production):**
+```
+SOLANA_RPC_ENDPOINT=https://mainnet.helius-rpc.com/?api-key=...
+PRIZE_POOL_SECRET_KEY=<base58 or JSON array>
+PRIZE_POOL_WALLET=<pubkey>
+NODE_ENV=production
+```
+
+---
+
+## What's working
+
+| Feature | Status |
+|---------|--------|
+| Physics movement + boost | WORKING |
+| Trail collision → kill | WORKING |
+| Bot AI pathfinding + abilities | WORKING |
+| Zone shrinking + warnings | WORKING |
+| Abilities (Shield/Dash/Trap/Overdrive) | WORKING |
+| Solana wallet + tournament entry + payout | WORKING |
+| Sine-wave tail animation | WORKING |
+| Sound effects (all) | WORKING |
+| Class selection + persistence | WORKING |
+| Win overlay (3s countdown) | WORKING |
+| Red trail halo on opponents | WORKING |
+| Spawn spread (60% arena, 600px sep) | WORKING |
+| Mobile controls + boost hint | WORKING |
+| Kill streaks + floating text | WORKING |
+| Minimap / leaderboard HUD | WORKING |
+| Solana RPC proxy (key server-side) | WORKING |
+
+## Known issues / next priorities
+
+- AppUnified.AppUnified chunk is ~2MB uncompressed (code-split opportunity)
+- No dispute/refund flow for failed on-chain payments
+- Prize pool key in memory (no multi-sig / hardware wallet)

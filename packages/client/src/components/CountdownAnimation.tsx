@@ -119,7 +119,7 @@ export const CountdownAnimation = memo(function CountdownAnimation({
           opacity: opacity,
         }}
       >
-        {isGo ? 'GO!' : currentNumber}
+        {isGo ? 'FIGHT!' : currentNumber}
       </div>
 
       {/* Subtitle for desktop */}

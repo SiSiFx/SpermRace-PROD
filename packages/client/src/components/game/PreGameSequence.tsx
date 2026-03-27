@@ -1,11 +1,11 @@
 /**
  * PreGameSequence - Orchestrates the pre-game experience
  * 
- * Phase 1: Class Showcase (1.5s) - Spotlight view with stats
- * Phase 2: Map Overview (2s) - Camera zooms out to show arena
- * Phase 3: Countdown (3s) - 3-2-1-GO! animation
+ * Phase 1: Class Showcase (0.85s) - Spotlight view with stats
+ * Phase 2: Map Overview (0.9s) - Quick arena context
+ * Phase 3: Countdown (1.8s) - Fast start pulse
  * 
- * Total: 6.5 seconds
+ * Total: 3.85 seconds
  */
 
 import { useEffect, useState, useCallback, useRef } from 'react';
@@ -14,11 +14,14 @@ import { ClassShowcase } from './ClassShowcase';
 import { CountdownAnimation } from '../CountdownAnimation';
 import { SpermClassType } from '../../game/engine/components/SpermClass';
 import type { Game } from '../../game/engine/Game';
+import { getDefaultZoom } from '../../game/engine/config';
 import './PreGameSequence.css';
 
 interface PreGameSequenceProps {
   game: Game;
   selectedClass: SpermClassType;
+  totalPlayers?: number;
+  skipToCountdown?: boolean;
   onComplete: () => void;
 }
 
@@ -26,10 +29,10 @@ type Phase = 'showcase' | 'mapOverview' | 'countdown' | 'zoomToPlayer' | 'comple
 
 // Phase durations in milliseconds
 const PHASE_DURATIONS = {
-  showcase: 1500,
-  mapOverview: 2000,
+  showcase: 850,
+  mapOverview: 900,
   countdown: 3000,
-  zoomToPlayer: 500,
+  zoomToPlayer: 300,
 };
 
 /**
@@ -39,10 +42,12 @@ const PHASE_DURATIONS = {
 export function PreGameSequence({
   game,
   selectedClass,
+  totalPlayers = 10,
+  skipToCountdown = false,
   onComplete,
 }: PreGameSequenceProps) {
-  const [phase, setPhase] = useState<Phase>('showcase');
-  const [showCountdown, setShowCountdown] = useState(false);
+  const [phase, setPhase] = useState<Phase>(skipToCountdown ? 'countdown' : 'showcase');
+  const [showCountdown, setShowCountdown] = useState(skipToCountdown);
   const [mapOverviewReady, setMapOverviewReady] = useState(false);
   const playerIdRef = useRef<string | null>(null);
   const initialPlayerPosRef = useRef<{ x: number; y: number } | null>(null);
@@ -149,7 +154,7 @@ export function PreGameSequence({
     setMapOverviewReady(true);
 
     // Animate camera to center with zoom out
-    animateCamera(centerX, centerY, 0.25, PHASE_DURATIONS.mapOverview, () => {
+    animateCamera(centerX, centerY, 0.34, PHASE_DURATIONS.mapOverview, () => {
       setPhase('countdown');
       setShowCountdown(true);
     });
@@ -193,7 +198,9 @@ export function PreGameSequence({
     }
 
     // Animate back to player
-    animateCamera(playerPos.x, playerPos.y, 0.85, PHASE_DURATIONS.zoomToPlayer, () => {
+    const focusZoom = getDefaultZoom(window.innerWidth <= 900);
+
+    animateCamera(playerPos.x, playerPos.y, focusZoom, PHASE_DURATIONS.zoomToPlayer, () => {
       // Re-enable camera follow
       if (cameraSystem && playerIdRef.current) {
         cameraSystem.setTarget(playerIdRef.current);
@@ -241,11 +248,11 @@ export function PreGameSequence({
               exit={{ y: -30, opacity: 0 }}
               transition={{ delay: 0.2, duration: 0.4 }}
             >
-              <h3 className="map-info-title">Arena Overview</h3>
-              <p className="map-info-subtitle">Battle Zone</p>
+              <h3 className="map-info-title">{totalPlayers} CELLS DETECTED</h3>
+              <p className="map-info-subtitle">Last one alive wins</p>
             </motion.div>
 
-            {/* Zone warning */}
+            {/* Freeze indicator */}
             <motion.div
               className="zone-warning"
               initial={{ opacity: 0, scale: 0.9 }}
@@ -253,8 +260,8 @@ export function PreGameSequence({
               exit={{ opacity: 0 }}
               transition={{ delay: 0.5, duration: 0.4 }}
             >
-              <div className="zone-warning-icon">⚠️</div>
-              <span className="zone-warning-text">Stay inside the zone to survive</span>
+              <div className="zone-warning-icon">■</div>
+              <span className="zone-warning-text">ALL CELLS LOCKED — COUNTDOWN BEGINS</span>
             </motion.div>
 
             {/* Player markers indicator */}

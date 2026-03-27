@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { createComponentMask, ComponentNames } from './components';
 import type { Health } from './components/Health';
+import { hasSpawnProtection } from './components/Health';
 import type { Position } from './components/Position';
 import { SpermClassType } from './components/SpermClass';
 import { createGame, type Game } from './Game';
@@ -13,6 +14,8 @@ import { useDeviceMode } from './view/hooks/useDeviceMode';
 import { useKeyboardState } from './view/hooks/useKeyboardState';
 import { ClassSelection } from '../../components/game/ClassSelection';
 import { PreGameSequence } from '../../components/game/PreGameSequence';
+import { DeathScreen } from '../../components/game/DeathScreen';
+import { GameRadar } from './GameRadar';
 import './NewGameViewECS.css';
 export type { GameStats } from './view/types';
 
@@ -48,12 +51,13 @@ type ToolsSnapshot = {
   frameMs: number;
   activeEntities: number;
   systemCount: number;
+  queryCacheEntries: number;
+  queryCacheHits: number;
+  queryCacheInvalidations: number;
   speed: number;
   inputMag: number;
   boostActive: boolean;
 };
-
-const NERD_BRIEF_SESSION_KEY = 'sr_nerd_brief_seen_v1';
 
 const STREAK_VISUALS: Array<{ minKills: number; label: string; color: string }> = [
   { minKills: 10, label: 'GODLIKE', color: '#facc15' },
@@ -62,27 +66,6 @@ const STREAK_VISUALS: Array<{ minKills: number; label: string; color: string }> 
   { minKills: 3, label: 'TRIPLE KILL', color: '#34d399' },
   { minKills: 2, label: 'DOUBLE KILL', color: '#22d3ee' },
 ];
-
-function shouldShowNerdBrief(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    const qs = new URLSearchParams(window.location.search);
-    // Keep gameplay-first by default. Show only when explicitly requested.
-    if (qs.get('nerd') === '1' || qs.get('brief') === '1') {
-      return true;
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}
-
-function markNerdBriefSeen(): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.sessionStorage.setItem(NERD_BRIEF_SESSION_KEY, '1');
-  } catch {}
-}
 
 function getStreakVisual(streak: number): { label: string; color: string } | null {
   const visual = STREAK_VISUALS.find((tier) => streak >= tier.minKills);
@@ -116,6 +99,66 @@ function resolveKillerLabel(killerId: string | null, game: Game): string | null 
   return killerId;
 }
 
+const BOT_NAME_LIST = [
+  'Vex', 'Kira', 'Dax', 'Zara', 'Rook', 'Nova', 'Jett', 'Lyra',
+  'Colt', 'Fenn', 'Skye', 'Oryn', 'Blaze', 'Sable', 'Raze', 'Wren',
+];
+
+function PracticeLobbyOverlay({ botCount, playerName, tick }: { botCount: number; playerName: string; tick: number }) {
+  const totalSlots = botCount + 1;
+  const secondsLeft = Math.max(0, 4 - tick);
+  // Reveal 1 bot per second; player is always slot 0
+  const visibleBots = Math.min(botCount, tick * 3);
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 50,
+      background: 'rgba(6,8,15,0.95)',
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      gap: 0, fontFamily: 'Outfit, sans-serif',
+    }}>
+      <div style={{ fontSize: 11, letterSpacing: '0.18em', color: '#c9933d', marginBottom: 12, textTransform: 'uppercase', opacity: 0.8 }}>
+        Practice Lobby
+      </div>
+      <div style={{ fontSize: 28, fontWeight: 900, color: '#f0f0f0', marginBottom: 4 }}>
+        {totalSlots} / {totalSlots}
+      </div>
+      <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', marginBottom: 32, letterSpacing: '0.05em' }}>
+        Room full · Starting in {secondsLeft}s
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: 240 }}>
+        {/* Human player slot */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          background: 'rgba(201,147,61,0.12)', border: '1px solid rgba(201,147,61,0.3)',
+          borderRadius: 6, padding: '8px 12px',
+        }}>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#22d3ee', flexShrink: 0 }} />
+          <span style={{ color: '#f0f0f0', fontWeight: 700, fontSize: 14 }}>{playerName}</span>
+          <span style={{ marginLeft: 'auto', fontSize: 10, color: '#c9933d', letterSpacing: '0.1em' }}>YOU</span>
+        </div>
+        {/* Bot slots */}
+        {BOT_NAME_LIST.slice(0, botCount).map((name, i) => (
+          <div key={name} style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            background: i < visibleBots ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.01)',
+            border: `1px solid ${i < visibleBots ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.03)'}`,
+            borderRadius: 6, padding: '8px 12px',
+            opacity: i < visibleBots ? 1 : 0.25,
+            transition: 'opacity 0.3s, background 0.3s',
+          }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: i < visibleBots ? '#4ade80' : '#333', flexShrink: 0 }} />
+            <span style={{ color: i < visibleBots ? '#e0e0e0' : '#555', fontWeight: 600, fontSize: 14 }}>
+              {i < visibleBots ? name : '...'}
+            </span>
+            <span style={{ marginLeft: 'auto', fontSize: 10, color: 'rgba(255,255,255,0.25)', letterSpacing: '0.08em' }}>BOT</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function NewGameViewECS({
   playerName = 'Player',
   playerColor = 0x22d3ee,
@@ -124,20 +167,39 @@ export function NewGameViewECS({
   onGameEnd,
   onPlayerDeath,
   onError,
-  onReplay,
   onExit,
 }: NewGameViewECSProps) {
   const [session, setSession] = useState(0);
   const isMobile = useDeviceMode(900);
   const [snapshot, setSnapshot] = useState<ViewSnapshot>(() => createInitialSnapshot(botCount));
+  const [spawnProtected, setSpawnProtected] = useState(false);
 
-  // Class selection state
-  const [showClassSelection, setShowClassSelection] = useState(true);
-  const [selectedClass, setSelectedClass] = useState<SpermClassType>(SpermClassType.BALANCED);
+  // Death screen state (shown in-game instead of jumping to results screen)
+  const [showDeathScreen, setShowDeathScreen] = useState(false);
+  const [pendingDeathStats, setPendingDeathStats] = useState<GameStats | null>(null);
+
+  // Win overlay state — shown in-game for 3s before exiting to results
+  const [winStats, setWinStats] = useState<GameStats | null>(null);
+  const [winCountdown, setWinCountdown] = useState(3);
+
+  // Class selection state — persisted across sessions
+  const [showClassSelection, setShowClassSelection] = useState(() => {
+    try { return !localStorage.getItem('spermrace_last_class'); } catch { return true; }
+  });
+  const [selectedClass, setSelectedClass] = useState<SpermClassType>(() => {
+    try {
+      const v = localStorage.getItem('spermrace_last_class');
+      if (v && Object.values(SpermClassType).includes(v as SpermClassType)) return v as SpermClassType;
+    } catch {}
+    return SpermClassType.BALANCED;
+  });
   const [gameStarted, setGameStarted] = useState(false);
   const [showPreGame, setShowPreGame] = useState(false);
+  const [showLobby, setShowLobby] = useState(false);
+  const [lobbyTick, setLobbyTick] = useState(0);
+  const [showControlsHint, setShowControlsHint] = useState(false);
+  const controlsHintShownAtRef = useRef<number>(0);
   const [stickUi, setStickUi] = useState({ active: false, dx: 0, dy: 0, baseX: 0, baseY: 0 });
-  const [showNerdBrief, setShowNerdBrief] = useState(() => shouldShowNerdBrief());
   const [killFeed, setKillFeed] = useState<KillFeedItem[]>([]);
   const [streakBanner, setStreakBanner] = useState<StreakBanner | null>(null);
   const [showToolsPanel] = useState(() => shouldShowToolsPanel());
@@ -146,12 +208,21 @@ export function NewGameViewECS({
     frameMs: 0,
     activeEntities: 0,
     systemCount: 0,
+    queryCacheEntries: 0,
+    queryCacheHits: 0,
+    queryCacheInvalidations: 0,
     speed: 0,
     inputMag: 0,
     boostActive: false,
   });
   const [toolsCopied, setToolsCopied] = useState(false);
   const [mobileBoostHeld, setMobileBoostHeld] = useState(false);
+
+  // First-game contextual hints — shown inline, one at a time, never again after first game
+  const isFirstGame = useMemo(() => {
+    try { return !localStorage.getItem('spermrace_played_before'); } catch { return false; }
+  }, []);
+  const [gameHint, setGameHint] = useState<'trail' | 'ability' | null>(null);
 
   const hostRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<Game | null>(null);
@@ -162,6 +233,17 @@ export function NewGameViewECS({
   const toolsTickRef = useRef<number>(0);
   const toolsCopiedTimerRef = useRef<number | null>(null);
   const mobileBoostHeldRef = useRef(false);
+  const prevAliveCountRef = useRef<number>(botCount + 1);
+
+  // Schedule first-game hints once gameplay begins
+  useEffect(() => {
+    if (!gameStarted || !isFirstGame) return;
+    const dismiss = (tag: 'trail' | 'ability') =>
+      window.setTimeout(() => setGameHint(h => h === tag ? null : h), 5500);
+    const t1 = window.setTimeout(() => { setGameHint('trail');   dismiss('trail');   }, 2500);
+    const t2 = window.setTimeout(() => { setGameHint('ability'); dismiss('ability'); }, 9500);
+    return () => { window.clearTimeout(t1); window.clearTimeout(t2); };
+  }, [gameStarted, isFirstGame]);
 
   const keyStateRef = useKeyboardState();
   const touchRef = useRef<TouchState>({
@@ -173,11 +255,6 @@ export function NewGameViewECS({
 
   const playerHealthMask = useMemo(() => {
     return createComponentMask(ComponentNames.PLAYER, ComponentNames.HEALTH);
-  }, []);
-
-  const dismissNerdBrief = useCallback(() => {
-    setShowNerdBrief(false);
-    markNerdBriefSeen();
   }, []);
 
   useEffect(() => {
@@ -200,6 +277,14 @@ export function NewGameViewECS({
       }
     };
   }, []);
+
+  // Win overlay: count down then exit to results
+  useEffect(() => {
+    if (!winStats) return;
+    if (winCountdown <= 0) { onGameEnd?.(winStats); return; }
+    const t = window.setTimeout(() => setWinCountdown(c => c - 1), 1000);
+    return () => window.clearTimeout(t);
+  }, [winStats, winCountdown, onGameEnd]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -280,36 +365,31 @@ export function NewGameViewECS({
     };
   }, [session]);
 
-  useEffect(() => {
-    if (!showNerdBrief || snapshot.status !== 'playing') return;
-    const timer = window.setTimeout(() => dismissNerdBrief(), 12000);
-    return () => window.clearTimeout(timer);
-  }, [showNerdBrief, snapshot.status, dismissNerdBrief]);
-
-  useEffect(() => {
-    if (!showNerdBrief || snapshot.status !== 'playing') return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Enter' || e.key === 'Escape' || e.key === ' ') {
-        dismissNerdBrief();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [showNerdBrief, snapshot.status, dismissNerdBrief]);
-
-  // Handle class selection confirmation - create game and start pre-game sequence
-  const handleClassConfirm = useCallback(async () => {
+  // Shared game creation — called by both first-run and quick-replay
+  const startGame = useCallback(async (skip: boolean) => {
     setShowClassSelection(false);
+    if (!skip) {
+      setShowControlsHint(true);
+      controlsHintShownAtRef.current = Date.now();
+    }
+
+    // Show lobby for 2s on first run, skip on quick-replay
+    if (!skip) {
+      setShowLobby(true);
+      setLobbyTick(0);
+      const tickInterval = setInterval(() => setLobbyTick(t => t + 1), 1000);
+      await new Promise<void>(resolve => setTimeout(resolve, 2000));
+      clearInterval(tickInterval);
+      setShowLobby(false);
+    }
+
     setShowPreGame(true);
 
     const host = hostRef.current;
     if (!host) return;
 
-    // Create the game immediately but it will be paused by PreGameSequence
     try {
-      // Clear any previous PIXI canvases/UI attached to the host.
       host.replaceChildren();
-
       const game = await createGame({
         container: host,
         isMobile,
@@ -319,17 +399,21 @@ export function NewGameViewECS({
         enableAbilities,
         classType: selectedClass,
       });
-
       gameRef.current = game;
-      
-      // Pause the engine immediately for pre-game sequence
       game.getEngine().pause();
-      
+      // Resume audio contexts — this is called within a user gesture chain
+      // (user clicked "Play as X"), so browsers will allow audio playback
+      game.resumeAudio().catch(() => {});
       cleanupRef.current = installAutomationHooks(host, gameRef, mouseRef);
     } catch (e) {
       onError?.(e as Error);
     }
   }, [isMobile, playerName, playerColor, botCount, enableAbilities, selectedClass, onError]);
+
+  const handleClassConfirm = useCallback(async () => {
+    try { localStorage.setItem('spermrace_last_class', selectedClass); } catch {}
+    await startGame(false);
+  }, [startGame, selectedClass]);
 
   // Handle pre-game sequence completion
   const handlePreGameComplete = useCallback(() => {
@@ -419,6 +503,8 @@ export function NewGameViewECS({
           if (endedRef.current) return;
           endedRef.current = true;
           setSnapshot(finalSnapshot);
+          setGameHint(null);
+          try { localStorage.setItem('spermrace_played_before', '1'); } catch {}
 
           try {
             game.getEngine().pause();
@@ -429,10 +515,21 @@ export function NewGameViewECS({
             kills: finalSnapshot.kills,
             duration: finalSnapshot.elapsed,
             distance: 0,
+            winner: finalSnapshot.status === 'won',
+            killerName: finalSnapshot.killer,
+            totalPlayers: botCount + 1,
           };
 
-          if (finalSnapshot.status === 'dead') onPlayerDeath?.(finalSnapshot.killer);
-          onGameEnd?.(stats);
+          if (finalSnapshot.status === 'dead') {
+            // Show in-game death screen — don't exit to results yet
+            onPlayerDeath?.(finalSnapshot.killer);
+            setPendingDeathStats(stats);
+            setShowDeathScreen(true);
+          } else {
+            // Won — show in-game victory overlay for 3s before results
+            setWinStats(stats);
+            setWinCountdown(3);
+          }
         };
 
         const processCombatEvents = (events: ReadonlyArray<CombatEvent>) => {
@@ -444,19 +541,27 @@ export function NewGameViewECS({
 
           for (const event of events) {
             if (event.type === 'kill' || event.type === 'kill_streak') {
+              const isLocalKill = event.killerId === localPlayerId;
+              const isLocalDeath = event.victimId === localPlayerId;
+              const killerLabel = isLocalKill ? 'YOU' : event.killerName;
+              const victimLabel = isLocalDeath ? 'YOU' : event.victimName;
               feedToAdd.push({
                 id: `${event.timestamp}-${event.killerId}-${event.victimId}`,
-                text: `${event.killerName} eliminated ${event.victimName}`,
-                emphasis: event.killerId === localPlayerId ? 'local' : 'neutral',
+                text: `${killerLabel} ✕ ${victimLabel}`,
+                emphasis: isLocalKill ? 'local' : isLocalDeath ? 'danger' : 'neutral',
                 timestamp: event.timestamp,
               });
-            } else if (event.type === 'death' && event.victimId === localPlayerId) {
-              feedToAdd.push({
-                id: `${event.timestamp}-${event.victimId}-death`,
-                text: 'You were eliminated',
-                emphasis: 'danger',
-                timestamp: event.timestamp,
-              });
+            } else if (event.type === 'death') {
+              const isLocalVictim = event.victimId === localPlayerId;
+              if (isLocalVictim) {
+                const cause = event.killerId === 'zone' ? 'ZONE' : 'own trail';
+                feedToAdd.push({
+                  id: `${event.timestamp}-${event.victimId}-death`,
+                  text: `YOU DIED (${cause})`,
+                  emphasis: 'danger',
+                  timestamp: event.timestamp,
+                });
+              }
             }
 
             if (event.type === 'kill_streak' && event.killerId === localPlayerId && event.streak) {
@@ -504,14 +609,12 @@ export function NewGameViewECS({
           const move = useTouch ? touchMove : keyboard;
           const boost = inputRef.current.boost || mobileBoostHeldRef.current || keys.has('shift') || keys.has(' ');
 
-          if (
-            showNerdBrief &&
-            (Math.abs(move.x) > 0.001 || Math.abs(move.y) > 0.001 || boost)
-          ) {
-            dismissNerdBrief();
+          // Dismiss controls hint after 6s minimum (so players have time to read it)
+          if (showControlsHint && Date.now() - controlsHintShownAtRef.current > 6000) {
+            setShowControlsHint(false);
           }
 
-          // Abilities (optional) - keep it simple for now.
+          // Abilities
           if (enableAbilities) {
             if (keys.has('q')) game.activateAbility('dash');
             if (keys.has('e')) game.activateAbility('shield');
@@ -525,24 +628,26 @@ export function NewGameViewECS({
 
           let targetX = 0;
           let targetY = 0;
+          let hasDirection = false;
           if (playerPos) {
             if (Math.abs(move.x) > 0.001 || Math.abs(move.y) > 0.001) {
               targetX = playerPos.x + move.x * targetDistance;
               targetY = playerPos.y + move.y * targetDistance;
+              hasDirection = true;
             } else if (renderSystem && mouseRef.current.active) {
               const worldPos = renderSystem.screenToWorld(mouseRef.current.x, mouseRef.current.y);
               targetX = worldPos.x;
               targetY = worldPos.y;
-            } else {
-              targetX = playerPos.x + targetDistance;
-              targetY = playerPos.y;
+              hasDirection = true;
             }
+            // No else: hasDirection=false tells InputSystem to keep current heading
           }
 
           game.setInput({
             targetX,
             targetY,
             boost,
+            hasDirection,
             timestamp: Date.now(),
           });
 
@@ -556,6 +661,7 @@ export function NewGameViewECS({
           }
 
           const h = getPlayerHealth();
+          setSpawnProtected(h ? hasSpawnProtection(h) : false);
           const aliveCount = countAlivePlayers();
           const boostEnergy = game.getBoostEnergy();
           const boostPct = boostEnergy.max > 0 ? (boostEnergy.current / boostEnergy.max) * 100 : 0;
@@ -567,6 +673,21 @@ export function NewGameViewECS({
           const status: ViewSnapshot['status'] = isDead ? 'dead' : isWon ? 'won' : 'playing';
           const placement = status === 'won' ? 1 : status === 'dead' ? Math.max(1, aliveCount + 1) : 0;
 
+          const zoneInfo = game.getZoneInfo();
+          const zonePhase = (zoneInfo?.state ?? 'idle') as ViewSnapshot['zonePhase'];
+          const dist = zoneInfo?.distanceFromPlayer ?? 9999;
+
+
+          // Ability cooldown for the selected class
+          const classAbilityMap: Record<SpermClassType, string> = {
+            [SpermClassType.BALANCED]: 'shield',
+            [SpermClassType.SPRINTER]: 'dash',
+            [SpermClassType.TANK]: 'overdrive',
+          };
+          const abilityProgress = enableAbilities
+            ? game.getAbilityProgress(classAbilityMap[selectedClass])
+            : { cooldown: 0, active: 0 };
+
           const nextSnapshot: ViewSnapshot = {
             aliveCount,
             kills,
@@ -575,9 +696,29 @@ export function NewGameViewECS({
             status,
             placement,
             killer: resolveKillerLabel(h?.killerId ?? null, game),
+            zonePhase,
+            isPlayerOutside: dist < 0,
+            isPlayerInDanger: dist >= 0 && dist < 200,
+            timeUntilShrink: Math.ceil((zoneInfo?.timeUntilNextPhaseMs ?? 0) / 1000),
+            abilityCooldownPct: abilityProgress.cooldown,
+            abilityActive: abilityProgress.active > 0,
           };
 
           setSnapshot(nextSnapshot);
+
+          // "1 TRIBUTE REMAINS" dramatic feed entry
+          if (prevAliveCountRef.current > 1 && aliveCount === 1) {
+            setKillFeed((prev) => [
+              ...prev,
+              {
+                id: `tribute-remains-${Date.now()}`,
+                text: '1 TRIBUTE REMAINS',
+                emphasis: 'danger' as const,
+                timestamp: Date.now(),
+              },
+            ].slice(-7));
+          }
+          prevAliveCountRef.current = aliveCount;
 
           if (showToolsPanel) {
             const perfNow = performance.now();
@@ -589,6 +730,9 @@ export function NewGameViewECS({
                 frameMs: debugInfo.timeStats.frameTime,
                 activeEntities: debugInfo.entityManager.active,
                 systemCount: debugInfo.systemCount,
+                queryCacheEntries: debugInfo.entityManager.queryCacheEntries,
+                queryCacheHits: debugInfo.entityManager.queryCacheHits,
+                queryCacheInvalidations: debugInfo.entityManager.queryCacheInvalidations,
                 speed: getPlayerSpeed(),
                 inputMag: Math.hypot(move.x, move.y),
                 boostActive: boost,
@@ -625,56 +769,52 @@ export function NewGameViewECS({
       void safeDestroy(gameRef.current);
       gameRef.current = null;
     };
-  }, [session, isMobile, playerName, playerColor, botCount, enableAbilities, onGameEnd, onPlayerDeath, onError, playerHealthMask, dismissNerdBrief, gameStarted, showPreGame, selectedClass]);
+  }, [session, isMobile, playerName, playerColor, botCount, enableAbilities, onGameEnd, onPlayerDeath, onError, playerHealthMask, gameStarted, showPreGame, selectedClass]);
 
   const summary = useMemo(() => {
     return getViewSummary(snapshot);
   }, [snapshot.status, snapshot.elapsed]);
 
-  const handleReplay = () => {
-    if (onReplay) {
-      onReplay();
-      return;
-    }
-
+  const resetPlayState = () => {
     inputRef.current = { move: { x: 0, y: 0 }, boost: false };
     keyStateRef.current.clear();
     setSnapshot(createInitialSnapshot(botCount));
     setStickUi({ active: false, dx: 0, dy: 0, baseX: 0, baseY: 0 });
     setKillFeed([]);
     setStreakBanner(null);
-    setShowNerdBrief(shouldShowNerdBrief());
     mobileBoostHeldRef.current = false;
     setMobileBoostHeld(false);
     setToolsCopied(false);
-    // Keep same class, just restart
+    prevAliveCountRef.current = botCount + 1;
+    endedRef.current = false;
+    setShowDeathScreen(false);
+    setPendingDeathStats(null);
+  };
+
+  // Change class: show class selection screen then restart
+  const handleReplay = () => {
+    resetPlayState();
     setGameStarted(false);
     setShowClassSelection(true);
     setSession((v) => v + 1);
   };
 
-  // Quick replay with same class
+  // Quick replay: same class, skip showcase + map overview, just countdown
   const handleQuickReplay = () => {
-    if (onReplay) {
-      onReplay();
-      return;
-    }
-
-    inputRef.current = { move: { x: 0, y: 0 }, boost: false };
-    keyStateRef.current.clear();
-    setSnapshot(createInitialSnapshot(botCount));
-    setStickUi({ active: false, dx: 0, dy: 0, baseX: 0, baseY: 0 });
-    setKillFeed([]);
-    setStreakBanner(null);
-    setShowNerdBrief(shouldShowNerdBrief());
-    mobileBoostHeldRef.current = false;
-    setMobileBoostHeld(false);
-    setToolsCopied(false);
-    setShowPreGame(false);
-    // Restart with same class (skip class selection and pre-game)
+    resetPlayState();
     setGameStarted(false);
-    setTimeout(() => setGameStarted(true), 50);
     setSession((v) => v + 1);
+    void startGame(true);
+  };
+
+  // Leave: exit to results screen / lobby
+  const handleLeave = () => {
+    setShowDeathScreen(false);
+    if (pendingDeathStats) {
+      onGameEnd?.(pendingDeathStats);
+    } else {
+      onExit?.();
+    }
   };
 
   const copyToolsSnapshot = useCallback(async () => {
@@ -693,6 +833,18 @@ export function NewGameViewECS({
     } catch {}
   }, []);
 
+  const onMobileAbilityTap = useCallback((e: ReactPointerEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!enableAbilities || !gameRef.current) return;
+    const classAbilityMap: Record<SpermClassType, string> = {
+      [SpermClassType.BALANCED]: 'shield',
+      [SpermClassType.SPRINTER]: 'dash',
+      [SpermClassType.TANK]: 'overdrive',
+    };
+    gameRef.current.activateAbility(classAbilityMap[selectedClass]);
+  }, [enableAbilities, selectedClass]);
+
   const onBoostPointerDown = useCallback((e: ReactPointerEvent<HTMLButtonElement>) => {
     e.preventDefault();
     e.stopPropagation();
@@ -707,6 +859,13 @@ export function NewGameViewECS({
     setMobileBoostHeld(false);
   }, []);
 
+  const abilityKey = selectedClass === SpermClassType.SPRINTER ? 'Q' : selectedClass === SpermClassType.TANK ? 'R' : 'E';
+  const CLASS_ABILITY_NAMES: Record<SpermClassType, string> = {
+    [SpermClassType.BALANCED]: 'SHIELD',
+    [SpermClassType.SPRINTER]: 'DASH',
+    [SpermClassType.TANK]: 'POWER',
+  };
+
   return (
     <div className="ecs-root" data-status={snapshot.status}>
       {/* Class Selection Modal */}
@@ -717,20 +876,36 @@ export function NewGameViewECS({
         visible={showClassSelection}
       />
 
+      {/* Practice Lobby Screen */}
+      {showLobby && (
+        <PracticeLobbyOverlay botCount={botCount} playerName={playerName} tick={lobbyTick} />
+      )}
+
       {/* Pre-Game Sequence */}
       {showPreGame && gameRef.current && (
         <PreGameSequence
           game={gameRef.current}
           selectedClass={selectedClass}
+          totalPlayers={botCount + 1}
+          skipToCountdown={true}
           onComplete={handlePreGameComplete}
         />
       )}
 
       <div ref={hostRef} className="ecs-canvas-host" />
 
+      {/* Dominant alive counter — centered at top */}
+      {snapshot.status === 'playing' && (
+        <div className="ecs-alive-dominant-wrap">
+          <div className={`ecs-alive-dominant${snapshot.aliveCount <= 3 ? ' danger' : ''}`}>
+            <span className="ecs-alive-kicker">{snapshot.aliveCount <= 3 ? 'Final Duel' : 'Alive'}</span>
+            <strong key={snapshot.aliveCount}>{snapshot.aliveCount}</strong>
+          </div>
+        </div>
+      )}
+
       <div className="ecs-hud">
-        <div className="ecs-pill">{summary.statusText}</div>
-        <div className="ecs-metric">ALIVE <strong>{snapshot.aliveCount}</strong></div>
+        <div className="ecs-pill">PRACTICE · {summary.statusText}</div>
         <div className="ecs-metric">KILLS <strong>{snapshot.kills}</strong></div>
         <div className="ecs-metric">TIME <strong>{summary.timeText}</strong></div>
         <div className="ecs-boost-wrap">
@@ -738,6 +913,32 @@ export function NewGameViewECS({
           <div className="ecs-boost-bar"><div className="ecs-boost-fill" style={{ width: `${snapshot.boostPct}%` }} /></div>
         </div>
       </div>
+
+      {/* Zone phase pill */}
+      {snapshot.status === 'playing' && !(snapshot.zonePhase === 'idle' && snapshot.timeUntilShrink <= 0) && (
+        <div className={`ecs-zone-pill is-${snapshot.zonePhase}`}>
+          {snapshot.zonePhase === 'idle'
+            ? `ZONE: ${snapshot.timeUntilShrink}s`
+            : snapshot.zonePhase === 'warning'
+            ? `ZONE CLOSING: ${snapshot.timeUntilShrink}s`
+            : snapshot.zonePhase === 'shrinking' ? 'ZONE SHRINKING'
+            : 'FINAL ZONE'}
+        </div>
+      )}
+      {/* Danger border overlay */}
+      {snapshot.status === 'playing' && snapshot.isPlayerOutside && (
+        <div className="ecs-danger-border" />
+      )}
+
+      {/* Radar */}
+      {snapshot.status === 'playing' && gameRef.current && (
+        <GameRadar game={gameRef.current} playerMask={playerHealthMask} />
+      )}
+
+      {/* Spawn protection indicator */}
+      {snapshot.status === 'playing' && spawnProtected && (
+        <div className="ecs-spawn-shield">SPAWNING — PROTECTED</div>
+      )}
 
       {snapshot.status === 'playing' && killFeed.length > 0 && (
         <div className="ecs-kill-feed" aria-live="polite">
@@ -756,41 +957,21 @@ export function NewGameViewECS({
         </div>
       )}
 
-      {snapshot.status === 'playing' && showNerdBrief && (
-        <div className="ecs-nerd-overlay">
-          <div className="ecs-nerd-card">
-            <div className="ecs-nerd-kicker">FIRST RUN / NERD MODE</div>
-            <h3>What This Game Feels Like</h3>
-            <p>
-              "Yo, this is high-speed vector combat. I steer with precision,
-              weaponize my trail, and out-macro the chaos."
-            </p>
-            <div className="ecs-nerd-grid">
-              <div>
-                <strong>Steer</strong>
-                <span>{isMobile ? 'Left thumb joystick' : 'Mouse or WASD / Arrows'}</span>
-              </div>
-              <div>
-                <strong>Boost</strong>
-                <span>{isMobile ? 'Hold right side' : 'Hold Space / Shift'}</span>
-              </div>
-              <div>
-                <strong>Secure Kills</strong>
-                <span>Slice enemies with your tail, avoid theirs.</span>
-              </div>
-              <div>
-                <strong>Stay Alive</strong>
-                <span>Grab green DNA, avoid the shrinking zone wall.</span>
-              </div>
-            </div>
-            <button
-              type="button"
-              className="ecs-nerd-start"
-              onClick={dismissNerdBrief}
-            >
-              LET ME COOK
-            </button>
-          </div>
+      {snapshot.status === 'playing' && showControlsHint && (
+        <div className="ecs-controls-hint">
+          {isMobile ? (
+            <>
+              <div>Steer with left thumb · Hold right side to <strong>Boost</strong></div>
+              <div>Touch ability button to activate your power</div>
+              <div>Touching any trail kills you · Stay inside the zone</div>
+            </>
+          ) : (
+            <>
+              <div>Mouse to steer · <strong>Space</strong> to Boost · <strong>{abilityKey}</strong> for your ability</div>
+              <div>Touching any trail kills you · Stay inside the shrinking zone</div>
+              <div>Last cell standing wins</div>
+            </>
+          )}
         </div>
       )}
 
@@ -810,6 +991,27 @@ export function NewGameViewECS({
               style={{ transform: `translate(calc(-50% + ${stickUi.dx}px), calc(-50% + ${stickUi.dy}px))` }}
             />
           </div>
+          {enableAbilities && (
+            <button
+              type="button"
+              className={`ecs-mobile-ability-btn${snapshot.abilityActive ? ' is-active' : ''}${snapshot.abilityCooldownPct > 0 ? ' is-cooling' : ''}`}
+              onPointerDown={onMobileAbilityTap}
+              onContextMenu={(e) => e.preventDefault()}
+              aria-label={`${CLASS_ABILITY_NAMES[selectedClass]} ability`}
+              style={{ ['--cooldown-pct' as any]: snapshot.abilityCooldownPct }}
+            >
+              <svg className="ecs-ability-cooldown-ring" viewBox="0 0 48 48" aria-hidden="true">
+                <circle cx="24" cy="24" r="20" className="ecs-ability-ring-track" />
+                <circle
+                  cx="24" cy="24" r="20"
+                  className="ecs-ability-ring-fill"
+                  style={{ strokeDashoffset: `${(1 - snapshot.abilityCooldownPct) * 125.66}` }}
+                />
+              </svg>
+              <span className="ecs-ability-btn-label">{CLASS_ABILITY_NAMES[selectedClass]}</span>
+              <span className="ecs-ability-btn-key">{abilityKey}</span>
+            </button>
+          )}
           <button
             type="button"
             className={`ecs-mobile-boost-btn ${mobileBoostHeld ? 'is-held' : ''}`}
@@ -822,7 +1024,9 @@ export function NewGameViewECS({
           >
             BOOST
           </button>
-          <div className="ecs-mobile-boost-hint">HOLD RIGHT BUTTON OR RIGHT SIDE TO BOOST</div>
+          {showControlsHint && (
+            <div className="ecs-mobile-boost-hint">HOLD RIGHT SIDE TO BOOST</div>
+          )}
         </>
       )}
 
@@ -834,6 +1038,9 @@ export function NewGameViewECS({
             <span>FRAME</span><strong>{toolsSnapshot.frameMs.toFixed(1)}ms</strong>
             <span>ENTITIES</span><strong>{toolsSnapshot.activeEntities}</strong>
             <span>SYSTEMS</span><strong>{toolsSnapshot.systemCount}</strong>
+            <span>QCACHE</span><strong>{toolsSnapshot.queryCacheEntries}</strong>
+            <span>QHITS</span><strong>{toolsSnapshot.queryCacheHits}</strong>
+            <span>QINV</span><strong>{toolsSnapshot.queryCacheInvalidations}</strong>
             <span>SPEED</span><strong>{Math.round(toolsSnapshot.speed)}</strong>
             <span>INPUT</span><strong>{toolsSnapshot.inputMag.toFixed(2)}</strong>
             <span>BOOST</span><strong>{toolsSnapshot.boostActive ? 'ON' : 'OFF'}</strong>
@@ -844,19 +1051,62 @@ export function NewGameViewECS({
         </div>
       )}
 
-      {snapshot.status !== 'playing' && !showClassSelection && (
-        <div className="ecs-end-overlay">
-          <h2>{snapshot.status === 'won' ? 'VICTORY' : 'ELIMINATED'}</h2>
-          <p>Placement: #{snapshot.placement}</p>
-          <p>Kills: {snapshot.kills}</p>
-          <p>Time: {summary.timeText}</p>
-          {snapshot.killer ? <p>Killed by: {snapshot.killer}</p> : null}
-          <div className="ecs-actions">
-            <button type="button" onClick={handleQuickReplay}>REPLAY</button>
-            <button type="button" onClick={handleReplay}>CHANGE CLASS</button>
-            <button type="button" onClick={() => onExit?.()}>EXIT</button>
+      {/* In-game victory overlay — 3s then auto-exits to results */}
+      {winStats && (
+        <div className="ecs-win-overlay">
+          <div className="ecs-win-card">
+            <div className="ecs-win-stamp">VICTORY</div>
+            <div className="ecs-win-sub">Last cell standing</div>
+            <div className="ecs-win-stats-row">
+              <span>{winStats.kills} KILL{winStats.kills !== 1 ? 'S' : ''}</span>
+              <span className="ecs-win-dot">·</span>
+              <span>{Math.floor(winStats.duration / 1000)}s</span>
+            </div>
+            <div className="ecs-win-hook">In a real $5 room you'd win <strong>$42 in SOL</strong></div>
+            <button
+              className="ecs-win-continue"
+              onClick={() => onGameEnd?.(winStats)}
+            >
+              CONTINUE · {winCountdown}
+            </button>
           </div>
         </div>
+      )}
+
+      {/* First-game contextual hints — shown inline, one at a time, first game only */}
+      {gameHint && snapshot.status === 'playing' && (
+        <div className="ecs-game-hint" role="status" aria-live="polite">
+          <div className="ecs-game-hint-body">
+            <span className="ecs-game-hint-icon" aria-hidden="true">
+              {gameHint === 'trail' ? '⚠' : '⚡'}
+            </span>
+            <div>
+              {gameHint === 'trail' && (
+                <><strong>Your trail is deadly</strong><span>Don't cross your own path after leaving it</span></>
+              )}
+              {gameHint === 'ability' && (
+                <><strong>You have an ability</strong><span>Press {selectedClass === SpermClassType.SPRINTER ? 'Q' : selectedClass === SpermClassType.TANK ? 'R' : 'E'} to activate it</span></>
+              )}
+            </div>
+          </div>
+          <button className="ecs-game-hint-dismiss" onClick={() => setGameHint(null)} aria-label="Dismiss hint">✕</button>
+        </div>
+      )}
+
+      {/* In-game death screen — shown on death, player chooses quick replay / change class / leave */}
+      {showDeathScreen && pendingDeathStats && (
+        <DeathScreen
+          placement={pendingDeathStats.placement}
+          totalPlayers={pendingDeathStats.totalPlayers}
+          killerName={pendingDeathStats.killerName}
+          ownTrail={!pendingDeathStats.killerName}
+          kills={pendingDeathStats.kills}
+          timeSurvived={pendingDeathStats.duration / 1000}
+          canSpectate={false}
+          onQuickReplay={handleQuickReplay}
+          onChangeClass={handleReplay}
+          onLeave={handleLeave}
+        />
       )}
     </div>
   );

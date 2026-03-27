@@ -156,13 +156,15 @@ export class LobbyManager {
 
     // Dev-only bot injection (legacy; guarded by ENABLE_DEV_BOTS=true).
     this.injectDevBots(lobby);
+    // Practice bot injection — fills remaining slots with AI bots (guarded by ENABLE_PRACTICE_BOTS=true).
+    this.injectPracticeBots(lobby);
 
-    // Practice requires at least 2 real players (no bots/solo-start unless explicitly configured).
-    // Tournaments can start solo after a silent wait.
+    // Practice requires at least 1 real player when bots fill remaining slots, otherwise 2 real players.
     const realPlayers = lobby.players.filter(p => !String(p).startsWith('BOT_'));
-    if (realPlayers.length < 2) {
+    const minRealToStart = (lobby.mode === 'practice' && isPracticeBotsEnabled()) ? 1 : 2;
+    if (realPlayers.length < minRealToStart) {
       if (lobby.mode === 'practice') {
-        console.log(`[LOBBY] Practice mode waiting for minimum 2 real players (current: ${realPlayers.length})`);
+        console.log(`[LOBBY] Practice mode waiting for minimum ${minRealToStart} real player(s) (current: ${realPlayers.length})`);
         // Don't start countdown - wait for another player
       } else {
         const silentWaitMs = 10000; // 10 seconds silent (reduced from 30s for faster queue times)
@@ -176,7 +178,7 @@ export class LobbyManager {
         }, silentWaitMs);
       }
     } else {
-      // Multiple players: start countdown immediately
+      // Enough real players (or 1 real + bots): start countdown
       this.startLobbyCountdown(lobby);
     }
   }
@@ -214,9 +216,10 @@ export class LobbyManager {
     // Re-evaluate countdown after a leave so remaining players don't get stuck in waiting forever.
     if (lobby.status === 'waiting') {
       const realPlayers = lobby.players.filter(p => !String(p).startsWith('BOT_'));
-      if (realPlayers.length < 2) {
+      const minRealToStart = (lobby.mode === 'practice' && isPracticeBotsEnabled()) ? 1 : 2;
+      if (realPlayers.length < minRealToStart) {
         if (lobby.mode === 'practice') {
-          // Practice is pure multiplayer: never run countdown loops with <2 real players.
+          // Not enough real players — hold for another player to join.
           return;
         } else {
           const silentWaitMs = 10000; // 10 seconds silent (reduced from 30s for faster queue times)
@@ -303,16 +306,18 @@ export class LobbyManager {
   private startLobbyCountdown(lobby: Lobby): void {
     if (lobby.status !== 'waiting') return;
     const realPlayers = lobby.players.filter(p => !String(p).startsWith('BOT_'));
-    if (lobby.mode === 'practice' && realPlayers.length < 2) {
-      // Practice is pure multiplayer: don't start countdown until 2 real players are present.
+    const minRealToStart = (lobby.mode === 'practice' && isPracticeBotsEnabled()) ? 1 : 2;
+    if (lobby.mode === 'practice' && realPlayers.length < minRealToStart) {
+      // Not enough real players to start.
       return;
     }
 
     lobby.status = 'starting';
     this.onLobbyUpdate?.(lobby);
 
-    // Keep counts healthy at countdown start (dev bots only when enabled).
+    // Keep counts healthy at countdown start.
     this.injectDevBots(lobby);
+    this.injectPracticeBots(lobby);
 
     // mark countdown start
     if (!this.lobbyCountdownStartMs.get(lobby.lobbyId)) {
@@ -396,14 +401,15 @@ export class LobbyManager {
       const minPlayers = dynamicMinPlayers();
       const deadline = this.lobbyDeadlineMs.get(lobby.lobbyId) || (Date.now() + LOBBY_MAX_WAIT_SEC * 1000);
       const realPlayers = lobby.players.filter(p => !String(p).startsWith('BOT_'));
+      const minRealRequired = (lobby.mode === 'practice' && isPracticeBotsEnabled()) ? 1 : 2;
       const minOk =
         lobby.mode === 'practice'
-          ? (realPlayers.length >= 2)
+          ? (realPlayers.length >= minRealRequired)
           : (lobby.players.length >= minPlayers);
       const deadlineOk =
         Date.now() >= deadline && (
           lobby.mode === 'practice'
-            ? (realPlayers.length >= 2)
+            ? (realPlayers.length >= minRealRequired)
             : (lobby.players.length >= 2)
         );
       if (minOk || deadlineOk) {

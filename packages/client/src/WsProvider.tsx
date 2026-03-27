@@ -68,6 +68,7 @@ const Ctx = createContext<WsApi>({
 
 const DEFAULT_WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
 const ENV_WS = (import.meta as any).env?.VITE_WS_URL as string | undefined;
+const NETWORK_BACKEND = (((import.meta as any).env?.VITE_NETWORK_BACKEND as string | undefined) || '').toLowerCase();
 const IS_LOCAL = /^(localhost|127\.0\.0\.1)$/i.test(location.hostname);
 const WS_URL = (() => {
   try {
@@ -119,6 +120,39 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
   const reconnectAttemptsRef = useRef<number>(0);
   const reconnectTimerRef = useRef<number | null>(null);
   const storedSessionTokenRef = useRef<{ token: string; expiresAt: number } | null>(null);
+  const wsBaseUrlRef = useRef<string>(WS_URL);
+
+  const withTokenParam = (baseUrl: string, token: string): string => {
+    try {
+      const u = new URL(baseUrl);
+      u.searchParams.set('token', token);
+      return u.toString();
+    } catch {
+      const sep = baseUrl.includes('?') ? '&' : '?';
+      return `${baseUrl}${sep}token=${encodeURIComponent(token)}`;
+    }
+  };
+
+  const resolveWsBaseUrl = async (opts: JoinOpts): Promise<string> => {
+    if (NETWORK_BACKEND !== 'edgegap') return WS_URL;
+    const matchmakeUrl = `${API_BASE}/edgegap/session`;
+    const body = {
+      // For future server-side selectors; safe no-op today.
+      mode: opts.mode ?? (opts.guestName ? 'practice' : 'tournament'),
+      entryFeeTier: opts.entryFeeTier,
+      isGuest: !!opts.guestName,
+    };
+    const resp = await fetch(matchmakeUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data: any = await resp.json().catch(() => ({}));
+    if (!resp.ok || !data?.ok || !data?.wsUrl) {
+      throw new Error(data?.error || `Edgegap matchmaker failed (${resp.status})`);
+    }
+    return String(data.wsUrl);
+  };
 
   // Best-effort cleanup: if the user refreshes/navigates away while queued in a lobby,
   // tell the server immediately so their slot doesn't "ghost" until the WS timeout.
@@ -205,7 +239,17 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
       joinBusyRef.current = true;
 
       // Use standard connection for guest (no HTTP auth needed)
-      const ws = new WebSocket(WS_URL);
+      let baseUrl = WS_URL;
+      try {
+        baseUrl = await resolveWsBaseUrl(opts);
+      } catch (e: any) {
+        console.error('[EDGEGAP] Failed to resolve WS URL:', e);
+        setState(s => ({ ...s, lastError: e?.message || 'Failed to start Edgegap session', phase: 'idle', joining: false }));
+        joinBusyRef.current = false;
+        return;
+      }
+      wsBaseUrlRef.current = baseUrl;
+      const ws = new WebSocket(baseUrl);
       wsRef.current = ws;
 
       // Reuse standard attach for message handling
@@ -348,7 +392,17 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Now connect WebSocket with session token
-    const wsUrlWithToken = sessionToken ? `${WS_URL}?token=${sessionToken}` : WS_URL;
+    let baseUrl = WS_URL;
+    try {
+      baseUrl = await resolveWsBaseUrl(opts);
+    } catch (e: any) {
+      console.error('[EDGEGAP] Failed to resolve WS URL:', e);
+      setState(s => ({ ...s, lastError: e?.message || 'Failed to start Edgegap session', phase: 'ended', joining: false }));
+      joinBusyRef.current = false;
+      return;
+    }
+    wsBaseUrlRef.current = baseUrl;
+    const wsUrlWithToken = sessionToken ? withTokenParam(baseUrl, sessionToken) : baseUrl;
     console.log(`[WS] Connecting with HTTP auth token → url=${wsUrlWithToken.replace(/token=.+/, 'token=***')}`);
     try { await fetch(`${API_BASE}/analytics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'debug_ws_creating_with_token' }) }); } catch { }
 
@@ -370,8 +424,9 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
         }
       };
       sock.onerror = (e: any) => {
+        const currentBase = wsBaseUrlRef.current || WS_URL;
         // Only retry fallback if we're on localhost
-        if (!triedDefault && IS_LOCAL && WS_URL !== DEFAULT_WS_URL) {
+        if (!triedDefault && IS_LOCAL && currentBase !== DEFAULT_WS_URL) {
           console.warn('[WS] error → retrying default /ws once');
           try { sock.close(); } catch { }
           const ws2 = new WebSocket(DEFAULT_WS_URL);
@@ -399,7 +454,8 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
             try {
               console.log('[WS] reconnecting...');
               const token = !isGuestRef.current ? getStoredSessionToken() : null;
-              const url = token ? `${WS_URL}?token=${encodeURIComponent(token.token)}` : WS_URL;
+              const base = wsBaseUrlRef.current || WS_URL;
+              const url = token ? withTokenParam(base, token.token) : base;
               const ws3 = new WebSocket(url);
               attach(ws3, true);
             } catch (e) { console.error('[WS] reconnect failed to initiate', e); }

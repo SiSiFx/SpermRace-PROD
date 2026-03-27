@@ -3,6 +3,9 @@ export interface GameStats {
   kills: number;
   duration: number;
   distance: number;
+  winner: boolean;
+  killerName: string | null;
+  totalPlayers: number;
 }
 
 export type TouchState = {
@@ -21,4 +24,12 @@ export type ViewSnapshot = {
   status: ViewStatus;
   placement: number;
   killer: string | null;
+  zonePhase: 'idle' | 'warning' | 'shrinking' | 'final';
+  isPlayerOutside: boolean;
+  isPlayerInDanger: boolean;
+  timeUntilShrink: number;
+  /** Ability cooldown 0-1 (0=ready, >0=on cooldown, counts down) */
+  abilityCooldownPct: number;
+  /** Whether ability is currently active */
+  abilityActive: boolean;
 };
