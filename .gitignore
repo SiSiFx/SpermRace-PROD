@@ -86,3 +86,4 @@ data/
 # Output/screenshot artifacts
 output/
 packages/client/output/
+.env.backup
