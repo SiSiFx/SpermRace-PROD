@@ -100,9 +100,11 @@
   letter-spacing: 0.05em;
 }
 
-.brutal-close-btn:hover {
-  border-color: var(--pr-accent-primary);
-  color: var(--pr-accent-primary);
+@media (hover: hover) {
+  .brutal-close-btn:hover {
+    border-color: var(--pr-accent-primary);
+    color: var(--pr-accent-primary);
+  }
 }
 
 .brutal-close-btn:active {
@@ -125,8 +127,10 @@
   transition: all 0.2s ease;
 }
 
-.brutal-step:hover {
-  border-color: var(--pr-border-default);
+@media (hover: hover) {
+  .brutal-step:hover {
+    border-color: var(--pr-border-default);
+  }
 }
 
 .brutal-step-header {

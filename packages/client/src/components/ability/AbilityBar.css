@@ -99,10 +99,12 @@
   height: 56px;
 }
 
-.ability-slot:hover:not(:disabled) {
-  border-color: var(--bio-cyan);
-  box-shadow: 0 0 35px rgba(0, 247, 255, 0.5);
-  transform: translateY(-3px);
+@media (hover: hover) {
+  .ability-slot:hover:not(:disabled) {
+    border-color: var(--bio-cyan);
+    box-shadow: 0 0 35px rgba(0, 247, 255, 0.5);
+    transform: translateY(-3px);
+  }
 }
 
 .ability-slot:active:not(:disabled) {

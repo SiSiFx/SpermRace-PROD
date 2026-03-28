@@ -70,8 +70,12 @@ export const MiniMap = memo(function MiniMap({ show = true, worldWidth = 8000, w
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const width = canvas.width;
-    const height = canvas.height;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const width = 140;
+    const height = 100;
+    canvas.width  = width * dpr;
+    canvas.height = height * dpr;
+    ctx.scale(dpr, dpr);
     const padding = 4;
     const mapWidth = width - padding * 2;
     const mapHeight = height - padding * 2;
@@ -80,7 +84,7 @@ export const MiniMap = memo(function MiniMap({ show = true, worldWidth = 8000, w
 
     const render = () => {
       // Clear canvas
-      ctx.clearRect(0, 0, width, height);
+      ctx.clearRect(0, 0, width, height); // logical px — correct after ctx.scale(dpr)
 
       // Draw background
       ctx.fillStyle = 'rgba(10, 15, 25, 0.85)';

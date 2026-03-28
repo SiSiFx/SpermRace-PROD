@@ -94,10 +94,12 @@
   z-index: 10;
 }
 
-.wallet-close-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
-  color: var(--text-primary);
+@media (hover: hover) {
+  .wallet-close-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: var(--text-primary);
+  }
 }
 
 /* =========================================
@@ -196,10 +198,12 @@
   letter-spacing: 0.05em;
 }
 
-.wallet-disconnect-btn:hover {
-  border-color: var(--accent-cyan);
-  color: var(--accent-cyan);
-  background: rgba(34, 211, 238, 0.1);
+@media (hover: hover) {
+  .wallet-disconnect-btn:hover {
+    border-color: var(--accent-cyan);
+    color: var(--accent-cyan);
+    background: rgba(34, 211, 238, 0.1);
+  }
 }
 
 /* =========================================
@@ -328,9 +332,11 @@
   text-align: left;
 }
 
-.wallet-option:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.15);
+@media (hover: hover) {
+  .wallet-option:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.15);
+  }
 }
 
 .wallet-option-icon {
@@ -429,10 +435,12 @@
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.wallet-help-btn:hover {
-  background: rgba(34, 211, 238, 0.1);
-  border-color: rgba(34, 211, 238, 0.3);
-  color: var(--accent-cyan);
+@media (hover: hover) {
+  .wallet-help-btn:hover {
+    background: rgba(34, 211, 238, 0.1);
+    border-color: rgba(34, 211, 238, 0.3);
+    color: var(--accent-cyan);
+  }
 }
 
 /* =========================================

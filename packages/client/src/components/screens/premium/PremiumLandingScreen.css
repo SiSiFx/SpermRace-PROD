@@ -107,9 +107,11 @@
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
 }
-.landing-nav-btn:hover {
-  color: var(--l-text);
-  border-color: rgba(255, 255, 255, 0.2);
+@media (hover: hover) {
+  .landing-nav-btn:hover {
+    color: var(--l-text);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
 }
 .landing-nav-btn:focus-visible {
   outline: 2px solid var(--l-gold);
@@ -198,10 +200,12 @@
   white-space: nowrap;
   box-shadow: 0 0 20px rgba(201, 147, 61, 0.2), 0 2px 8px rgba(0, 0, 0, 0.4);
 }
-.landing-cta-primary:hover {
-  background: var(--l-gold-hi);
-  transform: translateY(-2px);
-  box-shadow: 0 0 40px rgba(240, 213, 156, 0.35), 0 6px 20px rgba(0, 0, 0, 0.4);
+@media (hover: hover) {
+  .landing-cta-primary:hover {
+    background: var(--l-gold-hi);
+    transform: translateY(-2px);
+    box-shadow: 0 0 40px rgba(240, 213, 156, 0.35), 0 6px 20px rgba(0, 0, 0, 0.4);
+  }
 }
 .landing-cta-primary:active {
   transform: translateY(0);
@@ -238,9 +242,11 @@
   border-radius: 8px;
   transition: color 0.15s, border-color 0.15s;
 }
-.landing-cta-secondary:hover {
-  color: var(--l-text);
-  border-color: rgba(255, 255, 255, 0.22);
+@media (hover: hover) {
+  .landing-cta-secondary:hover {
+    color: var(--l-text);
+    border-color: rgba(255, 255, 255, 0.22);
+  }
 }
 .landing-cta-secondary:focus-visible {
   outline: 2px solid var(--l-gold);
@@ -269,10 +275,12 @@
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
 
-.landing-tier-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--l-text);
-  border-color: rgba(255, 255, 255, 0.16);
+@media (hover: hover) {
+  .landing-tier-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--l-text);
+    border-color: rgba(255, 255, 255, 0.16);
+  }
 }
 .landing-tier-btn:focus-visible {
   outline: 2px solid var(--l-gold);

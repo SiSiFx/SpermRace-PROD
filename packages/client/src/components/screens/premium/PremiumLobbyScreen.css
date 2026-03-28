@@ -127,10 +127,12 @@
     color 180ms ease;
 }
 
-.premium-lobby-back:hover {
-  transform: translateY(-1px);
-  border-color: rgba(var(--lobby-accent-rgb), 0.26);
-  color: #fff2d7;
+@media (hover: hover) {
+  .premium-lobby-back:hover {
+    transform: translateY(-1px);
+    border-color: rgba(var(--lobby-accent-rgb), 0.26);
+    color: #fff2d7;
+  }
 }
 
 .premium-lobby-topbar-right {
@@ -359,9 +361,11 @@
     box-shadow 180ms ease;
 }
 
-.premium-lobby-launch:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 18px 42px rgba(var(--lobby-accent-rgb), 0.16);
+@media (hover: hover) {
+  .premium-lobby-launch:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 42px rgba(var(--lobby-accent-rgb), 0.16);
+  }
 }
 
 .premium-lobby-autoflow {
@@ -434,9 +438,11 @@
     background 180ms ease;
 }
 
-.premium-lobby-slot:hover {
-  border-color: rgba(var(--lobby-accent-rgb), 0.16);
-  background: rgba(11, 17, 28, 0.84);
+@media (hover: hover) {
+  .premium-lobby-slot:hover {
+    border-color: rgba(var(--lobby-accent-rgb), 0.16);
+    background: rgba(11, 17, 28, 0.84);
+  }
 }
 
 .premium-lobby-slot.is-me {

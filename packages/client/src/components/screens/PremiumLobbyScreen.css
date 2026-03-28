@@ -125,8 +125,10 @@
   transition: color var(--transition-normal);
 }
 
-.premium-back-btn:hover {
-  color: var(--text-primary);
+@media (hover: hover) {
+  .premium-back-btn:hover {
+    color: var(--text-primary);
+  }
 }
 
 .premium-mode-badge {
@@ -431,8 +433,10 @@
   }
 }
 
-.premium-player-slot:hover {
-  transform: translateY(-2px);
+@media (hover: hover) {
+  .premium-player-slot:hover {
+    transform: translateY(-2px);
+  }
 }
 
 .premium-player-slot.is-me {

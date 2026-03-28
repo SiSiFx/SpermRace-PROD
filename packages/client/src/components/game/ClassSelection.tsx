@@ -281,8 +281,13 @@ const AbilityDemo = memo(function AbilityDemo({
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    const W = canvas.width;
-    const H = canvas.height;
+    // Scale backing store to device pixel ratio for crisp rendering on HiDPI/mobile
+    const dpr = Math.round(window.devicePixelRatio || 1);
+    const W = 300;
+    const H = 80;
+    canvas.width  = W * dpr;
+    canvas.height = H * dpr;
+    ctx.scale(dpr, dpr);
     let startTime = 0;
     let raf: number;
 

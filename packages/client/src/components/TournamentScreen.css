@@ -95,14 +95,15 @@
   z-index: 0;
 }
 
-.sr-tier-card:hover:not(.sr-tier-disabled)::before {
-  opacity: 0.08;
-}
-
-.sr-tier-card:hover:not(.sr-tier-disabled) {
-  border-color: var(--tier-color);
-  transform: translateY(-4px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+@media (hover: hover) {
+  .sr-tier-card:hover:not(.sr-tier-disabled)::before {
+    opacity: 0.08;
+  }
+  .sr-tier-card:hover:not(.sr-tier-disabled) {
+    border-color: var(--tier-color);
+    transform: translateY(-4px);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  }
 }
 
 .sr-tier-card.sr-tier-disabled {
