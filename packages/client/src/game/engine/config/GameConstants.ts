@@ -84,13 +84,13 @@ export const BOT_AI_TUNING = {
  */
 export const CAR_PHYSICS = {
   /** Base movement speed (pixels/second) */
-  BASE_SPEED: 420,
+  BASE_SPEED: 500,
 
   /** Boost speed (pixels/second) */
-  BOOST_SPEED: 780,
+  BOOST_SPEED: 930,
 
   /** Maximum speed cap */
-  MAX_SPEED: 860,
+  MAX_SPEED: 1000,
 
   /** Acceleration rate */
   ACCELERATION: 300,
@@ -102,7 +102,7 @@ export const CAR_PHYSICS = {
   LATERAL_DRAG: 0.82,
 
   /** Turn speed (rad/second) */
-  TURN_SPEED: 3.2,
+  TURN_SPEED: 3.5,
 
   /** Turn rate with speed scaling */
   SPEED_TURN_SCALE: 0.18,
@@ -128,19 +128,19 @@ export const BOOST_CONFIG = {
   MAX_ENERGY: 100,
 
   /** Minimum energy to start boosting */
-  MIN_ENERGY: 20,
+  MIN_ENERGY: 25,
 
   /** Speed multiplier while boosting */
   SPEED_MULTIPLIER: 1.8,
 
   /** Energy regeneration rate (energy/second) */
-  REGEN_RATE: 17,
+  REGEN_RATE: 12,
 
   /** Energy consumption rate (energy/second) */
-  CONSUMPTION_RATE: 22,
+  CONSUMPTION_RATE: 40,
 
   /** Instant boost energy reward for securing a kill */
-  KILL_REWARD_ENERGY: 45,
+  KILL_REWARD_ENERGY: 55,
 
   /** Boost trail width multiplier */
   TRAIL_WIDTH_MULTIPLIER: 2,
@@ -160,7 +160,7 @@ export const BOOST_CONFIG = {
  */
 export const TRAIL_CONFIG = {
   /** Trail lifetime (ms) — how long a trail segment stays lethal */
-  LIFETIME_MS: 4500,
+  LIFETIME_MS: 5500,
 
   /** Final circle trail lifetime (ms) */
   FINAL_LIFETIME_MS: 3000,
@@ -177,8 +177,8 @@ export const TRAIL_CONFIG = {
   /** Boosted trail width */
   BOOSTED_WIDTH: 9,
 
-  /** Maximum trail points per car — 4.5s at 420px/s ÷ 4px per point */
-  MAX_POINTS: 480,
+  /** Maximum trail points per car — 5.5s at 500px/s ÷ 4px per point */
+  MAX_POINTS: 688,
 
   /** Trail fade out duration (ms) */
   FADE_OUT_DURATION_MS: 500,
