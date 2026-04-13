@@ -10,11 +10,11 @@ type Tier = {
 };
 
 const TIERS: Tier[] = [
-  { name: 'Free',  usd: 0,   prize: null   },
-  { name: '$1',    usd: 1,   prize: '$8'   },
-  { name: '$5',    usd: 5,   prize: '$42',  recommended: true },
-  { name: '$25',   usd: 25,  prize: '$212' },
-  { name: '$100',  usd: 100, prize: '$850' },
+  { name: 'Free',  usd: 0,   prize: null    },
+  { name: '$1',    usd: 1,   prize: '$10'   },
+  { name: '$5',    usd: 5,   prize: '$50',   recommended: true },
+  { name: '$25',   usd: 25,  prize: '$250'  },
+  { name: '$100',  usd: 100, prize: '$1000' },
 ];
 
 export interface PremiumLandingScreenProps {
@@ -52,7 +52,7 @@ export const PremiumLandingScreen = memo(function PremiumLandingScreen({
 
       <main className="landing-stage">
         <h1 className="landing-headline">
-          <span className="landing-headline-line">12 enter.</span>
+          <span className="landing-headline-line">36 enter.</span>
           <span className="landing-headline-line is-gold">1 gets paid.</span>
         </h1>
 
