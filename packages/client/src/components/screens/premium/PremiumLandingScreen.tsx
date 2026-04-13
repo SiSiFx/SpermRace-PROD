@@ -1,5 +1,4 @@
 import { memo, useCallback, useState } from 'react';
-import { ArrowRight } from 'phosphor-react';
 import './PremiumLandingScreen.css';
 import { SpermBackground } from './SpermBackground';
 
@@ -18,7 +17,6 @@ const TIERS: Tier[] = [
   { name: '$100',     usd: 100, prize: '$850' },
 ];
 
-
 export interface PremiumLandingScreenProps {
   solPrice?: number | null;
   onPractice?: () => void;
@@ -32,8 +30,6 @@ export const PremiumLandingScreen = memo(function PremiumLandingScreen({
   onPractice,
   onWallet,
   onLeaderboard,
-  onHelp,
-  isNewPlayer,
 }: PremiumLandingScreenProps) {
   const [selected, setSelected] = useState(2); // default: $5
   const tier = TIERS[selected];
@@ -50,41 +46,16 @@ export const PremiumLandingScreen = memo(function PremiumLandingScreen({
       <div className="landing-shell">
         <header className="landing-header">
           <span className="landing-logo">SpermRace.io</span>
-          <div className="landing-header-nav">
-            <button className="landing-nav-btn" onClick={onLeaderboard}>
-              Leaderboard
-            </button>
-            <button className="landing-nav-btn" onClick={onHelp}>
-              How to Play
-            </button>
-          </div>
+          <button className="landing-nav-btn" onClick={onLeaderboard}>
+            Leaderboard
+          </button>
         </header>
 
         <main className="landing-hero">
-
-          <p className="landing-eyebrow">Pick a room · last one alive wins · paid in SOL</p>
-
           <h1 className="landing-headline">
             12 enter.<br />
             <span className="landing-headline-gold">1 gets paid.</span>
           </h1>
-
-          <p className="landing-subline">Slither. Trap. Outlast. Winner takes all.</p>
-
-          <div className="landing-howto" aria-label="How it works">
-            <div className="landing-howto-item">
-              <span className="landing-howto-title">Always moving</span>
-              <span className="landing-howto-desc">You can't stop — steer with mouse</span>
-            </div>
-            <div className="landing-howto-item">
-              <span className="landing-howto-title">One touch = dead</span>
-              <span className="landing-howto-desc">Any trail kills instantly, even yours</span>
-            </div>
-            <div className="landing-howto-item">
-              <span className="landing-howto-title">Last alive wins</span>
-              <span className="landing-howto-desc">Winner takes the entire prize pool</span>
-            </div>
-          </div>
 
           <div className="landing-tiers" role="group" aria-label="Choose room">
             <span className="landing-tiers-label">Choose your room</span>
@@ -104,32 +75,16 @@ export const PremiumLandingScreen = memo(function PremiumLandingScreen({
           <div className="landing-actions">
             <button className="landing-cta-primary" onClick={handlePrimary}>
               <span key={tier.usd} className="landing-cta-content">
-                {tier.usd === 0
-                  ? 'Start practice'
-                  : `Enter ${tier.name} room`}
-                {tier.prize && (
-                  <span className="landing-cta-prize">→ win {tier.prize}</span>
-                )}
-                {!tier.prize && <ArrowRight size={18} weight="bold" />}
+                {tier.usd === 0 ? 'Start practice' : `Enter ${tier.name} room`}
+                {tier.prize && <span className="landing-cta-prize">→ win {tier.prize}</span>}
               </span>
             </button>
-
             {tier.usd !== 0 && (
               <button className="landing-cta-secondary" onClick={onPractice}>
                 Practice free
               </button>
             )}
           </div>
-
-          {isNewPlayer && tier.usd > 0 && (
-            <p className="landing-new-player">
-              First time?{' '}
-              <button className="landing-new-player-link" onClick={onPractice}>
-                Try one free game first
-              </button>
-              {' '}— takes 60 seconds.
-            </p>
-          )}
         </main>
       </div>
     </div>
