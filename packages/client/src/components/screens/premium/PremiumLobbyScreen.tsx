@@ -205,6 +205,7 @@ export const PremiumLobbyScreen = memo(function PremiumLobbyScreen({
       ? (onStart ? 'Manual launch available' : 'Waiting for server handoff')
       : 'Queue still gathering';
   const playerSlots = buildPlayerSlots(players, playerNames, playerId, maxPlayers);
+  const refundCountdown = (state.lobby as any)?.refundCountdown as number | undefined;
 
   return (
     <motion.div
@@ -252,6 +253,12 @@ export const PremiumLobbyScreen = memo(function PremiumLobbyScreen({
             </h1>
 
             <p className="premium-lobby-subtitle">{subtitle}</p>
+
+            {refundCountdown !== undefined && refundCountdown > 0 && entryFee > 0 && (
+              <p className="premium-lobby-refund-warning">
+                No other players joined. Your ${entryFee} will be refunded in {refundCountdown}s.
+              </p>
+            )}
 
             <div className="premium-lobby-strips" aria-label="Lobby summary">
               <div className="premium-lobby-strip">

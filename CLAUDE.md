@@ -27,9 +27,11 @@ packages/
 
 ```
 src/
-  AppUnified.tsx            Screen router: landing | practice-solo | wallet | lobby | game | results
+  AppUnified.tsx            Screen router: landing | practice-solo | lobby | game | results
   WsProvider.tsx            WebSocket connection + state (auth, lobby, game, payment)
-  WalletProviderNew.tsx     Solana wallet adapter (Phantom, Solflare, Coinbase, Trust, WalletConnect, Mobile)
+  WalletProvider.tsx        Context bridge — wraps WalletProviderNew, exposes connect/disconnect/publicKey
+  WalletProviderNew.tsx     Solana wallet adapter (Coinbase, Trust, WalletConnect, Mobile)
+                            Phantom + Solflare omitted — auto-register via Wallet Standard API
 
   game/engine/
     NewGameViewECS.tsx      Main React wrapper — class selection, input loop, win overlay, death screen
@@ -90,15 +92,18 @@ Input → Physics → Camera → Zone → Trail (collision) → Powerup → Abil
 ## Key Config (GameConstants.ts)
 
 ```
-CAR_PHYSICS.BASE_SPEED = 315 px/s
-CAR_PHYSICS.BOOST_SPEED = 620 px/s
-CAR_PHYSICS.MAX_SPEED = 680 px/s
+CAR_PHYSICS.BASE_SPEED = 420 px/s   (was 315 — increased for faster, more skill-based feel)
+CAR_PHYSICS.BOOST_SPEED = 780 px/s
+CAR_PHYSICS.MAX_SPEED = 860 px/s
 CAR_PHYSICS.TURN_SPEED = 3.2 rad/s
+
+RENDER_CONFIG.DEFAULT_ZOOM = 0.72   (was 1.12 — zoomed out for better spatial awareness)
+RENDER_CONFIG.MOBILE_ZOOM  = 0.72
 
 TRAIL_CONFIG.LIFETIME_MS = 7000
 TRAIL_CONFIG.BASE_WIDTH = 5
 TRAIL_CONFIG.BOOSTED_WIDTH = 9
-TRAIL_CONFIG.MAX_POINTS = 450
+TRAIL_CONFIG.MAX_POINTS = 480       (recalculated for 420px/s)
 
 BOOST_CONFIG.MAX_ENERGY = 100
 BOOST_CONFIG.REGEN_RATE = 17 energy/s
@@ -132,7 +137,9 @@ Arena sizes:
 | Method | Trigger |
 |--------|---------|
 | `_startBoostSound()` | Boost held — turbine roar |
-| `playKill(pitch?)` | Kill confirmed — ascending chime, pitch scales with streak |
+| `playKill(pitch?)` | Kill confirmed — chime + triangle thud, pitch scales with streak |
+| `playNearMiss()` | Opponent trail within 18px — fwit sweep (throttled 400ms) |
+| `playFinalDuel()` | 2 players remain — bass pulses + sting |
 | `playDeath()` | Local player dies — descending whoosh |
 | `playCollision()` | Car-to-car bounce |
 | `playPickup()` | Powerup collected |
@@ -149,10 +156,12 @@ Arena sizes:
 
 ```
 Landing → (practice) → Class selection* → Game → Death/Win overlay → Results
-         → (tournament) → Wallet → Lobby → Class selection* → Game → Results
+         → (tournament) → wallet modal (direct) → Lobby → Class selection* → Game → Results
 
 *Class selection skipped if localStorage has 'spermrace_last_class'
 ```
+
+**Wallet connect flow:** clicking "Enter room" calls `connect()` directly — opens `@solana/wallet-adapter-react-ui` modal. No intermediate WalletScreen. On mobile always shows modal; on desktop tries last used wallet first (2.5s timeout), then falls back to modal.
 
 **Win overlay:** VICTORY stamp → 3s countdown → auto-exits to Results. Manual CONTINUE button skips countdown.
 
@@ -255,18 +264,23 @@ NODE_ENV=production
 | Abilities (Shield/Dash/Trap/Overdrive) | WORKING |
 | Solana wallet + tournament entry + payout | WORKING |
 | Sine-wave tail animation | WORKING |
-| Sound effects (all) | WORKING |
+| Sound effects (all) + near-miss + final duel | WORKING |
 | Class selection + persistence | WORKING |
 | Win overlay (3s countdown) | WORKING |
 | Red trail halo on opponents | WORKING |
 | Spawn spread (60% arena, 600px sep) | WORKING |
 | Mobile controls + boost hint | WORKING |
 | Kill streaks + floating text | WORKING |
+| Kill counter pulse animation | WORKING |
+| Final duel escalation (2 players left) | WORKING |
 | Minimap / leaderboard HUD | WORKING |
 | Solana RPC proxy (key server-side) | WORKING |
+| Countdown animation (SVG ring + CSS-driven) | WORKING |
+| Landing page (animations, grain, vignette, glow) | WORKING |
+| Wallet connect → direct modal, no intermediate screen | WORKING |
 
 ## Known issues / next priorities
 
-- AppUnified.AppUnified chunk is ~2MB uncompressed (code-split opportunity)
+- AppUnified chunk is ~2MB uncompressed (code-split `NewGameViewECS` + heavy game systems)
 - No dispute/refund flow for failed on-chain payments
 - Prize pool key in memory (no multi-sig / hardware wallet)

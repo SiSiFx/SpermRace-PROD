@@ -21,6 +21,11 @@ export interface GameViewWrapperProps {
 
   /** Called when game ends with stats (death or win) */
   onGameEnd?: (stats: any) => void;
+
+  /** Called when player wins practice and clicks "Play Real" */
+  onPlayReal?: () => void;
+  /** Prize label shown on the "play for real" upsell CTA */
+  playRealPrize?: string;
 }
 
 /**
@@ -32,6 +37,8 @@ export const GameViewWrapper = memo(function GameViewWrapperComponent({
   onReplay,
   onExit,
   onGameEnd,
+  onPlayReal,
+  playRealPrize,
 }: GameViewWrapperProps) {
   const flagsRef = useRef(getFeatureFlags());
   const [gameError, setGameError] = useState<string | null>(null);
@@ -118,6 +125,8 @@ export const GameViewWrapper = memo(function GameViewWrapperComponent({
         onPlayerDeath={handlePlayerDeath}
         onError={handleError}
         onExit={onExit}
+        onPlayReal={onPlayReal}
+        playRealPrize={playRealPrize}
       />
     </div>
   );

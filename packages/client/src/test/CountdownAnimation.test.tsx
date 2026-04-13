@@ -43,7 +43,7 @@ describe('CountdownAnimation', () => {
   it('should render with overlay and scanlines', () => {
     render(<CountdownAnimation isVisible={true} duration={3000} />);
     expect(screen.getByTestId('countdown-overlay')).toBeInTheDocument();
-    expect(document.querySelector('.bru-countdown-scanlines')).toBeTruthy();
+    expect(document.querySelector('.cd-scanlines')).toBeTruthy();
   });
 
   it('should render "GO!" when countdown reaches zero', () => {
@@ -59,7 +59,7 @@ describe('CountdownAnimation', () => {
 
   it('should use expected class names', () => {
     render(<CountdownAnimation isVisible={true} duration={3000} />);
-    expect(screen.getByTestId('countdown-overlay').className).toContain('bru-countdown-overlay');
-    expect(screen.getByTestId('countdown-number').className).toContain('bru-countdown-number');
+    expect(screen.getByTestId('countdown-overlay').className).toContain('cd-overlay');
+    expect(screen.getByTestId('countdown-number').className).toContain('cd-number');
   });
 });

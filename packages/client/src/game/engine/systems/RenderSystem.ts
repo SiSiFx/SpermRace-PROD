@@ -37,6 +37,7 @@ import { getKillPowerGrowthMult } from '../components/KillPower';
 import type { SpermClass } from '../components/SpermClass';
 import { SpermClassType } from '../components/SpermClass';
 import type { TrailSystem } from './TrailSystem';
+import type { AbilitySystem } from './AbilitySystem';
 
 /**
  * Sperm car visual configuration
@@ -184,6 +185,9 @@ export class RenderSystem extends System {
 
   // Powerup graphics cache
   private readonly _powerupGraphics: Map<string, { container: ContainerType; graphics: GraphicsType }> = new Map();
+
+  // Trap graphics cache (one Graphics per trap id)
+  private readonly _trapGraphics: Map<string, GraphicsType> = new Map();
 
   // Component masks
   private readonly _renderableMask: number;
@@ -593,6 +597,9 @@ export class RenderSystem extends System {
     // Render trails
     this._renderTrails(now);
 
+    // Render traps
+    this._renderTraps(now);
+
     // Render effects
     this._renderEffects();
 
@@ -819,7 +826,7 @@ export class RenderSystem extends System {
         }
 
         // Camera micro-shake
-        this._camera.addShake(0.08);
+        this._camera.addShake(0.025);
         break; // Only trigger once per frame
       }
     }
@@ -998,7 +1005,7 @@ export class RenderSystem extends System {
     if (!Number.isFinite(graphics.visualAngle)) {
       graphics.visualAngle = targetVisualAngle;
     }
-    const facingLerp = boost?.isBoosting ? 0.64 : 0.52;
+    const facingLerp = boost?.isBoosting ? 0.18 : 0.10;
     graphics.visualAngle = this._lerpAngle(graphics.visualAngle, targetVisualAngle, facingLerp);
     container.rotation = graphics.visualAngle;
 
@@ -1105,31 +1112,36 @@ export class RenderSystem extends System {
     const ry = baseRadius * PLAYER_VISUAL_CONFIG.BODY_HEIGHT_MULT;
     const color = player.color;
 
-    // Outer bioluminescent glow (large, very soft)
-    bodyGraphics.ellipse(0, 0, rx + 12, ry + 8).fill({ color, alpha: 0.05 });
-    bodyGraphics.ellipse(0, 0, rx + 6, ry + 4).fill({ color, alpha: 0.12 });
+    // Bioluminescent aura — tight concentric fills, light emitting from within
+    bodyGraphics.ellipse(0, 0, rx + 14, ry + 9).fill({ color, alpha: 0.06 });
+    bodyGraphics.ellipse(0, 0, rx + 8,  ry + 5).fill({ color, alpha: 0.14 });
+    bodyGraphics.ellipse(0, 0, rx + 3,  ry + 2).fill({ color, alpha: 0.22 });
 
-    // Boost outer ring
+    // Boost outer ring — extra aura when boosting
     if (isBoosting) {
-      bodyGraphics.ellipse(0, 0, rx + 8, ry + 6).stroke({ width: 1.7, color, alpha: 0.5 });
+      bodyGraphics.ellipse(0, 0, rx + 18, ry + 12).fill({ color, alpha: 0.08 });
+      bodyGraphics.ellipse(0, 0, rx + 10, ry + 7).stroke({ width: 1.7, color, alpha: 0.55 });
     }
 
     // Main head body
-    bodyGraphics.ellipse(0, 0, rx, ry).fill({ color, alpha: 0.92 });
+    bodyGraphics.ellipse(0, 0, rx, ry).fill({ color, alpha: 0.95 });
+
+    // Inner bloom — bright white core that makes it look lit from inside
+    bodyGraphics.ellipse(0, 0, rx * 0.65, ry * 0.6).fill({ color: 0xffffff, alpha: 0.12 });
 
     // Acrosome cap — brighter front half
-    bodyGraphics.ellipse(rx * 0.18, 0, rx * 0.58, ry * 0.82).fill({ color: 0xffffff, alpha: 0.1 });
+    bodyGraphics.ellipse(rx * 0.18, 0, rx * 0.58, ry * 0.82).fill({ color: 0xffffff, alpha: 0.13 });
 
     // Edge stroke for cell membrane look
-    bodyGraphics.ellipse(0, 0, rx, ry).stroke({ width: 1.2, color: 0xffffff, alpha: 0.4 });
+    bodyGraphics.ellipse(0, 0, rx, ry).stroke({ width: 1.4, color: 0xffffff, alpha: 0.55 });
 
     // Highlight spot (top-right, like light catching a wet cell)
-    bodyGraphics.ellipse(rx * 0.28, -ry * 0.28, rx * 0.22, ry * 0.2).fill({ color: 0xffffff, alpha: 0.5 });
+    bodyGraphics.ellipse(rx * 0.28, -ry * 0.28, rx * 0.22, ry * 0.2).fill({ color: 0xffffff, alpha: 0.65 });
 
     // Local player identity ring — bright outer ring so you always know which one is you
     if (player.isLocal) {
-      bodyGraphics.ellipse(0, 0, rx + 9, ry + 6).stroke({ width: 2.5, color: 0xffffff, alpha: 0.55 });
-      bodyGraphics.ellipse(0, 0, rx + 14, ry + 10).stroke({ width: 1.2, color: 0xffffff, alpha: 0.18 });
+      bodyGraphics.ellipse(0, 0, rx + 9, ry + 6).stroke({ width: 2.5, color: 0xffffff, alpha: 0.65 });
+      bodyGraphics.ellipse(0, 0, rx + 16, ry + 11).stroke({ width: 1.2, color: 0xffffff, alpha: 0.22 });
     }
   }
 
@@ -1367,8 +1379,8 @@ export class RenderSystem extends System {
   private _drawGlow(glowGraphics: GraphicsType, color: number): void {
     glowGraphics.clear();
 
-    const pulseFast = 0.4 + Math.sin(this._time * 15) * 0.25;
-    const r = PLAYER_VISUAL_CONFIG.GLOW_RADIUS + Math.sin(this._time * 9) * 2.6;
+    const pulseFast = 0.5 + Math.sin(this._time * 4) * 0.1;
+    const r = PLAYER_VISUAL_CONFIG.GLOW_RADIUS + Math.sin(this._time * 3) * 1.2;
     glowGraphics.ellipse(0, 0, r * 0.9, r * 0.62).fill({
       color,
       alpha: pulseFast * 0.22,
@@ -1594,7 +1606,7 @@ export class RenderSystem extends System {
       if (seg.length < 2) continue;
       const n = seg.length;
 
-      const buckets = 5;
+      const buckets = 16;
       for (let bucket = 0; bucket < buckets; bucket++) {
         const frac = bucket / (buckets - 1);
         const startIdx = Math.floor((bucket / buckets) * n);
@@ -1604,13 +1616,11 @@ export class RenderSystem extends System {
 
         const width = minWidth + (maxWidth - minWidth) * frac;
         const subPoly: Array<{ x: number; y: number }> = [];
-        let alphaSum = 0;
 
         for (let i = startIdx; i <= endIdx; i++) {
           const pt = seg[i]?.p;
           if (!pt) continue;
           subPoly.push({ x: pt.x, y: pt.y });
-          alphaSum += seg[i].alpha;
         }
 
         if (subPoly.length < 2) continue;
@@ -1618,7 +1628,9 @@ export class RenderSystem extends System {
         // Catmull-Rom spline smoothing — eliminates angular kinks at sharp turns
         const drawPoly = subPoly.length >= 4 ? this._catmullRomSmooth(subPoly, 2) : subPoly;
 
-        const bucketAlpha = alphaSum / (endIdx - startIdx + 1);
+        // Use midpoint alpha for smooth fade (not average — avoids sudden bucket drops)
+        const midIdx = Math.floor((startIdx + endIdx) / 2);
+        const bucketAlpha = seg[midIdx]?.alpha ?? 1;
 
         this._drawPolylineSegment(
           trailGraphics,
@@ -2107,6 +2119,56 @@ export class RenderSystem extends System {
   }
 
   /**
+   * Render ability traps (orange hazard dots)
+   */
+  private _renderTraps(now: number): void {
+    const abilitySystem = this.getEngine()?.getSystemManager()?.getSystem<AbilitySystem>('abilities');
+    if (!abilitySystem) return;
+
+    const traps = abilitySystem.getTraps();
+    const layer = this._layers.get(RenderLayer.POWERUPS);
+    if (!layer) return;
+
+    const TRAP_COLOR = 0xffa300; // PICO-8 orange
+    const TRAP_LIFETIME = 8000;
+    const TRAP_RADIUS = 8;
+
+    const activeTrapIds = new Set<string>();
+
+    for (const [trapId, trap] of traps) {
+      activeTrapIds.add(trapId);
+
+      let g = this._trapGraphics.get(trapId);
+      if (!g) {
+        g = new Graphics();
+        layer.addChild(g);
+        this._trapGraphics.set(trapId, g);
+      }
+
+      const age = now - trap.createdAt;
+      const lifeRatio = Math.max(0, 1 - age / TRAP_LIFETIME);
+      // Fade out during last 2 seconds
+      const alpha = age > TRAP_LIFETIME - 2000
+        ? lifeRatio / (2000 / TRAP_LIFETIME)
+        : 1;
+
+      g.clear();
+      for (const pt of trap.trailPoints) {
+        g.circle(pt.x, pt.y, TRAP_RADIUS).fill({ color: TRAP_COLOR, alpha: alpha * 0.85 });
+        g.circle(pt.x, pt.y, TRAP_RADIUS + 3).stroke({ width: 1.5, color: TRAP_COLOR, alpha: alpha * 0.4 });
+      }
+    }
+
+    // Remove graphics for expired/removed traps
+    for (const [id, g] of this._trapGraphics) {
+      if (!activeTrapIds.has(id)) {
+        g.destroy();
+        this._trapGraphics.delete(id);
+      }
+    }
+  }
+
+  /**
    * Create graphics for a powerup
    */
   private _createPowerupGraphics(powerup: PowerupData): { container: ContainerType; graphics: GraphicsType } {
@@ -2341,6 +2403,12 @@ export class RenderSystem extends System {
       }
     }
     this._powerupGraphics.clear();
+
+    // Clean up trap graphics
+    for (const g of this._trapGraphics.values()) {
+      g.destroy();
+    }
+    this._trapGraphics.clear();
 
     // Clean up layers (destroy from bottom to top)
     const layerKeys = Array.from(this._layers.keys());

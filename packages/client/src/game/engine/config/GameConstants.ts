@@ -84,13 +84,13 @@ export const BOT_AI_TUNING = {
  */
 export const CAR_PHYSICS = {
   /** Base movement speed (pixels/second) */
-  BASE_SPEED: 315,
+  BASE_SPEED: 420,
 
   /** Boost speed (pixels/second) */
-  BOOST_SPEED: 620,
+  BOOST_SPEED: 780,
 
   /** Maximum speed cap */
-  MAX_SPEED: 680,
+  MAX_SPEED: 860,
 
   /** Acceleration rate */
   ACCELERATION: 300,
@@ -160,7 +160,7 @@ export const BOOST_CONFIG = {
  */
 export const TRAIL_CONFIG = {
   /** Trail lifetime (ms) — how long a trail segment stays lethal */
-  LIFETIME_MS: 7000,
+  LIFETIME_MS: 4500,
 
   /** Final circle trail lifetime (ms) */
   FINAL_LIFETIME_MS: 3000,
@@ -177,8 +177,8 @@ export const TRAIL_CONFIG = {
   /** Boosted trail width */
   BOOSTED_WIDTH: 9,
 
-  /** Maximum trail points per car — 7s at 315px/s ÷ 5px per point */
-  MAX_POINTS: 450,
+  /** Maximum trail points per car — 4.5s at 420px/s ÷ 4px per point */
+  MAX_POINTS: 480,
 
   /** Trail fade out duration (ms) */
   FADE_OUT_DURATION_MS: 500,
@@ -380,10 +380,10 @@ export const RENDER_CONFIG = {
   CAMERA_SMOOTH_FACTOR: 0.1,
 
   /** Default zoom */
-  DEFAULT_ZOOM: 1.12,
+  DEFAULT_ZOOM: 0.72,
 
   /** Mobile zoom */
-  MOBILE_ZOOM: 0.94,
+  MOBILE_ZOOM: 0.72,
 
   /** Maximum zoom */
   MAX_ZOOM: 2,
@@ -536,16 +536,16 @@ export const PLAYER_VISUAL_CONFIG = {
   TAIL_SEGMENTS_BOOST: 60,
 
   /** Tail wave amplitude (side-to-side motion) - organic undulation */
-  TAIL_AMPLITUDE: 10,
+  TAIL_AMPLITUDE: 7,
 
   /** Tail amplitude when boosting */
-  TAIL_AMPLITUDE_BOOST: 15,
+  TAIL_AMPLITUDE_BOOST: 11,
 
   /** Tail wave speed - smooth organic motion */
-  TAIL_WAVE_SPEED: 31.4,
+  TAIL_WAVE_SPEED: 18.0,
 
   /** Tail wave speed when boosting */
-  TAIL_WAVE_SPEED_BOOST: 44.0,
+  TAIL_WAVE_SPEED_BOOST: 26.0,
 
   /** Base tail width (thickness at body) */
   TAIL_BASE_WIDTH: 8,

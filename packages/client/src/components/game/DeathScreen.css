@@ -206,7 +206,7 @@
 }
 
 .death-stat-label {
-  font-size: 9px;
+  font-size: clamp(9px, 1.8vw, 11px);
   font-weight: 600;
   color: var(--text-muted);
   letter-spacing: 0.08em;
@@ -297,9 +297,9 @@
   background: none;
   border: none;
   color: var(--text-muted);
-  padding-top: 10px;
-  padding-bottom: 10px;
-  min-height: 40px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+  min-height: 44px;
 }
 
 @media (hover: hover) {
@@ -403,7 +403,7 @@
   }
 
   .death-stat-label {
-    font-size: 8px;
+    font-size: 9px;
   }
 
   .death-actions {
@@ -486,7 +486,7 @@
   }
 
   .death-stat-label {
-    font-size: 7px;
+    font-size: 9px;
   }
 
   .death-actions {

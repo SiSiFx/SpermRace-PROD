@@ -86,6 +86,17 @@
   color: #f8fafc;
   font-size: 14px;
   letter-spacing: 0.03em;
+  display: inline-block;
+}
+
+@keyframes killPop {
+  0%   { transform: scale(2.2); color: #00ffcc; }
+  40%  { transform: scale(0.9); }
+  100% { transform: scale(1);   color: #f8fafc; }
+}
+
+.ecs-kill-pop {
+  animation: killPop 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .ecs-boost-wrap {
@@ -674,13 +685,17 @@
 .ecs-game-hint-dismiss {
   background: none;
   border: none;
-  color: rgba(203, 213, 225, 0.35);
-  font-size: 13px;
+  color: rgba(203, 213, 225, 0.65);
+  font-size: 16px;
   cursor: pointer;
-  padding: 4px;
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
   line-height: 1;
-  border-radius: 4px;
+  border-radius: 6px;
   transition: color 0.15s;
 }
 .ecs-game-hint-dismiss:hover { color: rgba(203, 213, 225, 0.8); }
@@ -858,7 +873,7 @@
 
 /* Spawn protection */
 .ecs-spawn-shield {
-  position: fixed;
+  position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
@@ -1002,25 +1017,72 @@
   font-weight: 800;
 }
 
-.ecs-win-continue {
-  margin-top: 8px;
+.ecs-win-play-real {
+  width: 100%;
   background: #c9933d;
   border: none;
   border-radius: 8px;
   color: #08090d;
-  font-size: 13px;
-  font-weight: 800;
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 16px 28px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s, box-shadow 0.15s;
+  animation: win-fade-up 0.4s 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+  box-shadow: 0 0 24px rgba(201, 147, 61, 0.45);
+}
+.ecs-win-play-real:hover {
+  background: #f0d59c;
+  transform: translateY(-2px);
+  box-shadow: 0 0 36px rgba(201, 147, 61, 0.7);
+}
+
+.ecs-win-continue {
+  margin-top: 4px;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px;
+  color: rgba(255,255,255,0.35);
+  font-size: 11px;
+  font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  padding: 12px 28px;
+  padding: 8px 20px;
   cursor: pointer;
-  transition: background 0.15s, transform 0.15s;
-  animation: win-fade-up 0.4s 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transition: color 0.15s, border-color 0.15s;
+  animation: win-fade-up 0.4s 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-.ecs-win-continue:hover { background: #f0d59c; transform: translateY(-2px); }
+.ecs-win-continue:hover { color: rgba(255,255,255,0.65); border-color: rgba(255,255,255,0.25); }
 
 @media (max-width: 480px) {
   .ecs-win-card { padding: 36px 28px 28px; gap: 10px; }
   .ecs-win-stamp { font-size: 3rem; }
-  .ecs-win-continue { padding: 14px 24px; font-size: 12px; width: 100%; }
+  .ecs-win-play-real { padding: 14px 24px; font-size: 13px; }
+  .ecs-win-continue { padding: 8px 18px; font-size: 11px; width: 100%; }
+}
+
+/* ── Landscape mobile ─────────────────────────────────────── */
+@media (max-height: 500px) and (orientation: landscape) {
+  .ecs-joystick-base {
+    width: 90px;
+    height: 90px;
+    bottom: max(12px, env(safe-area-inset-bottom, 0px));
+    left: max(12px, env(safe-area-inset-left, 0px));
+  }
+  .ecs-mobile-ability-btn {
+    width: 58px;
+    height: 58px;
+    bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  }
+  .ecs-mobile-boost-btn {
+    min-width: 80px;
+    height: 46px;
+    bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  }
+  .ecs-controls-hint { display: none; }
+  .ecs-hud { gap: 4px; padding-top: calc(6px + env(safe-area-inset-top, 0px)); }
+  .ecs-pill { padding: 4px 8px; font-size: 9px; }
+  .ecs-metric strong { font-size: 12px; }
 }

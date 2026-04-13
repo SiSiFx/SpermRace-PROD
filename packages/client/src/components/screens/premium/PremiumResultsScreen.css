@@ -470,3 +470,13 @@
   }
 }
 .premium-practice-info { font-size: 12px; color: rgba(255,255,255,0.4); margin-top: 6px; letter-spacing: 0.08em; }
+
+@media (prefers-reduced-motion: reduce) {
+  .premium-glow-orb,
+  .premium-glow-orb-victory,
+  .premium-crown-icon,
+  .premium-prize-amount.winner,
+  .premium-results-icon.winner,
+  .premium-confetti-piece { animation: none; }
+  .premium-results-screen { transition: none; }
+}

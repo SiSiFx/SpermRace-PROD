@@ -12,7 +12,6 @@ import { createInitialSnapshot, getViewSummary } from './view/snapshot';
 import type { GameStats, TouchState, ViewSnapshot } from './view/types';
 import { useDeviceMode } from './view/hooks/useDeviceMode';
 import { useKeyboardState } from './view/hooks/useKeyboardState';
-import { ClassSelection } from '../../components/game/ClassSelection';
 import { PreGameSequence } from '../../components/game/PreGameSequence';
 import { DeathScreen } from '../../components/game/DeathScreen';
 import { GameRadar } from './GameRadar';
@@ -30,6 +29,10 @@ interface NewGameViewECSProps {
   onError?: (error: Error) => void;
   onReplay?: () => void;
   onExit?: () => void;
+  /** Practice win → jump straight to real-money room */
+  onPlayReal?: () => void;
+  /** Prize label shown on the "play for real" upsell (e.g. "$42") */
+  playRealPrize?: string;
 }
 
 type KillFeedItem = {
@@ -168,6 +171,8 @@ export function NewGameViewECS({
   onPlayerDeath,
   onError,
   onExit,
+  onPlayReal,
+  playRealPrize = '$42',
 }: NewGameViewECSProps) {
   const [session, setSession] = useState(0);
   const isMobile = useDeviceMode(900);
@@ -182,17 +187,8 @@ export function NewGameViewECS({
   const [winStats, setWinStats] = useState<GameStats | null>(null);
   const [winCountdown, setWinCountdown] = useState(3);
 
-  // Class selection state — persisted across sessions
-  const [showClassSelection, setShowClassSelection] = useState(() => {
-    try { return !localStorage.getItem('spermrace_last_class'); } catch { return true; }
-  });
-  const [selectedClass, setSelectedClass] = useState<SpermClassType>(() => {
-    try {
-      const v = localStorage.getItem('spermrace_last_class');
-      if (v && Object.values(SpermClassType).includes(v as SpermClassType)) return v as SpermClassType;
-    } catch {}
-    return SpermClassType.BALANCED;
-  });
+  // Class system removed — everyone is balanced
+  const selectedClass = SpermClassType.BALANCED;
   const [gameStarted, setGameStarted] = useState(false);
   const [showPreGame, setShowPreGame] = useState(false);
   const [showLobby, setShowLobby] = useState(false);
@@ -222,7 +218,7 @@ export function NewGameViewECS({
   const isFirstGame = useMemo(() => {
     try { return !localStorage.getItem('spermrace_played_before'); } catch { return false; }
   }, []);
-  const [gameHint, setGameHint] = useState<'trail' | 'ability' | null>(null);
+  const [gameHint, setGameHint] = useState<'trail' | null>(null);
 
   const hostRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<Game | null>(null);
@@ -238,11 +234,9 @@ export function NewGameViewECS({
   // Schedule first-game hints once gameplay begins
   useEffect(() => {
     if (!gameStarted || !isFirstGame) return;
-    const dismiss = (tag: 'trail' | 'ability') =>
-      window.setTimeout(() => setGameHint(h => h === tag ? null : h), 5500);
-    const t1 = window.setTimeout(() => { setGameHint('trail');   dismiss('trail');   }, 2500);
-    const t2 = window.setTimeout(() => { setGameHint('ability'); dismiss('ability'); }, 9500);
-    return () => { window.clearTimeout(t1); window.clearTimeout(t2); };
+    const dismiss = window.setTimeout(() => setGameHint(null), 9000);
+    const t1 = window.setTimeout(() => setGameHint('trail'), 2500);
+    return () => { window.clearTimeout(t1); window.clearTimeout(dismiss); };
   }, [gameStarted, isFirstGame]);
 
   const keyStateRef = useKeyboardState();
@@ -367,7 +361,6 @@ export function NewGameViewECS({
 
   // Shared game creation — called by both first-run and quick-replay
   const startGame = useCallback(async (skip: boolean) => {
-    setShowClassSelection(false);
     if (!skip) {
       setShowControlsHint(true);
       controlsHintShownAtRef.current = Date.now();
@@ -382,8 +375,6 @@ export function NewGameViewECS({
       clearInterval(tickInterval);
       setShowLobby(false);
     }
-
-    setShowPreGame(true);
 
     const host = hostRef.current;
     if (!host) return;
@@ -400,6 +391,8 @@ export function NewGameViewECS({
         classType: selectedClass,
       });
       gameRef.current = game;
+      // Show pre-game sequence only after game is fully initialized and ready
+      setShowPreGame(true);
       game.getEngine().pause();
       // Resume audio contexts — this is called within a user gesture chain
       // (user clicked "Play as X"), so browsers will allow audio playback
@@ -410,10 +403,13 @@ export function NewGameViewECS({
     }
   }, [isMobile, playerName, playerColor, botCount, enableAbilities, selectedClass, onError]);
 
-  const handleClassConfirm = useCallback(async () => {
-    try { localStorage.setItem('spermrace_last_class', selectedClass); } catch {}
-    await startGame(false);
-  }, [startGame, selectedClass]);
+  // Auto-start on mount — no class selection needed
+  const hasAutoStarted = useRef(false);
+  useEffect(() => {
+    if (hasAutoStarted.current) return;
+    hasAutoStarted.current = true;
+    void startGame(false);
+  }, [startGame]);
 
   // Handle pre-game sequence completion
   const handlePreGameComplete = useCallback(() => {
@@ -435,7 +431,7 @@ export function NewGameViewECS({
     // Don't start if we're still in pre-game
     if (showPreGame) return;
     
-    // Game should already be created by handleClassConfirm
+    // Game should already be created by auto-start
     const game = gameRef.current;
     if (!game) return;
 
@@ -521,14 +517,16 @@ export function NewGameViewECS({
           };
 
           if (finalSnapshot.status === 'dead') {
-            // Show in-game death screen — don't exit to results yet
+            // Show in-game death screen — delay so death explosion plays first
             onPlayerDeath?.(finalSnapshot.killer);
             setPendingDeathStats(stats);
-            setShowDeathScreen(true);
+            setTimeout(() => setShowDeathScreen(true), 650);
           } else {
-            // Won — show in-game victory overlay for 3s before results
-            setWinStats(stats);
-            setWinCountdown(3);
+            // Won — delay 900ms so the final kill explosion plays out before overlay
+            setTimeout(() => {
+              setWinStats(stats);
+              setWinCountdown(3);
+            }, 900);
           }
         };
 
@@ -712,7 +710,7 @@ export function NewGameViewECS({
               ...prev,
               {
                 id: `tribute-remains-${Date.now()}`,
-                text: '1 TRIBUTE REMAINS',
+                text: '1 CELL REMAINS',
                 emphasis: 'danger' as const,
                 timestamp: Date.now(),
               },
@@ -791,12 +789,12 @@ export function NewGameViewECS({
     setPendingDeathStats(null);
   };
 
-  // Change class: show class selection screen then restart
+  // Replay: restart game
   const handleReplay = () => {
     resetPlayState();
     setGameStarted(false);
-    setShowClassSelection(true);
     setSession((v) => v + 1);
+    void startGame(true);
   };
 
   // Quick replay: same class, skip showcase + map overview, just countdown
@@ -833,18 +831,6 @@ export function NewGameViewECS({
     } catch {}
   }, []);
 
-  const onMobileAbilityTap = useCallback((e: ReactPointerEvent<HTMLButtonElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!enableAbilities || !gameRef.current) return;
-    const classAbilityMap: Record<SpermClassType, string> = {
-      [SpermClassType.BALANCED]: 'shield',
-      [SpermClassType.SPRINTER]: 'dash',
-      [SpermClassType.TANK]: 'overdrive',
-    };
-    gameRef.current.activateAbility(classAbilityMap[selectedClass]);
-  }, [enableAbilities, selectedClass]);
-
   const onBoostPointerDown = useCallback((e: ReactPointerEvent<HTMLButtonElement>) => {
     e.preventDefault();
     e.stopPropagation();
@@ -859,23 +845,8 @@ export function NewGameViewECS({
     setMobileBoostHeld(false);
   }, []);
 
-  const abilityKey = selectedClass === SpermClassType.SPRINTER ? 'Q' : selectedClass === SpermClassType.TANK ? 'R' : 'E';
-  const CLASS_ABILITY_NAMES: Record<SpermClassType, string> = {
-    [SpermClassType.BALANCED]: 'SHIELD',
-    [SpermClassType.SPRINTER]: 'DASH',
-    [SpermClassType.TANK]: 'POWER',
-  };
-
   return (
     <div className="ecs-root" data-status={snapshot.status}>
-      {/* Class Selection Modal */}
-      <ClassSelection
-        selectedClass={selectedClass}
-        onSelect={setSelectedClass}
-        onConfirm={handleClassConfirm}
-        visible={showClassSelection}
-      />
-
       {/* Practice Lobby Screen */}
       {showLobby && (
         <PracticeLobbyOverlay botCount={botCount} playerName={playerName} tick={lobbyTick} />
@@ -906,7 +877,7 @@ export function NewGameViewECS({
 
       <div className="ecs-hud">
         <div className="ecs-pill">PRACTICE · {summary.statusText}</div>
-        <div className="ecs-metric">KILLS <strong>{snapshot.kills}</strong></div>
+        <div className="ecs-metric">KILLS <strong key={snapshot.kills} className="ecs-kill-pop">{snapshot.kills}</strong></div>
         <div className="ecs-metric">TIME <strong>{summary.timeText}</strong></div>
         <div className="ecs-boost-wrap">
           <span>BOOST</span>
@@ -962,12 +933,11 @@ export function NewGameViewECS({
           {isMobile ? (
             <>
               <div>Steer with left thumb · Hold right side to <strong>Boost</strong></div>
-              <div>Touch ability button to activate your power</div>
               <div>Touching any trail kills you · Stay inside the zone</div>
             </>
           ) : (
             <>
-              <div>Mouse to steer · <strong>Space</strong> to Boost · <strong>{abilityKey}</strong> for your ability</div>
+              <div>Mouse to steer · <strong>Space</strong> to Boost</div>
               <div>Touching any trail kills you · Stay inside the shrinking zone</div>
               <div>Last cell standing wins</div>
             </>
@@ -991,27 +961,6 @@ export function NewGameViewECS({
               style={{ transform: `translate(calc(-50% + ${stickUi.dx}px), calc(-50% + ${stickUi.dy}px))` }}
             />
           </div>
-          {enableAbilities && (
-            <button
-              type="button"
-              className={`ecs-mobile-ability-btn${snapshot.abilityActive ? ' is-active' : ''}${snapshot.abilityCooldownPct > 0 ? ' is-cooling' : ''}`}
-              onPointerDown={onMobileAbilityTap}
-              onContextMenu={(e) => e.preventDefault()}
-              aria-label={`${CLASS_ABILITY_NAMES[selectedClass]} ability`}
-              style={{ ['--cooldown-pct' as any]: snapshot.abilityCooldownPct }}
-            >
-              <svg className="ecs-ability-cooldown-ring" viewBox="0 0 48 48" aria-hidden="true">
-                <circle cx="24" cy="24" r="20" className="ecs-ability-ring-track" />
-                <circle
-                  cx="24" cy="24" r="20"
-                  className="ecs-ability-ring-fill"
-                  style={{ strokeDashoffset: `${(1 - snapshot.abilityCooldownPct) * 125.66}` }}
-                />
-              </svg>
-              <span className="ecs-ability-btn-label">{CLASS_ABILITY_NAMES[selectedClass]}</span>
-              <span className="ecs-ability-btn-key">{abilityKey}</span>
-            </button>
-          )}
           <button
             type="button"
             className={`ecs-mobile-boost-btn ${mobileBoostHeld ? 'is-held' : ''}`}
@@ -1062,12 +1011,22 @@ export function NewGameViewECS({
               <span className="ecs-win-dot">·</span>
               <span>{Math.floor(winStats.duration / 1000)}s</span>
             </div>
-            <div className="ecs-win-hook">In a real $5 room you'd win <strong>$42 in SOL</strong></div>
+            {onPlayReal && (
+              <>
+                <div className="ecs-win-hook">You just beat {winStats.totalPlayers - 1} opponents. Ready for real money?</div>
+                <button
+                  className="ecs-win-play-real"
+                  onClick={onPlayReal}
+                >
+                  PLAY FOR REAL → win {playRealPrize} in SOL
+                </button>
+              </>
+            )}
             <button
               className="ecs-win-continue"
               onClick={() => onGameEnd?.(winStats)}
             >
-              CONTINUE · {winCountdown}
+              {onPlayReal ? `SKIP · ${winCountdown}` : `CONTINUE · ${winCountdown}`}
             </button>
           </div>
         </div>
@@ -1083,9 +1042,6 @@ export function NewGameViewECS({
             <div>
               {gameHint === 'trail' && (
                 <><strong>Your trail is deadly</strong><span>Don't cross your own path after leaving it</span></>
-              )}
-              {gameHint === 'ability' && (
-                <><strong>You have an ability</strong><span>Press {selectedClass === SpermClassType.SPRINTER ? 'Q' : selectedClass === SpermClassType.TANK ? 'R' : 'E'} to activate it</span></>
               )}
             </div>
           </div>
@@ -1104,7 +1060,6 @@ export function NewGameViewECS({
           timeSurvived={pendingDeathStats.duration / 1000}
           canSpectate={false}
           onQuickReplay={handleQuickReplay}
-          onChangeClass={handleReplay}
           onLeave={handleLeave}
         />
       )}

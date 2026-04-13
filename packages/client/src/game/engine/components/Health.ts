@@ -53,6 +53,12 @@ export interface Health {
 
   /** Whether entity was alive last frame (for detecting deaths) */
   wasAlive: boolean;
+
+  /** Whether entity is currently shielded (immune to trail/trap collisions) */
+  shielded?: boolean;
+
+  /** Timestamp when shield expires (ms) */
+  shieldUntil?: number;
 }
 
 /** Component name for type-safe access */

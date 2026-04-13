@@ -104,7 +104,11 @@ export class TrailSystem extends System {
       const velocity = entity.getComponent<Velocity>(ComponentNames.VELOCITY);
 
       if (!trail || !position || !player) continue;
-      if (health && !health.isAlive) continue;
+      if (health && !health.isAlive) {
+        // Kill clears trail instantly — no ghost trail after death
+        if (trail.points.length > 0) trail.points.length = 0;
+        continue;
+      }
       if (!trail.active) continue;
 
       // Don't emit during spawn protection

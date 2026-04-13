@@ -92,17 +92,18 @@ const wss = new WebSocketServer({
 
 const smartContractService = new SmartContractService();
 
-// Database for leaderboards and player stats
-const LEGACY_DATA_DIR = path.resolve(process.cwd(), 'packages/server/data');
-const DEFAULT_DATA_DIR = path.resolve(process.cwd(), 'data');
-const DATA_DIR = fs.existsSync(LEGACY_DATA_DIR) ? LEGACY_DATA_DIR : DEFAULT_DATA_DIR;
-const DB_PATH = (process.env.DB_PATH || '').trim() || path.join(DATA_DIR, 'spermrace.db');
-try { fs.mkdirSync(path.dirname(DB_PATH), { recursive: true }); } catch { }
-const db = new DatabaseService(DB_PATH);
-log.info(`[DB] Using database: ${DB_PATH}`);
+// Database for leaderboards and player stats (Supabase / Postgres)
+const DB_URL = (process.env.DATABASE_URL || '').trim();
+if (!DB_URL && IS_PRODUCTION) {
+  console.error('[FATAL] DATABASE_URL env var is required in production');
+  process.exit(1);
+}
+const db = new DatabaseService(DB_URL || 'postgresql://localhost/spermrace_dev');
+log.info('[DB] Using Supabase/Postgres');
 
 const lobbyManager = new LobbyManager(smartContractService, db);
 const BUILD_SHA = (process.env.GIT_SHA || process.env.COMMIT_SHA || process.env.VERCEL_GIT_COMMIT_SHA || process.env.RENDER_GIT_COMMIT || '').toString() || undefined;
+const DATA_DIR = path.resolve(process.cwd(), 'data');
 const AUDIT_DIR = (process.env.AUDIT_DIR || '').trim() || path.join(DATA_DIR, 'audit');
 try { fs.mkdirSync(AUDIT_DIR, { recursive: true }); } catch { }
 const audit = new AuditLogger({ dir: AUDIT_DIR, build: BUILD_SHA });
@@ -126,6 +127,8 @@ const expectedTierByPlayerId = new Map<string, import('shared').EntryFeeTier>();
 const pendingPaymentByPlayerId = new Map<string, { paymentId: string; createdAt: number; lamports: number; tier: import('shared').EntryFeeTier }>();
 const usedPaymentIds = new Map<string, number>(); // paymentId → timestamp; TTL-pruned hourly
 const PAYMENT_ID_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+
+// Paid player restore is done in the async startup block below (after db.init())
 
 // HTTP SIWS challenges and session handoff tokens
 type HttpSiwsChallenge = {
@@ -388,7 +391,7 @@ function removeMatch(matchId: string): void {
   }
 }
 
-function createAndStartMatch(lobby: Lobby): Match {
+async function createAndStartMatch(lobby: Lobby): Promise<Match> {
   const matchId = lobby.lobbyId;
   const existing = matchesById.get(matchId);
   if (existing) return existing;
@@ -497,7 +500,22 @@ function createAndStartMatch(lobby: Lobby): Match {
     } catch { }
   };
 
-  gameWorld.startRound(entrants, lobby.entryFee, lobby.mode as any);
+  // Sum actual lamports collected from each entrant so payout uses real amounts, not re-fetched price.
+  const collectedLamports = entrants.reduce((sum, pid) => sum + (expectedLamportsByPlayerId.get(pid) ?? 0), 0);
+
+  // Pre-match balance sanity check for tournament rounds with real money
+  if (lobby.mode === 'tournament' && Number(lobby.entryFee) > 0 && collectedLamports > 0) {
+    try {
+      const poolBalance = await smartContractService.getPrizePoolBalanceLamports();
+      const expectedPayout = Math.floor(collectedLamports * 0.85);
+      if (poolBalance >= 0 && poolBalance < expectedPayout + 10_000) {
+        log.error(`[PAYOUT] ⚠️  Prize pool LOW: balance=${poolBalance} lamports, need=${expectedPayout + 10_000}. Match will proceed but payout may fail.`);
+        try { audit.log('prize_pool_low', { poolBalance, expectedPayout, collectedLamports, lobbyId: lobby.lobbyId }); } catch { }
+      }
+    } catch { /* non-blocking — don't abort match over a balance check failure */ }
+  }
+
+  gameWorld.startRound(entrants, lobby.entryFee, lobby.mode as any, collectedLamports);
   gameWorld.start();
   try { audit.log('match_world_started', { matchId, lobbyId: lobby.lobbyId, entrants, entryFee: lobby.entryFee, mode: lobby.mode }); } catch { }
   return match;
@@ -718,6 +736,77 @@ app.get('/api/prize-preflight', async (_req, res) => {
 });
 
 // ================================================================================================
+// Admin endpoints (require ADMIN_SECRET env var as Bearer token)
+// ================================================================================================
+
+const ADMIN_SECRET = (process.env.ADMIN_SECRET || '').trim();
+
+function requireAdmin(req: Request, res: Response): boolean {
+  if (!ADMIN_SECRET) {
+    res.status(503).json({ error: 'Admin endpoints disabled (ADMIN_SECRET not set)' });
+    return false;
+  }
+  const auth = req.headers['authorization'] || '';
+  if (auth !== `Bearer ${ADMIN_SECRET}`) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return false;
+  }
+  return true;
+}
+
+// GET /api/admin/payouts/failed — list failed payouts needing manual retry
+app.get('/api/admin/payouts/failed', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  try {
+    const rows = await db.getFailedPayouts(100);
+    res.json({ count: rows.length, payouts: rows });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || String(e) });
+  }
+});
+
+// POST /api/admin/retry-payout — re-attempt a failed payout by roundId
+app.post('/api/admin/retry-payout', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const { roundId } = req.body || {};
+  if (!roundId) { res.status(400).json({ error: 'roundId required' }); return; }
+  try {
+    const record = await db.getPayoutByRoundId(roundId);
+    if (!record) { res.status(404).json({ error: 'Round not found' }); return; }
+    if (record.status === 'sent' && record.tx_signature) {
+      res.json({ ok: true, already: true, txSignature: record.tx_signature });
+      return;
+    }
+    if (!smartContractService.isPayoutConfigured()) {
+      res.status(503).json({ error: 'Prize pool keypair not configured' });
+      return;
+    }
+    const { PublicKey } = await import('@solana/web3.js');
+    const winnerPk = new PublicKey(record.winner_wallet);
+    log.info(`[ADMIN] Retrying payout for round ${roundId} → ${record.winner_wallet.slice(0, 8)} (${record.prize_lamports} lamports)`);
+    const txSig = await smartContractService.payoutPrizeLamports(winnerPk, record.prize_lamports, record.platform_fee_bps);
+    await db.recordPayoutSent(roundId, txSig);
+    try { audit.log('payout_retried', { roundId, winnerId: record.winner_wallet, txSig }); } catch { }
+    log.info(`[ADMIN] ✅ Retry payout succeeded: ${txSig}`);
+    res.json({ ok: true, txSignature: txSig });
+  } catch (e: any) {
+    log.error('[ADMIN] Retry payout failed:', e);
+    res.status(500).json({ error: e?.message || String(e) });
+  }
+});
+
+// GET /api/admin/paid-players — list players who have paid but not yet been matched
+app.get('/api/admin/paid-players', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  try {
+    const rows = await db.getAllPaidPlayers();
+    res.json({ count: rows.length, players: rows });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || String(e) });
+  }
+});
+
+// ================================================================================================
 // Leaderboard & Player Stats API
 // ================================================================================================
 
@@ -766,10 +855,10 @@ app.get('/api/leaderboard/skill-rating', limiterSensitive, (req, res) => {
 });
 
 // Get player stats by wallet
-app.get('/api/player/:wallet/stats', limiterSensitive, (req, res) => {
+app.get('/api/player/:wallet/stats', limiterSensitive, async (req, res) => {
   try {
     const { wallet } = req.params;
-    const stats = db.getPlayerStats(wallet);
+    const stats = await db.getPlayerStats(wallet);
     if (!stats) {
       res.status(404).json({ error: 'Player not found' });
       return;
@@ -781,9 +870,9 @@ app.get('/api/player/:wallet/stats', limiterSensitive, (req, res) => {
 });
 
 // Get overall stats
-app.get('/api/stats', limiterSensitive, (req, res) => {
+app.get('/api/stats', limiterSensitive, async (req, res) => {
   try {
-    const stats = db.getTotalStats();
+    const stats = await db.getTotalStats();
     res.json(stats);
   } catch (e: any) {
     res.status(500).json({ error: e?.message || String(e) });
@@ -950,8 +1039,36 @@ if (!IS_PRODUCTION) {
   });
 }
 
-server.listen(PORT, () => {
-  log.info(`📈 Unified API listening on http://localhost:${PORT}/api/sol-price | WS at /ws`);
+// Async startup: init DB, restore state, then open listener
+(async () => {
+  try {
+    await db.init();
+  } catch (e) {
+    console.error('[FATAL] DB init failed:', e);
+    process.exit(1);
+  }
+
+  // Restore paid player state from DB (crash-safe recovery)
+  try {
+    const persistedPaid = await db.getAllPaidPlayers();
+    for (const row of persistedPaid) {
+      paidPlayers.add(row.wallet_address);
+      expectedLamportsByPlayerId.set(row.wallet_address, row.lamports);
+      expectedTierByPlayerId.set(row.wallet_address, row.tier as import('shared').EntryFeeTier);
+    }
+    if (persistedPaid.length > 0) {
+      log.info(`[PAYMENT] ♻️  Restored ${persistedPaid.length} paid player(s) from DB after restart`);
+    }
+  } catch (e) {
+    log.warn('[PAYMENT] Failed to restore paid players from DB:', e);
+  }
+
+  server.listen(PORT, () => {
+    log.info(`📈 Unified API listening on http://localhost:${PORT}/api/sol-price | WS at /ws`);
+  });
+})().catch(e => {
+  console.error('[FATAL] Startup error:', e);
+  process.exit(1);
 });
 
 // =================================================================================================
@@ -978,15 +1095,14 @@ lobbyManager.onGameStart = (lobby: Lobby) => {
       if (paidPlayers.has(pid)) {
         paidPlayers.delete(pid);
         expectedTierByPlayerId.delete(pid);
+        db.clearPaidPlayer(pid).catch(e => log.warn('[DB] clearPaidPlayer failed:', e));
       }
     });
   } catch { }
-  try {
-    createAndStartMatch(lobby);
-  } catch (e) {
+  createAndStartMatch(lobby).catch(e => {
     log.error('[MATCH] Failed to start match world:', e);
     try { audit.log('match_start_failed', { lobbyId: lobby.lobbyId, mode: lobby.mode, entryFee: lobby.entryFee, players: lobby.players, error: String((e as any)?.message || e) }); } catch { }
-  }
+  });
   const rules = [
     'Contrôles: pointez la souris pour nager',
     'Votre spermatozoïde laisse une trace ~5s',
@@ -1046,6 +1162,7 @@ lobbyManager.onLobbyRefund = async (lobby: Lobby, playerId: string, _calculatedL
     // Clear payment tracking - player needs to pay again if they want to rejoin
     paidPlayers.delete(playerId);
     expectedLamportsByPlayerId.delete(playerId);
+    await db.clearPaidPlayer(playerId).catch(e => log.warn('[DB] clearPaidPlayer failed:', e));
 
     console.log(`[REFUND] Cleared payment cache for ${maskPk(playerId)}`);
 
@@ -1689,6 +1806,12 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
       if (verified) {
         log.info(`[PAYMENT] ✅ Adding player ${maskPk(playerId)} to paidPlayers set`);
         paidPlayers.add(playerId);
+        // Persist to DB so paid status survives a server restart
+        try {
+          const lamports = expectedLamportsByPlayerId.get(playerId) ?? 0;
+          const tier = expectedTierByPlayerId.get(playerId) ?? 0;
+          await db.recordPaidPlayer(playerId, lamports, tier as number, signature);
+        } catch (e) { log.warn('[PAYMENT] Failed to persist paid player to DB:', e); }
         if (pending) {
           usedPaymentIds.set(pending.paymentId, Date.now());
           pendingPaymentByPlayerId.delete(playerId);

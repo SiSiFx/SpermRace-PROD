@@ -168,8 +168,8 @@ export class BotAISystem extends System {
           lastDecision: 0,
           boostUntil: 0,
           lastAbilityCheck: now + Math.random() * 2000,
-          accuracy: 0.45 + Math.random() * 0.55,    // 0.45 → 1.0
-          aggression: 0.25 + Math.random() * 0.70,  // 0.25 → 0.95
+          accuracy: 0.62 + Math.random() * 0.28,    // 0.62 → 0.90 — no pushover bots, no laser bots
+          aggression: 0.40 + Math.random() * 0.35,  // 0.40 → 0.75 — all bots engage, none are killers
         };
         this._aiStates.set(bot.id, aiState);
       }

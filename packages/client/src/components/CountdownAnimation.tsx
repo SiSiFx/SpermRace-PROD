@@ -1,150 +1,109 @@
 /**
- * CountdownAnimation - Brutal Bet Style
- * Screen-filling typographic countdown animation with brutalist design
- * Black/white/red/yellow, thick borders, offset shadows, bold uppercase
+ * CountdownAnimation
+ * 3… 2… 1… FIGHT!
+ *
+ * Design principles:
+ * - NO per-frame React state updates. setState fires once per second (number tick).
+ * - ALL visual transitions (scale, opacity, ring drain) handled by CSS keyframes
+ *   keyed to the current number, so React remounts them cleanly on each tick.
+ * - SVG circular ring depletes over 1 s via stroke-dashoffset CSS animation.
+ *   Perfectly smooth, GPU-accelerated, zero React overhead.
  */
 
-import { useEffect, useState, useRef, memo, useMemo } from 'react';
+import { useEffect, useState, memo } from 'react';
 import './CountdownAnimation.css';
 
 interface CountdownAnimationProps {
-  duration?: number; // Duration in milliseconds (default: 3000ms = 3 seconds)
+  duration?: number; // ms (default 3000 = 3 ticks)
   onComplete?: () => void;
   isVisible?: boolean;
 }
 
-/**
- * Screen-filling typographic countdown animation (3... 2... 1... GO!)
- * Features:
- * - Massive, screen-filling typography with brutalist borders
- * - Smooth scale and fade animations
- * - Color transitions based on urgency (green → yellow → red)
- * - Glitch effect on "GO!"
- * - Responsive design for mobile and desktop
- * Memoized to prevent unnecessary re-renders
- */
+const RING_R = 72;
+const RING_CIRC = 2 * Math.PI * RING_R; // ≈ 452 px
+
 export const CountdownAnimation = memo(function CountdownAnimation({
   duration = 3000,
   onComplete,
   isVisible = true,
 }: CountdownAnimationProps) {
-  const [currentNumber, setCurrentNumber] = useState(3);
-  const [scale, setScale] = useState(0.5);
-  const [opacity, setOpacity] = useState(0);
-  const [isGlitching, setIsGlitching] = useState(false);
-  const startTimeRef = useRef<number>();
+  const totalTicks = Math.round(duration / 1000);
+  const [tick, setTick] = useState(totalTicks); // 3 → 2 → 1 → 0
 
   useEffect(() => {
     if (!isVisible) return;
 
-    startTimeRef.current = performance.now();
-    let frameId: number;
+    setTick(totalTicks); // reset on (re)mount
 
-    const animate = (currentTime: number) => {
-      if (!startTimeRef.current) {
-        startTimeRef.current = currentTime;
-      }
-
-      const elapsed = currentTime - startTimeRef.current;
-      const remaining = Math.max(0, duration - elapsed);
-      const secondsRemaining = Math.ceil(remaining / 1000);
-
-      // Update current number
-      setCurrentNumber(secondsRemaining > 0 ? secondsRemaining : 0);
-
-      // Calculate animation progress for current second
-      const progressInSecond = (remaining % 1000) / 1000; // 1 = start of second, 0 = end
-
-      // Animate scale: start small, bounce in, then fade out
-      const scaleAnimation = easeOutBack(1 - progressInSecond);
-      setScale(scaleAnimation);
-
-      // Animate opacity: fade in at start, fade out at end
-      if (progressInSecond > 0.85) {
-        // Fade out
-        setOpacity((progressInSecond - 0.85) / 0.15);
-      } else {
-        // Full opacity
-        setOpacity(1);
-      }
-
-      // Trigger glitch effect on "GO!" (0 seconds)
-      if (secondsRemaining === 0 && !isGlitching) {
-        setIsGlitching(true);
-        // Reset glitch effect after animation
-        setTimeout(() => setIsGlitching(false), 500);
-      }
-
-      // Check if countdown is complete
-      if (remaining <= 0) {
-        // Continue animation for a bit more to show "GO!"
-        if (elapsed < duration + 500) {
-          frameId = requestAnimationFrame(animate);
-        } else {
-          onComplete?.();
+    // Tick once per second
+    const id = setInterval(() => {
+      setTick(t => {
+        if (t <= 1) {
+          clearInterval(id);
+          // Show "GO!" for 600 ms then call onComplete
+          setTimeout(() => onComplete?.(), 600);
+          return 0;
         }
-      } else {
-        frameId = requestAnimationFrame(animate);
-      }
-    };
+        return t - 1;
+      });
+    }, 1000);
 
-    frameId = requestAnimationFrame(animate);
+    return () => clearInterval(id);
+  }, [isVisible, totalTicks, onComplete]);
 
-    return () => {
-      cancelAnimationFrame(frameId);
-    };
-  }, [duration, onComplete, isVisible]);
-
-  // Don't render if not visible
   if (!isVisible) return null;
 
-  const isGo = currentNumber === 0;
-  const isMobile = window.innerWidth <= 768;
+  const isGo = tick === 0;
 
-  // Memoize the number class to avoid recalculation on every render
-  const numberClass = useMemo(() => {
-    if (isGo) return 'go';
-    if (currentNumber === 1) return 'one';
-    if (currentNumber === 2) return 'two';
-    return 'three';
-  }, [isGo, currentNumber]);
+  // Color per tick
+  const ringColor = isGo
+    ? '#34d399'          // green
+    : tick === 1
+      ? '#f87171'        // red
+      : tick === 2
+        ? '#fbbf24'      // amber
+        : '#22d3ee';     // cyan
 
   return (
-    <div className="bru-countdown-overlay" data-testid="countdown-overlay">
-      <div
-        className={`bru-countdown-number ${numberClass} ${isGlitching ? 'glitch' : ''}`}
-        data-testid="countdown-number"
-        style={{
-          transform: `scale(${scale})`,
-          opacity: opacity,
-        }}
-      >
-        {isGo ? 'FIGHT!' : currentNumber}
-      </div>
+    <div className="cd-overlay" data-testid="countdown-overlay">
 
-      {/* Subtitle for desktop */}
-      {!isMobile && !isGo && (
-        <div
-          className="bru-countdown-subtitle"
-          style={{
-            opacity: opacity * 0.9,
-          }}
+      {/* Circular ring — keyed so CSS animation restarts on each tick */}
+      {!isGo && (
+        <svg
+          key={`ring-${tick}`}
+          className="cd-ring-svg"
+          viewBox="0 0 160 160"
+          aria-hidden="true"
         >
-          Prepare for Battle
-        </div>
+          {/* Track */}
+          <circle
+            cx="80" cy="80" r={RING_R}
+            className="cd-ring-track"
+          />
+          {/* Draining arc */}
+          <circle
+            cx="80" cy="80" r={RING_R}
+            className="cd-ring-arc"
+            style={{
+              stroke: ringColor,
+              strokeDasharray: RING_CIRC,
+              // animation handles dashoffset 0 → CIRC over 1 s
+            }}
+          />
+        </svg>
       )}
 
-      {/* Scanline effect */}
-      <div className="bru-countdown-scanlines" aria-hidden="true" />
+      {/* Number — keyed so CSS punch-in restarts on each tick */}
+      <div
+        key={`num-${tick}`}
+        className={`cd-number${isGo ? ' is-go' : ''}`}
+        data-testid="countdown-number"
+        style={{ color: isGo ? '#34d399' : ringColor } as React.CSSProperties}
+      >
+        {isGo ? 'GO!' : tick}
+      </div>
+
+      <div className="cd-scanlines" aria-hidden="true" />
     </div>
   );
 });
-
-/**
- * Easing function for smooth bounce-in animation
- */
-function easeOutBack(t: number): number {
-  const c1 = 1.70158;
-  const c3 = c1 + 1;
-  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
-}

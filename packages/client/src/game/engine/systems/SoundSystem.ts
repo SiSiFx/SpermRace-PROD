@@ -43,6 +43,9 @@ export class SoundSystem extends System {
   // Collision sound cooldown (ms) to avoid stacking thud sounds
   private _lastCollisionSoundAt: number = 0;
 
+  // Near-miss sound cooldown (ms) to avoid stacking
+  private _lastNearMissSoundAt: number = 0;
+
   // Masks
   private readonly _playerMask: number;
 
@@ -91,6 +94,9 @@ export class SoundSystem extends System {
 
     // Car-car collision thud
     this._updateCollisionSound();
+
+    // Near-miss "fwit" sound
+    this._updateNearMissSound();
   }
 
   /**
@@ -295,11 +301,29 @@ export class SoundSystem extends System {
 
   /**
    * Play kill chime (ascending). `pitch` scales all frequencies — streak tiers pass 1.0–1.8.
+   * Also plays a low impact thud for physical kill satisfaction.
    */
   playKill(pitch: number = 1.0): void {
     if (!this._audioContext || !this._masterGain) return;
     const ctx = this._audioContext;
     const now = ctx.currentTime;
+
+    // Low impact thud (physical "splat" layer)
+    const thud = ctx.createOscillator();
+    const thudGain = ctx.createGain();
+    const thudFilter = ctx.createBiquadFilter();
+    thud.type = 'triangle';
+    thud.frequency.setValueAtTime(140 * pitch, now);
+    thud.frequency.exponentialRampToValueAtTime(30, now + 0.12);
+    thudFilter.type = 'lowpass';
+    thudFilter.frequency.setValueAtTime(300, now);
+    thudGain.gain.setValueAtTime(0.45, now);
+    thudGain.gain.exponentialRampToValueAtTime(0.01, now + 0.14);
+    thud.connect(thudFilter);
+    thudFilter.connect(thudGain);
+    thudGain.connect(this._masterGain);
+    thud.start(now);
+    thud.stop(now + 0.14);
 
     // Primary chime
     const osc = ctx.createOscillator();
@@ -326,6 +350,75 @@ export class SoundSystem extends System {
     gain2.connect(this._masterGain);
     osc2.start(now + 0.05);
     osc2.stop(now + 0.35);
+  }
+
+  /**
+   * Near-miss "fwit" — a sharp high-pitched sweep past the ear.
+   * Triggered when the local player passes within 15px of an enemy trail.
+   */
+  playNearMiss(): void {
+    if (!this._audioContext || !this._masterGain) return;
+    const ctx = this._audioContext;
+    const t = ctx.currentTime;
+
+    // High swept sine — like something slicing past
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(2200, t);
+    osc.frequency.exponentialRampToValueAtTime(700, t + 0.08);
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(1400, t);
+    filter.Q.setValueAtTime(0.8, t);
+    gain.gain.setValueAtTime(0.18, t);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(this._masterGain);
+    osc.start(t);
+    osc.stop(t + 0.1);
+  }
+
+  /**
+   * Final Duel stinger — played when 2 players remain.
+   * Three descending bass pulses + a high harmonic overlay to signal "it's on".
+   */
+  playFinalDuel(): void {
+    const ctx = this._audioContext;
+    const master = this._masterGain;
+    if (!ctx || !master) return;
+    const t = ctx.currentTime;
+
+    // Three thumping bass notes (descending, foreboding)
+    [0, 0.18, 0.36].forEach((offset, i) => {
+      const freq = [110, 92, 82][i];
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(freq, t + offset);
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.7, t + offset + 0.16);
+      g.gain.setValueAtTime(0.4, t + offset);
+      g.gain.exponentialRampToValueAtTime(0.01, t + offset + 0.2);
+      osc.connect(g);
+      g.connect(master);
+      osc.start(t + offset);
+      osc.stop(t + offset + 0.22);
+    });
+
+    // High harmonic sting over the top (metallic, urgent)
+    const sting = ctx.createOscillator();
+    const stingGain = ctx.createGain();
+    sting.type = 'sine';
+    sting.frequency.setValueAtTime(880, t + 0.36);
+    sting.frequency.exponentialRampToValueAtTime(1320, t + 0.55);
+    stingGain.gain.setValueAtTime(0, t + 0.36);
+    stingGain.gain.linearRampToValueAtTime(0.2, t + 0.42);
+    stingGain.gain.exponentialRampToValueAtTime(0.01, t + 0.7);
+    sting.connect(stingGain);
+    stingGain.connect(master);
+    sting.start(t + 0.36);
+    sting.stop(t + 0.72);
   }
 
   /**
@@ -453,6 +546,37 @@ export class SoundSystem extends System {
     gain2.connect(master);
     osc2.start(t + 0.04);
     osc2.stop(t + 0.10);
+  }
+
+  /**
+   * Play near-miss "fwit" when local player passes close to an enemy trail.
+   * Throttled to 400ms so rapid near-misses don't stack.
+   */
+  private _updateNearMissSound(): void {
+    const collision = this.getEngine()?.getSystemManager()?.getSystem<CollisionSystem>('collision');
+    if (!collision) return;
+
+    const nearMisses = collision.getNearMisses();
+    if (nearMisses.length === 0) return;
+
+    const now = Date.now();
+    if (now - this._lastNearMissSoundAt < 400) return;
+
+    // Find local player ID
+    let localPlayerId: string | null = null;
+    for (const entity of this.entityManager.queryByMask(this._playerMask)) {
+      const player = entity.getComponent<Player>(ComponentNames.PLAYER);
+      if (player?.isLocal) { localPlayerId = entity.id; break; }
+    }
+
+    const hasLocalNearMiss = localPlayerId
+      ? nearMisses.some((nm: { entityId: string }) => nm.entityId === localPlayerId)
+      : false;
+
+    if (hasLocalNearMiss) {
+      this._lastNearMissSoundAt = now;
+      this.playNearMiss();
+    }
   }
 
   /**

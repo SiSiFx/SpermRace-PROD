@@ -1,18 +1,30 @@
 import { useEffect, useRef } from 'react';
 
-const COUNT = 24;
-const SPEED_MIN = 220;
-const SPEED_MAX = 400;
+const COUNT = 28;
+const SPEED_MIN = 200;
+const SPEED_MAX = 420;
 const TURN_RATE = 2.2;
 const STEER_INTERVAL: [number, number] = [0.35, 1.3];
-const TRAIL_LIFETIME = 3200;
-const TRAIL_SPACING = 6;
-const TRAIL_MAX_W = 2;
-const TRAIL_MIN_W = 0.5;
+const TRAIL_LIFETIME = 3600;
+const TRAIL_SPACING = 5;
+const TRAIL_MAX_W = 2.8;
+const TRAIL_MIN_W = 0.8;
 const HEAD_RX = 6;
 const HEAD_RY = 3.8;
 const SELF_IGNORE_MS = 300;
 const COLLISION_R = HEAD_RX + 3;
+
+// Game-accurate cell colors (rgb triples for rgba usage)
+const CELL_COLORS = [
+  '34,211,238',   // cyan
+  '244,114,182',  // pink
+  '52,211,153',   // green
+  '251,191,36',   // amber
+  '167,139,250',  // violet
+  '251,146,60',   // orange
+  '45,212,191',   // teal
+  '251,113,133',  // rose
+];
 
 interface TrailPt { x: number; y: number; ts: number; }
 interface Sperm {
@@ -21,12 +33,14 @@ interface Sperm {
   speed: number; steerTimer: number;
   trail: TrailPt[]; dist: number;
   alive: boolean; alpha: number; respawnAt: number;
+  color: string;
 }
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 
-function spawn(W: number, H: number): Sperm {
+function spawn(W: number, H: number, colorIdx?: number): Sperm {
   const angle = rand(0, Math.PI * 2);
+  const idx = colorIdx ?? Math.floor(Math.random() * CELL_COLORS.length);
   return {
     x: rand(W * 0.05, W * 0.95),
     y: rand(H * 0.05, H * 0.95),
@@ -35,6 +49,7 @@ function spawn(W: number, H: number): Sperm {
     steerTimer: rand(...STEER_INTERVAL),
     trail: [], dist: 0,
     alive: true, alpha: 1, respawnAt: 0,
+    color: CELL_COLORS[idx % CELL_COLORS.length],
   };
 }
 
@@ -63,7 +78,10 @@ export function SpermBackground() {
     resize();
     window.addEventListener('resize', resize);
 
-    const entities: Sperm[] = Array.from({ length: COUNT }, () => spawn(W, H));
+    // Spread colors evenly across initial entities
+    const entities: Sperm[] = Array.from({ length: COUNT }, (_, i) =>
+      spawn(W, H, i % CELL_COLORS.length)
+    );
     let animId = 0, lastTime = 0;
 
     function update(dt: number, now: number) {
@@ -82,9 +100,9 @@ export function SpermBackground() {
 
         // Wall avoidance
         const m = 55;
-        if (s.x < m)         s.target = rand(-0.4, 0.4);
+        if (s.x < m)          s.target = rand(-0.4, 0.4);
         else if (s.x > W - m) s.target = Math.PI + rand(-0.4, 0.4);
-        if (s.y < m)         s.target = Math.PI * 0.5 + rand(-0.4, 0.4);
+        if (s.y < m)          s.target = Math.PI * 0.5 + rand(-0.4, 0.4);
         else if (s.y > H - m) s.target = -Math.PI * 0.5 + rand(-0.4, 0.4);
 
         let diff = s.target - s.angle;
@@ -126,7 +144,7 @@ export function SpermBackground() {
       ctx.clearRect(0, 0, W, H);
 
       for (const s of entities) {
-        const base = s.alpha * 0.11;
+        const base = s.alpha * 0.18;
         if (base <= 0.005) continue;
 
         // Trail
@@ -144,7 +162,7 @@ export function SpermBackground() {
             const fade = age > TRAIL_LIFETIME * 0.78
               ? 1 - (age - TRAIL_LIFETIME * 0.78) / (TRAIL_LIFETIME * 0.22)
               : 1;
-            ctx.strokeStyle = `rgba(255,255,255,${base * fade})`;
+            ctx.strokeStyle = `rgba(${s.color},${(base * fade).toFixed(3)})`;
             ctx.lineWidth = lw;
             ctx.beginPath();
             ctx.moveTo(prev.x, prev.y);
@@ -154,14 +172,18 @@ export function SpermBackground() {
           ctx.restore();
         }
 
-        // Head
+        // Head — with subtle glow
         if (s.alpha > 0.05) {
           ctx.save();
           ctx.translate(s.x, s.y);
           ctx.rotate(s.angle);
+          const headAlpha = Math.min(1, base * 5);
+          // Outer glow
+          ctx.shadowColor = `rgba(${s.color},0.6)`;
+          ctx.shadowBlur = 8;
           ctx.beginPath();
           ctx.ellipse(0, 0, HEAD_RX, HEAD_RY, 0, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(255,255,255,${Math.min(1, base * 4.5)})`;
+          ctx.fillStyle = `rgba(${s.color},${headAlpha.toFixed(3)})`;
           ctx.fill();
           ctx.restore();
         }

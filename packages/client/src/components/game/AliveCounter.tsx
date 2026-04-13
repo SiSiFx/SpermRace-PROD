@@ -90,8 +90,8 @@ export const AliveCounter = memo(function AliveCounter({ show = true, isMobile =
 
         .alive-counter.urgency-danger .alive-number,
         .alive-counter.urgency-danger .alive-total {
-          color: #ef4444;
-          text-shadow: 0 0 15px rgba(239, 68, 68, 0.7);
+          color: #ffffff;
+          text-shadow: 0 0 12px rgba(239, 68, 68, 0.9);
         }
 
         .alive-icon {
@@ -138,8 +138,8 @@ export const AliveCounter = memo(function AliveCounter({ show = true, isMobile =
 
         @media (max-width: 768px) {
           .alive-counter {
-            top: 8px;
-            left: 8px;
+            top: calc(8px + env(safe-area-inset-top, 0px));
+            left: calc(8px + env(safe-area-inset-left, 0px));
             padding: 6px 10px;
           }
 

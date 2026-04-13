@@ -8,7 +8,7 @@
 
 import { useEffect, useState, memo, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sword, Timer, Ruler, Eye, ArrowLeft, ArrowsClockwise, ArrowCounterClockwise } from 'phosphor-react';
+import { Sword, Timer, Ruler, Eye, ArrowLeft, ArrowCounterClockwise } from 'phosphor-react';
 import './DeathScreen.css';
 
 /** Counts from 0 to target over `duration` ms, starting after `delayMs` */
@@ -57,8 +57,6 @@ export interface DeathScreenProps {
   canSpectate: boolean;
   onSpectate?: () => void;
   onLeave?: () => void;
-  onChangeClass?: () => void;
-  /** Instant replay with same class — skips class selection */
   onQuickReplay?: () => void;
 }
 
@@ -74,7 +72,6 @@ export const DeathScreen = memo(function DeathScreen({
   canSpectate,
   onSpectate,
   onLeave,
-  onChangeClass,
   onQuickReplay,
 }: DeathScreenProps) {
   const [isVisible, setIsVisible] = useState(false);
@@ -297,34 +294,18 @@ export const DeathScreen = memo(function DeathScreen({
                 </motion.button>
               )}
 
-              {onChangeClass && (
-                <motion.button
-                  onClick={onChangeClass}
-                  className="death-btn change-class"
-                  aria-label="Change class for next round"
-                  whileHover={{ scale: 1.02, y: -2 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  <ArrowsClockwise weight="fill" size={20} />
-                  <span className="death-btn-content">
-                    <span className="death-btn-text">CHANGE CLASS</span>
-                    <span className="death-btn-subtitle">Pick a different playstyle</span>
-                  </span>
-                </motion.button>
-              )}
-
               {onLeave && (
                 <motion.button
                   onClick={onLeave}
                   className="death-btn leave"
-                  aria-label="Return to lobby"
+                  aria-label="See results and exit"
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                 >
                   <ArrowLeft weight="bold" size={20} />
                   <span className="death-btn-content">
-                    <span className="death-btn-text">RETURN TO LOBBY</span>
-                    <span className="death-btn-subtitle">See results &amp; exit</span>
+                    <span className="death-btn-text">SEE RESULTS</span>
+                    <span className="death-btn-subtitle">View stats &amp; exit</span>
                   </span>
                 </motion.button>
               )}

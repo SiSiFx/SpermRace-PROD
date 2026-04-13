@@ -18,6 +18,7 @@ import { BOOST_CONFIG } from '../config';
 import type { FloatingTextSystem } from './FloatingTextSystem';
 import type { SlowMotionSystem } from './SlowMotionSystem';
 import type { SoundSystem } from './SoundSystem';
+import type { CameraSystem } from './CameraSystem';
 
 /**
  * Combat feedback event
@@ -129,6 +130,9 @@ export class CombatFeedbackSystem extends System {
     { minKills: 7, name: 'ULTRA KILL!', color: 0xff00ff, pitch: 1.6, shakeIntensity: 10 },
     { minKills: 10, name: 'GODLIKE!', color: 0xffd700, pitch: 1.8, shakeIntensity: 15 },
   ];
+
+  // Final Duel state
+  private _finalDuelTriggered: boolean = false;
 
   // Component mask
   private readonly _healthPlayerMask: number;
@@ -309,11 +313,18 @@ export class CombatFeedbackSystem extends System {
       });
     }
 
-    // Hit freeze: 80ms at 8% speed — Vlambeer-style impact weight
-    this._slowMotion?.trigger(0.08, 80);
+    // Hit freeze disabled — causes perceptible frame hitch on every kill
+    // this._slowMotion?.trigger(0.08, 80);
 
     if (this._config.enableSound) {
       this._getSoundSystem()?.playKill(tier?.pitch ?? 1.0);
+    }
+
+    // Check for Final Duel (2 players remaining)
+    const alive = this._countAlive();
+    if (alive === 2 && !this._finalDuelTriggered) {
+      this._finalDuelTriggered = true;
+      this._triggerFinalDuel();
     }
   }
 
@@ -399,6 +410,67 @@ export class CombatFeedbackSystem extends System {
   }
 
   /**
+   * Get camera system via engine
+   */
+  private _getCameraSystem(): CameraSystem | null {
+    return this.getEngine()?.getSystemManager()?.getSystem<CameraSystem>('camera') ?? null;
+  }
+
+  /**
+   * Count alive entities
+   */
+  private _countAlive(): number {
+    let count = 0;
+    for (const entity of this.entityManager.queryByMask(this._healthPlayerMask)) {
+      const health = entity.getComponent<Health>(ComponentNames.HEALTH);
+      if (health?.isAlive) count++;
+    }
+    return count;
+  }
+
+  /**
+   * Get local player entity ID
+   */
+  private _getLocalPlayerId(): string | null {
+    for (const entity of this.entityManager.queryByMask(this._healthPlayerMask)) {
+      const player = entity.getComponent<Player>(ComponentNames.PLAYER);
+      const health = entity.getComponent<Health>(ComponentNames.HEALTH);
+      if (player?.isLocal && health?.isAlive) return entity.id;
+    }
+    return null;
+  }
+
+  /**
+   * Trigger final duel mode — zoom in + stinger + floating text
+   */
+  private _triggerFinalDuel(): void {
+    // Only if local player is still alive
+    if (!this._getLocalPlayerId()) return;
+
+    // Zoom camera in for intimacy and tension
+    this._getCameraSystem()?.setZoom(0.92);
+
+    // Dramatic audio stinger
+    this._getSoundSystem()?.playFinalDuel();
+
+    // "FINAL DUEL" floating text at center of screen (approximate world center)
+    const localId = this._getLocalPlayerId();
+    if (localId) {
+      const localEntity = this.entityManager.getEntity(localId);
+      const pos = localEntity?.getComponent<Position>(ComponentNames.POSITION);
+      if (pos) {
+        this._getFloatingTextSystem()?.spawnText(
+          pos.x,
+          pos.y - 80,
+          'FINAL DUEL',
+          '#ff4444',
+          { fontSize: 42, speed: 20, lifetime: 2.5 }
+        );
+      }
+    }
+  }
+
+  /**
    * Get all combat events since last check
    */
   getEvents(): ReadonlyArray<CombatEvent> {
@@ -445,6 +517,7 @@ export class CombatFeedbackSystem extends System {
     this._events.length = 0;
     this._killStreaks.clear();
     this._lastKillTime.clear();
+    this._finalDuelTriggered = false;
   }
 }
 

@@ -74,8 +74,8 @@ type LobbyCountdownCallback = (lobby: Lobby, remainingSeconds: number, startAtMs
 type EloStore = Pick<DatabaseService, 'getPlayerElo' | 'getPlayersElo'>;
 
 const fallbackEloStore: EloStore = {
-  getPlayerElo: () => 1200,
-  getPlayersElo: (walletAddresses: string[]) => {
+  getPlayerElo: async () => 1200,
+  getPlayersElo: async (walletAddresses: string[]) => {
     const out = new Map<string, number>();
     for (const wallet of walletAddresses) out.set(wallet, 1200);
     return out;
@@ -123,10 +123,10 @@ export class LobbyManager {
     }
 
     // Get player's ELO rating for matchmaking
-    const playerElo = this.databaseService.getPlayerElo(playerId);
+    const playerElo = await this.databaseService.getPlayerElo(playerId);
     console.log(`[LOBBY] Player ${playerId.slice(0,6)}… ELO: ${playerElo}`);
 
-    let lobby = this.findAvailableLobby(entryFee, mode, playerElo);
+    let lobby = await this.findAvailableLobby(entryFee, mode, playerElo);
     if (!lobby) {
       lobby = this.createLobby(entryFee, mode);
       console.log(`[LOBBY] Created new lobby ${lobby.lobbyId} (mode=${mode}, fee=$${entryFee})`);
@@ -134,9 +134,9 @@ export class LobbyManager {
 
     // Finalize: re-check status just before admitting player to avoid races
     const current = this.lobbies.get(lobby.lobbyId);
-    if (!current || current.status !== 'waiting' || !this.isEloSpreadAcceptable(current, playerElo)) {
+    if (!current || current.status !== 'waiting' || !(await this.isEloSpreadAcceptable(current, playerElo))) {
       // Find another waiting lobby or create a new one
-      const alt = this.findAvailableLobby(entryFee, mode, playerElo);
+      const alt = await this.findAvailableLobby(entryFee, mode, playerElo);
       lobby = alt ?? this.createLobby(entryFee, mode);
     }
 
@@ -236,11 +236,11 @@ export class LobbyManager {
     }
   }
 
-  private findAvailableLobby(entryFee: EntryFeeTier, mode: GameMode, playerElo: number): Lobby | undefined {
+  private async findAvailableLobby(entryFee: EntryFeeTier, mode: GameMode, playerElo: number): Promise<Lobby | undefined> {
     for (const lobby of this.lobbies.values()) {
       if (lobby.entryFee === entryFee && lobby.mode === mode && (lobby.status === 'waiting' || lobby.status === 'starting') && lobby.players.length < lobby.maxPlayers) {
         // Check ELO spread for tournament mode
-        if (mode === 'tournament' && !this.isEloSpreadAcceptable(lobby, playerElo)) {
+        if (mode === 'tournament' && !(await this.isEloSpreadAcceptable(lobby, playerElo))) {
           continue;
         }
         return lobby;
@@ -253,7 +253,7 @@ export class LobbyManager {
    * Checks if a player's ELO is within the acceptable range for the lobby.
    * Returns true if the player can join without exceeding MAX_ELO_SPREAD.
    */
-  private isEloSpreadAcceptable(lobby: Lobby, playerElo: number): boolean {
+  private async isEloSpreadAcceptable(lobby: Lobby, playerElo: number): Promise<boolean> {
     // Skip ELO check for practice mode or if lobby is empty
     if (lobby.mode === 'practice' || lobby.players.length === 0) {
       return true;
@@ -265,7 +265,7 @@ export class LobbyManager {
       return true;
     }
 
-    const playerElos = this.databaseService.getPlayersElo(realPlayers);
+    const playerElos = await this.databaseService.getPlayersElo(realPlayers);
     const eloValues = Array.from(playerElos.values());
 
     // Calculate min and max ELO in the lobby
@@ -325,8 +325,7 @@ export class LobbyManager {
     }
 
     const dynamicMinPlayers = (): number => {
-      // Practice is pure multiplayer but should start as soon as 2 real players join.
-      if (lobby.mode === 'practice') return 2;
+      if (lobby.mode === 'practice') return isPracticeBotsEnabled() ? 1 : 2;
       const baseMin = process.env.SKIP_ENTRY_FEE === 'true' ? Math.max(1, LOBBY_MIN_START) : Math.max(2, LOBBY_MIN_START);
       const startedAt = this.lobbyCountdownStartMs.get(lobby.lobbyId) || Date.now();
       const elapsedSec = Math.floor((Date.now() - startedAt) / 1000);
@@ -355,8 +354,9 @@ export class LobbyManager {
       if (Date.now() >= deadline && lobby.players.length >= 2) {
         if (lobby.mode === 'tournament' || lobby.mode === 'practice') {
           const realPlayers = lobby.players.filter(p => !String(p).startsWith('BOT_'));
-          if (realPlayers.length < 2) {
-            console.log(`[LOBBY] Deadline reached but <2 real players; keeping lobby waiting`);
+          const minReal = (lobby.mode === 'practice' && isPracticeBotsEnabled()) ? 1 : 2;
+          if (realPlayers.length < minReal) {
+            console.log(`[LOBBY] Deadline reached but <${minReal} real players; keeping lobby waiting`);
             return false;
           }
         }

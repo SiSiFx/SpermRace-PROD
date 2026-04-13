@@ -15,6 +15,8 @@ import { ComponentNames, createComponentMask } from '../components';
 import type { Entity } from '../core/Entity';
 import type { Player } from '../components/Player';
 import type { SoundSystem } from './SoundSystem';
+import { BOOST_CONFIG, CAR_PHYSICS } from '../config/GameConstants';
+import type { SpermClass } from '../components/SpermClass';
 
 /**
  * Ability activation request
@@ -246,17 +248,30 @@ export class AbilitySystem extends System {
         // Dash is instant, no expiration handling needed
         break;
 
-      case AbilityType.SHIELD:
-        // Remove shield effect
-        break;
-
-      case AbilityType.OVERDRIVE:
-        // Remove overdrive boost
-        const boost = entity.getComponent<Boost>(ComponentNames.BOOST);
-        if (boost) {
-          // Reset to normal boost
+      case AbilityType.SHIELD: {
+        const health = entity.getComponent<any>(ComponentNames.HEALTH);
+        if (health) {
+          health.shielded = false;
+          health.shieldUntil = 0;
         }
         break;
+      }
+
+      case AbilityType.OVERDRIVE: {
+        const boost = entity.getComponent<Boost>(ComponentNames.BOOST);
+        if (boost) {
+          boost.speedMultiplier = BOOST_CONFIG.SPEED_MULTIPLIER;
+          boost.trailWidthMultiplier = BOOST_CONFIG.TRAIL_WIDTH_MULTIPLIER;
+          boost.trailLifetimeBonus = BOOST_CONFIG.TRAIL_LIFETIME_BONUS;
+        }
+        const velocity = entity.getComponent<Velocity>(ComponentNames.VELOCITY);
+        if (velocity) {
+          const spermClass = entity.getComponent<SpermClass>(ComponentNames.SPERM_CLASS);
+          const classMult = spermClass?.speedMultiplier ?? 1.0;
+          velocity.maxSpeed = CAR_PHYSICS.BASE_SPEED * classMult;
+        }
+        break;
+      }
     }
   }
 

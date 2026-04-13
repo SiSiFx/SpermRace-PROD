@@ -85,7 +85,7 @@ export class CameraSystem extends System {
       screenWidth: window.innerWidth,
       screenHeight: window.innerHeight,
       shakeIntensity: 0,
-      shakeDecay: config?.shakeDecay ?? 2.0,
+      shakeDecay: config?.shakeDecay ?? 6.0,
     };
   }
 
@@ -250,13 +250,16 @@ export class CameraSystem extends System {
    * Get shake offset for rendering
    */
   getShakeOffset(): { x: number; y: number } {
-    if (!Number.isFinite(this._camera.shakeIntensity) || this._camera.shakeIntensity <= 0) {
+    if (!Number.isFinite(this._camera.shakeIntensity) || this._camera.shakeIntensity <= 0.01) {
       this._camera.shakeIntensity = 0;
       return { x: 0, y: 0 };
     }
+    // Smooth sine-wave shake — two co-prime frequencies give non-repeating motion
+    const t = Date.now() / 1000;
+    const mag = this._camera.shakeIntensity * 5;
     return {
-      x: (Math.random() - 0.5) * this._camera.shakeIntensity * 20,
-      y: (Math.random() - 0.5) * this._camera.shakeIntensity * 20,
+      x: Math.sin(t * 47.1) * mag,
+      y: Math.sin(t * 37.7 + 1.2) * mag,
     };
   }
 }

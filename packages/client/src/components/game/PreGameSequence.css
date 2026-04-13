@@ -220,7 +220,7 @@
 }
 
 /* Ensure CountdownAnimation appears above everything */
-.pre-game-sequence .bru-countdown-overlay {
+.pre-game-sequence .cd-overlay {
   z-index: 1100;
 }
 

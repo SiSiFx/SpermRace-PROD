@@ -21,9 +21,6 @@ import './AppUnified.css';
 const Leaderboard = lazy(() =>
   import('./Leaderboard').then((m) => ({ default: m.Leaderboard }))
 );
-const WalletScreen = lazy(() =>
-  import('./components/WalletScreen').then((m) => ({ default: m.WalletScreen }))
-);
 const HowToPlayOverlay = lazy(() => import('./HowToPlayOverlay'));
 const MobileTutorial = lazy(() => import('./MobileTutorial'));
 
@@ -38,7 +35,7 @@ const API_BASE: string = (() => {
   return '/api';
 })();
 
-type AppScreen = 'landing' | 'practice-solo' | 'wallet' | 'lobby' | 'game' | 'results';
+type AppScreen = 'landing' | 'practice-solo' | 'lobby' | 'game' | 'results';
 
 function getInitialScreen(): AppScreen {
   if (!(import.meta as any).env?.DEV) return 'landing';
@@ -51,7 +48,6 @@ function getInitialScreen(): AppScreen {
     if (
       screen === 'landing' ||
       screen === 'practice-solo' ||
-      screen === 'wallet' ||
       screen === 'lobby' ||
       screen === 'game' ||
       screen === 'results'
@@ -76,16 +72,25 @@ export default function App() {
 function AppInner() {
   const isMobile = useIsMobile();
   const { state: wsState } = useWs();
-  const { publicKey, disconnect } = useWallet();
+  const { publicKey, disconnect, connect } = useWallet();
 
   const [screen, setScreen] = useState<AppScreen>(() => getInitialScreen());
-  const [returnScreen, setReturnScreen] = useState<AppScreen>('landing');
   const [solPrice, setSolPrice] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [isNewPlayer, setIsNewPlayer] = useState(() => {
+    try { return !localStorage.getItem('spermrace_played_before'); } catch { return true; }
+  });
+
+  const markPlayed = useCallback(() => {
+    try { localStorage.setItem('spermrace_played_before', '1'); } catch {}
+    setIsNewPlayer(false);
+  }, []);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [showHowToPlay, setShowHowToPlay] = useState(false);
   const [gameCountdown] = useState<number | null>(null);
   const [practiceStats, setPracticeStats] = useState<{ placement: number; kills: number; duration: number; winner: boolean; killerName: string | null; totalPlayers: number } | null>(null);
+  // Track last selected tier so the upsell CTA reflects the right prize
+  const [selectedTier, setSelectedTier] = useState<{ usd: number; prize: string }>({ usd: 5, prize: '$42' });
 
   // Fetch SOL price
   useEffect(() => {
@@ -115,9 +120,10 @@ function AppInner() {
     } else if (phase === 'game') {
       if (screen !== 'game') setScreen('game');
     } else if (phase === 'ended') {
+      markPlayed();
       if (screen !== 'results') setScreen('results');
     }
-  }, [wsState.phase, screen]);
+  }, [wsState.phase, screen, markPlayed]);
 
   // PC Keyboard shortcuts
   useEffect(() => {
@@ -125,8 +131,7 @@ function AppInner() {
 
     const handleKeyPress = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (screen === 'wallet') setScreen(returnScreen);
-        else if (screen === 'lobby') setScreen('landing');
+        if (screen === 'lobby') setScreen('landing');
       }
       if (screen === 'landing') {
         if (e.key === 'p' || e.key === 'P') setScreen('practice-solo');
@@ -135,7 +140,7 @@ function AppInner() {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [isMobile, screen, returnScreen]);
+  }, [isMobile, screen]);
 
   // Mobile browser back handler
   useEffect(() => {
@@ -145,23 +150,26 @@ function AppInner() {
       if (screen !== 'landing') {
         e.preventDefault();
         window.history.pushState(null, '', window.location.href);
-        if (screen === 'wallet') setScreen(returnScreen);
-        else if (screen === 'practice-solo' || screen === 'game') setScreen('landing');
-        else setScreen('landing');
+        setScreen('landing');
       }
     };
 
     window.history.pushState(null, '', window.location.href);
     window.addEventListener('popstate', handleBack);
     return () => window.removeEventListener('popstate', handleBack);
-  }, [isMobile, screen, returnScreen]);
+  }, [isMobile, screen]);
 
   // Navigation handlers - Practice goes directly to solo mode
   const onPractice = useCallback(() => setScreen('practice-solo'), []);
-  const onWallet = useCallback(() => {
-    setReturnScreen(screen);
-    setScreen('wallet');
-  }, [screen]);
+  const onWallet = useCallback(async (tier?: { usd: number; prize: string }) => {
+    if (tier) setSelectedTier(tier);
+    const success = await connect();
+    if (success) {
+      setScreen('lobby');
+    } else {
+      showToast('Wallet not connected — try again or use Practice mode');
+    }
+  }, [connect, showToast]);
   const openLeaderboard = useCallback(() => setShowLeaderboard(true), []);
 
   // Loading fallback
@@ -201,24 +209,18 @@ function AppInner() {
           onWallet={onWallet}
           onLeaderboard={openLeaderboard}
           onHelp={() => setShowHowToPlay(true)}
+          isNewPlayer={isNewPlayer}
         />
       )}
 
       {screen === 'practice-solo' && (
         <Practice
-          onFinish={(stats) => { setPracticeStats(stats); setScreen('results'); }}
+          onFinish={(stats) => { markPlayed(); setPracticeStats(stats); setScreen('results'); }}
           onBack={() => setScreen('landing')}
+          onPlayReal={() => { onWallet(selectedTier); }}
+          playRealPrize={selectedTier.prize}
           isMobile={isMobile}
         />
-      )}
-
-      {screen === 'wallet' && (
-        <Suspense fallback={LoadingFallback}>
-          <WalletScreen
-            onConnected={() => setScreen('lobby')}
-            onClose={() => setScreen(returnScreen)}
-          />
-        </Suspense>
       )}
 
       {screen === 'lobby' && (
@@ -236,7 +238,12 @@ function AppInner() {
 
       {screen === 'results' && (
         <PremiumResultsScreen
-          onPlayAgain={() => { setPracticeStats(null); setScreen('practice-solo'); }}
+          onPlayAgain={() => {
+            setPracticeStats(null);
+            // Tournament players go back to landing to re-enter; practice players go back to practice
+            if (!practiceStats) setScreen('landing');
+            else setScreen('practice-solo');
+          }}
           onChangeTier={() => { setPracticeStats(null); setScreen('landing'); }}
           practiceStats={practiceStats ?? undefined}
         />
@@ -320,10 +327,14 @@ const Header = memo(function Header({
 function Practice({
   onFinish,
   onBack,
+  onPlayReal,
+  playRealPrize,
   isMobile,
 }: {
   onFinish: (stats: any) => void;
   onBack: () => void;
+  onPlayReal?: () => void;
+  playRealPrize?: string;
   isMobile: boolean;
 }) {
   const [meId] = useState(() => {
@@ -365,6 +376,8 @@ function Practice({
         onReplay={onBack}
         onExit={onBack}
         onGameEnd={onFinish}
+        onPlayReal={onPlayReal}
+        playRealPrize={playRealPrize}
       />
       {isMobile && showTutorial && (
         <Suspense fallback={null}>

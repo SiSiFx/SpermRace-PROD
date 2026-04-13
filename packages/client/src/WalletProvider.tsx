@@ -138,7 +138,8 @@ function WalletContextBridge({ children }: { children: React.ReactNode }) {
 
   const connectThroughAdapter = useCallback(async () => {
     console.log('[WALLET] connectThroughAdapter() invoked');
-    const waitPromise = waitForConnectionResult(false, 20000);
+    // Short timeout — if the wallet doesn't confirm within 2.5s we fall back to the modal
+    const waitPromise = waitForConnectionResult(false, 2500);
     try {
       await connect();
       console.log('[WALLET] connect() promise resolved');
@@ -155,11 +156,6 @@ function WalletContextBridge({ children }: { children: React.ReactNode }) {
     if (typeof window === 'undefined') return false;
     if (publicKey) return true;
 
-    if (wallet) {
-      console.log('[WALLET] Wallet already selected → using existing adapter');
-      return await connectThroughAdapter();
-    }
-
     // On mobile, always show the wallet selection modal (avoid stale desktop preference)
     if (isMobileUA()) {
       const result = await waitForConnectionResult(true, 60000);
@@ -167,7 +163,7 @@ function WalletContextBridge({ children }: { children: React.ReactNode }) {
       return result;
     }
 
-    // Desktop: try auto-selecting last used wallet, else show modal
+    // Desktop: try auto-selecting last used wallet, then fall back to modal
     try {
       const preferred = localStorage.getItem('sr_last_wallet');
       if (preferred) {
@@ -176,18 +172,22 @@ function WalletContextBridge({ children }: { children: React.ReactNode }) {
           console.log('[WALLET] Auto-selecting last wallet →', preferred);
           await select(candidate.adapter.name);
           await new Promise((resolve) => setTimeout(resolve, 0));
-          return await connectThroughAdapter();
+          const result = await connectThroughAdapter();
+          if (result) return result;
+          console.log('[WALLET] Direct connect failed → showing modal');
+        } else {
+          console.log('[WALLET] Stored wallet not available → showing modal');
         }
-        console.log('[WALLET] Stored wallet not available → showing modal');
       }
     } catch (err) {
       console.warn('[WALLET] Failed to auto-select last wallet', err);
     }
 
+    // Show the wallet modal (covers: no preferred wallet, or direct connect didn't work)
     const result = await waitForConnectionResult(true, 60000);
     console.log('[WALLET] Modal result →', result);
     return result;
-  }, [publicKey, wallet, connectThroughAdapter, wallets, select, waitForConnectionResult]);
+  }, [publicKey, connectThroughAdapter, wallets, select, waitForConnectionResult]);
 
   const disconnectWrapper = useCallback(async () => {
     resolvePending(false);

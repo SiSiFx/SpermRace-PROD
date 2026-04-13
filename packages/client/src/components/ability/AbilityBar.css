@@ -286,3 +286,13 @@
     width: 70px;
   }
 }
+
+@media (max-width: 768px) {
+  .ability-keybind,
+  .ability-energy-cost { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ability-slot.active,
+  .ability-active-indicator { animation: none; }
+}

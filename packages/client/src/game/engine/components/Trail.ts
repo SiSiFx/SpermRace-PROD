@@ -200,12 +200,12 @@ export function checkTrailCollision(
 }
 
 /**
- * Calculate trail alpha based on age — fades in the final 20% of lifetime
+ * Calculate trail alpha based on age — fades over the last 50% of lifetime for a long smooth gradient
  */
 export function getTrailAlpha(point: TrailPoint, lifetime: number, now: number): number {
   const age = now - point.timestamp;
   if (age >= lifetime) return 0;
-  const fadeStart = lifetime * 0.8;
+  const fadeStart = lifetime * 0.5;
   if (age > fadeStart) {
     return 1 - (age - fadeStart) / (lifetime - fadeStart);
   }

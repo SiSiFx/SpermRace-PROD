@@ -18,6 +18,7 @@ import { BODY_COLLISION_CONFIG } from '../config';
 import type { ZoneSystem } from './ZoneSystem';
 import { distanceToSegmentSquared } from '../view/math';
 import type { TrailSystem } from './TrailSystem';
+import type { AbilitySystem } from './AbilitySystem';
 
 /**
  * Collision result
@@ -120,6 +121,9 @@ export class CollisionSystem extends System {
     // Check car-trail/body collisions (slither.io-style)
     this._checkTrailCollisions(now);
 
+    // Check car-trap collisions (ability-placed hazards)
+    this._checkTrapCollisions(now);
+
     // Check car-car collisions
     this._checkCarCollisions();
 
@@ -195,6 +199,11 @@ export class CollisionSystem extends System {
           return;
         }
 
+        // Shield absorbs this hit
+        if (health.shielded || (health.shieldUntil && health.shieldUntil > now)) {
+          return false;
+        }
+
         this._collisions.push({
           victimId: car.id,
           killerId: isSelfTrail ? car.id : segment.ownerId,
@@ -215,6 +224,54 @@ export class CollisionSystem extends System {
           distance: nearestNearMissDistance,
           timestamp: now,
         });
+      }
+    }
+  }
+
+  /**
+   * Check car-trap collisions (ability-placed hazards)
+   */
+  private _checkTrapCollisions(now: number): void {
+    const abilitySystem = this.getEngine()?.getSystemManager()?.getSystem<AbilitySystem>('abilities');
+    if (!abilitySystem) return;
+
+    const traps = abilitySystem.getTraps();
+    if (traps.size === 0) return;
+
+    const cars = this.entityManager.queryByMask(this._carMask);
+    const TRAP_POINT_RADIUS = 10;
+
+    for (const car of cars) {
+      const position = car.getComponent<Position>(ComponentNames.POSITION);
+      const collision = car.getComponent<Collision>(ComponentNames.COLLISION);
+      const health = car.getComponent<Health>(ComponentNames.HEALTH);
+
+      if (!position || !collision || !health) continue;
+      if (!health.isAlive) continue;
+      if (hasSpawnProtection(health)) continue;
+      if (health.shielded || (health.shieldUntil && health.shieldUntil > now)) continue;
+
+      const combinedRadius = collision.radius + TRAP_POINT_RADIUS;
+      const combinedRadiusSq = combinedRadius * combinedRadius;
+
+      for (const [trapId, trap] of traps) {
+        for (const pt of trap.trailPoints) {
+          const dx = position.x - pt.x;
+          const dy = position.y - pt.y;
+          if (dx * dx + dy * dy < combinedRadiusSq) {
+            this._collisions.push({
+              victimId: car.id,
+              killerId: trapId,
+              x: pt.x,
+              y: pt.y,
+              type: 'trap' as any,
+              timestamp: now,
+            });
+            killEntity(health, trapId, true);
+            break;
+          }
+        }
+        if (!health.isAlive) break;
       }
     }
   }
