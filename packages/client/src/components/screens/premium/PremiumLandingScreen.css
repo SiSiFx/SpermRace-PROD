@@ -201,11 +201,15 @@
 
 .stake-payout {
   font-family: 'Outfit', sans-serif;
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
   color: var(--muted);
   line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 .landing-stake.is-active .stake-payout { color: rgba(13,11,8,0.65); }
 

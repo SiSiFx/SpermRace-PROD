@@ -67,7 +67,7 @@ export const PremiumLandingScreen = memo(function PremiumLandingScreen({
               >
                 <span className="stake-entry">{t.name}</span>
                 {t.prize
-                  ? <span className="stake-payout">→ {t.prize}</span>
+                  ? <span className="stake-payout">win {t.prize}</span>
                   : <span className="stake-payout">practice</span>
                 }
               </button>
