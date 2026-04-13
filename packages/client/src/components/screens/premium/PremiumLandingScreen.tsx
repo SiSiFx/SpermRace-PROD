@@ -10,11 +10,11 @@ type Tier = {
 };
 
 const TIERS: Tier[] = [
-  { name: 'Practice', usd: 0,   prize: null   },
-  { name: '$1',       usd: 1,   prize: '$8'   },
-  { name: '$5',       usd: 5,   prize: '$42',  recommended: true },
-  { name: '$25',      usd: 25,  prize: '$212' },
-  { name: '$100',     usd: 100, prize: '$850' },
+  { name: 'Free',  usd: 0,   prize: null   },
+  { name: '$1',    usd: 1,   prize: '$8'   },
+  { name: '$5',    usd: 5,   prize: '$42',  recommended: true },
+  { name: '$25',   usd: 25,  prize: '$212' },
+  { name: '$100',  usd: 100, prize: '$850' },
 ];
 
 export interface PremiumLandingScreenProps {
@@ -43,50 +43,51 @@ export const PremiumLandingScreen = memo(function PremiumLandingScreen({
     <div className="landing-root">
       <SpermBackground />
 
-      <div className="landing-shell">
-        <header className="landing-header">
-          <span className="landing-logo">SpermRace.io</span>
-          <button className="landing-nav-btn" onClick={onLeaderboard}>
-            Leaderboard
-          </button>
-        </header>
+      <nav className="landing-nav">
+        <span className="landing-logo">SpermRace.io</span>
+        <button className="landing-nav-link" onClick={onLeaderboard}>
+          Leaderboard
+        </button>
+      </nav>
 
-        <main className="landing-hero">
-          <h1 className="landing-headline">
-            12 enter.<br />
-            <span className="landing-headline-gold">1 gets paid.</span>
-          </h1>
+      <main className="landing-stage">
+        <h1 className="landing-headline">
+          <span className="landing-headline-line">12 enter.</span>
+          <span className="landing-headline-line is-gold">1 gets paid.</span>
+        </h1>
 
-          <div className="landing-tiers" role="group" aria-label="Choose room">
-            <span className="landing-tiers-label">Choose your room</span>
+        <div className="landing-card">
+          <div className="landing-stakes" role="group" aria-label="Choose your stake">
             {TIERS.map((t, i) => (
               <button
                 key={t.name}
-                className={`landing-tier-btn${selected === i ? ' is-active' : ''}${t.recommended ? ' is-recommended' : ''}`}
+                className={`landing-stake${selected === i ? ' is-active' : ''}${t.recommended ? ' is-hot' : ''}`}
                 onClick={() => setSelected(i)}
                 aria-pressed={selected === i}
               >
-                {t.name}
-                {t.prize && <span className="landing-tier-prize">win {t.prize}</span>}
+                <span className="stake-entry">{t.name}</span>
+                {t.prize
+                  ? <span className="stake-payout">→ {t.prize}</span>
+                  : <span className="stake-payout">practice</span>
+                }
               </button>
             ))}
           </div>
 
-          <div className="landing-actions">
-            <button className="landing-cta-primary" onClick={handlePrimary}>
-              <span key={tier.usd} className="landing-cta-content">
-                {tier.usd === 0 ? 'Start practice' : `Enter ${tier.name} room`}
-                {tier.prize && <span className="landing-cta-prize">→ win {tier.prize}</span>}
-              </span>
+          <button className="landing-cta" onClick={handlePrimary}>
+            {tier.usd === 0
+              ? 'Start practice'
+              : <>Enter {tier.name} room <span className="cta-payout">win {tier.prize}</span></>
+            }
+          </button>
+
+          {tier.usd !== 0 && (
+            <button className="landing-practice-link" onClick={onPractice}>
+              or practice free first
             </button>
-            {tier.usd !== 0 && (
-              <button className="landing-cta-secondary" onClick={onPractice}>
-                Practice free
-              </button>
-            )}
-          </div>
-        </main>
-      </div>
+          )}
+        </div>
+      </main>
     </div>
   );
 });
