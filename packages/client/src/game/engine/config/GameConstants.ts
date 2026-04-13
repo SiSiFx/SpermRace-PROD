@@ -102,7 +102,7 @@ export const CAR_PHYSICS = {
   LATERAL_DRAG: 0.82,
 
   /** Turn speed (rad/second) */
-  TURN_SPEED: 3.5,
+  TURN_SPEED: 12,
 
   /** Turn rate with speed scaling */
   SPEED_TURN_SCALE: 0.18,
