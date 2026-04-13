@@ -93,16 +93,16 @@ export const CAR_PHYSICS = {
   MAX_SPEED: 1000,
 
   /** Acceleration rate */
-  ACCELERATION: 300,
+  ACCELERATION: 520,
 
   /** Longitudinal drag (velocity preservation) */
   LONGITUDINAL_DRAG: 0.989,
 
   /** Lateral drag */
-  LATERAL_DRAG: 0.82,
+  LATERAL_DRAG: 0.91,
 
   /** Turn speed (rad/second) */
-  TURN_SPEED: 12,
+  TURN_SPEED: 7,
 
   /** Turn rate with speed scaling */
   SPEED_TURN_SCALE: 0.18,
