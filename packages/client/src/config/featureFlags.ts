@@ -28,7 +28,7 @@ export function getFeatureFlags(): FeatureFlags {
   if (import.meta.env.VITE_ENABLE_ECS_ENGINE === 'true') {
     return {
       enableECSEngine: true,
-      enableAbilities: false,
+      enableAbilities: true,
       enableFastGameplay: true,
       enableSpatialPartitioning: true,
       enableClientPrediction: false, // Still experimental
@@ -65,11 +65,11 @@ export function setFeatureFlags(flags: Partial<FeatureFlags>): void {
  * Default feature flags
  */
 const defaultFlags: FeatureFlags = {
-  enableECSEngine: true,      // ECS engine is now enabled
-  enableAbilities: false,     // Abilities disabled
-  enableFastGameplay: true,   // Faster matches (30s)
+  enableECSEngine: true,          // ECS engine is now enabled
+  enableAbilities: true,          // Abilities on — Shield/Dash/Overdrive per class
+  enableFastGameplay: true,       // Faster matches (30s)
   enableSpatialPartitioning: true, // Performance optimization enabled
-  enableClientPrediction: false, // Requires more testing
+  enableClientPrediction: false,  // Requires more testing
 };
 
 /**

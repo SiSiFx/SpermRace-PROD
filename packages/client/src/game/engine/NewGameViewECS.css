@@ -785,6 +785,8 @@
     gap: 6px;
     top: calc(12px + env(safe-area-inset-top, 0px));
     left: calc(12px + env(safe-area-inset-left, 0px));
+    /* Constrain width so HUD never reaches under the alive counter (top-right) */
+    max-width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 148px);
   }
 
   .ecs-pill,
@@ -794,19 +796,21 @@
     padding: 7px 10px;
   }
 
+  /* Narrower boost wrap so it fits in the constrained HUD column */
   .ecs-boost-wrap {
-    min-width: 150px;
+    min-width: 130px;
   }
 
   .ecs-boost-bar {
-    width: 88px;
+    width: 72px;
   }
 
+  /* Kill feed: below the 3-row HUD (HUD bottom ~130px) and below alive counter (61px) */
   .ecs-kill-feed {
-    top: calc(96px + env(safe-area-inset-top, 0px));
+    top: calc(140px + env(safe-area-inset-top, 0px));
     right: calc(8px + env(safe-area-inset-right, 0px));
     gap: 4px;
-    max-width: min(240px, 62vw);
+    max-width: min(200px, 52vw);
   }
 
   .ecs-kill-feed-item {
@@ -820,7 +824,7 @@
   }
 
   .ecs-alive-dominant-wrap {
-    /* Move to top-right on mobile — avoids overlapping the 2-row HUD */
+    /* Pinned top-right — clear of the HUD column on the left */
     top: calc(10px + env(safe-area-inset-top, 0px));
     left: auto;
     right: calc(10px + env(safe-area-inset-right, 0px));
@@ -829,9 +833,9 @@
     min-width: 120px;
   }
 
-  /* Zone pill below the 2-row HUD on mobile */
+  /* Zone pill below the 3-row HUD on mobile (HUD bottom ~130px) */
   .ecs-zone-pill {
-    top: calc(96px + env(safe-area-inset-top, 0px));
+    top: calc(140px + env(safe-area-inset-top, 0px));
   }
 
   .ecs-alive-kicker {
@@ -842,10 +846,23 @@
     font-size: 2rem;
   }
 
+  /* Hide the desktop/center controls hint on mobile —
+     the on-screen joystick and boost button already communicate the controls.
+     The hint renders at the bottom center and badly overlaps the joystick. */
   .ecs-controls-hint {
-    font-size: 10px;
-    padding: 8px 12px;
-    max-width: calc(100vw - 28px);
+    display: none;
+  }
+
+  /* Hide the "HOLD RIGHT SIDE TO BOOST" tooltip — the BOOST button
+     already has that label, and it overlaps the ability button. */
+  .ecs-mobile-boost-hint {
+    display: none;
+  }
+
+  /* Push game hint above the ability button stack (ability btn top ~y=668) */
+  .ecs-game-hint {
+    bottom: calc(190px + env(safe-area-inset-bottom, 0px));
+    max-width: calc(100vw - 24px);
   }
 }
 

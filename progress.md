@@ -162,3 +162,23 @@ Original prompt: actually the core game look is pretyy abd and very not playable
 - Notes:
   - The stock `develop-web-game` wrapper still failed on the class confirm click; direct forced-click verification was used again.
   - Filtered `tsc` for `Game.tsx`, `GameConstants.ts`, and `CameraSystem.ts` returned no touched-file errors.
+
+- 2026-04-14: Practice lobby bot system fully implemented and verified end-to-end.
+- Changes made:
+  - LobbyManager.ts: Called `injectPracticeBots()` in both `joinLobby()` and `startLobbyCountdown()`.
+  - LobbyManager.ts: Changed all minimum-real-player guards from hardcoded `2` to `(isPracticeBotsEnabled()) ? 1 : 2`.
+  - Server .env: ENABLE_PRACTICE_BOTS=true, PRACTICE_BOTS_TARGET=10, LOBBY_COUNTDOWN_PRACTICE=5.
+  - Landing page redesign: grain texture, vignette, gold glow, staggered entrance animations, CTA hover glow, prize amounts on tier buttons, goldPulse shimmer on headline.
+  - HUD animations: hudIn, aliveCountDrop (remounts on count change), killFeedSlideIn, endOverlayIn/endContentUp stagger, zonePillIn.
+  - Mobile HUD fixes: alive counter moved top-right (was overlapping HUD), zone pill and kill feed pushed down past 2-row HUD.
+- Verified:
+  - Single player joining practice → 9 bots fill immediately → 10/10 lobby
+  - 5s countdown starts → game launches
+  - All ECS HUD elements visible: alive counter (10), boost bar, zone pill, kill counter, time
+  - Bots are real opponents (server logs: guest killed bots, bots killed guest, bots killed bots)
+  - Full round lifecycle: round starts → combat → one survivor declared winner → results
+  - Zero console errors end-to-end
+- Notes:
+  - selectedClass hardcoded to BALANCED in NewGameViewECS.tsx:191 (class selection not wired in multiplayer flow)
+  - PixiJS/WebGL canvas is black in headless Playwright (expected — swiftshader doesn't render WebGL)
+  - Screenshot API hangs on font loading when WebGL game canvas is active; functional state verified via DOM text queries instead

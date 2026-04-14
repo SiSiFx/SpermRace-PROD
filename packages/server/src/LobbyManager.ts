@@ -341,8 +341,8 @@ export class LobbyManager {
 
     const maybeStart = () => {
       const deadline = this.lobbyDeadlineMs.get(lobby.lobbyId) || (Date.now() + LOBBY_MAX_WAIT_SEC * 1000);
-      // If lobby is full, start immediately
-      if (lobby.players.length >= lobby.maxPlayers) {
+      // If lobby is full, start immediately — but let practice run its countdown so the lobby is visible
+      if (lobby.players.length >= lobby.maxPlayers && lobby.mode !== 'practice') {
         this.clearLobbyTimers(lobby.lobbyId);
         this.onGameStart?.(lobby);
         this.lobbies.delete(lobby.lobbyId);

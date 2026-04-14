@@ -845,6 +845,24 @@ export function NewGameViewECS({
     setMobileBoostHeld(false);
   }, []);
 
+  // Class → ability name map (render-scope, used by mobile ability button)
+  const classAbilityLabel: Record<SpermClassType, string> = {
+    [SpermClassType.BALANCED]: 'SHIELD',
+    [SpermClassType.SPRINTER]: 'DASH',
+    [SpermClassType.TANK]: 'OVERDRIVE',
+  };
+  const classAbilityKey: Record<SpermClassType, string> = {
+    [SpermClassType.BALANCED]: 'shield',
+    [SpermClassType.SPRINTER]: 'dash',
+    [SpermClassType.TANK]: 'overdrive',
+  };
+
+  const onAbilityPointerDown = useCallback((e: ReactPointerEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    gameRef.current?.activateAbility(classAbilityKey[selectedClass]);
+  }, [selectedClass]);
+
   return (
     <div className="ecs-root" data-status={snapshot.status}>
       {/* Practice Lobby Screen */}
@@ -975,6 +993,23 @@ export function NewGameViewECS({
           </button>
           {showControlsHint && (
             <div className="ecs-mobile-boost-hint">HOLD RIGHT SIDE TO BOOST</div>
+          )}
+          {enableAbilities && (
+            <button
+              type="button"
+              className={`ecs-mobile-ability-btn${snapshot.abilityActive ? ' is-active' : snapshot.abilityCooldownPct > 0 ? ' is-cooling' : ''}`}
+              onPointerDown={onAbilityPointerDown}
+              onContextMenu={(e) => e.preventDefault()}
+              aria-label={`Use ${classAbilityLabel[selectedClass]}`}
+            >
+              <svg className="ecs-ability-cooldown-ring" viewBox="0 0 46 46">
+                <circle className="ecs-ability-ring-track" cx="23" cy="23" r="20"/>
+                <circle className="ecs-ability-ring-fill" cx="23" cy="23" r="20"
+                  style={{ strokeDashoffset: 125.66 * (snapshot.abilityActive ? 0 : snapshot.abilityCooldownPct) }}
+                />
+              </svg>
+              <span className="ecs-ability-btn-label">{classAbilityLabel[selectedClass]}</span>
+            </button>
           )}
         </>
       )}

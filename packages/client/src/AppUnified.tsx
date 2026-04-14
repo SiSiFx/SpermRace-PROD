@@ -71,7 +71,7 @@ export default function App() {
 
 function AppInner() {
   const isMobile = useIsMobile();
-  const { state: wsState } = useWs();
+  const { state: wsState, connectAndJoin } = useWs();
   const { publicKey, disconnect, connect } = useWallet();
 
   const [screen, setScreen] = useState<AppScreen>(() => getInitialScreen());
@@ -159,8 +159,17 @@ function AppInner() {
     return () => window.removeEventListener('popstate', handleBack);
   }, [isMobile, screen]);
 
-  // Navigation handlers - Practice goes directly to solo mode
-  const onPractice = useCallback(() => setScreen('practice-solo'), []);
+  // Navigation handlers - Practice routes through server lobby (guest mode, no wallet needed)
+  const PRACTICE_NAMES = ['Ace', 'Atom', 'Blitz', 'Chrome', 'Dusk', 'Echo', 'Ember', 'Fuse', 'Glitch', 'Hex', 'Ion', 'Jade', 'Lux', 'Mach', 'Nitro'];
+  const onPractice = useCallback(async () => {
+    const name = PRACTICE_NAMES[Math.floor(Math.random() * PRACTICE_NAMES.length)];
+    try {
+      await connectAndJoin({ entryFeeTier: 0, mode: 'practice', guestName: name });
+    } catch {
+      // Server unavailable — fall back to local offline practice
+      setScreen('practice-solo');
+    }
+  }, [connectAndJoin]);
   const onWallet = useCallback(async (tier?: { usd: number; prize: string }) => {
     if (tier) setSelectedTier(tier);
     const success = await connect();
