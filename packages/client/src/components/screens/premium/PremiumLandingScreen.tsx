@@ -1,6 +1,13 @@
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import './PremiumLandingScreen.css';
 import { SpermBackground } from './SpermBackground';
+
+function genRoomCode(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/I/1 confusion
+  let code = '';
+  for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
 
 type Tier = {
   name: string;
@@ -20,6 +27,7 @@ const TIERS: Tier[] = [
 export interface PremiumLandingScreenProps {
   solPrice?: number | null;
   onPractice?: () => void;
+  onFriendsLobby?: (roomCode: string) => void;
   onWallet?: (tier: { usd: number; prize: string }) => void;
   onLeaderboard?: () => void;
   onHelp?: () => void;
@@ -28,11 +36,45 @@ export interface PremiumLandingScreenProps {
 
 export const PremiumLandingScreen = memo(function PremiumLandingScreen({
   onPractice,
+  onFriendsLobby,
   onWallet,
   onLeaderboard,
 }: PremiumLandingScreenProps) {
   const [selected, setSelected] = useState(2); // default: $5
   const tier = TIERS[selected];
+
+  // Friend-room state
+  const [friendCode, setFriendCode] = useState<string | null>(() => {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      const c = p.get('room');
+      return c && /^[A-Z0-9]{2,6}$/i.test(c) ? c.toUpperCase() : null;
+    } catch { return null; }
+  });
+  const [copied, setCopied] = useState(false);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // If URL had a room code, auto-joining is handled in AppUnified; just show the code.
+  const isJoiningExisting = !!friendCode && (() => {
+    try { return !!new URLSearchParams(window.location.search).get('room'); } catch { return false; }
+  })();
+
+  const handleCreateRoom = useCallback(() => {
+    const code = genRoomCode();
+    setFriendCode(code);
+    onFriendsLobby?.(code);
+  }, [onFriendsLobby]);
+
+  const handleCopyLink = useCallback(() => {
+    if (!friendCode) return;
+    const url = `${window.location.origin}${window.location.pathname}?room=${friendCode}`;
+    navigator.clipboard.writeText(url).catch(() => {});
+    setCopied(true);
+    if (copyTimer.current) clearTimeout(copyTimer.current);
+    copyTimer.current = setTimeout(() => setCopied(false), 2000);
+  }, [friendCode]);
+
+  useEffect(() => () => { if (copyTimer.current) clearTimeout(copyTimer.current); }, []);
 
   const handlePrimary = useCallback(() => {
     if (tier.usd === 0) onPractice?.();
@@ -86,6 +128,28 @@ export const PremiumLandingScreen = memo(function PremiumLandingScreen({
               or practice free first
             </button>
           )}
+
+          {/* ── Friends lobby ── */}
+          <div className="landing-friends">
+            {!friendCode ? (
+              <button className="landing-friends-btn" onClick={handleCreateRoom}>
+                Play with friends
+              </button>
+            ) : (
+              <div className="landing-friends-room">
+                <span className="landing-friends-label">
+                  {isJoiningExisting ? 'Joining room' : 'Room code'}
+                </span>
+                <span className="landing-friends-code">{friendCode}</span>
+                <button className="landing-friends-copy" onClick={handleCopyLink}>
+                  {copied ? 'Copied!' : 'Copy link'}
+                </button>
+                {!isJoiningExisting && (
+                  <span className="landing-friends-hint">Share link — game starts in 30s</span>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </main>
     </div>

@@ -182,3 +182,19 @@ Original prompt: actually the core game look is pretyy abd and very not playable
   - selectedClass hardcoded to BALANCED in NewGameViewECS.tsx:191 (class selection not wired in multiplayer flow)
   - PixiJS/WebGL canvas is black in headless Playwright (expected — swiftshader doesn't render WebGL)
   - Screenshot API hangs on font loading when WebGL game canvas is active; functional state verified via DOM text queries instead
+
+- 2026-04-14: Server-side practice bots fully verified end-to-end (resumed session).
+- Verification results:
+  - Server starts cleanly on port 8085 via `node dist/server/src/index.js`
+  - Guest player connects via guestLogin → authenticated → joinLobby (practice, tier 0)
+  - Server logs confirm: ENABLE_PRACTICE_BOTS=true, PRACTICE_BOTS_TARGET=10, 9 bots injected in <100ms
+  - Lobby goes 1/10 → 10/10 instantly → 5s countdown → gameStarting
+  - Client lobby screen shows: "PRACTICE LOBBY 10/10 · Room full · Starting in 3s"
+  - Bot names visible (Vex, Kira, Dax, ...) with BOT badge
+  - HUD elements visible: ALIVE 10, KILLS 0, TIME 00:00, BOOST bar, zone/trail warnings
+  - Landing page confirmed: grain texture, vignette, animated sperm background, tier buttons with prize amounts
+- Remaining for production deploy:
+  - Copy .env to VPS, adjust SOLANA_RPC_ENDPOINT for mainnet
+  - Set PRIZE_POOL_SECRET_KEY + PRIZE_POOL_WALLET env vars
+  - NODE_ENV=production will disable ENABLE_PRACTICE_BOTS by default (set explicitly if wanted)
+  - Run `pm2 restart spermrace-server-ws` after deploy

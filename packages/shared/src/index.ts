@@ -97,6 +97,7 @@ export interface Lobby {
   entryFee: EntryFeeTier;
   mode: GameMode;
   status: 'waiting' | 'starting';
+  roomCode?: string; // Set for friend lobbies — all players with this code join the same lobby
 }
 
 // =================================================================================================
@@ -130,6 +131,7 @@ export interface JoinLobbyMessage {
   payload: {
     entryFeeTier: EntryFeeTier;
     mode?: GameMode;
+    roomCode?: string; // Optional 4-char code to join/create a friend lobby
   };
 }
 

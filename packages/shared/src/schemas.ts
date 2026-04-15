@@ -47,6 +47,7 @@ export const joinLobbyMessageSchema = z.object({
   payload: z.object({
     entryFeeTier: entryFeeTierSchema,
     mode: gameModeSchema,
+    roomCode: z.string().max(6).optional(),
   }),
 });
 

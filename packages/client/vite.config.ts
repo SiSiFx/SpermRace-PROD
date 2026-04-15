@@ -1,6 +1,8 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
+const SERVER_PORT = process.env.SERVER_PORT || process.env.PORT || '8085';
+
 /**
  * Vite config for the canvas-test client.
  * Optimized for performance and production builds.
@@ -19,12 +21,12 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:8085',
+        target: `http://localhost:${SERVER_PORT}`,
         changeOrigin: false,
         secure: false,
       },
       '/ws': {
-        target: 'ws://localhost:8085',
+        target: `ws://localhost:${SERVER_PORT}`,
         ws: true,
         changeOrigin: false,
         secure: false,
