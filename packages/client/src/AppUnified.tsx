@@ -3,7 +3,7 @@
  * Consolidates AppPC + AppMobile into one responsive component
  */
 
-import { useState, useEffect, useCallback, lazy, Suspense, memo } from 'react';
+import { useState, useEffect, useCallback, useRef, lazy, Suspense, memo } from 'react';
 import { WalletProvider, useWallet } from './WalletProvider';
 import { WsProvider, useWs } from './WsProvider';
 import { GameViewWrapper } from './components/GameViewWrapper';
@@ -89,6 +89,8 @@ function AppInner() {
   const [showHowToPlay, setShowHowToPlay] = useState(false);
   const [gameCountdown] = useState<number | null>(null);
   const [practiceStats, setPracticeStats] = useState<{ placement: number; kills: number; duration: number; winner: boolean; killerName: string | null; totalPlayers: number } | null>(null);
+  // Track whether the current online game is free/practice so Results screen shows correct UI
+  const joinedAsPracticeRef = useRef(false);
   // Track last selected tier so the upsell CTA reflects the right prize
   const [selectedTier, setSelectedTier] = useState<{ usd: number; prize: string }>({ usd: 5, prize: '$42' });
 
@@ -121,6 +123,29 @@ function AppInner() {
       if (screen !== 'game') setScreen('game');
     } else if (phase === 'ended') {
       markPlayed();
+      // Build practiceStats for online free/practice games so Results screen shows correct UI
+      if (joinedAsPracticeRef.current && !practiceStats) {
+        const selfId = wsState.playerId || '';
+        const isWinner = !!wsState.lastRound?.winnerId && wsState.lastRound.winnerId === selfId;
+        const totalPlayers = wsState.initialPlayers.length || 1;
+        // Placement: winner = 1, otherwise position from elimination order
+        const elimIdx = wsState.eliminationOrder.indexOf(selfId);
+        const placement = isWinner ? 1 : (elimIdx >= 0 ? totalPlayers - elimIdx : totalPlayers);
+        // Killer name from kill feed
+        const killedByEntry = wsState.killFeed.find(e => e.victimId === selfId);
+        const killerName = killedByEntry?.killerId
+          ? (wsState.lobby?.playerNames?.[killedByEntry.killerId] || null)
+          : null;
+        setPracticeStats({
+          winner: isWinner,
+          placement,
+          kills: wsState.kills[selfId] || 0,
+          duration: 0,
+          killerName,
+          totalPlayers,
+        });
+        joinedAsPracticeRef.current = false;
+      }
       if (screen !== 'results') setScreen('results');
     }
   }, [wsState.phase, screen, markPlayed]);
@@ -164,8 +189,10 @@ function AppInner() {
   const onPractice = useCallback(async () => {
     const name = PRACTICE_NAMES[Math.floor(Math.random() * PRACTICE_NAMES.length)];
     try {
+      joinedAsPracticeRef.current = true;
       await connectAndJoin({ entryFeeTier: 0, mode: 'practice', guestName: name });
     } catch {
+      joinedAsPracticeRef.current = false;
       // Server unavailable — fall back to local offline practice
       setScreen('practice-solo');
     }
@@ -174,8 +201,10 @@ function AppInner() {
   const onFriendsLobby = useCallback(async (roomCode: string) => {
     const name = PRACTICE_NAMES[Math.floor(Math.random() * PRACTICE_NAMES.length)];
     try {
+      joinedAsPracticeRef.current = true;
       await connectAndJoin({ entryFeeTier: 0, mode: 'practice', guestName: name, roomCode });
     } catch {
+      joinedAsPracticeRef.current = false;
       setScreen('practice-solo');
     }
   }, [connectAndJoin]);
@@ -270,12 +299,13 @@ function AppInner() {
       {screen === 'results' && (
         <PremiumResultsScreen
           onPlayAgain={() => {
+            joinedAsPracticeRef.current = false;
             setPracticeStats(null);
-            // Tournament players go back to landing to re-enter; practice players go back to practice
-            if (!practiceStats) setScreen('landing');
-            else setScreen('practice-solo');
+            // Online practice + local practice → back to practice; tournament → landing
+            if (practiceStats) setScreen('practice-solo');
+            else setScreen('landing');
           }}
-          onChangeTier={() => { setPracticeStats(null); setScreen('landing'); }}
+          onChangeTier={() => { joinedAsPracticeRef.current = false; setPracticeStats(null); setScreen('landing'); }}
           practiceStats={practiceStats ?? undefined}
         />
       )}
