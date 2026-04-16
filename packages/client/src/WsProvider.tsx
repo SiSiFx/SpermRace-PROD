@@ -46,7 +46,7 @@ type WsState = {
   eliminationOrder: string[];
 };
 
-type JoinOpts = { entryFeeTier: EntryFeeTier; mode?: GameMode; guestName?: string; roomCode?: string };
+type JoinOpts = { entryFeeTier: EntryFeeTier; mode?: GameMode; guestName?: string };
 
 type WsApi = {
   state: WsState;
@@ -222,7 +222,7 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
       // If we already have an open authenticated guest socket, just re-join without reconnecting.
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && state.playerId && state.playerId.startsWith('guest-')) {
         try {
-          wsRef.current.send(JSON.stringify({ type: 'joinLobby', payload: { entryFeeTier: opts.entryFeeTier, mode: opts.mode, roomCode: opts.roomCode } }));
+          wsRef.current.send(JSON.stringify({ type: 'joinLobby', payload: { entryFeeTier: opts.entryFeeTier, mode: opts.mode } }));
           joinBusyRef.current = false;
           setState(s => ({ ...s, phase: 'connecting', joining: true, lastError: null }));
           return;
@@ -310,7 +310,7 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
       // If already authenticated and socket is OPEN, send join now
       if (ready === WebSocket.OPEN && state.playerId) {
         console.log('[JOIN] WS open + authenticated → sending joinLobby');
-        wsRef.current.send(JSON.stringify({ type: 'joinLobby', payload: { entryFeeTier: opts.entryFeeTier, mode: opts.mode, roomCode: opts.roomCode } }));
+        wsRef.current.send(JSON.stringify({ type: 'joinLobby', payload: { entryFeeTier: opts.entryFeeTier, mode: opts.mode } }));
         joinBusyRef.current = false;
         setState(s => ({ ...s, phase: 'connecting', joining: true }));
         console.log('[JOIN] joinLobby sent (socket already authenticated)');
@@ -605,7 +605,7 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
               const join = pendingJoinRef.current;
               if (join) {
                 console.log('[JOIN] sending joinLobby after auth');
-                sock.send(JSON.stringify({ type: 'joinLobby', payload: { entryFeeTier: join.entryFeeTier, mode: join.mode, roomCode: join.roomCode } }));
+                sock.send(JSON.stringify({ type: 'joinLobby', payload: { entryFeeTier: join.entryFeeTier, mode: join.mode } }));
                 setState(s => ({ ...s, phase: 'connecting', joining: true }));
               }
               break;
@@ -733,7 +733,7 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
                   try {
                     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && pendingJoinRef.current) {
                       console.log('[JOIN] no lobby update yet → re-sending joinLobby');
-                      wsRef.current.send(JSON.stringify({ type: 'joinLobby', payload: { entryFeeTier: pendingJoinRef.current.entryFeeTier, mode: pendingJoinRef.current.mode, roomCode: pendingJoinRef.current.roomCode } }));
+                      wsRef.current.send(JSON.stringify({ type: 'joinLobby', payload: { entryFeeTier: pendingJoinRef.current.entryFeeTier, mode: pendingJoinRef.current.mode } }));
                     }
                   } catch { }
                 }, 3000);

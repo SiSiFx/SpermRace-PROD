@@ -102,14 +102,10 @@ const fallbackEloStore: EloStore = {
   },
 };
 
-// How long friends have to join a room before bots fill remaining slots
-const LOBBY_COUNTDOWN_FRIENDS_SEC = parseInt(process.env.LOBBY_COUNTDOWN_FRIENDS || '30', 10);
 
 export class LobbyManager {
   private lobbies: Map<string, Lobby> = new Map();
   private playerLobbyMap: Map<string, string> = new Map();
-  /** roomCode (4-char) → lobbyId — so all friends with the same code land in the same lobby */
-  private roomLobbies: Map<string, string> = new Map();
   private smartContractService: SmartContractService;
   private databaseService: EloStore;
   private lobbyDeadlineMs: Map<string, number> = new Map();
@@ -134,42 +130,9 @@ export class LobbyManager {
     return this.lobbies.get(lobbyId) || null;
   }
 
-  async joinLobby(playerId: string, entryFee: EntryFeeTier, mode: GameMode = (process.env.SKIP_ENTRY_FEE === 'true' ? 'practice' : 'tournament'), roomCode?: string): Promise<void> {
-    console.log(`[LOBBY] joinLobby called: player=${playerId.slice(0,6)}… entryFee=$${entryFee} mode=${mode}${roomCode ? ` room=${roomCode}` : ''}`);
+  async joinLobby(playerId: string, entryFee: EntryFeeTier, mode: GameMode = (process.env.SKIP_ENTRY_FEE === 'true' ? 'practice' : 'tournament')): Promise<void> {
+    console.log(`[LOBBY] joinLobby called: player=${playerId.slice(0,6)}… entryFee=$${entryFee} mode=${mode}`);
     if (this.playerLobbyMap.has(playerId)) return;
-
-    // ── Friend-room lobby: pinned lobby shared by a 4-char code ──────────────
-    if (roomCode) {
-      const code = roomCode.toUpperCase().slice(0, 6);
-      let lobby: Lobby | undefined;
-      const existingId = this.roomLobbies.get(code);
-      if (existingId) {
-        lobby = this.lobbies.get(existingId);
-      }
-      // Allow joining if lobby is waiting OR counting down (status='starting') and not full.
-      const canJoinExisting = lobby != null && lobby.players.length < lobby.maxPlayers
-        && (lobby.status === 'waiting' || lobby.status === 'starting');
-      if (!canJoinExisting) {
-        // Create a new room lobby (10 slots, practice tier)
-        lobby = this.createLobby(0, 'practice', code);
-        this.roomLobbies.set(code, lobby.lobbyId);
-        console.log(`[ROOM] Created friend lobby ${lobby.lobbyId} for code=${code}`);
-      }
-      const activeLobby = lobby!;
-      activeLobby.players.push(playerId);
-      this.playerLobbyMap.set(playerId, activeLobby.lobbyId);
-      console.log(`[ROOM] Player ${playerId.slice(0,6)}… joined room ${code} (${activeLobby.players.length}/${activeLobby.maxPlayers})`);
-      this.onLobbyUpdate?.(activeLobby);
-      // Sync countdown if already running
-      if (activeLobby.status === 'starting') {
-        const startAtMs = this.lobbyStartAtMs.get(activeLobby.lobbyId);
-        if (startAtMs) this.onLobbyCountdown?.(activeLobby, Math.ceil((startAtMs - Date.now()) / 1000), startAtMs);
-      } else {
-        // Start the 30s countdown so friends see a timer. Bots fill at t=0.
-        this.startFriendRoomCountdown(activeLobby);
-      }
-      return;
-    }
 
     try {
       if (mode === 'tournament' && process.env.SKIP_ENTRY_FEE !== 'true') {
@@ -214,8 +177,15 @@ export class LobbyManager {
     // Dev-only bot injection (legacy; guarded by ENABLE_DEV_BOTS=true).
     this.injectDevBots(lobby);
 
-    // If lobby is already starting, immediately sync the countdown for this new player
-    if (lobby.status === "starting") {
+    // If a real player joins a lobby already counting down → reset so they get a full countdown
+    const isRealPlayer = !String(playerId).startsWith('BOT_');
+    if (lobby.status === 'starting' && isRealPlayer) {
+      this.clearLobbyTimers(lobby.lobbyId);
+      this.lobbyCountdownStartMs.delete(lobby.lobbyId);
+      lobby.status = 'waiting';
+      console.log(`[LOBBY] Real player joined mid-countdown — resetting countdown for ${lobby.lobbyId}`);
+    } else if (lobby.status === 'starting') {
+      // Bot join: just sync the existing countdown (no reset)
       const startAtMs = this.lobbyStartAtMs.get(lobby.lobbyId);
       if (startAtMs) {
         const remaining = Math.ceil((startAtMs - Date.now()) / 1000);
@@ -366,7 +336,7 @@ export class LobbyManager {
     return acceptable;
   }
 
-  private createLobby(entryFee: EntryFeeTier, mode: GameMode, roomCode?: string): Lobby {
+  private createLobby(entryFee: EntryFeeTier, mode: GameMode): Lobby {
     const maxPlayers = getLobbyMaxPlayers(mode);
     const newLobby: Lobby = {
       lobbyId: uuidv4(),
@@ -375,48 +345,12 @@ export class LobbyManager {
       entryFee,
       mode,
       status: 'waiting',
-      roomCode,
     };
     this.lobbies.set(newLobby.lobbyId, newLobby);
     // Set a maximum wait deadline for this lobby
     this.lobbyDeadlineMs.set(newLobby.lobbyId, Date.now() + (LOBBY_MAX_WAIT_SEC * 1000));
     this.lobbyCountdownStartMs.delete(newLobby.lobbyId);
     return newLobby;
-  }
-
-  /** 30-second countdown for friend-room lobbies. Bots fill remaining slots just before start. */
-  private startFriendRoomCountdown(lobby: Lobby): void {
-    if (lobby.status !== 'waiting') return;
-    lobby.status = 'starting';
-    this.onLobbyUpdate?.(lobby);
-
-    const countdownSec = LOBBY_COUNTDOWN_FRIENDS_SEC;
-    const startAtMs = Date.now() + countdownSec * 1000;
-    this.lobbyStartAtMs.set(lobby.lobbyId, startAtMs);
-    if (!this.lobbyCountdownStartMs.get(lobby.lobbyId)) {
-      this.lobbyCountdownStartMs.set(lobby.lobbyId, Date.now());
-    }
-
-    this.onLobbyCountdown?.(lobby, countdownSec, startAtMs);
-    const tick = setInterval(() => {
-      const remaining = Math.ceil((startAtMs - Date.now()) / 1000);
-      if (remaining >= 0) this.onLobbyCountdown?.(lobby, remaining, startAtMs);
-      if (remaining <= 0) clearInterval(tick);
-    }, 1000);
-    try { this.lobbyCountdownTick.set(lobby.lobbyId, tick as unknown as NodeJS.Timeout); } catch {}
-
-    const startTimeout = setTimeout(() => {
-      // Friend rooms: no bots — game is just the real players who joined.
-      this.clearLobbyTimers(lobby.lobbyId);
-      // Clean up room-code index
-      if (lobby.roomCode) this.roomLobbies.delete(lobby.roomCode);
-      this.onGameStart?.(lobby);
-      this.lobbies.delete(lobby.lobbyId);
-      lobby.players.forEach(p => this.playerLobbyMap.delete(p));
-    }, countdownSec * 1000);
-    try { this.lobbyStartTimeout.set(lobby.lobbyId, startTimeout as unknown as NodeJS.Timeout); } catch {}
-
-    console.log(`[ROOM] Friend lobby ${lobby.lobbyId} countdown: ${countdownSec}s`);
   }
 
   private startLobbyCountdown(lobby: Lobby): void {

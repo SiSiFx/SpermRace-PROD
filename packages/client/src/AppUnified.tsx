@@ -198,28 +198,6 @@ function AppInner() {
     }
   }, [connectAndJoin]);
 
-  const onFriendsLobby = useCallback(async (roomCode: string) => {
-    const name = PRACTICE_NAMES[Math.floor(Math.random() * PRACTICE_NAMES.length)];
-    try {
-      joinedAsPracticeRef.current = true;
-      await connectAndJoin({ entryFeeTier: 0, mode: 'practice', guestName: name, roomCode });
-    } catch {
-      joinedAsPracticeRef.current = false;
-      setScreen('practice-solo');
-    }
-  }, [connectAndJoin]);
-
-  // Auto-join friend room if ?room= param in URL
-  useEffect(() => {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const code = params.get('room');
-      if (code && /^[A-Z0-9]{2,6}$/i.test(code)) {
-        onFriendsLobby(code.toUpperCase());
-      }
-    } catch {}
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
   const onWallet = useCallback(async (tier?: { usd: number; prize: string }) => {
     if (tier) setSelectedTier(tier);
     const success = await connect();
@@ -265,7 +243,6 @@ function AppInner() {
         <PremiumLandingScreen
           solPrice={solPrice}
           onPractice={onPractice}
-          onFriendsLobby={onFriendsLobby}
           onWallet={onWallet}
           onLeaderboard={openLeaderboard}
           onHelp={() => setShowHowToPlay(true)}

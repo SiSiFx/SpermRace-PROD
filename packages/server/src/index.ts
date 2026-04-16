@@ -1663,12 +1663,8 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
       const playerId = socketToPlayerId.get(ws);
       if (!playerId) return;
 
-      const { entryFeeTier, mode, roomCode } = (message as any).payload;
-      // Sanitize roomCode: uppercase alphanumeric only, max 6 chars
-      const safeRoomCode: string | undefined = typeof roomCode === 'string'
-        ? roomCode.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) || undefined
-        : undefined;
-      console.log(`[LOBBY] joinLobby raw: entryFee=${entryFeeTier} mode=${mode} roomCode=${roomCode ?? 'none'} safeRoomCode=${safeRoomCode ?? 'none'}`);
+      const { entryFeeTier, mode } = (message as any).payload;
+      console.log(`[LOBBY] joinLobby raw: entryFee=${entryFeeTier} mode=${mode}`);
 
       // SECURITY: Guests can only join EntryFeeTier 0
       if (playerId.startsWith('guest-')) {
@@ -1678,7 +1674,7 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
           return;
         }
         // Valid guest join - route directly to lobby
-        await lobbyManager.joinLobby(playerId, entryFeeTier, mode, safeRoomCode);
+        await lobbyManager.joinLobby(playerId, entryFeeTier, mode);
         break;
       }
 
@@ -1691,11 +1687,11 @@ async function handleClientMessage(message: any, ws: WebSocket): Promise<void> {
 
       try {
         const requestedMode = mode as 'practice' | 'tournament' | undefined;
-        // Always allow practice mode without fee (includes friend-room lobbies)
+        // Always allow practice mode without fee
         if (requestedMode === 'practice' || entryFeeTier === 0) {
           pendingPaymentByPlayerId.delete(playerId);
           expectedLamportsByPlayerId.delete(playerId);
-          await lobbyManager.joinLobby(playerId, entryFeeTier, 'practice', safeRoomCode);
+          await lobbyManager.joinLobby(playerId, entryFeeTier, 'practice');
           break;
         }
         // If a round is already in progress and the player is part of it, ignore join and resume

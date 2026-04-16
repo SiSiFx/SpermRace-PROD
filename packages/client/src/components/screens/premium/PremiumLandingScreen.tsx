@@ -20,7 +20,6 @@ const TIERS: Tier[] = [
 export interface PremiumLandingScreenProps {
   solPrice?: number | null;
   onPractice?: () => void;
-  onFriendsLobby?: (roomCode: string) => void;
   onWallet?: (tier: { usd: number; prize: string }) => void;
   onLeaderboard?: () => void;
   onHelp?: () => void;
