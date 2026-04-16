@@ -91,6 +91,7 @@ function AppInner() {
   const [practiceStats, setPracticeStats] = useState<{ placement: number; kills: number; duration: number; winner: boolean; killerName: string | null; totalPlayers: number } | null>(null);
   // Track whether the current online game is free/practice so Results screen shows correct UI
   const joinedAsPracticeRef = useRef(false);
+  const practiceFallbackTimerRef = useRef<number | null>(null);
   // Track last selected tier so the upsell CTA reflects the right prize
   const [selectedTier, setSelectedTier] = useState<{ usd: number; prize: string }>({ usd: 5, prize: '$42' });
 
@@ -118,6 +119,11 @@ function AppInner() {
   useEffect(() => {
     const phase = wsState.phase;
     if (phase === 'authenticating') {
+      // Successfully connected — cancel the offline fallback timer
+      if (practiceFallbackTimerRef.current) {
+        clearTimeout(practiceFallbackTimerRef.current);
+        practiceFallbackTimerRef.current = null;
+      }
       if (screen !== 'lobby') setScreen('lobby');
     } else if (phase === 'game') {
       if (screen !== 'game') setScreen('game');
@@ -186,8 +192,16 @@ function AppInner() {
 
   // Navigation handlers - Practice routes through server lobby (guest mode, no wallet needed)
   const PRACTICE_NAMES = ['Ace', 'Atom', 'Blitz', 'Chrome', 'Dusk', 'Echo', 'Ember', 'Fuse', 'Glitch', 'Hex', 'Ion', 'Jade', 'Lux', 'Mach', 'Nitro'];
+  const screenRef = useRef<AppScreen>('landing');
+  screenRef.current = screen;
+
   const onPractice = useCallback(async () => {
     const name = PRACTICE_NAMES[Math.floor(Math.random() * PRACTICE_NAMES.length)];
+    // Clear any previous fallback timer
+    if (practiceFallbackTimerRef.current) {
+      clearTimeout(practiceFallbackTimerRef.current);
+      practiceFallbackTimerRef.current = null;
+    }
     try {
       joinedAsPracticeRef.current = true;
       await connectAndJoin({ entryFeeTier: 0, mode: 'practice', guestName: name });
@@ -195,7 +209,17 @@ function AppInner() {
       joinedAsPracticeRef.current = false;
       // Server unavailable — fall back to local offline practice
       setScreen('practice-solo');
+      return;
     }
+    // connectAndJoin for guests returns immediately (fire-and-forget).
+    // If we're still on landing after 4s the server is unreachable — go offline.
+    practiceFallbackTimerRef.current = window.setTimeout(() => {
+      practiceFallbackTimerRef.current = null;
+      if (screenRef.current === 'landing') {
+        joinedAsPracticeRef.current = false;
+        setScreen('practice-solo');
+      }
+    }, 4000);
   }, [connectAndJoin]);
 
   const onWallet = useCallback(async (tier?: { usd: number; prize: string }) => {
