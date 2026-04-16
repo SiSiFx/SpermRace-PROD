@@ -1,35 +1,30 @@
 /**
  * PreGameSequence - Orchestrates the pre-game experience
- * 
- * Phase 1: Class Showcase (0.85s) - Spotlight view with stats
- * Phase 2: Map Overview (0.9s) - Quick arena context
- * Phase 3: Countdown (1.8s) - Fast start pulse
- * 
- * Total: 3.85 seconds
+ *
+ * Phase 1: Map Overview (0.9s) - Quick arena context
+ * Phase 2: Countdown (1.8s) - Fast start pulse
+ *
+ * Total: ~3 seconds
  */
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ClassShowcase } from './ClassShowcase';
 import { CountdownAnimation } from '../CountdownAnimation';
-import { SpermClassType } from '../../game/engine/components/SpermClass';
 import type { Game } from '../../game/engine/Game';
 import { getDefaultZoom } from '../../game/engine/config';
 import './PreGameSequence.css';
 
 interface PreGameSequenceProps {
   game: Game;
-  selectedClass: SpermClassType;
   totalPlayers?: number;
   skipToCountdown?: boolean;
   onComplete: () => void;
 }
 
-type Phase = 'showcase' | 'mapOverview' | 'countdown' | 'zoomToPlayer' | 'complete';
+type Phase = 'mapOverview' | 'countdown' | 'zoomToPlayer' | 'complete';
 
 // Phase durations in milliseconds
 const PHASE_DURATIONS = {
-  showcase: 850,
   mapOverview: 900,
   countdown: 3000,
   zoomToPlayer: 300,
@@ -41,12 +36,11 @@ const PHASE_DURATIONS = {
  */
 export function PreGameSequence({
   game,
-  selectedClass,
   totalPlayers = 10,
   skipToCountdown = false,
   onComplete,
 }: PreGameSequenceProps) {
-  const [phase, setPhase] = useState<Phase>(skipToCountdown ? 'countdown' : 'showcase');
+  const [phase, setPhase] = useState<Phase>(skipToCountdown ? 'countdown' : 'mapOverview');
   const [showCountdown, setShowCountdown] = useState(skipToCountdown);
   const [mapOverviewReady, setMapOverviewReady] = useState(false);
   const playerIdRef = useRef<string | null>(null);
@@ -136,12 +130,7 @@ export function PreGameSequence({
     animationFrameRef.current = requestAnimationFrame(animate);
   }, [game]);
 
-  // Phase 1: Class Showcase -> Map Overview
-  const handleShowcaseComplete = useCallback(() => {
-    setPhase('mapOverview');
-  }, []);
-
-  // Phase 2: Map Overview -> Countdown
+  // Phase 1: Map Overview -> Countdown
   useEffect(() => {
     if (phase !== 'mapOverview') return;
 
@@ -219,17 +208,6 @@ export function PreGameSequence({
 
   return (
     <div className="pre-game-sequence">
-      <AnimatePresence mode="wait">
-        {phase === 'showcase' && (
-          <ClassShowcase
-            key="showcase"
-            classType={selectedClass}
-            onComplete={handleShowcaseComplete}
-            duration={PHASE_DURATIONS.showcase}
-          />
-        )}
-      </AnimatePresence>
-
       {/* Map Overview UI overlay */}
       <AnimatePresence>
         {phase === 'mapOverview' && mapOverviewReady && (

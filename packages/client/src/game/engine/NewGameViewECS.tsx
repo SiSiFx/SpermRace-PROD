@@ -3,7 +3,6 @@ import { createComponentMask, ComponentNames } from './components';
 import type { Health } from './components/Health';
 import { hasSpawnProtection } from './components/Health';
 import type { Position } from './components/Position';
-import { SpermClassType } from './components/SpermClass';
 import { createGame, type Game } from './Game';
 import type { CombatEvent } from './systems/CombatFeedbackSystem';
 import { installAutomationHooks } from './view/automation';
@@ -187,8 +186,6 @@ export function NewGameViewECS({
   const [winStats, setWinStats] = useState<GameStats | null>(null);
   const [winCountdown, setWinCountdown] = useState(3);
 
-  // Class system removed — everyone is balanced
-  const selectedClass = SpermClassType.BALANCED;
   const [gameStarted, setGameStarted] = useState(false);
   const [showPreGame, setShowPreGame] = useState(false);
   const [showLobby, setShowLobby] = useState(false);
@@ -388,7 +385,6 @@ export function NewGameViewECS({
         playerColor,
         botCount,
         enableAbilities,
-        classType: selectedClass,
       });
       gameRef.current = game;
       // Show pre-game sequence only after game is fully initialized and ready
@@ -401,7 +397,7 @@ export function NewGameViewECS({
     } catch (e) {
       onError?.(e as Error);
     }
-  }, [isMobile, playerName, playerColor, botCount, enableAbilities, selectedClass, onError]);
+  }, [isMobile, playerName, playerColor, botCount, enableAbilities, onError]);
 
   // Auto-start on mount — no class selection needed
   const hasAutoStarted = useRef(false);
@@ -676,14 +672,8 @@ export function NewGameViewECS({
           const dist = zoneInfo?.distanceFromPlayer ?? 9999;
 
 
-          // Ability cooldown for the selected class
-          const classAbilityMap: Record<SpermClassType, string> = {
-            [SpermClassType.BALANCED]: 'shield',
-            [SpermClassType.SPRINTER]: 'dash',
-            [SpermClassType.TANK]: 'overdrive',
-          };
           const abilityProgress = enableAbilities
-            ? game.getAbilityProgress(classAbilityMap[selectedClass])
+            ? game.getAbilityProgress('shield')
             : { cooldown: 0, active: 0 };
 
           const nextSnapshot: ViewSnapshot = {
@@ -767,7 +757,7 @@ export function NewGameViewECS({
       void safeDestroy(gameRef.current);
       gameRef.current = null;
     };
-  }, [session, isMobile, playerName, playerColor, botCount, enableAbilities, onGameEnd, onPlayerDeath, onError, playerHealthMask, gameStarted, showPreGame, selectedClass]);
+  }, [session, isMobile, playerName, playerColor, botCount, enableAbilities, onGameEnd, onPlayerDeath, onError, playerHealthMask, gameStarted, showPreGame]);
 
   const summary = useMemo(() => {
     return getViewSummary(snapshot);
@@ -845,23 +835,11 @@ export function NewGameViewECS({
     setMobileBoostHeld(false);
   }, []);
 
-  // Class → ability name map (render-scope, used by mobile ability button)
-  const classAbilityLabel: Record<SpermClassType, string> = {
-    [SpermClassType.BALANCED]: 'SHIELD',
-    [SpermClassType.SPRINTER]: 'DASH',
-    [SpermClassType.TANK]: 'OVERDRIVE',
-  };
-  const classAbilityKey: Record<SpermClassType, string> = {
-    [SpermClassType.BALANCED]: 'shield',
-    [SpermClassType.SPRINTER]: 'dash',
-    [SpermClassType.TANK]: 'overdrive',
-  };
-
   const onAbilityPointerDown = useCallback((e: ReactPointerEvent<HTMLButtonElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    gameRef.current?.activateAbility(classAbilityKey[selectedClass]);
-  }, [selectedClass]);
+    gameRef.current?.activateAbility('shield');
+  }, []);
 
   return (
     <div className="ecs-root" data-status={snapshot.status}>
@@ -874,7 +852,6 @@ export function NewGameViewECS({
       {showPreGame && gameRef.current && (
         <PreGameSequence
           game={gameRef.current}
-          selectedClass={selectedClass}
           totalPlayers={botCount + 1}
           skipToCountdown={true}
           onComplete={handlePreGameComplete}
@@ -1000,7 +977,7 @@ export function NewGameViewECS({
               className={`ecs-mobile-ability-btn${snapshot.abilityActive ? ' is-active' : snapshot.abilityCooldownPct > 0 ? ' is-cooling' : ''}`}
               onPointerDown={onAbilityPointerDown}
               onContextMenu={(e) => e.preventDefault()}
-              aria-label={`Use ${classAbilityLabel[selectedClass]}`}
+              aria-label="Use Shield"
             >
               <svg className="ecs-ability-cooldown-ring" viewBox="0 0 46 46">
                 <circle className="ecs-ability-ring-track" cx="23" cy="23" r="20"/>
@@ -1008,7 +985,7 @@ export function NewGameViewECS({
                   style={{ strokeDashoffset: 125.66 * (snapshot.abilityActive ? 0 : snapshot.abilityCooldownPct) }}
                 />
               </svg>
-              <span className="ecs-ability-btn-label">{classAbilityLabel[selectedClass]}</span>
+              <span className="ecs-ability-btn-label">SHIELD</span>
             </button>
           )}
         </>

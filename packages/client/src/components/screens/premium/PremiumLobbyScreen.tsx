@@ -176,7 +176,7 @@ export const PremiumLobbyScreen = memo(function PremiumLobbyScreen({
   const visibleSlots = Math.min(Math.max(maxPlayers, 8), 12);
   const winnerPayoutUsd = lobbyMode === 'tournament' ? Math.max(0, Math.floor(entryFee * 10)) : 0;
   const armThresholdMissing = lobbyMode === 'practice'
-    ? Math.max(0, 2 - realPlayers.length)
+    ? Math.max(0, 1 - realPlayers.length)   // practice: 1 real player arms the room (bots fill rest)
     : Math.max(0, 2 - players.length);
   const canStart = armThresholdMissing === 0;
   const fillProgress = maxPlayers > 0 ? (players.length / maxPlayers) * 100 : 0;
@@ -192,12 +192,12 @@ export const PremiumLobbyScreen = memo(function PremiumLobbyScreen({
       ? 'Room is live-ready.'
       : 'Forming the hunt.';
   const subtitle = countdown > 0
-    ? `Release in ${countdown}. Read the first cut before the room closes around you.`
+    ? `Release in ${countdown}s. ${lobbyMode === 'practice' ? `${players.length} in the chamber — AI opponents locked in.` : 'Read the first cut before the room closes around you.'}`
     : canStart
       ? 'Threshold hit. The server can drop this match at any moment.'
-      : `Need ${armThresholdMissing} more ${lobbyMode === 'practice' ? 'human' : 'entrant'}${armThresholdMissing === 1 ? '' : 's'} to arm the room.`;
+      : `Need ${armThresholdMissing} more ${lobbyMode === 'practice' ? 'real player' : 'entrant'}${armThresholdMissing === 1 ? '' : 's'} to arm the room.`;
   const boardFooter = lobbyMode === 'practice'
-    ? 'Practice only arms on real players. Bots can fill space, but they do not unlock the room.'
+    ? 'One real player arms the room. AI opponents fill remaining lanes on launch.'
     : 'Live rooms are short, lethal, and server-authoritative. Two entrants arms the queue.';
   const autoFlowLabel = countdown > 0
     ? 'Auto launch engaged'
@@ -271,7 +271,9 @@ export const PremiumLobbyScreen = memo(function PremiumLobbyScreen({
               </div>
               <div className="premium-lobby-strip">
                 <span className="premium-lobby-strip-label">Arms at</span>
-                <strong className="premium-lobby-strip-value">2 entrants</strong>
+                <strong className="premium-lobby-strip-value">
+                  {lobbyMode === 'practice' ? '1 player' : '2 entrants'}
+                </strong>
               </div>
             </div>
 

@@ -527,7 +527,7 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://spermrace.io,ht
   .filter(Boolean);
 
 log.info(`🚀 SpermRace.io server starting on http://localhost:${PORT} (WS path /ws)`);
-log.info(`[ENV] SOLANA_RPC_ENDPOINT=${process.env.SOLANA_RPC_ENDPOINT || 'default'} ENABLE_DEV_BOTS=${process.env.ENABLE_DEV_BOTS} DEV_BOTS_TARGET=${process.env.DEV_BOTS_TARGET} SKIP_ENTRY_FEE=${process.env.SKIP_ENTRY_FEE}`);
+log.info(`[ENV] SOLANA_RPC_ENDPOINT=${process.env.SOLANA_RPC_ENDPOINT || 'default'} ENABLE_DEV_BOTS=${process.env.ENABLE_DEV_BOTS} DEV_BOTS_TARGET=${process.env.DEV_BOTS_TARGET} SKIP_ENTRY_FEE=${process.env.SKIP_ENTRY_FEE} ENABLE_PRACTICE_BOTS=${process.env.ENABLE_PRACTICE_BOTS} PRACTICE_BOTS_TARGET=${process.env.PRACTICE_BOTS_TARGET}`);
 log.info(`[SEC] ALLOWED_ORIGINS=${ALLOWED_ORIGINS.join(' | ')}`);
 
 // Production safety: forbid example/localhost origins in prod

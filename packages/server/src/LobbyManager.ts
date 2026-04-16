@@ -181,7 +181,18 @@ export class LobbyManager {
     lobby.players.push(playerId);
     this.playerLobbyMap.set(playerId, lobby.lobbyId);
     console.log(`[LOBBY] Player added to ${lobby.lobbyId}; count=${lobby.players.length}/${lobby.maxPlayers}`);
-    this.onLobbyUpdate?.(lobby);
+
+    // For practice mode: inject bots immediately so the lobby roster is visible during the
+    // entire countdown window — not deferred to game-start.
+    if (lobby.mode === 'practice' && isPracticeBotsEnabled()) {
+      this.injectPracticeBots(lobby);
+      // injectPracticeBots broadcasts onLobbyUpdate internally — no separate call needed below.
+    } else {
+      this.onLobbyUpdate?.(lobby);
+    }
+
+    // Dev-only bot injection (legacy; guarded by ENABLE_DEV_BOTS=true).
+    this.injectDevBots(lobby);
 
     // If lobby is already starting, immediately sync the countdown for this new player
     if (lobby.status === "starting") {
@@ -191,11 +202,6 @@ export class LobbyManager {
         this.onLobbyCountdown?.(lobby, remaining, startAtMs);
       }
     }
-
-    // Dev-only bot injection (legacy; guarded by ENABLE_DEV_BOTS=true).
-    this.injectDevBots(lobby);
-    // NOTE: practice bots are NOT injected here — they fill at game-start time so real players
-    // have the full countdown window to join the same lobby before bots take the remaining slots.
 
     // Practice requires at least 1 real player when bots fill remaining slots, otherwise 2 real players.
     const realPlayers = lobby.players.filter(p => !String(p).startsWith('BOT_'));
@@ -240,6 +246,22 @@ export class LobbyManager {
       this.lobbyCountdownStartMs.delete(lobbyId);
       this.lobbyStartAtMs.delete(lobbyId);
       return;
+    }
+
+    // Practice lobbies: if no real players remain, purge the lobby entirely.
+    // Without this, the bot-only lobby sits in 'waiting' forever — a zombie that
+    // accumulates in the Map across joins/leaves without ever being cleaned up.
+    if (lobby.mode === 'practice') {
+      const remainingReal = lobby.players.filter(p => !String(p).startsWith('BOT_'));
+      if (remainingReal.length === 0) {
+        console.log(`[LOBBY] Practice lobby ${lobbyId} has no real players left — purging bot-only lobby`);
+        this.clearLobbyTimers(lobbyId);
+        this.lobbies.delete(lobbyId);
+        this.lobbyDeadlineMs.delete(lobbyId);
+        this.lobbyCountdownStartMs.delete(lobbyId);
+        this.lobbyStartAtMs.delete(lobbyId);
+        return;
+      }
     }
 
     // If a player leaves during countdown, reset the countdown to avoid "ghost slots" + stale start times.
@@ -431,7 +453,7 @@ export class LobbyManager {
           }
         }
         console.log(`[LOBBY] Max wait reached; starting with ${lobby.players.length} players (min=${minPlayers})`);
-        this.injectPracticeBots(lobby);
+        this.injectPracticeBots(lobby); // Safety net: no-op if bots were already injected at join time.
         this.clearLobbyTimers(lobby.lobbyId);
         this.onGameStart?.(lobby);
         this.lobbies.delete(lobby.lobbyId);
@@ -484,7 +506,7 @@ export class LobbyManager {
             : (lobby.players.length >= 2)
         );
       if (minOk || deadlineOk) {
-        // Fill remaining slots with bots now — real players had the full countdown to join.
+        // Safety net: no-op if bots were already injected at join time (idempotency guard inside).
         this.injectPracticeBots(lobby);
         this.clearLobbyTimers(lobby.lobbyId);
         this.onGameStart?.(lobby);
@@ -559,7 +581,9 @@ export class LobbyManager {
       const added = lobby.players.length - before;
       console.log(`[PRACTICE-BOT] ✅ Injected ${added} practice bots`);
       if (added > 0) this.onLobbyUpdate?.(lobby);
-    } catch { }
+    } catch (err) {
+      console.error('[PRACTICE-BOT] injectPracticeBots failed:', err);
+    }
   }
 
   /**

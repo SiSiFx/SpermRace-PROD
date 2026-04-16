@@ -11,8 +11,6 @@ export { MiniMap } from './MiniMap';
 export { AliveCounter } from './AliveCounter';
 export { ZoneIndicator, ZoneState } from './ZoneIndicator';
 export { KillStreakAnnouncement } from './KillStreakAnnouncement';
-export { ClassSelection } from './ClassSelection';
-export { ClassShowcase } from './ClassShowcase';
 export { PreGameSequence } from './PreGameSequence';
 export { SpermVisualization } from './SpermVisualization';
 export { RadialGauge } from './RadialGauge';
