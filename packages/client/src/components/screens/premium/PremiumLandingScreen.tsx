@@ -27,18 +27,32 @@ export interface PremiumLandingScreenProps {
   isNewPlayer?: boolean;
 }
 
+function isFirstVisit(): boolean {
+  try { return !localStorage.getItem('sr_has_played'); } catch { return true; }
+}
+
 export const PremiumLandingScreen = memo(function PremiumLandingScreen({
   onPractice,
   onWallet,
   onLeaderboard,
 }: PremiumLandingScreenProps) {
-  const [selected, setSelected] = useState(2); // default: $5
+  // New visitors default to Free so the first action is always zero-risk.
+  // Returning players (sr_has_played set) default to $5 (recommended).
+  const [selected, setSelected] = useState(() => isFirstVisit() ? 0 : 2);
   const tier = TIERS[selected];
 
   const handlePrimary = useCallback(() => {
-    if (tier.usd === 0) onPractice?.();
-    else onWallet?.({ usd: tier.usd, prize: tier.prize ?? '$42' });
+    if (tier.usd === 0) {
+      onPractice?.();
+    } else {
+      try { localStorage.setItem('sr_has_played', '1'); } catch { }
+      onWallet?.({ usd: tier.usd, prize: tier.prize ?? '$42' });
+    }
   }, [onPractice, onWallet, tier]);
+
+  const handlePractice = useCallback(() => {
+    onPractice?.();
+  }, [onPractice]);
 
   return (
     <div className="landing-root">
@@ -83,8 +97,8 @@ export const PremiumLandingScreen = memo(function PremiumLandingScreen({
           </button>
 
           {tier.usd !== 0 && (
-            <button className="landing-practice-link" onClick={onPractice}>
-              or practice free first
+            <button className="landing-practice-link" onClick={handlePractice}>
+              Try free — no wallet needed
             </button>
           )}
         </div>

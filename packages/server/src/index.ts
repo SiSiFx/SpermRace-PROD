@@ -111,6 +111,19 @@ const pendingSockets = new Set<WebSocket>();
 const playerIdToSocket = new Map<string, WebSocket>();
 const socketToPlayerId = new Map<WebSocket, string>();
 const playerIdToName = new Map<string, string>();
+
+const BOT_DISPLAY_NAMES = [
+  'NitroCel','SwimX','VeloCell','ArcBot','PulseX','CellX','DriftBot','OmegaX',
+  'ZeroG','VortexB','AlphaBot','NucleiX','TurboX','PhaseX','HexCell','IonBot',
+  'ApexX','FluxBot','SpikeX','CorvusX','NovaBio','QuasarX','GeneX','WarpCell',
+];
+function botDisplayName(botId: string): string {
+  // Deterministic name from bot ID suffix so it's stable across broadcasts.
+  const suffix = botId.replace('BOT_', '');
+  let hash = 0;
+  for (let i = 0; i < suffix.length; i++) hash = (hash * 31 + suffix.charCodeAt(i)) >>> 0;
+  return BOT_DISPLAY_NAMES[hash % BOT_DISPLAY_NAMES.length];
+}
 const socketToNonce = new Map<WebSocket, { nonce: string; issuedAt: number; consumed: boolean }>();
 const socketToSessionId = new Map<WebSocket, string>();
 const socketToAuthTimeout = new Map<WebSocket, NodeJS.Timeout>();
@@ -210,7 +223,7 @@ function sendLobbyStateToPlayer(ws: WebSocket, lobby: Lobby): void {
     const playerNamesMap: Record<string, string> = {};
     lobby.players.forEach((pid) => {
       playerNamesMap[pid] = playerIdToName.get(pid)
-        || (pid.startsWith('BOT_') ? 'Bot' : pid.startsWith('guest-') ? 'Guest' : pid.slice(0, 4) + '…' + pid.slice(-4));
+        || (pid.startsWith('BOT_') ? botDisplayName(pid) : pid.startsWith('guest-') ? 'Guest' : pid.slice(0, 4) + '…' + pid.slice(-4));
     });
     const message: LobbyStateMessage = { type: 'lobbyState', payload: { ...lobby, playerNames: playerNamesMap } as any };
     safeSend(ws, JSON.stringify(message as any), 'generic');
@@ -1079,7 +1092,7 @@ lobbyManager.onLobbyUpdate = (lobby: Lobby) => {
   const playerNamesMap: Record<string, string> = {};
   lobby.players.forEach(pid => {
     playerNamesMap[pid] = playerIdToName.get(pid)
-      || (pid.startsWith("BOT_") ? "Bot" : pid.startsWith("guest-") ? "Guest" : pid.slice(0, 4) + "…" + pid.slice(-4));
+      || (pid.startsWith("BOT_") ? botDisplayName(pid) : pid.startsWith("guest-") ? "Guest" : pid.slice(0, 4) + "…" + pid.slice(-4));
   });
   const message: LobbyStateMessage = { type: 'lobbyState', payload: { ...lobby, playerNames: playerNamesMap } as any };
   broadcastToLobby(lobby, message);

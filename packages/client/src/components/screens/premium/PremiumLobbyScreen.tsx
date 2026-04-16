@@ -135,7 +135,7 @@ function buildPlayerSlots(
       isMe,
       isBot,
       isEmpty: false,
-      note: isMe ? 'Your lane' : isBot ? 'Server bot' : 'Human entrant',
+      note: isMe ? 'Your lane' : isBot ? 'AI opponent' : 'Human entrant',
       color: getInitialHue(index),
     };
   });
@@ -270,7 +270,7 @@ export const PremiumLobbyScreen = memo(function PremiumLobbyScreen({
                 <strong className="premium-lobby-strip-value">{winnerLabel}</strong>
               </div>
               <div className="premium-lobby-strip">
-                <span className="premium-lobby-strip-label">Arms at</span>
+                <span className="premium-lobby-strip-label">Starts with</span>
                 <strong className="premium-lobby-strip-value">
                   {lobbyMode === 'practice' ? '1 player' : '2 entrants'}
                 </strong>

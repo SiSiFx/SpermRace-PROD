@@ -3,6 +3,21 @@ import { v4 as uuidv4 } from 'uuid';
 import { SmartContractService } from './SmartContractService.js';
 import { DatabaseService } from './DatabaseService.js';
 
+const BOT_NAMES = [
+  'NitroCel','SwimX','VeloCell','ArcBot','PulseX','CellX','DriftBot','OmegaX',
+  'ZeroG','VortexB','AlphaBot','NucleiX','TurboX','PhaseX','HexCell','IonBot',
+  'ApexX','CellBot','FluxBot','SpikeX','CorvusX','NovaBio','QuasarX','GeneX',
+];
+const usedBotNames = new Set<string>();
+function pickBotName(): string {
+  const available = BOT_NAMES.filter(n => !usedBotNames.has(n));
+  const pool = available.length > 0 ? available : BOT_NAMES;
+  const name = pool[Math.floor(Math.random() * pool.length)];
+  usedBotNames.add(name);
+  if (usedBotNames.size > BOT_NAMES.length * 2) usedBotNames.clear();
+  return name;
+}
+
 // =================================================================================================
 // Constants
 // =================================================================================================
