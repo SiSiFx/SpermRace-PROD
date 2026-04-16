@@ -23,6 +23,7 @@ function pickBotName(): string {
 // =================================================================================================
 
 const LOBBY_MAX_PLAYERS_DEFAULT = Math.max(2, parseInt(process.env.LOBBY_MAX_PLAYERS || '100', 10));
+const LOBBY_MAX_PLAYERS_PRACTICE_DEFAULT = 10;  // 1 real + 9 bots
 function getLobbyMaxPlayers(mode: GameMode): number {
   const key = mode === 'tournament' ? 'LOBBY_MAX_PLAYERS_TOURNAMENT' : 'LOBBY_MAX_PLAYERS_PRACTICE';
   const raw = process.env[key];
@@ -30,9 +31,12 @@ function getLobbyMaxPlayers(mode: GameMode): number {
     const n = parseInt(raw, 10);
     if (Number.isFinite(n) && n >= 2) return n;
   }
+  if (mode === 'practice') return LOBBY_MAX_PLAYERS_PRACTICE_DEFAULT;
   return LOBBY_MAX_PLAYERS_DEFAULT;
 }
 const LOBBY_START_COUNTDOWN_DEFAULT = Math.max(5, parseInt(process.env.LOBBY_COUNTDOWN || '15', 10)); // seconds
+// Practice lobbies fill with bots immediately — no reason to wait long.
+const LOBBY_COUNTDOWN_PRACTICE_DEFAULT = 5;
 function getLobbyCountdownSeconds(mode: GameMode): number {
   const key = mode === 'tournament' ? 'LOBBY_COUNTDOWN_TOURNAMENT' : 'LOBBY_COUNTDOWN_PRACTICE';
   const raw = process.env[key];
@@ -40,6 +44,7 @@ function getLobbyCountdownSeconds(mode: GameMode): number {
     const n = parseInt(raw, 10);
     if (Number.isFinite(n) && n >= 3) return n;
   }
+  if (mode === 'practice') return LOBBY_COUNTDOWN_PRACTICE_DEFAULT;
   return LOBBY_START_COUNTDOWN_DEFAULT;
 }
 const LOBBY_MIN_START = Math.max(2, parseInt(process.env.LOBBY_MIN_START || (process.env.SKIP_ENTRY_FEE === 'true' ? '1' : '4'), 10));
