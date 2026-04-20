@@ -355,6 +355,8 @@ export class LobbyManager {
 
   private startLobbyCountdown(lobby: Lobby): void {
     if (lobby.status !== 'waiting') return;
+    // Fill any remaining slots with practice bots before evaluating minimum players.
+    this.injectPracticeBots(lobby);
     const realPlayers = lobby.players.filter(p => !String(p).startsWith('BOT_'));
     const minRealToStart = (lobby.mode === 'practice' && isPracticeBotsEnabled()) ? 1 : 2;
     if (lobby.mode === 'practice' && realPlayers.length < minRealToStart) {

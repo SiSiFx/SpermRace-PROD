@@ -873,7 +873,7 @@ export function NewGameViewECS({
       <div className="ecs-hud">
         <div className="ecs-pill">PRACTICE · {summary.statusText}</div>
         <div className="ecs-metric">KILLS <strong key={snapshot.kills} className="ecs-kill-pop">{snapshot.kills}</strong></div>
-        <div className="ecs-metric">TIME <strong>{summary.timeText}</strong></div>
+        <div className="ecs-metric ecs-time-metric">TIME <strong>{summary.timeText}</strong></div>
         <div className="ecs-boost-wrap">
           <span>BOOST</span>
           <div className="ecs-boost-bar"><div className="ecs-boost-fill" style={{ width: `${snapshot.boostPct}%` }} /></div>

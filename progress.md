@@ -193,8 +193,18 @@ Original prompt: actually the core game look is pretyy abd and very not playable
   - Bot names visible (Vex, Kira, Dax, ...) with BOT badge
   - HUD elements visible: ALIVE 10, KILLS 0, TIME 00:00, BOOST bar, zone/trail warnings
   - Landing page confirmed: grain texture, vignette, animated sperm background, tier buttons with prize amounts
+- 2026-04-20: Full local stack verified — server on port 8090, client on 5174.
+  - DB: PostgreSQL `spermrace_dev` via TCP (sisi user, password spermrace_dev)
+  - Bot flow confirmed: guest joins → 8 bots injected <50ms → 9/10 lobby → 5s countdown
+  - Server: "Injected 8 practice bots" → "Countdown: solo=false, duration=5s"
+  - Client WS msgs: lobbyState (9/10) → countdown 5→4→3
+  - Lobby UI: "Chamber armed", 8 BOT roster slots, INSIDE 9/10, AUTO LAUNCH ENGAGED
+  - PRACTICE_BOTS_TARGET=9 → lobby fills to 9 (1 real + 8 bots), 1 open lane
+  - Landing: "Free" selected → "START PRACTICE" CTA → animated sperm background
+
 - Remaining for production deploy:
   - Copy .env to VPS, adjust SOLANA_RPC_ENDPOINT for mainnet
   - Set PRIZE_POOL_SECRET_KEY + PRIZE_POOL_WALLET env vars
-  - NODE_ENV=production will disable ENABLE_PRACTICE_BOTS by default (set explicitly if wanted)
+  - Set ENABLE_PRACTICE_BOTS=true explicitly (NODE_ENV=production defaults to true already)
+  - DATABASE_URL must point to prod PostgreSQL
   - Run `pm2 restart spermrace-server-ws` after deploy

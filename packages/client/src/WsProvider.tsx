@@ -72,10 +72,9 @@ const NETWORK_BACKEND = (((import.meta as any).env?.VITE_NETWORK_BACKEND as stri
 const IS_LOCAL = /^(localhost|127\.0\.0\.1)$/i.test(location.hostname);
 const WS_URL = (() => {
   try {
-    if (IS_LOCAL) return DEFAULT_WS_URL;
+    // Check explicit VITE_WS_URL first — respects local dev server on a different port
     if (ENV_WS && ENV_WS.trim()) {
       const trimmed = ENV_WS.trim();
-      // Validate that the env var doesn't point to api.spermrace.io (common mistake)
       if (trimmed.includes('api.spermrace.io')) {
         console.warn('[WS] Invalid VITE_WS_URL contains api.spermrace.io, using fallback');
       } else if (trimmed.startsWith('ws://') || trimmed.startsWith('wss://')) {
@@ -88,6 +87,7 @@ const WS_URL = (() => {
         return `${scheme}://${location.host}${path.includes('/ws') ? path : '/ws'}`;
       }
     }
+    if (IS_LOCAL) return DEFAULT_WS_URL;
     const host = (window?.location?.hostname || '').toLowerCase();
     if (host.includes('dev.spermrace.io')) return 'wss://dev.spermrace.io/ws';
     if (host.includes('spermrace.io')) return 'wss://spermrace.io/ws';
