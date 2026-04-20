@@ -212,14 +212,15 @@ function AppInner() {
       return;
     }
     // connectAndJoin for guests returns immediately (fire-and-forget).
-    // If we're still on landing after 4s the server is unreachable — go offline.
+    // Give 10s for the WS TCP+TLS handshake to complete on slow mobile connections.
+    // The timer is cancelled as soon as ws.onopen fires (phase → 'authenticating').
     practiceFallbackTimerRef.current = window.setTimeout(() => {
       practiceFallbackTimerRef.current = null;
       if (screenRef.current === 'landing') {
         joinedAsPracticeRef.current = false;
         setScreen('practice-solo');
       }
-    }, 4000);
+    }, 10000);
   }, [connectAndJoin]);
 
   const onWallet = useCallback(async (tier?: { usd: number; prize: string }) => {
