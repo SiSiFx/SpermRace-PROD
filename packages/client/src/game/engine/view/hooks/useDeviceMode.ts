@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react';
 
+function detectMobile(mobileWidth: number): boolean {
+  if (typeof window === 'undefined') return false;
+  const coarse = window.matchMedia('(pointer: coarse)').matches;
+  return coarse || window.innerWidth <= mobileWidth;
+}
+
 export function useDeviceMode(mobileWidth: number = 900): boolean {
-  const [isMobile, setIsMobile] = useState(false);
+  // Lazy initializer: detects correctly on the very first render (no flash of wrong value)
+  const [isMobile, setIsMobile] = useState(() => detectMobile(mobileWidth));
 
   useEffect(() => {
-    const detect = () => {
-      const coarse = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
-      setIsMobile(coarse || window.innerWidth <= mobileWidth);
-    };
-
-    detect();
+    const detect = () => setIsMobile(detectMobile(mobileWidth));
     window.addEventListener('resize', detect);
     return () => window.removeEventListener('resize', detect);
   }, [mobileWidth]);

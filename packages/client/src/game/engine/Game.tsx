@@ -194,15 +194,29 @@ export class Game {
   }
 
   /**
+   * Get the true visual viewport dimensions.
+   * iOS Safari: visualViewport gives the actual visible area (excludes URL bar);
+   * window.innerWidth/Height is a reliable fallback for all other browsers.
+   */
+  private _getViewportSize(): { width: number; height: number } {
+    const vvp = window.visualViewport;
+    return {
+      width: Math.round(vvp ? vvp.width : window.innerWidth),
+      height: Math.round(vvp ? vvp.height : window.innerHeight),
+    };
+  }
+
+  /**
    * Initialize PIXI
    * PERFORMANCE: Lower resolution on mobile, no antialias on low-end devices
    */
   private async _initPixi(): Promise<void> {
     const container = this._config.container;
 
-    // Ensure container has valid dimensions (use window size as fallback)
-    const width = container.clientWidth || window.innerWidth;
-    const height = container.clientHeight || window.innerHeight;
+    // Use visualViewport for accurate iOS Safari sizing (URL bar appears/hides).
+    // Falls back to window.innerWidth/Height which also match the visual viewport
+    // on modern browsers.
+    const { width, height } = this._getViewportSize();
 
     // PERFORMANCE: Reduce resolution on mobile for better FPS
     const isMobile = this._config.isMobile || window.innerWidth <= 768;
@@ -229,8 +243,13 @@ export class Game {
     const canvas = this._app.canvas as HTMLCanvasElement;
     container.appendChild(canvas);
     canvas.style.outline = 'none';
-    canvas.style.width = '100%';
-    canvas.style.height = '100%';
+    // Explicit pixel dimensions so the canvas never gets CSS-stretched when
+    // the visualViewport changes between init and the next resize event.
+    canvas.style.position = 'absolute';
+    canvas.style.top = '0';
+    canvas.style.left = '0';
+    canvas.style.width = width + 'px';
+    canvas.style.height = height + 'px';
     canvas.style.display = 'block';
     canvas.tabIndex = 0;
 
@@ -241,16 +260,18 @@ export class Game {
     this._app.stage.addChild(this._worldContainer);
     this._app.stage.addChild(this._uiContainer);
 
-    // Handle resize - store bound function for cleanup
+    // Handle resize — listen to both window resize AND visualViewport resize so
+    // that iOS Safari URL-bar show/hide is caught reliably.
     this._boundOnResize = () => this._onResize();
     window.addEventListener('resize', this._boundOnResize);
+    window.visualViewport?.addEventListener('resize', this._boundOnResize);
+    window.visualViewport?.addEventListener('scroll', this._boundOnResize);
 
-    // Force a resize after a short delay to ensure container has dimensions
+    // Force a resize after a short delay in case the viewport settles slightly
+    // after the PIXI init (common on iOS Safari during page load).
     this._resizeTimeout = setTimeout(() => {
-      if (this._app && container.clientWidth > 0 && container.clientHeight > 0) {
-        this._onResize();
-      }
-    }, 100);
+      if (this._app) this._onResize();
+    }, 150);
 
     // Setup WebGL context loss handling
     this._setupContextLossHandlers();
@@ -484,10 +505,15 @@ export class Game {
   private _onResize(): void {
     if (!this._app) return;
 
-    const container = this._config.container;
-    this._app.renderer.resize(container.clientWidth, container.clientHeight);
+    const { width, height } = this._getViewportSize();
+    const canvas = this._app.canvas as HTMLCanvasElement;
 
-    this._engine.onResize(container.clientWidth, container.clientHeight);
+    // Keep canvas CSS pixel-exact to avoid CSS stretching on iOS
+    canvas.style.width = width + 'px';
+    canvas.style.height = height + 'px';
+
+    this._app.renderer.resize(width, height);
+    this._engine.onResize(width, height);
   }
 
   /**
@@ -762,9 +788,11 @@ export class Game {
   async destroy(): Promise<void> {
     this._running = false;
 
-    // Clean up resize listener
+    // Clean up resize listeners (window + visualViewport)
     if (this._boundOnResize) {
       window.removeEventListener('resize', this._boundOnResize);
+      window.visualViewport?.removeEventListener('resize', this._boundOnResize);
+      window.visualViewport?.removeEventListener('scroll', this._boundOnResize);
       this._boundOnResize = null;
     }
 
