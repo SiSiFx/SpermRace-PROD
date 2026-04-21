@@ -505,7 +505,7 @@ export function NewGameViewECS({
           const stats: GameStats = {
             placement: finalSnapshot.placement || (finalSnapshot.status === 'won' ? 1 : 0),
             kills: finalSnapshot.kills,
-            duration: finalSnapshot.elapsed,
+            duration: finalSnapshot.elapsed * 1000,
             distance: 0,
             winner: finalSnapshot.status === 'won',
             killerName: finalSnapshot.killer,

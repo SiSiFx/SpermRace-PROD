@@ -92,6 +92,7 @@ function AppInner() {
   const [isPracticeConnecting, setIsPracticeConnecting] = useState(false);
   // Track whether the current online game is free/practice so Results screen shows correct UI
   const joinedAsPracticeRef = useRef(false);
+  const gameStartTimeRef = useRef<number | null>(null);
   const practiceFallbackTimerRef = useRef<number | null>(null);
   // Track last selected tier so the upsell CTA reflects the right prize
   const [selectedTier, setSelectedTier] = useState<{ usd: number; prize: string }>({ usd: 5, prize: '$42' });
@@ -129,6 +130,7 @@ function AppInner() {
       if (screen !== 'lobby') setScreen('lobby');
     } else if (phase === 'game') {
       if (screen !== 'game') setScreen('game');
+      if (!gameStartTimeRef.current) gameStartTimeRef.current = Date.now();
     } else if (phase === 'ended') {
       markPlayed();
       // Build practiceStats for online free/practice games so Results screen shows correct UI
@@ -144,11 +146,13 @@ function AppInner() {
         const killerName = killedByEntry?.killerId
           ? (wsState.lobby?.playerNames?.[killedByEntry.killerId] || null)
           : null;
+        const durationMs = gameStartTimeRef.current ? Date.now() - gameStartTimeRef.current : 0;
+        gameStartTimeRef.current = null;
         setPracticeStats({
           winner: isWinner,
           placement,
           kills: wsState.kills[selfId] || 0,
-          duration: 0,
+          duration: durationMs,
           killerName,
           totalPlayers,
         });
