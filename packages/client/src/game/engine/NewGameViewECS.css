@@ -1111,3 +1111,31 @@
   .ecs-pill { padding: 4px 8px; font-size: 9px; }
   .ecs-metric strong { font-size: 12px; }
 }
+
+/* ── Radar / Minimap ──────────────────────────────────────────── */
+.ecs-radar {
+  position: fixed;
+  border-radius: 10px;
+  pointer-events: none;
+  box-shadow: 0 8px 24px rgba(2, 6, 23, 0.5);
+  image-rendering: pixelated;
+  /* Explicit size so canvas intrinsic height never leaks out */
+  width: clamp(120px, 14vw, 148px);
+  height: clamp(120px, 14vw, 148px);
+}
+
+.ecs-radar--desktop {
+  bottom: 18px;
+  right: 18px;
+  z-index: 60;
+}
+
+/* On mobile: smaller, left side, above the joystick */
+.ecs-radar--mobile {
+  width: 80px;
+  height: 80px;
+  /* Sits above the joystick — joystick base is ~110px tall + safe area */
+  bottom: calc(max(24px, env(safe-area-inset-bottom, 0px)) + 130px);
+  left: max(18px, env(safe-area-inset-left, 0px));
+  z-index: 21;
+}

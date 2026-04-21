@@ -171,6 +171,11 @@ export class Game {
     // Create systems
     this._createSystems();
 
+    // Sync camera to actual visual viewport — CameraSystem defaults to window.innerWidth/Height
+    // which on iOS Safari can differ from visualViewport (URL bar included in innerHeight).
+    const { width: vw, height: vh } = this._getViewportSize();
+    this._engine.onResize(vw, vh);
+
     // Generate spread spawn points for all entities at once
     const totalEntities = 1 + (this._config.botCount ?? 5);
     const spawnPoints = this._generateSpawnPoints(totalEntities);

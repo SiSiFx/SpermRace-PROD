@@ -3,7 +3,7 @@
  * Shows all alive players as colored dots with velocity arrows, zone ring, self as pulsing ring
  */
 
-import { useEffect, useRef, memo } from 'react';
+import { useEffect, useRef, memo, useMemo } from 'react';
 import type { Game } from './Game';
 import { ComponentNames } from './components';
 import type { Position } from './components/Position';
@@ -30,6 +30,13 @@ function hexColor(n: number): string {
 
 export const GameRadar = memo(function GameRadar({ game, playerMask, worldWidth = ARENA_CONFIG.DESKTOP_WIDTH, worldHeight = ARENA_CONFIG.DESKTOP_HEIGHT }: GameRadarProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Detect mobile once on mount — used for positioning class
+  const isMobile = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    const coarse = window.matchMedia?.('(pointer: coarse)')?.matches;
+    return coarse || window.innerWidth <= 768;
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -204,18 +211,7 @@ export const GameRadar = memo(function GameRadar({ game, playerMask, worldWidth 
   return (
     <canvas
       ref={canvasRef}
-      style={{
-        position: 'fixed',
-        bottom: 18,
-        right: 18,
-        width: 'clamp(120px, 14vw, 148px)',
-        height: 'auto',
-        aspectRatio: '1',
-        borderRadius: 10,
-        zIndex: 60,
-        pointerEvents: 'none',
-        boxShadow: '0 8px 24px rgba(2, 6, 23, 0.5)',
-      }}
+      className={`ecs-radar ${isMobile ? 'ecs-radar--mobile' : 'ecs-radar--desktop'}`}
     />
   );
 });
