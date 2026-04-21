@@ -238,6 +238,11 @@
   .landing-cta:hover { background: #daa03a; }
 }
 .landing-cta:active { transform: scale(0.99); }
+.landing-cta:disabled {
+  opacity: 0.65;
+  cursor: default;
+  transform: none;
+}
 .landing-cta:focus-visible {
   outline: 2px solid var(--cream);
   outline-offset: 2px;

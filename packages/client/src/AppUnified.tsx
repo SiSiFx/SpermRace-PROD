@@ -71,7 +71,7 @@ export default function App() {
 
 function AppInner() {
   const isMobile = useIsMobile();
-  const { state: wsState, connectAndJoin } = useWs();
+  const { state: wsState, connectAndJoin, leave } = useWs();
   const { publicKey, disconnect, connect } = useWallet();
 
   const [screen, setScreen] = useState<AppScreen>(() => getInitialScreen());
@@ -89,6 +89,7 @@ function AppInner() {
   const [showHowToPlay, setShowHowToPlay] = useState(false);
   const [gameCountdown] = useState<number | null>(null);
   const [practiceStats, setPracticeStats] = useState<{ placement: number; kills: number; duration: number; winner: boolean; killerName: string | null; totalPlayers: number } | null>(null);
+  const [isPracticeConnecting, setIsPracticeConnecting] = useState(false);
   // Track whether the current online game is free/practice so Results screen shows correct UI
   const joinedAsPracticeRef = useRef(false);
   const practiceFallbackTimerRef = useRef<number | null>(null);
@@ -119,11 +120,12 @@ function AppInner() {
   useEffect(() => {
     const phase = wsState.phase;
     if (phase === 'authenticating') {
-      // Successfully connected — cancel the offline fallback timer
+      // Successfully connected — cancel the offline fallback timer and clear loading state
       if (practiceFallbackTimerRef.current) {
         clearTimeout(practiceFallbackTimerRef.current);
         practiceFallbackTimerRef.current = null;
       }
+      setIsPracticeConnecting(false);
       if (screen !== 'lobby') setScreen('lobby');
     } else if (phase === 'game') {
       if (screen !== 'game') setScreen('game');
@@ -196,32 +198,34 @@ function AppInner() {
   screenRef.current = screen;
 
   const onPractice = useCallback(async () => {
+    // Prevent double-tap: if already connecting, do nothing
+    if (practiceFallbackTimerRef.current) return;
+    // Stop any lingering reconnect loop from a previous failed attempt
+    leave();
+    setIsPracticeConnecting(true);
     const name = PRACTICE_NAMES[Math.floor(Math.random() * PRACTICE_NAMES.length)];
-    // Clear any previous fallback timer
-    if (practiceFallbackTimerRef.current) {
-      clearTimeout(practiceFallbackTimerRef.current);
-      practiceFallbackTimerRef.current = null;
-    }
     try {
       joinedAsPracticeRef.current = true;
       await connectAndJoin({ entryFeeTier: 0, mode: 'practice', guestName: name });
     } catch {
       joinedAsPracticeRef.current = false;
-      // Server unavailable — fall back to local offline practice
+      setIsPracticeConnecting(false);
+      leave();
       setScreen('practice-solo');
       return;
     }
     // connectAndJoin for guests returns immediately (fire-and-forget).
-    // Give 10s for the WS TCP+TLS handshake to complete on slow mobile connections.
-    // The timer is cancelled as soon as ws.onopen fires (phase → 'authenticating').
+    // Give 4s for the WS handshake; fall back to offline practice if it doesn't connect.
     practiceFallbackTimerRef.current = window.setTimeout(() => {
       practiceFallbackTimerRef.current = null;
       if (screenRef.current === 'landing') {
         joinedAsPracticeRef.current = false;
+        setIsPracticeConnecting(false);
+        leave(); // kill the reconnect loop before going offline
         setScreen('practice-solo');
       }
-    }, 10000);
-  }, [connectAndJoin]);
+    }, 4000);
+  }, [connectAndJoin, leave]);
 
   const onWallet = useCallback(async (tier?: { usd: number; prize: string }) => {
     if (tier) setSelectedTier(tier);
@@ -272,6 +276,7 @@ function AppInner() {
           onLeaderboard={openLeaderboard}
           onHelp={() => setShowHowToPlay(true)}
           isNewPlayer={isNewPlayer}
+          isPracticeConnecting={isPracticeConnecting}
         />
       )}
 

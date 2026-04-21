@@ -24,6 +24,7 @@ export interface PremiumLandingScreenProps {
   onLeaderboard?: () => void;
   onHelp?: () => void;
   isNewPlayer?: boolean;
+  isPracticeConnecting?: boolean;
 }
 
 function isFirstVisit(): boolean {
@@ -34,6 +35,7 @@ export const PremiumLandingScreen = memo(function PremiumLandingScreen({
   onPractice,
   onWallet,
   onLeaderboard,
+  isPracticeConnecting,
 }: PremiumLandingScreenProps) {
   // New visitors default to Free so the first action is always zero-risk.
   // Returning players (sr_has_played set) default to $5 (recommended).
@@ -88,9 +90,13 @@ export const PremiumLandingScreen = memo(function PremiumLandingScreen({
             ))}
           </div>
 
-          <button className="landing-cta" onClick={handlePrimary}>
+          <button
+            className="landing-cta"
+            onClick={handlePrimary}
+            disabled={tier.usd === 0 && isPracticeConnecting}
+          >
             {tier.usd === 0
-              ? 'Start practice'
+              ? (isPracticeConnecting ? 'Connecting…' : 'Start practice')
               : <>Enter {tier.name} room <span className="cta-payout">win {tier.prize}</span></>
             }
           </button>
