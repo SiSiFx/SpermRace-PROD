@@ -59,6 +59,14 @@ export const PremiumLandingScreen = memo(function PremiumLandingScreen({
     <div className="landing-root">
       <SpermBackground />
 
+      {/* Full-screen connecting overlay — shown while finding a practice room */}
+      {isPracticeConnecting && (
+        <div className="landing-connecting-overlay" aria-live="polite">
+          <div className="landing-connecting-spinner" />
+          <p className="landing-connecting-label">Finding a room…</p>
+        </div>
+      )}
+
       <nav className="landing-nav">
         <span className="landing-logo">SpermRace.io</span>
         <button className="landing-nav-link" onClick={onLeaderboard}>
@@ -93,16 +101,20 @@ export const PremiumLandingScreen = memo(function PremiumLandingScreen({
           <button
             className="landing-cta"
             onClick={handlePrimary}
-            disabled={tier.usd === 0 && isPracticeConnecting}
+            disabled={isPracticeConnecting}
           >
             {tier.usd === 0
-              ? (isPracticeConnecting ? 'Connecting…' : 'Start practice')
+              ? 'Start practice'
               : <>Enter {tier.name} room <span className="cta-payout">win {tier.prize}</span></>
             }
           </button>
 
           {tier.usd !== 0 && (
-            <button className="landing-practice-link" onClick={handlePractice}>
+            <button
+              className="landing-practice-link"
+              onClick={handlePractice}
+              disabled={isPracticeConnecting}
+            >
               Try free — no wallet needed
             </button>
           )}

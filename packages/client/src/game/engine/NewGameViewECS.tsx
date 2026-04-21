@@ -4,7 +4,6 @@ import type { Health } from './components/Health';
 import { hasSpawnProtection } from './components/Health';
 import type { Position } from './components/Position';
 import { createGame, type Game } from './Game';
-import { getArenaSize } from './config';
 import type { CombatEvent } from './systems/CombatFeedbackSystem';
 import { installAutomationHooks } from './view/automation';
 import { clamp, normalize } from './view/math';
@@ -379,12 +378,9 @@ export function NewGameViewECS({
 
     try {
       host.replaceChildren();
-      const arenaSize = getArenaSize(isMobile);
       const game = await createGame({
         container: host,
         isMobile,
-        worldWidth: arenaSize.width,
-        worldHeight: arenaSize.height,
         playerName,
         playerColor,
         botCount,
@@ -902,12 +898,7 @@ export function NewGameViewECS({
 
       {/* Radar */}
       {snapshot.status === 'playing' && gameRef.current && (
-        <GameRadar
-          game={gameRef.current}
-          playerMask={playerHealthMask}
-          worldWidth={getArenaSize(isMobile).width}
-          worldHeight={getArenaSize(isMobile).height}
-        />
+        <GameRadar game={gameRef.current} playerMask={playerHealthMask} />
       )}
 
       {/* Spawn protection indicator */}

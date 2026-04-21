@@ -160,8 +160,9 @@
   flex-direction: column;
   align-items: center;
   gap: 24px;
-  /* safe areas: keep content away from notch and home bar */
-  padding: max(40px, calc(env(safe-area-inset-top, 0px) + 20px))
+  /* Top: clear the fixed header (≈60px) + notch safe area + breathing room.
+     On iPhone 12 with safe-area-inset-top≈47px → 60+47+16 = 123px */
+  padding: max(120px, calc(76px + env(safe-area-inset-top, 0px)))
            max(24px, env(safe-area-inset-right, 0px))
            max(40px, calc(env(safe-area-inset-bottom, 0px) + 20px))
            max(24px, env(safe-area-inset-left, 0px));
@@ -424,7 +425,7 @@
 
 @media (max-width: 640px) {
   .premium-results-content {
-    padding: 32px 20px;
+    padding: max(120px, calc(76px + env(safe-area-inset-top, 0px))) 20px max(32px, calc(env(safe-area-inset-bottom, 0px) + 16px));
     gap: 20px;
   }
 

@@ -310,8 +310,47 @@
 }
 
 
+/* ── Connecting overlay ── */
+.landing-connecting-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: rgba(13, 11, 8, 0.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.landing-connecting-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(200, 144, 42, 0.25);
+  border-top-color: var(--amber);
+  border-radius: 50%;
+  animation: landing-spin 0.75s linear infinite;
+}
+
+@keyframes landing-spin {
+  to { transform: rotate(360deg); }
+}
+
+.landing-connecting-label {
+  font-family: 'Outfit', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .landing-headline,
   .landing-card { animation: none; }
   .landing-cta { transition: none; }
+  .landing-connecting-spinner { animation: none; }
 }
