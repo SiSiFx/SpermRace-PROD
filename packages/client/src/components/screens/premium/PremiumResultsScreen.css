@@ -17,7 +17,10 @@
   align-items: center;
   justify-content: center;
   background: var(--bg-primary);
-  overflow: hidden;
+  /* Allow scrolling on small phones instead of clipping content */
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
   opacity: 0;
   transform: scale(0.98);
   transition: opacity 0.5s ease-out, transform 0.5s ease-out;
@@ -157,7 +160,11 @@
   flex-direction: column;
   align-items: center;
   gap: 24px;
-  padding: 40px 24px;
+  /* safe areas: keep content away from notch and home bar */
+  padding: max(40px, calc(env(safe-area-inset-top, 0px) + 20px))
+           max(24px, env(safe-area-inset-right, 0px))
+           max(40px, calc(env(safe-area-inset-bottom, 0px) + 20px))
+           max(24px, env(safe-area-inset-left, 0px));
   max-width: 500px;
   width: 100%;
   text-align: center;

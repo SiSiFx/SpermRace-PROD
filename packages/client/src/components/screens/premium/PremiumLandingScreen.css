@@ -52,7 +52,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px clamp(20px, 4vw, 60px) 0;
+  /* safe-area-inset-top: push below notch / Dynamic Island / status bar */
+  padding-top: calc(20px + env(safe-area-inset-top, 0px));
+  padding-left: clamp(20px, 4vw, 60px);
+  padding-right: clamp(20px, 4vw, 60px);
+  padding-bottom: 0;
   flex-shrink: 0;
 }
 
@@ -96,7 +100,10 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 0 clamp(20px, 4vw, 60px) clamp(48px, 8vh, 100px);
+  padding-top: 0;
+  padding-left: max(clamp(20px, 4vw, 60px), env(safe-area-inset-left, 0px));
+  padding-right: max(clamp(20px, 4vw, 60px), env(safe-area-inset-right, 0px));
+  padding-bottom: calc(clamp(48px, 8vh, 100px) + env(safe-area-inset-bottom, 0px));
   gap: 40px;
 }
 
@@ -283,7 +290,8 @@
 @media (max-width: 560px) {
   .landing-stage {
     justify-content: flex-end;
-    padding-bottom: clamp(32px, 8vh, 64px);
+    /* safe-area-inset-bottom: keep CTA above the home indicator */
+    padding-bottom: calc(clamp(32px, 8vh, 64px) + env(safe-area-inset-bottom, 0px));
     gap: 24px;
   }
 

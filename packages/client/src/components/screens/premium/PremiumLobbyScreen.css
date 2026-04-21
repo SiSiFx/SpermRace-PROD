@@ -15,6 +15,8 @@
   inset: 0;
   overflow-y: auto;
   overflow-x: clip;
+  /* Smooth momentum scrolling on iOS */
+  -webkit-overflow-scrolling: touch;
   background:
     radial-gradient(circle at 82% 10%, rgba(var(--lobby-accent-rgb), 0.11), transparent 24%),
     radial-gradient(circle at 10% 100%, rgba(87, 107, 132, 0.18), transparent 28%),
@@ -94,7 +96,11 @@
   z-index: 1;
   width: min(1320px, 100%);
   margin: 0 auto;
-  padding: 88px clamp(16px, 3vw, 36px) 28px;
+  /* top: clear fixed header (≈60px) + notch; bottom: clear home indicator */
+  padding-top: max(88px, calc(60px + env(safe-area-inset-top, 0px)));
+  padding-left: clamp(16px, 3vw, 36px);
+  padding-right: clamp(16px, 3vw, 36px);
+  padding-bottom: max(28px, calc(12px + env(safe-area-inset-bottom, 0px)));
 }
 
 .premium-lobby-topbar {
@@ -576,7 +582,7 @@
 
 @media (max-width: 1120px) {
   .premium-lobby-shell {
-    padding-top: 86px;
+    padding-top: max(86px, calc(60px + env(safe-area-inset-top, 0px)));
   }
 
   .premium-lobby-main {
@@ -590,7 +596,10 @@
 
 @media (max-width: 760px) {
   .premium-lobby-shell {
-    padding: 74px 14px 20px;
+    padding-top: max(74px, calc(56px + env(safe-area-inset-top, 0px)));
+    padding-left: max(14px, env(safe-area-inset-left, 0px));
+    padding-right: max(14px, env(safe-area-inset-right, 0px));
+    padding-bottom: max(20px, calc(8px + env(safe-area-inset-bottom, 0px)));
   }
 
   .premium-lobby-topbar {

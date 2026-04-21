@@ -12,16 +12,26 @@
     <meta name="description" content="Battle royale racing game with crypto tournaments on Solana" />
     
     <style>
-      /* Prevent iOS bounce and ensure full screen */
-      html, body {
+      /* Prevent iOS bounce and ensure full-bleed with safe-area coverage */
+      html {
+        height: 100%;
+        overflow: hidden;
+      }
+      body {
         width: 100%;
         height: 100%;
-        height: 100dvh;
         margin: 0;
         padding: 0;
         overflow: hidden;
+        /* position:fixed prevents iOS rubber-band bounce on body */
         position: fixed;
-        -webkit-overflow-scrolling: touch;
+        /* overscroll-behavior as progressive enhancement for non-iOS */
+        overscroll-behavior: none;
+      }
+      /* Ensure React root fills body */
+      #root {
+        width: 100%;
+        height: 100%;
       }
     </style>
 
