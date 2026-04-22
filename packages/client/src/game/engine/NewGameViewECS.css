@@ -783,7 +783,8 @@
 }
 
 /* ─── Mobile ─── */
-@media (max-width: 768px) {
+/* Match JS useDeviceMode(900): coarse-pointer devices (touch) OR screens ≤900px */
+@media (max-width: 900px), (pointer: coarse) {
   /* ── HUD: single-row compact layout ── */
   .ecs-hud {
     gap: 6px;

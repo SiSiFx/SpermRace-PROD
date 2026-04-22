@@ -286,7 +286,9 @@ export function NewGameViewECS({
       for (let i = 0; i < e.changedTouches.length; i += 1) {
         const touch = e.changedTouches[i];
 
-        if (t.moveTouchId == null && touch.clientX < window.innerWidth * 0.62) {
+        // 50% split: joystick zone (left) vs boost zone (right).
+        // 62% caused the right boost zone to be too narrow on tablets.
+        if (t.moveTouchId == null && touch.clientX < window.innerWidth * 0.5) {
           t.moveTouchId = touch.identifier;
           t.moveOrigin = { x: touch.clientX, y: touch.clientY };
           inputRef.current.move = { x: 0, y: 0 };
