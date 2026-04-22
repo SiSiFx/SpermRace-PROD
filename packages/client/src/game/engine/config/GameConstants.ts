@@ -25,8 +25,8 @@ export const MATCH_CONFIG = {
   /** Zone shrink speed (pixels/second) */
   ZONE_SHRINK_RATE: 30,
 
-  /** Spawn grace period (ms) - invincibility on spawn */
-  SPAWN_GRACE_MS: 1200,
+  /** Spawn grace period (ms) - invincibility on spawn (extended for soft velocity burst) */
+  SPAWN_GRACE_MS: 1500,
 
   /** Self-trail collision grace period (ms) */
   SELF_COLLISION_GRACE_MS: 300,

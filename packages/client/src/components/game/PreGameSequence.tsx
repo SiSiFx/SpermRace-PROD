@@ -156,18 +156,22 @@ export function PreGameSequence({
   }, [phase, game, animateCamera]);
 
   // Phase 3: Countdown -> Zoom to Player
+  // Resume engine immediately at GO so the player starts moving during the camera zoom-in.
+  // This eliminates the freeze between "GO!" and gameplay starting.
   const handleCountdownComplete = useCallback(() => {
     setShowCountdown(false);
     setPhase('zoomToPlayer');
-  }, []);
+    game.getEngine().resume();
+  }, [game]);
 
   // Phase 4: Zoom to Player -> Complete
+  // Two-step punch zoom: overshoot to 1.25× default (zoomed in close), then the camera
+  // smooth factor naturally settles back to default while gameplay runs.
   useEffect(() => {
     if (phase !== 'zoomToPlayer') return;
 
     const playerPos = initialPlayerPosRef.current;
     if (!playerPos) {
-      // Fallback if no player position
       setPhase('complete');
       onComplete();
       return;
@@ -177,7 +181,7 @@ export function PreGameSequence({
     const engine = game.getEngine();
     const systemManager = engine.getSystemManager();
     const systems = (systemManager as any).systems || [];
-    
+
     let cameraSystem: any = null;
     for (const sys of systems) {
       if (sys.constructor.name === 'CameraSystem') {
@@ -186,15 +190,24 @@ export function PreGameSequence({
       }
     }
 
-    // Animate back to player
     const focusZoom = getDefaultZoom(window.innerWidth <= 900);
+    // Punch in closer than normal zoom, then let smooth follow settle to focusZoom
+    const punchZoom = focusZoom * 1.28;
 
-    animateCamera(playerPos.x, playerPos.y, focusZoom, PHASE_DURATIONS.zoomToPlayer, () => {
-      // Re-enable camera follow
+    // Step 1: Fast zoom to player position, punched in close
+    animateCamera(playerPos.x, playerPos.y, punchZoom, 220, () => {
+      // Shake on impact — tactile "GO!" feel
+      if (cameraSystem) {
+        cameraSystem.shake(0.28, 0.22);
+        // Set target zoom back to normal; camera smooth factor eases it out during gameplay
+        cameraSystem.setZoom(focusZoom);
+      }
+
+      // Re-enable camera follow so it tracks player immediately
       if (cameraSystem && playerIdRef.current) {
         cameraSystem.setTarget(playerIdRef.current);
       }
-      
+
       setPhase('complete');
       onComplete();
     });

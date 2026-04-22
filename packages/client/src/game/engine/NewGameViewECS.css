@@ -350,7 +350,8 @@
 .ecs-joystick-base {
   position: fixed;
   left: max(18px, env(safe-area-inset-left, 0px));
-  bottom: max(24px, env(safe-area-inset-bottom, 0px));
+  /* +50px minimum to clear Safari's ~50px bottom toolbar on iPhones without home indicator */
+  bottom: max(74px, env(safe-area-inset-bottom, 0px));
   width: 120px;
   height: 120px;
   border-radius: 50%;
@@ -379,7 +380,8 @@
 .ecs-mobile-ability-btn {
   position: fixed;
   right: max(16px, env(safe-area-inset-right, 0px));
-  bottom: max(106px, calc(100px + env(safe-area-inset-bottom, 0px)));
+  /* boost(82px) + boost-height(54px) + 16px gap = 152px minimum */
+  bottom: max(152px, calc(146px + env(safe-area-inset-bottom, 0px)));
   width: 70px;
   height: 70px;
   border-radius: 50%;
@@ -469,7 +471,8 @@
 .ecs-mobile-boost-btn {
   position: fixed;
   right: max(16px, env(safe-area-inset-right, 0px));
-  bottom: max(34px, env(safe-area-inset-bottom, 0px));
+  /* +50px minimum to clear Safari toolbar (replaces old 34px) */
+  bottom: max(82px, env(safe-area-inset-bottom, 0px));
   min-width: 96px;
   height: 54px;
   border-radius: 12px;
@@ -867,9 +870,9 @@
     display: none;
   }
 
-  /* Push game hint above the ability button stack */
+  /* Push game hint above the ability button stack (ability top = 152+70=222px → +18px gap) */
   .ecs-game-hint {
-    bottom: calc(190px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(240px + env(safe-area-inset-bottom, 0px));
     max-width: calc(100vw - 24px);
   }
 }
@@ -1139,8 +1142,8 @@
 .ecs-radar--mobile {
   width: 80px !important;
   height: 80px !important;
-  /* Sits above the joystick — joystick base is ~110px tall + safe area */
-  bottom: calc(max(24px, env(safe-area-inset-bottom, 0px)) + 130px) !important;
+  /* Sits above the joystick — joystick base 120px + new bottom(74px) + gap */
+  bottom: calc(max(74px, env(safe-area-inset-bottom, 0px)) + 130px) !important;
   left: max(18px, env(safe-area-inset-left, 0px)) !important;
   z-index: 21;
 }

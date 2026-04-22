@@ -124,6 +124,14 @@ export class EntityFactory {
       y: spawn.y,
     });
 
+    // Point spawn toward arena center — avoids the default angle-0 (right) drift.
+    // Soft initial burst (~55% base speed) gives a launch feel at GO without instant full speed.
+    const spawnAngle = Math.atan2(
+      this._config.worldHeight / 2 - spawn.y,
+      this._config.worldWidth / 2 - spawn.x
+    );
+    const spawnSpeed = CAR_PHYSICS.BASE_SPEED * classStats.speedMultiplier * 0.55;
+
     // Velocity (apply class speed multiplier)
     player.addComponent<Velocity>(
       ComponentNames.VELOCITY,
@@ -131,6 +139,10 @@ export class EntityFactory {
         maxSpeed: CAR_PHYSICS.BASE_SPEED * classStats.speedMultiplier,
         acceleration: CAR_PHYSICS.ACCELERATION * classStats.speedMultiplier,
         drag: CAR_PHYSICS.LONGITUDINAL_DRAG,
+        angle: spawnAngle,
+        targetAngle: spawnAngle,
+        vx: Math.cos(spawnAngle) * spawnSpeed,
+        vy: Math.sin(spawnAngle) * spawnSpeed,
       })
     );
 
@@ -237,6 +249,13 @@ export class EntityFactory {
       y: spawn.y,
     });
 
+    // Bots also spawn pointing toward center for visual consistency
+    const botSpawnAngle = Math.atan2(
+      this._config.worldHeight / 2 - spawn.y,
+      this._config.worldWidth / 2 - spawn.x
+    );
+    const botSpawnSpeed = CAR_PHYSICS.BASE_SPEED * classStats.speedMultiplier * 0.55;
+
     // Velocity (apply class speed multiplier)
     bot.addComponent<Velocity>(
       ComponentNames.VELOCITY,
@@ -244,6 +263,10 @@ export class EntityFactory {
         maxSpeed: CAR_PHYSICS.BASE_SPEED * classStats.speedMultiplier,
         acceleration: CAR_PHYSICS.ACCELERATION * classStats.speedMultiplier,
         drag: CAR_PHYSICS.LONGITUDINAL_DRAG,
+        angle: botSpawnAngle,
+        targetAngle: botSpawnAngle,
+        vx: Math.cos(botSpawnAngle) * botSpawnSpeed,
+        vy: Math.sin(botSpawnAngle) * botSpawnSpeed,
       })
     );
 
