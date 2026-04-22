@@ -10,6 +10,8 @@ import type { Collision } from '../components/Collision';
 import type { Boost } from '../components/Boost';
 import type { KillPower } from '../components/KillPower';
 import { getKillPowerSpeedMult, updateKillPower } from '../components/KillPower';
+import type { Abilities } from '../components/Abilities';
+import { AbilityType } from '../components/Abilities';
 import { ComponentNames, createComponentMask } from '../components';
 import { SpatialGrid } from '../spatial/SpatialGrid';
 import { CAR_PHYSICS } from '../config';
@@ -81,16 +83,22 @@ export class PhysicsSystem extends System {
         updateKillPower(killPower, now);
       }
 
+      const abilities = entity.getComponent<Abilities>(ComponentNames.ABILITIES);
+
       // Apply boost multiplier
       const boostMult = boost ? (boost.isBoosting ? boost.speedMultiplier : 1) : 1;
       const isBoosting = boost ? boost.isBoosting : false;
+
+      // Overdrive: Tank ability — speed boost without consuming boost energy.
+      // Checked directly from abilities.active so it works independently of isBoosting.
+      const isOverdriving = abilities ? abilities.active.has(AbilityType.OVERDRIVE) : false;
 
       // Apply kill power speed burst
       const killPowerMult = killPower ? getKillPowerSpeedMult(killPower, now) : 1.0;
       const speedMult = boostMult * killPowerMult;
 
       // Update velocity based on target angle
-      this._updateVelocity(velocity, fixedDt, isBoosting, speedMult);
+      this._updateVelocity(velocity, fixedDt, isBoosting, speedMult, isOverdriving);
 
       // Apply velocity to position
       position.x += velocity.vx * fixedDt;
@@ -133,13 +141,15 @@ export class PhysicsSystem extends System {
     velocity: Velocity,
     dt: number,
     isBoosting: boolean,
-    speedMultiplier: number
+    speedMultiplier: number,
+    isOverdriving: boolean = false
   ): void {
     const headingX = Math.cos(velocity.angle);
     const headingY = Math.sin(velocity.angle);
 
     // 1. Apply forward acceleration (matching server)
-    const accelMagnitude = velocity.acceleration * (isBoosting ? 2.45 : 1);
+    // Overdrive gives 1.8× acceleration — noticeably faster than base, less frantic than boost
+    const accelMagnitude = velocity.acceleration * (isBoosting ? 2.45 : isOverdriving ? 1.8 : 1);
     velocity.vx += headingX * accelMagnitude * dt;
     velocity.vy += headingY * accelMagnitude * dt;
 
@@ -159,8 +169,9 @@ export class PhysicsSystem extends System {
     velocity.vy = vForwardAfter * headingY + vSideAfter * headingX;
 
     // 3. Clamp to max speed
+    // Overdrive raises the cap to 1.6× base — reaches ~672px/s vs 420px/s normal
     const speed = Math.hypot(velocity.vx, velocity.vy);
-    const maxSpeed = velocity.maxSpeed * (isBoosting ? this._BOOST_SPEED_RATIO : 1);
+    const maxSpeed = velocity.maxSpeed * (isBoosting ? this._BOOST_SPEED_RATIO : isOverdriving ? 1.6 : 1);
     let finalSpeed = speed;
     if (speed > maxSpeed) {
       const ratio = maxSpeed / speed;

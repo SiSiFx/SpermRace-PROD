@@ -258,17 +258,12 @@ export class AbilitySystem extends System {
       }
 
       case AbilityType.OVERDRIVE: {
+        // Restore trail visuals — speed returns automatically since PhysicsSystem
+        // reads abilities.active.has(OVERDRIVE) which is now cleared on expiry.
         const boost = entity.getComponent<Boost>(ComponentNames.BOOST);
         if (boost) {
-          boost.speedMultiplier = BOOST_CONFIG.SPEED_MULTIPLIER;
           boost.trailWidthMultiplier = BOOST_CONFIG.TRAIL_WIDTH_MULTIPLIER;
           boost.trailLifetimeBonus = BOOST_CONFIG.TRAIL_LIFETIME_BONUS;
-        }
-        const velocity = entity.getComponent<Velocity>(ComponentNames.VELOCITY);
-        if (velocity) {
-          const spermClass = entity.getComponent<SpermClass>(ComponentNames.SPERM_CLASS);
-          const classMult = spermClass?.speedMultiplier ?? 1.0;
-          velocity.maxSpeed = CAR_PHYSICS.BASE_SPEED * classMult;
         }
         break;
       }
@@ -343,15 +338,11 @@ export class AbilitySystem extends System {
   private _applyOverdrive(entity: Entity): void {
     const boost = entity.getComponent<Boost>(ComponentNames.BOOST);
     if (boost) {
-      // Temporary boost to speed and trail width
-      boost.speedMultiplier = 2;
+      // Fat trail + lifetime bonus — the signature visual of Overdrive.
+      // Speed is now handled in PhysicsSystem via abilities.active.has(OVERDRIVE)
+      // so it works without requiring isBoosting (no energy drain).
       boost.trailWidthMultiplier = 3;
       boost.trailLifetimeBonus = 3000;
-    }
-
-    const velocity = entity.getComponent<Velocity>(ComponentNames.VELOCITY);
-    if (velocity) {
-      velocity.maxSpeed = 500;
     }
   }
 
