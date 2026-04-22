@@ -310,13 +310,22 @@ function AppInner() {
       {screen === 'results' && (
         <PremiumResultsScreen
           onPlayAgain={() => {
+            // leave() resets wsState.phase → 'idle' so the phase effect doesn't
+            // immediately redirect back to 'results' (game-over loop fix)
+            leave();
             joinedAsPracticeRef.current = false;
+            const hadStats = !!practiceStats;
             setPracticeStats(null);
             // Online practice + local practice → back to practice; tournament → landing
-            if (practiceStats) setScreen('practice-solo');
+            if (hadStats) setScreen('practice-solo');
             else setScreen('landing');
           }}
-          onChangeTier={() => { joinedAsPracticeRef.current = false; setPracticeStats(null); setScreen('landing'); }}
+          onChangeTier={() => {
+            leave();
+            joinedAsPracticeRef.current = false;
+            setPracticeStats(null);
+            setScreen('landing');
+          }}
           practiceStats={practiceStats ?? undefined}
         />
       )}
