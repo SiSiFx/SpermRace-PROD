@@ -402,10 +402,9 @@ export class Game {
       // Set container for floating text
       this._floatingText.setContainer(this._worldContainer);
 
-      // Post-processing: danger overlay active on all devices; CRT scanlines desktop-only
-      const isMobileDevice = this._config.isMobile || window.innerWidth <= 768;
+      // Post-processing: danger overlay + flash only — CRT scanlines live on overlay screens, not gameplay
       this._postProcessing = new PostProcessingSystem(this._app.stage, {
-        crtEnabled: !isMobileDevice,
+        crtEnabled: false,
         vignetteEnabled: false,
         filmGrainEnabled: false,
       });
