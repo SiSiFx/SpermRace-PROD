@@ -5,7 +5,7 @@ import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 import type { WalletAdapter, WalletError } from '@solana/wallet-adapter-base';
 import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
 import {
-  CoinbaseWalletAdapter,
+  PhantomWalletAdapter,
   TrustWalletAdapter,
 } from '@solana/wallet-adapter-wallets';
 import { WalletConnectWalletAdapter } from '@solana/wallet-adapter-walletconnect';
@@ -78,11 +78,13 @@ export const WalletProviderNew: FC<Props> = ({ children }) => {
 
   // Configure wallets
   const wallets = useMemo(() => {
-    // Phantom + Solflare omitted — both auto-register via the Wallet Standard API.
-    // Explicit adapters on top cause duplicate registration and connection state conflicts.
-    // They still appear in the wallet modal via their Standard Wallet registrations.
+    // Phantom: explicit adapter needed for mobile Safari/Chrome where Wallet Standard
+    // injection doesn't fire. On desktop it auto-registers via Standard AND appears
+    // here — wallet-adapter-react deduplicates by name, so no duplicate entry.
+    // Trust: good mobile coverage (iOS + Android), no Standard auto-register on mobile.
+    // WalletConnect added below if VITE_WALLETCONNECT_PROJECT_ID is set.
     const adapters: WalletAdapter[] = [
-      new CoinbaseWalletAdapter(),
+      new PhantomWalletAdapter(),
       new TrustWalletAdapter(),
     ];
 
