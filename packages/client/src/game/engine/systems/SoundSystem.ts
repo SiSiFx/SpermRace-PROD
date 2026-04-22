@@ -683,6 +683,44 @@ export class SoundSystem extends System {
   }
 
   /**
+   * Play spawn materialisation — low thud + ascending triangle tone
+   * Called once at GO to signal the player's arrival in the arena.
+   */
+  playSpawn(): void {
+    const ctx = this._audioContext;
+    const master = this._masterGain;
+    if (!ctx || !master) return;
+    const now = ctx.currentTime;
+
+    // Low thud — impact
+    const thud = ctx.createOscillator();
+    const thudGain = ctx.createGain();
+    thud.type = 'sine';
+    thud.frequency.setValueAtTime(120, now);
+    thud.frequency.exponentialRampToValueAtTime(40, now + 0.18);
+    thudGain.gain.setValueAtTime(0.35, now);
+    thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+    thud.connect(thudGain);
+    thudGain.connect(master);
+    thud.start(now);
+    thud.stop(now + 0.18);
+
+    // Rising tone — identity arrival
+    const tone = ctx.createOscillator();
+    const toneGain = ctx.createGain();
+    tone.type = 'triangle';
+    tone.frequency.setValueAtTime(320, now + 0.05);
+    tone.frequency.linearRampToValueAtTime(620, now + 0.4);
+    toneGain.gain.setValueAtTime(0.0, now + 0.05);
+    toneGain.gain.linearRampToValueAtTime(0.18, now + 0.12);
+    toneGain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+    tone.connect(toneGain);
+    toneGain.connect(master);
+    tone.start(now + 0.05);
+    tone.stop(now + 0.45);
+  }
+
+  /**
    * Destroy system
    */
   destroy(): void {

@@ -162,6 +162,18 @@ export function PreGameSequence({
     setShowCountdown(false);
     setPhase('zoomToPlayer');
     game.getEngine().resume();
+
+    // Spawn effects at GO — screen flash + materialisation sound
+    const systemManager = game.getEngine().getSystemManager();
+    const systems = (systemManager as any).systems || [];
+    for (const sys of systems) {
+      if (sys.constructor.name === 'PostProcessingSystem') {
+        sys.triggerFlash(0.35);
+      }
+      if (sys.constructor.name === 'SoundSystem') {
+        sys.playSpawn?.();
+      }
+    }
   }, [game]);
 
   // Phase 4: Zoom to Player -> Complete

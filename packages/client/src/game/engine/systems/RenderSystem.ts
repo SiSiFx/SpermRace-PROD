@@ -15,7 +15,7 @@ import { getTrailAlpha } from '../components/Trail';
 import type { Player } from '../components/Player';
 import { EntityType } from '../components/Player';
 import type { Health } from '../components/Health';
-import { EntityState } from '../components/Health';
+import { EntityState, hasSpawnProtection, getSpawnProtectionRemaining } from '../components/Health';
 import type { Boost } from '../components/Boost';
 import type { Abilities } from '../components/Abilities';
 import { AbilityType } from '../components/Abilities';
@@ -30,7 +30,7 @@ import type { PowerupData } from './PowerupSystem';
 import type { Entity } from '../core/Entity';
 import type { ZoneSystem } from './ZoneSystem';
 import type { SpatialGrid } from '../spatial/SpatialGrid';
-import { PLAYER_VISUAL_CONFIG, TRAIL_EFFECTS, MICROSCOPE_PALETTE, MICROSCOPE_VISUALS } from '../config/GameConstants';
+import { PLAYER_VISUAL_CONFIG, TRAIL_EFFECTS, MICROSCOPE_PALETTE, MICROSCOPE_VISUALS, MATCH_CONFIG } from '../config/GameConstants';
 import { PostProcessingSystem, createPostProcessingSystem } from './PostProcessingSystem';
 import type { KillPower } from '../components/KillPower';
 import { getKillPowerGrowthMult } from '../components/KillPower';
@@ -112,6 +112,9 @@ interface EntityGraphics {
 
   /** Cache key for the last head geometry draw */
   bodyDrawKey: string;
+
+  /** Timestamp (ms) of first visible frame — drives scale pop-in; 0 = not yet started */
+  spawnAnimStart: number;
 }
 
 interface TrailGraphicsCache {
@@ -217,6 +220,10 @@ export class RenderSystem extends System {
 
   // Post-processing system
   private _postProcessing: PostProcessingSystem | null = null;
+
+  // Spawn ring — one expanding circle at local player's spawn point (500ms)
+  private _spawnRing: { x: number; y: number; startTime: number } | null = null;
+  private _spawnRingGraphics: GraphicsType | null = null;
 
   constructor(config: RenderSystemConfig) {
     super(SystemPriority.RENDERING);
@@ -434,6 +441,11 @@ export class RenderSystem extends System {
 
     // Set graphics on particle pool
     this._particlePool.setGraphics(this._particleGraphics);
+
+    // Spawn ring (drawn above particles)
+    this._spawnRingGraphics = new Graphics();
+    this._spawnRingGraphics.label = 'spawnRing';
+    effectsLayer.addChild(this._spawnRingGraphics);
   }
 
   /**
@@ -618,7 +630,7 @@ export class RenderSystem extends System {
     this._renderTraps(now);
 
     // Render effects
-    this._renderEffects();
+    this._renderEffects(now);
 
     // Apply camera transform
     this._applyCameraTransform();
@@ -986,6 +998,7 @@ export class RenderSystem extends System {
       nameplate,
       visualAngle: 0,
       bodyDrawKey: '',
+      spawnAnimStart: 0,
     };
   }
 
@@ -1038,6 +1051,26 @@ export class RenderSystem extends System {
 
     if (!isVisible) return false;
 
+    // Spawn animation: initialize on first visible frame, apply scale pop-in
+    if (graphics.spawnAnimStart === 0) {
+      graphics.spawnAnimStart = now;
+      // Register expanding spawn ring for local player
+      if (player.isLocal && !this._spawnRing) {
+        this._spawnRing = { x: position.x, y: position.y, startTime: now };
+      }
+    }
+    // Scale pop-in (0–400ms): 0 → 1.35 overshoot → 1.0
+    const spawnElapsed = now - graphics.spawnAnimStart;
+    if (spawnElapsed < 400) {
+      const t = spawnElapsed / 400;
+      const scale = t < 0.3
+        ? (t / 0.3) * 1.35
+        : 1.35 - 0.35 * ((t - 0.3) / 0.7);
+      container.scale.set(scale);
+    } else if (container.scale.x !== 1.0) {
+      container.scale.set(1.0);
+    }
+
     const bodySizeMult = classSizeMult * growthMult;
     const bodyDrawKey = `${player.color}:${boost?.isBoosting ? 1 : 0}:${bodySizeMult.toFixed(3)}:${player.isLocal ? 1 : 0}`;
     let bodyRedrawn = false;
@@ -1062,9 +1095,12 @@ export class RenderSystem extends System {
       bodySizeMult
     );
 
-    // Draw shield if active
+    // Draw shield ability aura, or spawn grace aura (whichever applies)
     if (abilities && isAbilityActive(abilities, AbilityType.SHIELD)) {
       this._drawShield(shield, true);
+      shield.visible = true;
+    } else if (health && hasSpawnProtection(health)) {
+      this._drawSpawnAura(shield, health, classSizeMult, growthMult);
       shield.visible = true;
     } else {
       shield.visible = false;
@@ -1388,6 +1424,37 @@ export class RenderSystem extends System {
       color: 0xffffff,
       alpha: pulse * 0.5,
     });
+  }
+
+  /**
+   * Draw spawn-grace protection aura (mint green, fades as grace expires)
+   * Distinct from shield ability — lighter, simpler, communicates "you're safe right now"
+   */
+  private _drawSpawnAura(
+    shieldGraphics: GraphicsType,
+    health: Health,
+    sizeMult: number,
+    growthMult: number
+  ): void {
+    shieldGraphics.clear();
+
+    const graceRemaining = getSpawnProtectionRemaining(health);
+    const graceFraction = Math.max(0, graceRemaining / MATCH_CONFIG.SPAWN_GRACE_MS);
+    const pulse = 0.35 + 0.35 * Math.sin(this._time * 8.0);
+    const alpha = pulse * graceFraction;
+
+    if (alpha < 0.01) return;
+
+    const bodyRadius = PLAYER_VISUAL_CONFIG.BODY_RADIUS * sizeMult * growthMult;
+    const rx = bodyRadius * PLAYER_VISUAL_CONFIG.BODY_WIDTH_MULT + 8 + pulse * 4;
+    const ry = bodyRadius * PLAYER_VISUAL_CONFIG.BODY_HEIGHT_MULT + 5 + pulse * 3;
+
+    // Outer diffuse halo
+    shieldGraphics.ellipse(0, 0, rx + 6, ry + 4).fill({ color: 0x44ffaa, alpha: alpha * 0.12 });
+    // Main ring stroke
+    shieldGraphics.ellipse(0, 0, rx, ry).stroke({ width: 2.0, color: 0x44ffaa, alpha: alpha * 0.9 });
+    // Faint inner fill (soap-bubble look)
+    shieldGraphics.ellipse(0, 0, rx - 3, ry - 2).fill({ color: 0x44ffaa, alpha: alpha * 0.06 });
   }
 
   /**
@@ -1808,12 +1875,35 @@ export class RenderSystem extends System {
   /**
    * Render effects (particles, etc.)
    */
-  private _renderEffects(): void {
+  private _renderEffects(now: number): void {
     const effectsLayer = this._layers.get(RenderLayer.EFFECTS);
     if (!effectsLayer) return;
 
     // Render all active particles
     this._particlePool.render();
+
+    // Spawn ring — single expanding circle at local player spawn point (500ms)
+    if (this._spawnRingGraphics) {
+      if (this._spawnRing) {
+        const elapsed = now - this._spawnRing.startTime;
+        const duration = 500;
+        if (elapsed <= duration) {
+          const t = elapsed / duration;
+          const radius = 8 + 72 * t;             // 8 → 80
+          const ringAlpha = 0.85 * (1 - t);      // fades out
+          const lineWidth = Math.max(0.5, 4 * (1 - t * 0.75));
+          this._spawnRingGraphics.clear();
+          this._spawnRingGraphics
+            .circle(this._spawnRing.x, this._spawnRing.y, radius)
+            .stroke({ width: lineWidth, color: 0xffffff, alpha: ringAlpha });
+        } else {
+          this._spawnRingGraphics.clear();
+          this._spawnRing = null;
+        }
+      } else {
+        // Nothing to draw — keep cleared
+      }
+    }
   }
 
   /**
@@ -2386,6 +2476,12 @@ export class RenderSystem extends System {
       this._particleGraphics.destroy({ children: true, texture: false });
       this._particleGraphics = null;
     }
+
+    if (this._spawnRingGraphics) {
+      this._spawnRingGraphics.destroy({ children: true, texture: false });
+      this._spawnRingGraphics = null;
+    }
+    this._spawnRing = null;
 
     // Clean up all graphics
     for (const [entityId, graphics] of this._entityGraphics) {

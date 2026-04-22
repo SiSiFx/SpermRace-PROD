@@ -902,25 +902,40 @@
 
 /* Spawn protection */
 .ecs-spawn-shield {
-  position: absolute;
-  top: 50%;
+  position: fixed;
+  top: 42%;
   left: 50%;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%) scale(0.85);
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.18em;
-  color: #22c55e;
-  background: rgba(34,197,94,0.08);
-  border: 1px solid rgba(34,197,94,0.3);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #44ffaa;
+  background: rgba(68, 255, 170, 0.08);
+  border: 1px solid rgba(68, 255, 170, 0.4);
   border-radius: 999px;
-  padding: 6px 18px;
+  padding: 7px 20px;
   pointer-events: none;
   z-index: 55;
-  animation: shield-pulse 0.7s ease-in-out infinite alternate;
+  animation: spawn-shield-in 0.25s cubic-bezier(0.22, 1, 0.36, 1) forwards,
+             spawn-shield-pulse 0.8s ease-in-out 0.25s infinite alternate;
 }
-@keyframes shield-pulse {
-  from { opacity: 0.5; }
-  to   { opacity: 1; }
+@keyframes spawn-shield-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.7); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes spawn-shield-pulse {
+  from {
+    opacity: 0.55;
+    box-shadow: 0 0 10px rgba(68, 255, 170, 0.15);
+  }
+  to {
+    opacity: 1;
+    box-shadow: 0 0 22px rgba(68, 255, 170, 0.4), 0 0 6px rgba(68, 255, 170, 0.2);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ecs-spawn-shield { animation: none; opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 
 /* Zone pill */
