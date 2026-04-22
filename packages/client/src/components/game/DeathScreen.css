@@ -24,6 +24,58 @@
   -webkit-backdrop-filter: blur(8px);
 }
 
+/* ── VHS / CRT film overlay ──────────────────────────────────── */
+@keyframes vhsHeadSweep {
+  0%   { background-position: 0 120%; }
+  100% { background-position: 0 -20%; }
+}
+@keyframes vhsFlicker {
+  0%, 81%, 83%, 85%, 100% { opacity: 1; }
+  82% { opacity: 0.82; }
+  84% { opacity: 0.93; }
+}
+
+/* Layer 1: static horizontal scanlines */
+.death-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent 0px,
+    transparent 3px,
+    rgba(0, 0, 0, 0.07) 3px,
+    rgba(0, 0, 0, 0.07) 4px
+  );
+}
+
+/* Layer 2: sweeping tape-head band + periodic glitch flicker */
+.death-overlay::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent 38%,
+    rgba(210, 230, 255, 0.025) 46%,
+    rgba(210, 230, 255, 0.05)  50%,
+    rgba(210, 230, 255, 0.025) 54%,
+    transparent 62%,
+    transparent 100%
+  );
+  background-size: 100% 250%;
+  animation: vhsHeadSweep 10s linear infinite, vhsFlicker 8s steps(1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .death-overlay::after { animation: none; }
+}
+
 /* Background blood effect */
 .death-bg-effect {
   position: absolute;

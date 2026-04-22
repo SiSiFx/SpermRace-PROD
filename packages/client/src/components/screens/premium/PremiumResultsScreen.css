@@ -31,6 +31,58 @@
   transform: scale(1);
 }
 
+/* ── VHS / CRT film overlay ──────────────────────────────────── */
+@keyframes vhsHeadSweepResults {
+  0%   { background-position: 0 120%; }
+  100% { background-position: 0 -20%; }
+}
+@keyframes vhsFlickerResults {
+  0%, 81%, 83%, 85%, 100% { opacity: 1; }
+  82% { opacity: 0.82; }
+  84% { opacity: 0.93; }
+}
+
+/* Layer 1: scanlines — sits above all content */
+.premium-results-screen::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent 0px,
+    transparent 3px,
+    rgba(0, 0, 0, 0.07) 3px,
+    rgba(0, 0, 0, 0.07) 4px
+  );
+}
+
+/* Layer 2: tape-head band + flicker */
+.premium-results-screen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent 38%,
+    rgba(200, 220, 255, 0.025) 46%,
+    rgba(200, 220, 255, 0.05)  50%,
+    rgba(200, 220, 255, 0.025) 54%,
+    transparent 62%,
+    transparent 100%
+  );
+  background-size: 100% 250%;
+  animation: vhsHeadSweepResults 10s linear infinite, vhsFlickerResults 8s steps(1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .premium-results-screen::after { animation: none; }
+}
+
 /* =========================================
    BACKGROUND EFFECTS
    ========================================= */

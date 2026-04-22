@@ -969,6 +969,57 @@
 }
 
 /* ── Victory overlay ──────────────────────────────────────── */
+@keyframes vhsHeadSweepWin {
+  0%   { background-position: 0 120%; }
+  100% { background-position: 0 -20%; }
+}
+@keyframes vhsFlickerWin {
+  0%, 81%, 83%, 85%, 100% { opacity: 1; }
+  82% { opacity: 0.82; }
+  84% { opacity: 0.93; }
+}
+
+/* Layer 1: scanlines */
+.ecs-win-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent 0px,
+    transparent 3px,
+    rgba(0, 0, 0, 0.07) 3px,
+    rgba(0, 0, 0, 0.07) 4px
+  );
+}
+
+/* Layer 2: tape-head band + flicker */
+.ecs-win-overlay::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent 38%,
+    rgba(255, 240, 180, 0.025) 46%,
+    rgba(255, 240, 180, 0.05)  50%,
+    rgba(255, 240, 180, 0.025) 54%,
+    transparent 62%,
+    transparent 100%
+  );
+  background-size: 100% 250%;
+  animation: vhsHeadSweepWin 10s linear infinite, vhsFlickerWin 8s steps(1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ecs-win-overlay::after { animation: none; }
+}
+
 @keyframes win-stamp-in {
   from { opacity: 0; transform: scale(1.6) rotate(-6deg); }
   to   { opacity: 1; transform: scale(1)  rotate(-2deg); }
