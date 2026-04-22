@@ -1113,29 +1113,32 @@
 }
 
 /* ── Radar / Minimap ──────────────────────────────────────────── */
+/* NOTE: mobile-game-fixes.css has a global `canvas { position: absolute; width: 100% !important; height: 100% !important }`
+   that nukes any canvas not explicitly overridden. All properties that clash need !important here. */
 .ecs-radar {
-  position: fixed;
+  position: fixed !important;  /* override position: absolute from mobile-game-fixes.css */
+  top: auto !important;        /* override top: 0 */
   border-radius: 10px;
   pointer-events: none;
   box-shadow: 0 8px 24px rgba(2, 6, 23, 0.5);
-  image-rendering: pixelated;
-  /* Explicit size so canvas intrinsic height never leaks out */
-  width: clamp(120px, 14vw, 148px);
-  height: clamp(120px, 14vw, 148px);
+  /* Explicit size — both !important to beat the 100% !important in mobile-game-fixes.css */
+  width: clamp(120px, 14vw, 148px) !important;
+  height: clamp(120px, 14vw, 148px) !important;
 }
 
 .ecs-radar--desktop {
-  bottom: 18px;
-  right: 18px;
+  bottom: 18px !important;
+  right: 18px !important;
+  left: auto !important;
   z-index: 60;
 }
 
 /* On mobile: smaller, left side, above the joystick */
 .ecs-radar--mobile {
-  width: 80px;
-  height: 80px;
+  width: 80px !important;
+  height: 80px !important;
   /* Sits above the joystick — joystick base is ~110px tall + safe area */
-  bottom: calc(max(24px, env(safe-area-inset-bottom, 0px)) + 130px);
-  left: max(18px, env(safe-area-inset-left, 0px));
+  bottom: calc(max(24px, env(safe-area-inset-bottom, 0px)) + 130px) !important;
+  left: max(18px, env(safe-area-inset-left, 0px)) !important;
   z-index: 21;
 }
