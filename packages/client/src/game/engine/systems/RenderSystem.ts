@@ -207,6 +207,14 @@ export class RenderSystem extends System {
   private _backgroundGraphics: GraphicsType | null = null;
   private _zoneGraphics: GraphicsType | null = null;
 
+  // Zone change-detection — only redraw when something actually changes
+  private _zoneLastState: string = '';
+  private _zoneLastRadius: number = -1;
+  private _zoneLastPulseBucket: number = -1;
+
+  // Trap alpha-bucket caching — avoid 60fps redraws when alpha is unchanged
+  private readonly _trapAlphaBuckets: Map<string, number> = new Map();
+
   // Post-processing system
   private _postProcessing: PostProcessingSystem | null = null;
 
@@ -266,11 +274,13 @@ export class RenderSystem extends System {
     for (const layer of layerOrder) {
       const container = new Container();
       container.zIndex = layer;
-      container.sortableChildren = true;
+      // No sortableChildren on individual layers — entities within a layer never
+      // set per-entity zIndex, so sorting would be a no-op at 60fps cost.
       this._layers.set(layer, container);
       this._config.worldContainer.addChild(container);
     }
 
+    // worldContainer needs sorting so layers render in the right order.
     this._config.worldContainer.sortableChildren = true;
   }
 
@@ -452,10 +462,17 @@ export class RenderSystem extends System {
     const zoneInfo = zoneSystem.getDebugInfo?.();
     if (!zoneInfo) return;
 
+    const { currentRadius, center, state } = zoneInfo;
+
+    // Bucket time-based pulse at 8fps so we only redraw when visible state changes
+    const pulseBucket = state === 'shrinking' ? Math.floor(this._time * 8) : 0;
+    // Round radius to nearest pixel — zone shrinks ~0.5px/frame so this gives ~2-frame skips
+    const stateKey = `${state}:${Math.round(currentRadius)}:${pulseBucket}`;
+    if (this._zoneLastState === stateKey) return;
+    this._zoneLastState = stateKey;
+
     const zone = this._zoneGraphics;
     zone.clear();
-
-    const { currentRadius, center, state } = zoneInfo;
 
     // Idle: visible guide ring so players can see the zone boundary
     if (state === 'idle') {
@@ -669,7 +686,7 @@ export class RenderSystem extends System {
     let indicators = this._offscreenIndicators;
     if (!indicators) {
         indicators = new Graphics();
-        indicators.name = 'offscreen-indicators';
+        indicators.label = 'offscreen-indicators';
         overlayLayer.addChild(indicators);
         this._offscreenIndicators = indicators;
     }
@@ -2152,10 +2169,15 @@ export class RenderSystem extends System {
         ? lifeRatio / (2000 / TRAP_LIFETIME)
         : 1;
 
+      // Bucket alpha at 5% steps — skip clear+redraw when unchanged
+      const alphaBucket = Math.round(alpha * 20) / 20;
+      if (this._trapAlphaBuckets.get(trapId) === alphaBucket) continue;
+      this._trapAlphaBuckets.set(trapId, alphaBucket);
+
       g.clear();
       for (const pt of trap.trailPoints) {
-        g.circle(pt.x, pt.y, TRAP_RADIUS).fill({ color: TRAP_COLOR, alpha: alpha * 0.85 });
-        g.circle(pt.x, pt.y, TRAP_RADIUS + 3).stroke({ width: 1.5, color: TRAP_COLOR, alpha: alpha * 0.4 });
+        g.circle(pt.x, pt.y, TRAP_RADIUS).fill({ color: TRAP_COLOR, alpha: alphaBucket * 0.85 });
+        g.circle(pt.x, pt.y, TRAP_RADIUS + 3).stroke({ width: 1.5, color: TRAP_COLOR, alpha: alphaBucket * 0.4 });
       }
     }
 
@@ -2164,12 +2186,15 @@ export class RenderSystem extends System {
       if (!activeTrapIds.has(id)) {
         g.destroy();
         this._trapGraphics.delete(id);
+        this._trapAlphaBuckets.delete(id);
       }
     }
   }
 
   /**
-   * Create graphics for a powerup
+   * Create graphics for a powerup.
+   * Shape is drawn ONCE here — animation is handled via container.rotation + container.alpha,
+   * avoiding 54+ per-frame Graphics primitives (zero clear+redraw cost at 60fps).
    */
   private _createPowerupGraphics(powerup: PowerupData): { container: ContainerType; graphics: GraphicsType } {
     const container = new Container();
@@ -2180,85 +2205,68 @@ export class RenderSystem extends System {
     graphics.label = `powerup_${powerup.entityId}`;
     container.addChild(graphics);
 
+    // Draw static shape once — container rotation handles spin animation
+    const colors = this._getPowerupColors(powerup.type);
+    const { primary, glow } = colors;
+
+    // Static outer ring (12 evenly-spaced dots)
+    const ringRadius = 16;
+    const ringSteps = 12;
+    for (let i = 0; i < ringSteps; i++) {
+      const angle = (i / ringSteps) * Math.PI * 2;
+      const px = Math.cos(angle) * ringRadius;
+      const py = Math.sin(angle) * ringRadius;
+      graphics.rect(px - 2, py - 2, 4, 4).fill({ color: glow, alpha: 0.3 });
+    }
+
+    // Static DNA helix at phase=0
+    this._drawHelixStatic(graphics, primary);
+
+    // Center nucleus
+    graphics.rect(-3, -3, 6, 6).fill({ color: primary, alpha: 0.9 });
+    graphics.rect(-1, -1, 2, 2).fill({ color: 0xffffff, alpha: 0.6 });
+
     return { container, graphics };
   }
 
   /**
-   * Update powerup graphics (Pixel Art DNA)
+   * Update powerup graphics — position/scale/rotation/alpha only.
+   * No clear+redraw; shape was drawn once in _createPowerupGraphics.
    */
   private _updatePowerupGraphics(powerupGraphics: { container: ContainerType; graphics: GraphicsType }, powerup: PowerupData, now: number): void {
-    const { container, graphics } = powerupGraphics;
+    const { container } = powerupGraphics;
     const age = now - powerup.spawnTime;
-    const lifetime = 15000; // 15 seconds
-    const fadeStart = lifetime - 3000; // Start fading at 12 seconds
+    const lifetime = 15000;
+    const fadeStart = lifetime - 3000;
 
-    // Update position
     container.x = powerup.x;
     container.y = powerup.y;
-
-    // Update scale (bobbing animation from system)
     container.scale.set(powerup.scale);
     container.rotation = powerup.rotation;
 
-    // Calculate alpha based on lifetime
     let alpha = 1;
     if (age > fadeStart) {
       alpha = 1 - (age - fadeStart) / (lifetime - fadeStart);
     }
-    alpha = Math.max(0, Math.min(1, alpha));
-
-    // Clear and redraw
-    graphics.clear();
-
-    // Get powerup color based on type
-    const colors = this._getPowerupColors(powerup.type);
-    const primary = colors.primary;
-    const glow = colors.glow;
-
-    // Draw outer glow ring (Pixelated)
-    const ringRadius = 16;
-    const ringSteps = 12;
-    for(let i=0; i<ringSteps; i++) {
-        const angle = (i/ringSteps) * Math.PI * 2 + now/1000;
-        const px = Math.cos(angle) * ringRadius;
-        const py = Math.sin(angle) * ringRadius;
-        graphics.rect(px-2, py-2, 4, 4).fill({ color: glow, alpha: alpha * 0.3 });
-    }
-
-    // Draw DNA helix (double helix structure)
-    this._drawHelix(graphics, primary, alpha, now);
-
-    // Center nucleus
-    graphics.rect(-3, -3, 6, 6).fill({
-      color: primary,
-      alpha: alpha * 0.9,
-    });
-
-    // Inner highlight
-    graphics.rect(-1, -1, 2, 2).fill({
-      color: 0xffffff,
-      alpha: alpha * 0.6,
-    });
+    container.alpha = Math.max(0, Math.min(1, alpha));
   }
 
   /**
-   * Draw DNA double helix structure (Pixel Art)
+   * Draw static DNA double helix at phase=0 (Pixel Art).
+   * Container rotation drives the visual spin — no per-frame redraw needed.
    */
-  private _drawHelix(graphics: GraphicsType, color: number, alpha: number, now: number): void {
-    // Iterate along the length to draw pixel strands
+  private _drawHelixStatic(graphics: GraphicsType, color: number): void {
     const steps = 20;
-    for(let i=0; i<steps; i++) {
-        const t = i/steps;
-        const x = (t - 0.5) * 20; // -10 to 10
-        const angle = (now / 500) + t * Math.PI * 4;
-        
-        // Strand 1
-        const y1 = Math.sin(angle) * 8;
-        graphics.rect(x-1, y1-1, 2, 2).fill({ color, alpha });
-        
-        // Strand 2
-        const y2 = Math.sin(angle + Math.PI) * 8;
-        graphics.rect(x-1, y2-1, 2, 2).fill({ color, alpha });
+    for (let i = 0; i < steps; i++) {
+      const t = i / steps;
+      const x = (t - 0.5) * 20; // -10 to 10
+      const angle = t * Math.PI * 4; // fixed phase=0
+
+      const y1 = Math.sin(angle) * 8;
+      graphics.rect(x - 1, y1 - 1, 2, 2).fill({ color, alpha: 1 });
+
+      const y2 = Math.sin(angle + Math.PI) * 8;
+      graphics.rect(x - 1, y2 - 1, 2, 2).fill({ color, alpha: 1 });
     }
   }
 

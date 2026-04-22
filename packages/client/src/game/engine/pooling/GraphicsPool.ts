@@ -215,7 +215,6 @@ export class GraphicsPool {
    */
   private _createContainer(): PIXI.Container {
     const container = new PIXI.Container();
-    container.sortableChildren = true;
     return container;
   }
 
