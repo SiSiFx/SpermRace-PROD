@@ -23,6 +23,7 @@ import { CombatFeedbackSystem } from './systems/CombatFeedbackSystem';
 import { SoundSystem } from './systems/SoundSystem';
 import { FloatingTextSystem } from './systems/FloatingTextSystem';
 import { SlowMotionSystem } from './systems/SlowMotionSystem';
+import { PostProcessingSystem } from './systems/PostProcessingSystem';
 import type {
   Position,
   Velocity,
@@ -115,6 +116,7 @@ export class Game {
   private _sound!: SoundSystem;
   private _floatingText!: FloatingTextSystem;
   private _slowMotion!: SlowMotionSystem;
+  private _postProcessing: PostProcessingSystem | null = null;
 
   // Entity IDs
   private _playerId: string | null = null;
@@ -399,6 +401,15 @@ export class Game {
 
       // Set container for floating text
       this._floatingText.setContainer(this._worldContainer);
+
+      // Post-processing: danger overlay active on all devices; CRT scanlines desktop-only
+      const isMobileDevice = this._config.isMobile || window.innerWidth <= 768;
+      this._postProcessing = new PostProcessingSystem(this._app.stage, {
+        crtEnabled: !isMobileDevice,
+        vignetteEnabled: false,
+        filmGrainEnabled: false,
+      });
+      this._systemManager.addSystem(this._postProcessing, 'postProcessing');
     }
   }
 

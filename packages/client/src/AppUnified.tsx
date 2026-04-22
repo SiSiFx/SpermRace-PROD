@@ -6,7 +6,9 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense, memo } from 'react';
 import { WalletProvider, useWallet } from './WalletProvider';
 import { WsProvider, useWs } from './WsProvider';
-import { GameViewWrapper } from './components/GameViewWrapper';
+// GameViewWrapper is lazy-loaded — it pulls PixiJS + all ECS systems (~2MB).
+// Only instantiated when entering game or practice-solo screens.
+const GameViewWrapper = lazy(() => import('./components/GameViewWrapper'));
 import { PremiumLandingScreen } from './components/screens/premium/PremiumLandingScreen';
 import { PremiumLobbyScreen } from './components/screens/premium/PremiumLobbyScreen';
 import { PremiumResultsScreen } from './components/screens/premium/PremiumResultsScreen';
@@ -285,13 +287,15 @@ function AppInner() {
       )}
 
       {screen === 'practice-solo' && (
-        <Practice
-          onFinish={(stats) => { markPlayed(); setPracticeStats(stats); setScreen('results'); }}
-          onBack={() => setScreen('landing')}
-          onPlayReal={() => { onWallet(selectedTier); }}
-          playRealPrize={selectedTier.prize}
-          isMobile={isMobile}
-        />
+        <Suspense fallback={LoadingFallback}>
+          <Practice
+            onFinish={(stats) => { markPlayed(); setPracticeStats(stats); setScreen('results'); }}
+            onBack={() => setScreen('landing')}
+            onPlayReal={() => { onWallet(selectedTier); }}
+            playRealPrize={selectedTier.prize}
+            isMobile={isMobile}
+          />
+        </Suspense>
       )}
 
       {screen === 'lobby' && (
@@ -299,12 +303,14 @@ function AppInner() {
       )}
 
       {screen === 'game' && (
-        <Game
-          onEnd={() => setScreen('results')}
-          onRestart={() => setScreen('game')}
-          isMobile={isMobile}
-          countdown={gameCountdown}
-        />
+        <Suspense fallback={LoadingFallback}>
+          <Game
+            onEnd={() => setScreen('results')}
+            onRestart={() => setScreen('game')}
+            isMobile={isMobile}
+            countdown={gameCountdown}
+          />
+        </Suspense>
       )}
 
       {screen === 'results' && (

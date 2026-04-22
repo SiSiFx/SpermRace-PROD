@@ -313,8 +313,8 @@ export class CombatFeedbackSystem extends System {
       });
     }
 
-    // Hit freeze disabled — causes perceptible frame hitch on every kill
-    // this._slowMotion?.trigger(0.08, 80);
+    // Subtle hit-stop: 35% speed for 55ms — punchy but not jarring
+    this._slowMotion?.trigger(0.35, 55);
 
     if (this._config.enableSound) {
       this._getSoundSystem()?.playKill(tier?.pitch ?? 1.0);

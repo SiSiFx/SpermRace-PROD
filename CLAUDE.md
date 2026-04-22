@@ -1,5 +1,14 @@
 # SpermRace.io — Dev Reference
 
+## AI Behavior Rules (always apply)
+
+- **Before touching any library API** (PixiJS, Zod, Solana web3.js, Vite, React): use context7 to fetch current docs — never guess at API shapes
+- **Before any multi-file change** (>2 files): use sequential-thinking to plan first, then execute
+- **Start every session**: read `/home/sisi/.claude/projects/-home-sisi/memory/spermrace_status.md`
+- **End every session**: update that memory file with what changed
+
+
+
 ## What this game is
 
 Browser-based battle royale. Players control a sperm cell (Slither.io style) — always moving forward, steer with mouse/joystick. You leave a trail behind you. Touching anyone's trail (including your own after a grace period) = instant death. Last one alive wins the crypto prize pool.

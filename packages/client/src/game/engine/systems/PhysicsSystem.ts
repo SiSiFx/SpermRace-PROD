@@ -8,6 +8,7 @@ import type { Position } from '../components/Position';
 import type { Velocity } from '../components/Velocity';
 import type { Collision } from '../components/Collision';
 import type { Boost } from '../components/Boost';
+import { updateBoost } from '../components/Boost';
 import type { KillPower } from '../components/KillPower';
 import { getKillPowerSpeedMult, updateKillPower } from '../components/KillPower';
 import type { Abilities } from '../components/Abilities';
@@ -84,6 +85,9 @@ export class PhysicsSystem extends System {
       }
 
       const abilities = entity.getComponent<Abilities>(ComponentNames.ABILITIES);
+
+      // Drain / regenerate boost energy each physics tick
+      if (boost) updateBoost(boost, fixedDt);
 
       // Apply boost multiplier
       const boostMult = boost ? (boost.isBoosting ? boost.speedMultiplier : 1) : 1;

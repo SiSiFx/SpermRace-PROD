@@ -4,7 +4,11 @@
  */
 
 import { System, SystemPriority } from '../core/System';
-import { Container, Graphics, Filter, GlProgram, GpuProgram, type Container as ContainerType, type Graphics as GraphicsType } from 'pixi.js';
+import { Container, Graphics, Filter, GlProgram, type Container as ContainerType, type Graphics as GraphicsType } from 'pixi.js';
+import { ComponentNames, createComponentMask } from '../components';
+import type { Player } from '../components/Player';
+import type { Position } from '../components/Position';
+import type { ZoneSystem } from './ZoneSystem';
 
 /**
  * Post-processing configuration
@@ -28,23 +32,38 @@ export interface PostProcessingConfig {
 
 // === SHADERS ===
 
+// v8 filter vertex shader — uses the PixiJS-provided output frame uniforms
+// to map filter quads correctly. Uses filterVertexPosition() / filterTextureCoord()
+// helpers as documented in https://pixijs.com/guides/migrations/v8
 const vertexShader = `
 in vec2 aPosition;
-in vec2 aUV;
 out vec2 vTextureCoord;
 
-uniform mat3 uProjectionMatrix;
-uniform mat3 uWorldTransformMatrix;
-uniform mat3 uTransformMatrix;
+uniform vec4 uInputSize;
+uniform vec4 uOutputFrame;
+uniform vec4 uOutputTexture;
 
-void main() {
-    vTextureCoord = aUV;
-    gl_Position = vec4((uProjectionMatrix * uWorldTransformMatrix * vec3(aPosition, 1.0)).xy, 0.0, 1.0);
+vec4 filterVertexPosition(void)
+{
+    vec2 position = aPosition * uOutputFrame.zw + uOutputFrame.xy;
+    position.x = position.x * (2.0 / uOutputTexture.x) - 1.0;
+    position.y = position.y * (2.0 * uOutputTexture.z / uOutputTexture.y) - uOutputTexture.z;
+    return vec4(position, 0.0, 1.0);
+}
+
+vec2 filterTextureCoord(void)
+{
+    return aPosition * (uOutputFrame.zw * uInputSize.zw);
+}
+
+void main(void)
+{
+    gl_Position = filterVertexPosition();
+    vTextureCoord = filterTextureCoord();
 }
 `;
 
 const fragmentShader = `
-precision mediump float;
 in vec2 vTextureCoord;
 out vec4 finalColor;
 
@@ -148,8 +167,11 @@ export class PostProcessingSystem extends System {
   // Flash state
   private _flashIntensity: number = 0;
 
-  // Danger state
+  // Danger state (0 = safe, 1 = fully in danger zone)
   private _dangerIntensity: number = 0;
+
+  // Component mask for zone-danger detection
+  private readonly _playerMask: number;
 
   constructor(targetContainer: Container, config: PostProcessingConfig = {}) {
     super(SystemPriority.RENDERING);
@@ -169,6 +191,8 @@ export class PostProcessingSystem extends System {
     this._overlayContainer = new Container();
     this._overlayContainer.zIndex = 9999;
     this._targetContainer.addChild(this._overlayContainer);
+
+    this._playerMask = createComponentMask(ComponentNames.PLAYER, ComponentNames.POSITION);
 
     // Initialize effects
     this._initializeEffects();
@@ -232,6 +256,9 @@ export class PostProcessingSystem extends System {
    */
   update(dt: number): void {
     this._time += dt;
+
+    // Auto-drive danger overlay from local player's zone distance
+    this._updateZoneDanger();
 
     // Decay shake aberration
     if (this._shakeAberration > 0) {
@@ -333,6 +360,34 @@ export class PostProcessingSystem extends System {
     this._dangerIntensity = Math.min(1, this._dangerIntensity + 0.5);
     // Micro chromatic aberration burst
     this._shakeAberration = Math.max(this._shakeAberration, 0.003);
+  }
+
+  /**
+   * Auto-update danger intensity from local player's distance to zone edge.
+   * Negative distance = outside zone. Intensity ramps from 0 (inside) to 1 (far outside).
+   */
+  private _updateZoneDanger(): void {
+    const zone = this.getEngine()?.getSystemManager()?.getSystem<ZoneSystem>('zone');
+    if (!zone) return;
+
+    // Find local player position
+    let localPos: Position | null = null;
+    for (const entity of this.entityManager.queryByMask(this._playerMask)) {
+      const player = entity.getComponent<Player>(ComponentNames.PLAYER);
+      if (player?.isLocal) {
+        localPos = entity.getComponent<Position>(ComponentNames.POSITION) ?? null;
+        break;
+      }
+    }
+
+    if (!localPos) return;
+
+    const distToEdge = zone.getDistanceFromZone(localPos.x, localPos.y);
+    // distToEdge < 0 = outside zone; clamp danger to 0–1 over 0–400px outside
+    const danger = distToEdge < 0 ? Math.min(1, -distToEdge / 400) : 0;
+    // Smooth to avoid flickering
+    this._dangerIntensity += (danger - this._dangerIntensity) * 0.1;
+    if (this._dangerIntensity < 0.01) this._dangerIntensity = 0;
   }
 
   /**

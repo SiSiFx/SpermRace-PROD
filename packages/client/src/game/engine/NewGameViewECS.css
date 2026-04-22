@@ -348,7 +348,7 @@
 
 /* ─── Mobile joystick ─── */
 .ecs-joystick-base {
-  position: absolute;
+  position: fixed;
   left: max(18px, env(safe-area-inset-left, 0px));
   bottom: max(24px, env(safe-area-inset-bottom, 0px));
   width: 120px;
@@ -377,7 +377,7 @@
 
 /* ─── Mobile ability button ─── */
 .ecs-mobile-ability-btn {
-  position: absolute;
+  position: fixed;
   right: max(16px, env(safe-area-inset-right, 0px));
   bottom: max(106px, calc(100px + env(safe-area-inset-bottom, 0px)));
   width: 70px;
@@ -467,7 +467,7 @@
 
 /* ─── Mobile boost button ─── */
 .ecs-mobile-boost-btn {
-  position: absolute;
+  position: fixed;
   right: max(16px, env(safe-area-inset-right, 0px));
   bottom: max(34px, env(safe-area-inset-bottom, 0px));
   min-width: 96px;
@@ -497,7 +497,7 @@
 }
 
 .ecs-mobile-boost-hint {
-  position: absolute;
+  position: fixed;
   right: max(16px, env(safe-area-inset-right, 0px));
   bottom: max(96px, calc(88px + env(safe-area-inset-bottom, 0px)));
   background: rgba(10, 14, 20, 0.78);
@@ -1096,15 +1096,17 @@
     bottom: max(12px, env(safe-area-inset-bottom, 0px));
     left: max(12px, env(safe-area-inset-left, 0px));
   }
+  /* Boost button: anchored near bottom-right */
+  .ecs-mobile-boost-btn {
+    min-width: 80px;
+    height: 44px;
+    bottom: max(10px, env(safe-area-inset-bottom, 0px));
+  }
+  /* Ability button: sits directly above boost button (44px height + 10px gap) */
   .ecs-mobile-ability-btn {
     width: 58px;
     height: 58px;
-    bottom: max(12px, env(safe-area-inset-bottom, 0px));
-  }
-  .ecs-mobile-boost-btn {
-    min-width: 80px;
-    height: 46px;
-    bottom: max(12px, env(safe-area-inset-bottom, 0px));
+    bottom: max(62px, calc(54px + env(safe-area-inset-bottom, 0px)));
   }
   .ecs-controls-hint { display: none; }
   .ecs-hud { gap: 4px; padding-top: calc(6px + env(safe-area-inset-top, 0px)); }
