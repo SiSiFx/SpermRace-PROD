@@ -882,7 +882,7 @@ export function NewGameViewECS({
         <PreGameSequence
           game={gameRef.current}
           totalPlayers={botCount + 1}
-          skipToCountdown={skipMapOverview}
+          skipToCountdown={true}
           onComplete={handlePreGameComplete}
         />
       )}
