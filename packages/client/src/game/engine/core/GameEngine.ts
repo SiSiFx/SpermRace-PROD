@@ -127,6 +127,10 @@ export class GameEngine {
   /** Animation frame handle */
   private _rafId: number | null = null;
 
+  /** Preview render loop handle (render-only RAF while engine is paused during countdown) */
+  private _previewRafId: number = 0;
+  private _previewLastTime: number = 0;
+
   /** Callbacks */
   private readonly _onStateChangeCallbacks: Set<(state: GameState, data?: any) => void> = new Set();
 
@@ -204,6 +208,7 @@ export class GameEngine {
       return;
     }
 
+    this.stopPreviewRender();
     this._setState(GameState.RUNNING);
     this._lastTime = performance.now();
 
@@ -435,6 +440,33 @@ export class GameEngine {
    */
   getFixedDt(): number {
     return this._fixedDt;
+  }
+
+  /**
+   * Start a render-only animation loop while the engine is paused.
+   * Calls only RenderSystem.update(dt) — no physics, no game logic.
+   * Automatically stopped when resume() is called.
+   */
+  startPreviewRender(): void {
+    if (this._previewRafId) return;
+    const tick = (t: number) => {
+      const dt = Math.min((t - (this._previewLastTime || t)) / 1000, 0.05);
+      this._previewLastTime = t;
+      this._systemManager.getSystem('render')?.update(dt);
+      this._previewRafId = requestAnimationFrame(tick);
+    };
+    this._previewRafId = requestAnimationFrame(tick);
+  }
+
+  /**
+   * Stop the preview render loop.
+   */
+  stopPreviewRender(): void {
+    if (this._previewRafId) {
+      cancelAnimationFrame(this._previewRafId);
+      this._previewRafId = 0;
+      this._previewLastTime = 0;
+    }
   }
 
   /**

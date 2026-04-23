@@ -381,13 +381,9 @@ export function NewGameViewECS({
         enableAbilities,
       }).then(game => {
         game.getEngine().pause();
-        // Render one frame so the canvas shows initial spawn positions instead of black
-        // during the PreGameSequence overlay fade-in. Two nested RAFs: first re-registers
-        // the engine loop (resume), second pauses it again after that one frame fires.
-        requestAnimationFrame(() => {
-          game.getEngine().resume();
-          requestAnimationFrame(() => game.getEngine().pause());
-        });
+        // Animate canvas during countdown — render-only loop (no physics).
+        // Auto-stops when engine.resume() fires at countdown completion.
+        game.getEngine().startPreviewRender();
         return game;
       });
 
