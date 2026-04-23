@@ -160,7 +160,9 @@ function AppInner() {
         });
         joinedAsPracticeRef.current = false;
       }
-      if (screen !== 'results') setScreen('results');
+      // Only auto-navigate from the game screen — not from practice-solo or landing,
+      // which can be the current screen when leave() hasn't resolved phase yet.
+      if (screen === 'game') setScreen('results');
     }
   }, [wsState.phase, screen, markPlayed]);
 

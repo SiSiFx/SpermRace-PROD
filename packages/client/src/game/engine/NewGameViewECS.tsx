@@ -113,7 +113,7 @@ function PracticeLobbyOverlay({ botCount, playerName, tick, isFading }: { botCou
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, zIndex: 50,
+      position: 'absolute', inset: 0, zIndex: 100,
       background: 'rgba(6,8,15,0.95)',
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
       gap: 0, fontFamily: 'Outfit, sans-serif',
@@ -381,6 +381,13 @@ export function NewGameViewECS({
         enableAbilities,
       }).then(game => {
         game.getEngine().pause();
+        // Render one frame so the canvas shows initial spawn positions instead of black
+        // during the PreGameSequence overlay fade-in. Two nested RAFs: first re-registers
+        // the engine loop (resume), second pauses it again after that one frame fires.
+        requestAnimationFrame(() => {
+          game.getEngine().resume();
+          requestAnimationFrame(() => game.getEngine().pause());
+        });
         return game;
       });
 
@@ -409,6 +416,9 @@ export function NewGameViewECS({
       setSkipMapOverview(skip);
       // Show pre-game sequence — game is initialized and paused, ready for countdown
       setShowPreGame(true);
+      // Show controls hint during the countdown so players can read it before they move
+      setShowControlsHint(true);
+      controlsHintShownAtRef.current = Date.now();
       // Resume audio contexts — this is called within a user gesture chain
       // (user clicked "Play as X"), so browsers will allow audio playback
       gameRef.current!.resumeAudio().catch(() => {});
@@ -430,9 +440,6 @@ export function NewGameViewECS({
   const handlePreGameComplete = useCallback(() => {
     setShowPreGame(false);
     setGameStarted(true);
-    // Show controls hint now — player is about to start playing
-    setShowControlsHint(true);
-    controlsHintShownAtRef.current = Date.now();
     // Resume game engine (no-op if already resumed by PreGameSequence at GO)
     if (gameRef.current) {
       gameRef.current.getEngine().resume();
@@ -892,15 +899,17 @@ export function NewGameViewECS({
         </div>
       )}
 
-      <div className="ecs-hud">
-        <div className="ecs-pill">PRACTICE · {summary.statusText}</div>
-        <div className="ecs-metric">KILLS <strong key={snapshot.kills} className="ecs-kill-pop">{snapshot.kills}</strong></div>
-        <div className="ecs-metric ecs-time-metric">TIME <strong>{summary.timeText}</strong></div>
-        <div className="ecs-boost-wrap">
-          <span>BOOST</span>
-          <div className="ecs-boost-bar"><div className="ecs-boost-fill" style={{ width: `${snapshot.boostPct}%` }} /></div>
+      {gameStarted && (
+        <div className="ecs-hud">
+          <div className="ecs-pill">PRACTICE · {summary.statusText}</div>
+          <div className="ecs-metric">KILLS <strong key={snapshot.kills} className="ecs-kill-pop">{snapshot.kills}</strong></div>
+          <div className="ecs-metric ecs-time-metric">TIME <strong>{summary.timeText}</strong></div>
+          <div className="ecs-boost-wrap">
+            <span>BOOST</span>
+            <div className="ecs-boost-bar"><div className="ecs-boost-fill" style={{ width: `${snapshot.boostPct}%` }} /></div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Zone phase pill */}
       {snapshot.status === 'playing' && !(snapshot.zonePhase === 'idle' && snapshot.timeUntilShrink <= 0) && (
@@ -945,7 +954,7 @@ export function NewGameViewECS({
         </div>
       )}
 
-      {snapshot.status === 'playing' && showControlsHint && (
+      {(showPreGame || snapshot.status === 'playing') && showControlsHint && (
         <div className="ecs-controls-hint">
           {isMobile ? (
             <>

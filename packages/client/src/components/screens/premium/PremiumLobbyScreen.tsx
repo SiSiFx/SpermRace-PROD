@@ -187,17 +187,21 @@ export const PremiumLobbyScreen = memo(function PremiumLobbyScreen({
       : 'Tournament chamber';
   const winnerLabel = lobbyMode === 'tournament' ? `$${winnerPayoutUsd}` : 'No payout';
   const headline = countdown > 0
-    ? 'Chamber armed.'
+    ? lobbyMode === 'practice' ? 'Ready. Starting soon.' : 'Chamber armed.'
     : canStart
-      ? 'Room is live-ready.'
+      ? lobbyMode === 'practice' ? 'Ready to launch.' : 'Room is live-ready.'
       : 'Forming the hunt.';
   const subtitle = countdown > 0
-    ? `Release in ${countdown}s. ${lobbyMode === 'practice' ? `${players.length} in the chamber — AI opponents locked in.` : 'Read the first cut before the room closes around you.'}`
+    ? lobbyMode === 'practice'
+      ? `Launching in ${countdown}s — ${players.length} AI opponents loaded.`
+      : 'Read the first cut before the room closes around you.'
     : canStart
-      ? 'Threshold hit. The server can drop this match at any moment.'
-      : `Need ${armThresholdMissing} more ${lobbyMode === 'practice' ? 'real player' : 'entrant'}${armThresholdMissing === 1 ? '' : 's'} to arm the room.`;
+      ? lobbyMode === 'practice'
+        ? 'All AI opponents loaded. Launch when ready.'
+        : 'Threshold hit. The server can drop this match at any moment.'
+      : `Need ${armThresholdMissing} more ${lobbyMode === 'practice' ? 'real player' : 'entrant'}${armThresholdMissing === 1 ? '' : 's'} to start.`;
   const boardFooter = lobbyMode === 'practice'
-    ? 'One real player arms the room. AI opponents fill remaining lanes on launch.'
+    ? 'Solo practice — you vs AI. No entry fee, no payout.'
     : 'Live rooms are short, lethal, and server-authoritative. Two entrants arms the queue.';
   const autoFlowLabel = countdown > 0
     ? 'Auto launch engaged'
@@ -244,7 +248,7 @@ export const PremiumLobbyScreen = memo(function PremiumLobbyScreen({
             transition={{ delay: 0.05, ...springPage }}
           >
             <p className="premium-lobby-eyebrow">
-              {lobbyMode === 'practice' ? 'Free rehearsal chamber' : 'Live kill room'}
+              {lobbyMode === 'practice' ? 'Practice mode · Free' : 'Live kill room'}
             </p>
 
             <h1 className="premium-lobby-title">

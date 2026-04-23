@@ -160,9 +160,11 @@ export const PremiumResultsScreen = memo(function PremiumResultsScreen({
     ? (practiceStats.winner ? 'YOU' : (practiceStats.killerName || 'Trail'))
     : (winner
       ? (wsState.lobby?.playerNames?.[winner] ||
-        (typeof winner === 'string' && winner.length >= 12
-          ? `${winner.slice(0, 6)}...${winner.slice(-6)}`
-          : winner))
+        (typeof winner === 'string' && winner.startsWith('BOT_')
+          ? 'A Bot'
+          : winner.length >= 12
+            ? `${winner.slice(0, 6)}...${winner.slice(-6)}`
+            : winner))
       : '—');
 
   return (
