@@ -163,14 +163,12 @@ export function PreGameSequence({
     setPhase('zoomToPlayer');
     game.getEngine().resume();
 
-    // Reset spawn state so all effects play from GO, not from entity creation time
+    // Play spawn sound immediately at GO
     const systems = (game.getEngine().getSystemManager() as any).systems || [];
     for (const sys of systems) {
-      if (sys.constructor.name === 'RenderSystem') {
-        sys.resetSpawnState?.();
-      }
       if (sys.constructor.name === 'SoundSystem') {
         sys.playSpawn?.();
+        break;
       }
     }
   }, [game]);
@@ -217,6 +215,16 @@ export function PreGameSequence({
       // Re-enable camera follow so it tracks player immediately
       if (cameraSystem && playerIdRef.current) {
         cameraSystem.setTarget(playerIdRef.current);
+      }
+
+      // Trigger spawn visual effects NOW — camera is on the player at full zoom,
+      // so the pop-in, ring, and grace aura are fully visible at this moment
+      const allSystems = (game.getEngine().getSystemManager() as any).systems || [];
+      for (const sys of allSystems) {
+        if (sys.constructor.name === 'RenderSystem') {
+          sys.resetSpawnState?.();
+          break;
+        }
       }
 
       setPhase('complete');
