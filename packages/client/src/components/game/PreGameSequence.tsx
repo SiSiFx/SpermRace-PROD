@@ -142,13 +142,21 @@ export function PreGameSequence({
     // Mark map overview as ready for rendering
     setMapOverviewReady(true);
 
-    // Animate camera to center with zoom out
-    animateCamera(centerX, centerY, 0.34, PHASE_DURATIONS.mapOverview, () => {
+    // Always hold map overview for the full duration — a timer drives the transition.
+    // Previously animateCamera(onDone) was used, but if CameraSystem isn't accessible
+    // (dynamic system lookup via `(sm as any).systems`) onDone fired immediately,
+    // skipping the overlay before React could render it.
+    const timer = setTimeout(() => {
       setPhase('countdown');
       setShowCountdown(true);
-    });
+    }, PHASE_DURATIONS.mapOverview);
+
+    // Best-effort camera pan — updates CameraSystem state even while paused.
+    // The canvas won't re-render (engine paused) but state is primed for GO.
+    animateCamera(centerX, centerY, 0.34, PHASE_DURATIONS.mapOverview, () => {});
 
     return () => {
+      clearTimeout(timer);
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }

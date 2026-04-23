@@ -971,7 +971,7 @@ export function NewGameViewECS({
         </div>
       )}
 
-      {isMobile && snapshot.status === 'playing' && (
+      {isMobile && gameStarted && snapshot.status === 'playing' && (
         <>
           <div
             className="ecs-joystick-base"
