@@ -163,12 +163,11 @@ export function PreGameSequence({
     setPhase('zoomToPlayer');
     game.getEngine().resume();
 
-    // Spawn effects at GO — screen flash + materialisation sound
-    const systemManager = game.getEngine().getSystemManager();
-    const systems = (systemManager as any).systems || [];
+    // Reset spawn state so all effects play from GO, not from entity creation time
+    const systems = (game.getEngine().getSystemManager() as any).systems || [];
     for (const sys of systems) {
-      if (sys.constructor.name === 'PostProcessingSystem') {
-        sys.triggerFlash(0.35);
+      if (sys.constructor.name === 'RenderSystem') {
+        sys.resetSpawnState?.();
       }
       if (sys.constructor.name === 'SoundSystem') {
         sys.playSpawn?.();

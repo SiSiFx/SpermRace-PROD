@@ -1953,6 +1953,31 @@ export class RenderSystem extends System {
   }
 
   /**
+   * Reset all spawn-entrance state so effects play from the current moment.
+   * Call this at GO (engine.resume) — entity graphics are created one frame before
+   * the engine pauses for the countdown, so timers are stale by the time GO fires.
+   */
+  resetSpawnState(): void {
+    const now = Date.now();
+
+    // Reset per-entity spawn animation timers
+    for (const graphics of this._entityGraphics.values()) {
+      graphics.spawnAnimStart = 0;
+    }
+
+    // Reset spawn ring so it re-registers on next frame
+    this._spawnRing = null;
+
+    // Refresh spawn grace periods — entity creation time is 3s before GO
+    for (const entity of this.entityManager.queryByMask(this._carMask)) {
+      const health = entity.getComponent<Health>(ComponentNames.HEALTH);
+      if (health && health.isAlive) {
+        health.spawnGraceUntil = now + MATCH_CONFIG.SPAWN_GRACE_MS;
+      }
+    }
+  }
+
+  /**
    * Spawn explosion particles at position
    */
   spawnExplosion(x: number, y: number, color: number, count?: number): void {
