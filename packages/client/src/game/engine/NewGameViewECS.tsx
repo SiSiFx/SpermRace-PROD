@@ -106,11 +106,10 @@ const BOT_NAME_LIST = [
   'Colt', 'Fenn', 'Skye', 'Oryn', 'Blaze', 'Sable', 'Raze', 'Wren',
 ];
 
-function PracticeLobbyOverlay({ botCount, playerName, tick }: { botCount: number; playerName: string; tick: number }) {
+function PracticeLobbyOverlay({ botCount, playerName, tick, isFading }: { botCount: number; playerName: string; tick: number; isFading: boolean }) {
   const totalSlots = botCount + 1;
-  const secondsLeft = Math.max(0, 4 - tick);
-  // Reveal 1 bot per second; player is always slot 0
-  const visibleBots = Math.min(botCount, tick * 3);
+  // Show ~1/3 of bots immediately, all bots by tick=1 (after 1 second)
+  const visibleBots = Math.min(botCount, tick === 0 ? Math.ceil(botCount / 3) : botCount);
 
   return (
     <div style={{
@@ -118,6 +117,8 @@ function PracticeLobbyOverlay({ botCount, playerName, tick }: { botCount: number
       background: 'rgba(6,8,15,0.95)',
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
       gap: 0, fontFamily: 'Outfit, sans-serif',
+      opacity: isFading ? 0 : 1,
+      transition: 'opacity 0.35s ease',
     }}>
       <div style={{ fontSize: 11, letterSpacing: '0.18em', color: '#c9933d', marginBottom: 12, textTransform: 'uppercase', opacity: 0.8 }}>
         Practice Lobby
@@ -126,7 +127,7 @@ function PracticeLobbyOverlay({ botCount, playerName, tick }: { botCount: number
         {totalSlots} / {totalSlots}
       </div>
       <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', marginBottom: 32, letterSpacing: '0.05em' }}>
-        Room full · Starting in {secondsLeft}s
+        Room full · Starting soon
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: 240 }}>
         {/* Human player slot */}
@@ -193,6 +194,8 @@ export function NewGameViewECS({
   const [showControlsHint, setShowControlsHint] = useState(false);
   const controlsHintShownAtRef = useRef<number>(0);
   const [stickUi, setStickUi] = useState({ active: false, dx: 0, dy: 0, baseX: 0, baseY: 0 });
+  const [lobbyFading, setLobbyFading] = useState(false);
+  const [skipMapOverview, setSkipMapOverview] = useState(false);
   const [killFeed, setKillFeed] = useState<KillFeedItem[]>([]);
   const [streakBanner, setStreakBanner] = useState<StreakBanner | null>(null);
   const [showToolsPanel] = useState(() => shouldShowToolsPanel());
@@ -360,41 +363,55 @@ export function NewGameViewECS({
 
   // Shared game creation — called by both first-run and quick-replay
   const startGame = useCallback(async (skip: boolean) => {
-    if (!skip) {
-      setShowControlsHint(true);
-      controlsHintShownAtRef.current = Date.now();
-    }
-
-    // Show lobby for 2s on first run, skip on quick-replay
-    if (!skip) {
-      setShowLobby(true);
-      setLobbyTick(0);
-      const tickInterval = setInterval(() => setLobbyTick(t => t + 1), 1000);
-      await new Promise<void>(resolve => setTimeout(resolve, 2000));
-      clearInterval(tickInterval);
-      setShowLobby(false);
-    }
-
     const host = hostRef.current;
     if (!host) return;
 
     try {
       host.replaceChildren();
-      const game = await createGame({
+
+      // Start game creation — pause immediately when ready so no frames run before countdown.
+      // The .then() runs as a microtask (before the next RAF), so pause() cancels the RAF
+      // that engine.start() registered before it ever fires.
+      const gamePromise = createGame({
         container: host,
         isMobile,
         playerName,
         playerColor,
         botCount,
         enableAbilities,
+      }).then(game => {
+        game.getEngine().pause();
+        return game;
       });
-      gameRef.current = game;
-      // Show pre-game sequence only after game is fully initialized and ready
+
+      if (!skip) {
+        // Show lobby while game initializes in background — parallel, so no dead time between
+        // lobby exit and pre-game starting.
+        setShowLobby(true);
+        setLobbyTick(0);
+        const tickInterval = setInterval(() => setLobbyTick(t => t + 1), 1000);
+        const lobbyWait = new Promise<void>(resolve => setTimeout(resolve, 2000));
+
+        const [game] = await Promise.all([gamePromise, lobbyWait]);
+        clearInterval(tickInterval);
+
+        // Smooth fade-out before revealing the arena
+        setLobbyFading(true);
+        await new Promise<void>(resolve => setTimeout(resolve, 350));
+        setShowLobby(false);
+        setLobbyFading(false);
+
+        gameRef.current = game;
+      } else {
+        gameRef.current = await gamePromise;
+      }
+
+      setSkipMapOverview(skip);
+      // Show pre-game sequence — game is initialized and paused, ready for countdown
       setShowPreGame(true);
-      game.getEngine().pause();
       // Resume audio contexts — this is called within a user gesture chain
       // (user clicked "Play as X"), so browsers will allow audio playback
-      game.resumeAudio().catch(() => {});
+      gameRef.current!.resumeAudio().catch(() => {});
       cleanupRef.current = installAutomationHooks(host, gameRef, mouseRef);
     } catch (e) {
       onError?.(e as Error);
@@ -413,7 +430,10 @@ export function NewGameViewECS({
   const handlePreGameComplete = useCallback(() => {
     setShowPreGame(false);
     setGameStarted(true);
-    // Resume game engine
+    // Show controls hint now — player is about to start playing
+    setShowControlsHint(true);
+    controlsHintShownAtRef.current = Date.now();
+    // Resume game engine (no-op if already resumed by PreGameSequence at GO)
     if (gameRef.current) {
       gameRef.current.getEngine().resume();
     }
@@ -847,7 +867,7 @@ export function NewGameViewECS({
     <div className="ecs-root" data-status={snapshot.status}>
       {/* Practice Lobby Screen */}
       {showLobby && (
-        <PracticeLobbyOverlay botCount={botCount} playerName={playerName} tick={lobbyTick} />
+        <PracticeLobbyOverlay botCount={botCount} playerName={playerName} tick={lobbyTick} isFading={lobbyFading} />
       )}
 
       {/* Pre-Game Sequence */}
@@ -855,7 +875,7 @@ export function NewGameViewECS({
         <PreGameSequence
           game={gameRef.current}
           totalPlayers={botCount + 1}
-          skipToCountdown={true}
+          skipToCountdown={skipMapOverview}
           onComplete={handlePreGameComplete}
         />
       )}
