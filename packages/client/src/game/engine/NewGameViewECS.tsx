@@ -12,6 +12,7 @@ import type { GameStats, TouchState, ViewSnapshot } from './view/types';
 import { useDeviceMode } from './view/hooks/useDeviceMode';
 import { useKeyboardState } from './view/hooks/useKeyboardState';
 import { PreGameSequence } from '../../components/game/PreGameSequence';
+import { TutorialCards } from '../../components/game/TutorialCards';
 import { DeathScreen } from '../../components/game/DeathScreen';
 import { GameRadar } from './GameRadar';
 import './NewGameViewECS.css';
@@ -196,6 +197,8 @@ export function NewGameViewECS({
   const [stickUi, setStickUi] = useState({ active: false, dx: 0, dy: 0, baseX: 0, baseY: 0 });
   const [lobbyFading, setLobbyFading] = useState(false);
   const [skipMapOverview, setSkipMapOverview] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
+  const tutorialDoneRef = useRef<(() => void) | null>(null);
   const [killFeed, setKillFeed] = useState<KillFeedItem[]>([]);
   const [streakBanner, setStreakBanner] = useState<StreakBanner | null>(null);
   const [showToolsPanel] = useState(() => shouldShowToolsPanel());
@@ -393,7 +396,22 @@ export function NewGameViewECS({
         setShowLobby(true);
         setLobbyTick(0);
         const tickInterval = setInterval(() => setLobbyTick(t => t + 1), 1000);
-        const lobbyWait = new Promise<void>(resolve => setTimeout(resolve, 2000));
+
+        // First-time players see tutorial cards overlaid on the lobby.
+        // The tutorial promise resolves when they finish or skip — runs concurrent
+        // with game init so it adds zero latency for returning players.
+        const isFirstVisit = (() => { try { return !localStorage.getItem('sr_has_seen_tutorial'); } catch { return false; } })();
+        const tutorialPromise = isFirstVisit
+          ? new Promise<void>(resolve => {
+              setShowTutorial(true);
+              tutorialDoneRef.current = resolve;
+            })
+          : Promise.resolve();
+
+        const lobbyWait = Promise.all([
+          new Promise<void>(resolve => setTimeout(resolve, 2000)),
+          tutorialPromise,
+        ]);
 
         const [game] = await Promise.all([gamePromise, lobbyWait]);
         clearInterval(tickInterval);
@@ -871,6 +889,16 @@ export function NewGameViewECS({
       {/* Practice Lobby Screen */}
       {showLobby && (
         <PracticeLobbyOverlay botCount={botCount} playerName={playerName} tick={lobbyTick} isFading={lobbyFading} />
+      )}
+
+      {/* First-visit tutorial cards — overlaid on lobby, runs concurrent with game init */}
+      {showTutorial && (
+        <TutorialCards onComplete={() => {
+          try { localStorage.setItem('sr_has_seen_tutorial', '1'); } catch {}
+          setShowTutorial(false);
+          tutorialDoneRef.current?.();
+          tutorialDoneRef.current = null;
+        }} />
       )}
 
       {/* Pre-Game Sequence */}
