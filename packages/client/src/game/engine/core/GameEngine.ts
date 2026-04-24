@@ -452,6 +452,7 @@ export class GameEngine {
     const tick = (t: number) => {
       const dt = Math.min((t - (this._previewLastTime || t)) / 1000, 0.05);
       this._previewLastTime = t;
+      this._systemManager.getSystem('camera')?.update(dt);
       this._systemManager.getSystem('render')?.update(dt);
       this._previewRafId = requestAnimationFrame(tick);
     };
