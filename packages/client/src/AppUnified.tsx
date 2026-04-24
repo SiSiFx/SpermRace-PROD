@@ -24,7 +24,7 @@ const Leaderboard = lazy(() =>
   import('./Leaderboard').then((m) => ({ default: m.Leaderboard }))
 );
 const HowToPlayOverlay = lazy(() => import('./HowToPlayOverlay'));
-const MobileTutorial = lazy(() => import('./MobileTutorial'));
+
 
 // API Base URL
 const API_BASE: string = (() => {
@@ -295,7 +295,6 @@ function AppInner() {
             onBack={() => setScreen('landing')}
             onPlayReal={() => { onWallet(selectedTier); }}
             playRealPrize={selectedTier.prize}
-            isMobile={isMobile}
           />
         </Suspense>
       )}
@@ -418,13 +417,11 @@ function Practice({
   onBack,
   onPlayReal,
   playRealPrize,
-  isMobile,
 }: {
   onFinish: (stats: any) => void;
   onBack: () => void;
   onPlayReal?: () => void;
   playRealPrize?: string;
-  isMobile: boolean;
 }) {
   const [meId] = useState(() => {
     const NAMES = [
@@ -435,29 +432,6 @@ function Practice({
     ];
     return NAMES[Math.floor(Math.random() * NAMES.length)];
   });
-  const [countdown, setCountdown] = useState(3);
-  const [showTutorial, setShowTutorial] = useState(() => {
-    try {
-      return !localStorage.getItem('spermrace_tutorial_seen');
-    } catch {
-      return true;
-    }
-  });
-
-  // Countdown timer
-  useEffect(() => {
-    if (countdown <= 0) return;
-    const timer = setTimeout(() => setCountdown(c => c - 1), 1000);
-    return () => clearTimeout(timer);
-  }, [countdown]);
-
-  const handleTutorialDone = useCallback(() => {
-    setShowTutorial(false);
-    try {
-      localStorage.setItem('spermrace_tutorial_seen', '1');
-    } catch {}
-  }, []);
-
   return (
     <div className="screen active game-screen">
       <GameViewWrapper
@@ -468,11 +442,6 @@ function Practice({
         onPlayReal={onPlayReal}
         playRealPrize={playRealPrize}
       />
-      {isMobile && showTutorial && (
-        <Suspense fallback={null}>
-          <MobileTutorial countdown={countdown} onComplete={handleTutorialDone} context="practice" />
-        </Suspense>
-      )}
     </div>
   );
 }

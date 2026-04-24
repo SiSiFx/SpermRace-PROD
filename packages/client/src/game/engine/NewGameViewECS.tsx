@@ -471,20 +471,15 @@ export function NewGameViewECS({
       }
 
       setSkipMapOverview(skip);
-      // First-visit tutorial: show cards on a frozen canvas before the pre-game sequence.
-      // Engine is paused + preview render stopped so nothing moves behind the cards.
-      // When the tutorial is dismissed, preview render restarts and PreGameSequence shows.
       if (!skip) {
-        const isFirstVisit = (() => { try { return !localStorage.getItem('sr_has_seen_tutorial'); } catch { return false; } })();
-        if (isFirstVisit) {
-          gameRef.current!.getEngine().stopPreviewRender();
-          setShowTutorial(true);
-          // PreGameSequence will be shown by the tutorial onComplete handler below
-          // Resume audio contexts here — user gesture is still active at this point
-          gameRef.current!.resumeAudio().catch(() => {});
-          cleanupRef.current = installAutomationHooks(host, gameRef, mouseRef);
-          return;
-        }
+        // Always show tutorial cards on a frozen canvas before the pre-game sequence.
+        // Engine is paused + preview render stopped so nothing moves behind the cards.
+        // onComplete restarts preview render and mounts PreGameSequence.
+        gameRef.current!.getEngine().stopPreviewRender();
+        setShowTutorial(true);
+        gameRef.current!.resumeAudio().catch(() => {});
+        cleanupRef.current = installAutomationHooks(host, gameRef, mouseRef);
+        return;
       }
       // Show pre-game sequence — game is initialized and paused, ready for countdown
       setShowPreGame(true);
@@ -963,7 +958,6 @@ export function NewGameViewECS({
           Collapses into one pre-game experience: map overview (cards on top) → countdown ring. */}
       {showTutorial && (
         <TutorialCards onComplete={() => {
-          try { localStorage.setItem('sr_has_seen_tutorial', '1'); } catch {}
           setShowTutorial(false);
           tutorialDoneRef.current = null;
           // Canvas was frozen during tutorial — restart preview render then show countdown
