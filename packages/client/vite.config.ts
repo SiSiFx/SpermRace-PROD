@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-const SERVER_PORT = process.env.SERVER_PORT || process.env.PORT || '8085';
+const SERVER_PORT = process.env.SERVER_PORT || process.env.PORT || '8090';
 
 /**
  * Vite config for the canvas-test client.

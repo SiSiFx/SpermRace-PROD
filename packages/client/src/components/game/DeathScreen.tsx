@@ -112,13 +112,7 @@ export const DeathScreen = memo(function DeathScreen({
     }
     const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
     return () => clearTimeout(timer);
-  }, [isVisible, countdown, canSpectate, onSpectate, onLeave]);
-
-  const formattedTime = useMemo(() => {
-    const mins = Math.floor(timeSurvived / 60);
-    const secs = Math.floor(timeSurvived % 60);
-    return `${mins}:${String(secs).padStart(2, '0')}`;
-  }, [timeSurvived]);
+  }, [isVisible, countdown, canSpectate, onSpectate, onLeave, onQuickReplay]);
 
   const formattedDistance = useMemo(() => {
     if (distance === undefined) return undefined;

@@ -146,7 +146,7 @@ function buildPlayerSlots(
   for (let index = 0; index < openSlots; index += 1) {
     slots.push({
       id: `open-${index}`,
-      name: 'Open lane',
+      name: '–',
       isMe: false,
       isBot: false,
       isEmpty: true,
@@ -173,13 +173,11 @@ export const PremiumLobbyScreen = memo(function PremiumLobbyScreen({
   const lobbyMode = (lobby as any)?.mode as LobbyMode;
   const entryFee = Number((lobby as any)?.entryFee || 0);
   const maxPlayers = lobby?.maxPlayers ?? 12;
-  const visibleSlots = Math.min(Math.max(maxPlayers, 8), 12);
   const winnerPayoutUsd = lobbyMode === 'tournament' ? Math.max(0, Math.floor(entryFee * 10)) : 0;
   const armThresholdMissing = lobbyMode === 'practice'
-    ? Math.max(0, 1 - realPlayers.length)   // practice: 1 real player arms the room (bots fill rest)
+    ? Math.max(0, 1 - realPlayers.length)
     : Math.max(0, 2 - players.length);
   const canStart = armThresholdMissing === 0;
-  const fillProgress = maxPlayers > 0 ? (players.length / maxPlayers) * 100 : 0;
   const roomLabel = lobbyMode === 'practice' ? 'Practice' : `${formatEntry(entryFee)} room`;
   const winnerLabel = lobbyMode === 'tournament' ? `$${winnerPayoutUsd}` : null;
   const statusLine = countdown > 0

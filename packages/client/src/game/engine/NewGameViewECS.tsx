@@ -187,6 +187,8 @@ export function NewGameViewECS({
   // Win overlay state — shown in-game for 3s before exiting to results
   const [winStats, setWinStats] = useState<GameStats | null>(null);
   const [winCountdown, setWinCountdown] = useState(3);
+  const [displayKills, setDisplayKills] = useState(0);
+  const [displaySeconds, setDisplaySeconds] = useState(0);
 
   const [gameStarted, setGameStarted] = useState(false);
   const [showPreGame, setShowPreGame] = useState(false);
@@ -254,6 +256,25 @@ export function NewGameViewECS({
     return createComponentMask(ComponentNames.PLAYER, ComponentNames.HEALTH);
   }, []);
 
+  // Win overlay derived values
+  const displayTime = useMemo(() => {
+    const m = Math.floor(displaySeconds / 60);
+    const s = displaySeconds % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
+  }, [displaySeconds]);
+
+  const winSubLine = useMemo(() => {
+    if (!winStats) return '';
+    const { kills, duration, totalPlayers } = winStats;
+    const secs = Math.floor(duration / 1000);
+    const mins = Math.floor(secs / 60);
+    const rem = secs % 60;
+    if (kills >= 5) return `${kills} cells eliminated. You were the predator.`;
+    if (kills === 0 && secs >= 240) return 'No kills. Pure evasion. Still the last one breathing.';
+    const n = totalPlayers - 1;
+    return `Outlasted ${n} opponent${n !== 1 ? 's' : ''} over ${mins}m ${rem}s.`;
+  }, [winStats]);
+
   useEffect(() => {
     const timer = window.setInterval(() => {
       const now = Date.now();
@@ -282,6 +303,42 @@ export function NewGameViewECS({
     const t = window.setTimeout(() => setWinCountdown(c => c - 1), 1000);
     return () => window.clearTimeout(t);
   }, [winStats, winCountdown, onGameEnd]);
+
+  // Win overlay: count-up animation for stats
+  useEffect(() => {
+    if (!winStats) return;
+    setDisplayKills(0);
+    setDisplaySeconds(0);
+    const kills = winStats.kills;
+    const totalSeconds = Math.floor(winStats.duration / 1000);
+    const delayMs = 300;
+    const killsMs = 400;
+    const secsMs = 800;
+    const start = performance.now();
+    let killsDone = false;
+    let secsDone = false;
+    let raf: number;
+    const tick = (now: number) => {
+      const elapsed = now - start - delayMs;
+      if (elapsed >= 0) {
+        if (!killsDone) {
+          const t = Math.min(1, elapsed / killsMs);
+          const eased = 1 - Math.pow(1 - t, 4);
+          setDisplayKills(Math.round(kills * eased));
+          if (t >= 1) killsDone = true;
+        }
+        if (!secsDone) {
+          const t = Math.min(1, elapsed / secsMs);
+          const eased = 1 - Math.pow(1 - t, 4);
+          setDisplaySeconds(Math.round(totalSeconds * eased));
+          if (t >= 1) secsDone = true;
+        }
+      }
+      if (!killsDone || !secsDone) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [winStats]);
 
   useEffect(() => {
     const host = hostRef.current;
