@@ -354,6 +354,28 @@
   min-height: 44px;
 }
 
+.death-secondary-actions {
+  display: flex;
+  justify-content: center;
+  gap: 1.5rem;
+  margin-top: 0.25rem;
+}
+
+.death-text-link {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  padding: 0.25rem 0;
+  transition: color 0.15s;
+}
+
+.death-text-link:hover {
+  color: rgba(255, 255, 255, 0.7);
+}
+
 @media (hover: hover) {
   .death-btn.quick-replay:hover {
     background: linear-gradient(135deg, #f0d59c 0%, #c9933d 100%);

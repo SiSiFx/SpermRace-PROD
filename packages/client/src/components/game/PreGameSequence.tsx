@@ -266,20 +266,8 @@ export function PreGameSequence({
               exit={{ y: -30, opacity: 0 }}
               transition={{ delay: 0.2, duration: 0.4 }}
             >
-              <h3 className="map-info-title">{totalPlayers} CELLS DETECTED</h3>
+              <h3 className="map-info-title">{totalPlayers} players</h3>
               <p className="map-info-subtitle">Last one alive wins</p>
-            </motion.div>
-
-            {/* Freeze indicator */}
-            <motion.div
-              className="zone-warning"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ delay: 0.5, duration: 0.4 }}
-            >
-              <div className="zone-warning-icon">■</div>
-              <span className="zone-warning-text">ALL CELLS LOCKED — COUNTDOWN BEGINS</span>
             </motion.div>
 
             {/* Player markers indicator */}

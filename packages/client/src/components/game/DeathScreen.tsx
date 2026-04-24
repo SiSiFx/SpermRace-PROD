@@ -8,7 +8,7 @@
 
 import { useEffect, useState, memo, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sword, Timer, Ruler, Eye, ArrowLeft, ArrowCounterClockwise } from 'phosphor-react';
+import { Sword, Timer, Ruler, ArrowCounterClockwise } from 'phosphor-react';
 import './DeathScreen.css';
 
 /** Counts from 0 to target over `duration` ms, starting after `delayMs` */
@@ -32,17 +32,15 @@ function useCountUp(target: number, duration = 750, delayMs = 0): number {
   return value;
 }
 
-// Brutal one-liner verdict based on how the round went
+// Contextual verdict — deterministic, no randomness
 function getVerdict(ownTrail: boolean, kills: number, timeSurvived: number, placement: number, totalPlayers: number): string {
-  const pick = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
-  if (ownTrail)              return pick(['Took yourself out.', 'Your own worst enemy.', 'Self-inflicted.']);
-  if (timeSurvived < 12)     return pick(['Barely had time to breathe.', 'Speed run.', 'New record. Bad kind.']);
-  if (placement === 2)       return pick(['So close.', 'Second is the first loser.', 'Almost.']);
-  if (kills >= 5)            return pick(['Went down swinging.', 'Took a crowd with you.', 'Plenty of damage dealt.']);
-  if (kills >= 2)            return pick(['At least you drew blood.', 'Took some with you.', 'Not your worst day.']);
-  if (kills === 1)           return pick(['One kill. Respectable.', 'You left a mark.', 'They remember you.']);
-  if (totalPlayers > 5 && placement <= Math.floor(totalPlayers * 0.3)) return pick(['Top third.', 'Decent run.', 'Mid pack.']);
-  return pick(['Next time.', 'Try again.', 'It happens.']);
+  if (ownTrail)              return 'You crossed your own trail.';
+  if (timeSurvived < 12)     return 'Under 12 seconds.';
+  if (placement === 2)       return 'Runner-up.';
+  if (kills >= 2)            return `${kills} kills.`;
+  if (kills === 1)           return '1 kill.';
+  if (totalPlayers > 5 && placement <= Math.floor(totalPlayers * 0.3)) return 'Top third.';
+  return '';
 }
 
 export interface DeathScreenProps {
@@ -188,7 +186,7 @@ export const DeathScreen = memo(function DeathScreen({
               id="death-title"
               className="death-stamp"
               initial={{ scale: 2, opacity: 0, rotate: -15 }}
-              animate={{ scale: 1, opacity: 1, rotate: -3 }}
+              animate={{ scale: 1, opacity: 1 }}
               transition={{
                 type: 'spring',
                 stiffness: 300,
@@ -266,49 +264,23 @@ export const DeathScreen = memo(function DeathScreen({
                 <motion.button
                   onClick={onQuickReplay}
                   className="death-btn quick-replay"
-                  aria-label={`Play again with same class — auto in ${countdown}s`}
+                  aria-label={`Play again — auto in ${countdown}s`}
                   whileHover={{ scale: 1.02, y: -2 }}
                   whileTap={{ scale: 0.98 }}
                 >
                   <ArrowCounterClockwise weight="fill" size={20} />
-                  <span className="death-btn-content">
-                    <span className="death-btn-text">PLAY AGAIN</span>
-                    <span className="death-btn-subtitle">Same class · auto in {countdown}s</span>
-                  </span>
+                  <span className="death-btn-text">PLAY AGAIN</span>
                 </motion.button>
               )}
 
-              {canSpectate && onSpectate && (
-                <motion.button
-                  onClick={onSpectate}
-                  className="death-btn spectate"
-                  aria-label="Spectate - watch remaining players"
-                  whileHover={{ scale: 1.02, y: -2 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  <Eye weight="fill" size={20} />
-                  <span className="death-btn-content">
-                    <span className="death-btn-text">SPECTATE</span>
-                    <span className="death-btn-subtitle">Watch remaining players</span>
-                  </span>
-                </motion.button>
-              )}
-
-              {onLeave && (
-                <motion.button
-                  onClick={onLeave}
-                  className="death-btn leave"
-                  aria-label="See results and exit"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  <ArrowLeft weight="bold" size={20} />
-                  <span className="death-btn-content">
-                    <span className="death-btn-text">SEE RESULTS</span>
-                    <span className="death-btn-subtitle">View stats &amp; exit</span>
-                  </span>
-                </motion.button>
-              )}
+              <div className="death-secondary-actions">
+                {canSpectate && onSpectate && (
+                  <button className="death-text-link" onClick={onSpectate}>Spectate</button>
+                )}
+                {onLeave && (
+                  <button className="death-text-link" onClick={onLeave}>See results</button>
+                )}
+              </div>
             </motion.div>
 
             {/* Progress bar */}

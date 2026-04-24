@@ -3,19 +3,19 @@ import './TutorialCards.css';
 
 const CARDS = [
   {
-    glyph: '〰',
+    num: '01',
     headline: 'TRAILS KILL',
     body: 'Every cell leaves a deadly trail behind it. Touch any trail — including your own — and you die instantly.',
   },
   {
-    glyph: '◎',
+    num: '02',
     headline: 'ZONE SHRINKS',
     body: 'The safe zone closes in during every match. Get caught outside the ring and you\'re dead. Keep moving inward.',
   },
   {
-    glyph: '✦',
+    num: '03',
     headline: 'LAST ONE ALIVE',
-    body: '16 cells enter. One survives. Outlast everyone and the prize hits your wallet on-chain — instantly.',
+    body: '16 enter. One survives. Outlast everyone and the prize hits your wallet instantly.',
   },
 ];
 
@@ -70,7 +70,7 @@ export function TutorialCards({ onComplete }: TutorialCardsProps) {
       aria-modal="true"
     >
       <div className="tutorial-card">
-        <div className="tutorial-card-glyph">{card.glyph}</div>
+        <div className="tutorial-card-num">{card.num}</div>
         <h2 className="tutorial-card-headline">{card.headline}</h2>
         <p className="tutorial-card-body">{card.body}</p>
 
@@ -89,7 +89,6 @@ export function TutorialCards({ onComplete }: TutorialCardsProps) {
           <div className="tutorial-progress-fill" style={{ width: `${progress * 100}%` }} />
         </div>
 
-        <p className="tutorial-tap-hint">tap to continue</p>
       </div>
 
       <button

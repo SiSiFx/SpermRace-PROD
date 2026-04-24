@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Sword, Timer, Trophy, Users } from 'phosphor-react';
+import { ArrowLeft, Trophy, Users } from 'phosphor-react';
 import { useWs } from '../../../WsProvider';
 import './PremiumLobbyScreen.css';
 
@@ -180,34 +180,13 @@ export const PremiumLobbyScreen = memo(function PremiumLobbyScreen({
     : Math.max(0, 2 - players.length);
   const canStart = armThresholdMissing === 0;
   const fillProgress = maxPlayers > 0 ? (players.length / maxPlayers) * 100 : 0;
-  const roomLabel = lobbyMode === 'practice'
-    ? 'Practice chamber'
-    : lobby
-      ? `${formatEntry(entryFee)} room`
-      : 'Tournament chamber';
-  const winnerLabel = lobbyMode === 'tournament' ? `$${winnerPayoutUsd}` : 'No payout';
-  const headline = countdown > 0
-    ? lobbyMode === 'practice' ? 'Ready. Starting soon.' : 'Chamber armed.'
+  const roomLabel = lobbyMode === 'practice' ? 'Practice' : `${formatEntry(entryFee)} room`;
+  const winnerLabel = lobbyMode === 'tournament' ? `$${winnerPayoutUsd}` : null;
+  const statusLine = countdown > 0
+    ? `Starting in ${countdown}s`
     : canStart
-      ? lobbyMode === 'practice' ? 'Ready to launch.' : 'Room is live-ready.'
-      : 'Forming the hunt.';
-  const subtitle = countdown > 0
-    ? lobbyMode === 'practice'
-      ? `Launching in ${countdown}s — ${players.length} AI opponents loaded.`
-      : 'Read the first cut before the room closes around you.'
-    : canStart
-      ? lobbyMode === 'practice'
-        ? 'All AI opponents loaded. Launch when ready.'
-        : 'Threshold hit. The server can drop this match at any moment.'
-      : `Need ${armThresholdMissing} more ${lobbyMode === 'practice' ? 'real player' : 'entrant'}${armThresholdMissing === 1 ? '' : 's'} to start.`;
-  const boardFooter = lobbyMode === 'practice'
-    ? 'Solo practice — you vs AI. No entry fee, no payout.'
-    : 'Live rooms are short, lethal, and server-authoritative. Two entrants arms the queue.';
-  const autoFlowLabel = countdown > 0
-    ? 'Auto launch engaged'
-    : canStart
-      ? (onStart ? 'Manual launch available' : 'Waiting for server handoff')
-      : 'Queue still gathering';
+      ? lobbyMode === 'practice' ? 'Ready to start' : 'Room is full — starting soon'
+      : `Waiting for ${armThresholdMissing} more player${armThresholdMissing === 1 ? '' : 's'}`;
   const playerSlots = buildPlayerSlots(players, playerNames, playerId, maxPlayers);
   const refundCountdown = (state.lobby as any)?.refundCountdown as number | undefined;
 
@@ -247,16 +226,9 @@ export const PremiumLobbyScreen = memo(function PremiumLobbyScreen({
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.05, ...springPage }}
           >
-            <p className="premium-lobby-eyebrow">
-              {lobbyMode === 'practice' ? 'Practice mode · Free' : 'Live kill room'}
-            </p>
+            <h1 className="premium-lobby-title">{roomLabel}</h1>
 
-            <h1 className="premium-lobby-title">
-              {headline}
-              <span>{roomLabel}</span>
-            </h1>
-
-            <p className="premium-lobby-subtitle">{subtitle}</p>
+            <p className="premium-lobby-subtitle">{statusLine}</p>
 
             {refundCountdown !== undefined && refundCountdown > 0 && entryFee > 0 && (
               <p className="premium-lobby-refund-warning">
@@ -266,57 +238,22 @@ export const PremiumLobbyScreen = memo(function PremiumLobbyScreen({
 
             <div className="premium-lobby-strips" aria-label="Lobby summary">
               <div className="premium-lobby-strip">
-                <span className="premium-lobby-strip-label">Inside</span>
+                <span className="premium-lobby-strip-label">Players</span>
                 <strong className="premium-lobby-strip-value">{players.length}/{maxPlayers}</strong>
               </div>
-              <div className="premium-lobby-strip">
-                <span className="premium-lobby-strip-label">Winner</span>
-                <strong className="premium-lobby-strip-value">{winnerLabel}</strong>
-              </div>
-              <div className="premium-lobby-strip">
-                <span className="premium-lobby-strip-label">Starts with</span>
-                <strong className="premium-lobby-strip-value">
-                  {lobbyMode === 'practice' ? '1 player' : '2 entrants'}
-                </strong>
-              </div>
+              {winnerLabel && (
+                <div className="premium-lobby-strip">
+                  <span className="premium-lobby-strip-label">Winner gets</span>
+                  <strong className="premium-lobby-strip-value">{winnerLabel}</strong>
+                </div>
+              )}
             </div>
 
-            <div className="premium-lobby-command">
-              <div className="premium-lobby-command-display">
-                <span className="premium-lobby-command-kicker">Status</span>
-                <strong className="premium-lobby-command-value">
-                  {countdown > 0 ? countdown : canStart ? 'ARMED' : armThresholdMissing}
-                </strong>
-                <span className="premium-lobby-command-caption">
-                  {countdown > 0 ? 'Seconds to release' : canStart ? 'Queue threshold hit' : 'More needed'}
-                </span>
-              </div>
-
-              <div className="premium-lobby-command-copy">
-                <div className="premium-lobby-command-headline">
-                  <span>Capacity</span>
-                  <strong>{players.length} of {maxPlayers}</strong>
-                </div>
-
-                <div className="premium-lobby-track" aria-hidden="true">
-                  <span style={{ width: `${Math.max(6, Math.min(fillProgress, 100))}%` }} />
-                </div>
-
-                <p className="premium-lobby-command-note">{boardFooter}</p>
-
-                {onStart && canStart ? (
-                  <button type="button" className="premium-lobby-launch" onClick={onStart}>
-                    <Sword size={18} weight="bold" />
-                    <span>{countdown > 0 ? 'Launch armed room' : 'Launch room'}</span>
-                  </button>
-                ) : (
-                  <div className="premium-lobby-autoflow">
-                    <Timer size={18} weight="fill" />
-                    <span>{autoFlowLabel}</span>
-                  </div>
-                )}
-              </div>
-            </div>
+            {onStart && canStart && (
+              <button type="button" className="premium-lobby-launch" onClick={onStart}>
+                <span>Start</span>
+              </button>
+            )}
           </motion.section>
 
           <motion.section
@@ -325,18 +262,6 @@ export const PremiumLobbyScreen = memo(function PremiumLobbyScreen({
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.12, ...springPage }}
           >
-            <div className="premium-lobby-board-head">
-              <div>
-                <p className="premium-lobby-board-kicker">Roster</p>
-                <h2 className="premium-lobby-board-title">Inside the chamber</h2>
-              </div>
-
-              <div className="premium-lobby-board-summary">
-                <span>{players.length} active</span>
-                <span>{visibleSlots} visible lanes</span>
-              </div>
-            </div>
-
             <motion.div
               className="premium-lobby-roster"
               role="list"
@@ -365,7 +290,6 @@ export const PremiumLobbyScreen = memo(function PremiumLobbyScreen({
 
                     <div className="premium-lobby-slot-copy">
                       <span className="premium-lobby-slot-name">{slot.name}</span>
-                      <span className="premium-lobby-slot-note">{slot.note}</span>
                     </div>
                   </div>
 
@@ -378,13 +302,6 @@ export const PremiumLobbyScreen = memo(function PremiumLobbyScreen({
               ))}
             </motion.div>
 
-            <div className="premium-lobby-board-footer">
-              <p>{boardFooter}</p>
-              <div className="premium-lobby-rule">
-                <Sword size={16} weight="bold" />
-                <span>Any trail touch kills. Read bodies, not just lanes.</span>
-              </div>
-            </div>
           </motion.section>
         </main>
       </div>
