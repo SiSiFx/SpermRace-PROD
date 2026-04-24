@@ -25,7 +25,7 @@ type Phase = 'mapOverview' | 'countdown' | 'zoomToPlayer' | 'complete';
 
 // Phase durations in milliseconds
 const PHASE_DURATIONS = {
-  mapOverview: 900,
+  mapOverview: 2500,
   countdown: 3000,
   zoomToPlayer: 300,
 };
