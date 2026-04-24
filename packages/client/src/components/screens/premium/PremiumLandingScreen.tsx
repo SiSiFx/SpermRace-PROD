@@ -44,7 +44,6 @@ function EntryModal({
   onPractice: () => void;
   onClose: () => void;
 }) {
-  const pool = `$${tier.usd * tier.players}`;
   const winnerShare = Math.round(tier.usd * tier.players * 0.85);
 
   return (
@@ -53,51 +52,36 @@ function EntryModal({
 
         <button className="entry-modal-close" onClick={onClose} aria-label="Close">✕</button>
 
-        {/* Room badge */}
-        <div className="entry-modal-badge">{tier.name} ROOM</div>
+        {/* Room label */}
+        <p className="entry-modal-room">{tier.name} room</p>
 
-        {/* Hero payout */}
-        <div className="entry-modal-hero">
-          <span className="entry-modal-multiplier">10×</span>
-          <div className="entry-modal-win">
-            <span className="entry-modal-win-label">TOP PRIZE</span>
-            <span className="entry-modal-win-amount">{tier.prize}</span>
+        {/* Prize — the only number that matters */}
+        <div className="entry-modal-prize-wrap">
+          <span className="entry-modal-prize-amount">{tier.prize}</span>
+          <span className="entry-modal-prize-label">top prize</span>
+        </div>
+
+        {/* Simple entry → payout equation */}
+        <div className="entry-modal-deal">
+          <div className="entry-modal-deal-side">
+            <span className="entry-modal-deal-value">{tier.name}</span>
+            <span className="entry-modal-deal-hint">you pay</span>
+          </div>
+          <svg className="entry-modal-deal-arrow" viewBox="0 0 44 14" fill="none" aria-hidden="true">
+            <path d="M0 7h40M33 1l7 6-7 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          <div className="entry-modal-deal-side entry-modal-deal-side--win">
+            <span className="entry-modal-deal-value">${winnerShare}</span>
+            <span className="entry-modal-deal-hint">winner gets</span>
           </div>
         </div>
 
-        <p className="entry-modal-tagline">Winner takes everything. Last cell alive.</p>
+        {/* Single trust line */}
+        <p className="entry-modal-meta">
+          {tier.players} players · instant on-chain payout · provably fair
+        </p>
 
-        {/* Stats strip */}
-        <div className="entry-modal-stats">
-          <div className="entry-modal-stat">
-            <span className="entry-modal-stat-value">{tier.name}</span>
-            <span className="entry-modal-stat-label">Entry</span>
-          </div>
-          <div className="entry-modal-stat-divider" />
-          <div className="entry-modal-stat">
-            <span className="entry-modal-stat-value">{pool}</span>
-            <span className="entry-modal-stat-label">Prize pool</span>
-          </div>
-          <div className="entry-modal-stat-divider" />
-          <div className="entry-modal-stat">
-            <span className="entry-modal-stat-value">${winnerShare}</span>
-            <span className="entry-modal-stat-label">To winner</span>
-          </div>
-          <div className="entry-modal-stat-divider" />
-          <div className="entry-modal-stat">
-            <span className="entry-modal-stat-value">{tier.players}</span>
-            <span className="entry-modal-stat-label">Players</span>
-          </div>
-        </div>
-
-        {/* Trust signals */}
-        <ul className="entry-modal-trust">
-          <li>Winner paid instantly — on-chain SOL transfer</li>
-          <li>Server-authoritative — no client cheating possible</li>
-          <li>85% of pool goes to winner · 15% platform fee</li>
-        </ul>
-
-        {/* Actions */}
+        {/* CTA */}
         <button className="entry-modal-cta" onClick={onConfirm}>
           Connect Wallet &amp; Enter
         </button>
