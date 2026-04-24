@@ -12,10 +12,10 @@ type Tier = {
 
 const TIERS: Tier[] = [
   { name: 'Free',  usd: 0,   prize: null,    players: 10  },
-  { name: '$1',    usd: 1,   prize: '$10',   players: 10  },
-  { name: '$5',    usd: 5,   prize: '$50',   players: 10, recommended: true },
-  { name: '$25',   usd: 25,  prize: '$250',  players: 10  },
-  { name: '$100',  usd: 100, prize: '$1000', players: 10  },
+  { name: '$1',    usd: 1,   prize: '$10',   players: 16  },
+  { name: '$5',    usd: 5,   prize: '$50',   players: 16, recommended: true },
+  { name: '$25',   usd: 25,  prize: '$250',  players: 16  },
+  { name: '$100',  usd: 100, prize: '$1000', players: 16  },
 ];
 
 export interface PremiumLandingScreenProps {
@@ -44,8 +44,6 @@ function EntryModal({
   onPractice: () => void;
   onClose: () => void;
 }) {
-  const winnerShare = Math.round(tier.usd * tier.players * 0.85);
-
   return (
     <div className="entry-modal-backdrop" onClick={onClose} role="dialog" aria-modal="true">
       <div className="entry-modal" onClick={e => e.stopPropagation()}>
@@ -71,7 +69,7 @@ function EntryModal({
             <path d="M0 7h40M33 1l7 6-7 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
           <div className="entry-modal-deal-side entry-modal-deal-side--win">
-            <span className="entry-modal-deal-value">${winnerShare}</span>
+            <span className="entry-modal-deal-value">{tier.prize}</span>
             <span className="entry-modal-deal-hint">winner gets</span>
           </div>
         </div>
@@ -156,7 +154,7 @@ export const PremiumLandingScreen = memo(function PremiumLandingScreen({
 
       <main className="landing-stage">
         <h1 className="landing-headline">
-          <span className="landing-headline-line">36 enter.</span>
+          <span className="landing-headline-line">16 enter.</span>
           <span className="landing-headline-line is-gold">1 gets paid.</span>
         </h1>
 

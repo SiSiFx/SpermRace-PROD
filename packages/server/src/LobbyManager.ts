@@ -22,7 +22,7 @@ function pickBotName(): string {
 // Constants
 // =================================================================================================
 
-const LOBBY_MAX_PLAYERS_DEFAULT = Math.max(2, parseInt(process.env.LOBBY_MAX_PLAYERS || '100', 10));
+const LOBBY_MAX_PLAYERS_DEFAULT = Math.max(2, parseInt(process.env.LOBBY_MAX_PLAYERS || '16', 10));
 const LOBBY_MAX_PLAYERS_PRACTICE_DEFAULT = 10;  // 1 real + 9 bots
 function getLobbyMaxPlayers(mode: GameMode): number {
   const key = mode === 'tournament' ? 'LOBBY_MAX_PLAYERS_TOURNAMENT' : 'LOBBY_MAX_PLAYERS_PRACTICE';
