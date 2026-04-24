@@ -93,15 +93,19 @@ export class CameraSystem extends System {
    * Update camera
    */
   update(dt: number): void {
+    // Normalise smooth factor to 60 fps so camera feel is frame-rate independent.
+    // Without this, frame drops during boost particle effects cause jerky camera movement.
+    const dtAlpha = Math.min(1, this._camera.smoothFactor * dt * 60);
+
     // Update camera position to follow target
     if (this._camera.targetId) {
       const target = this.entityManager.getEntity(this._camera.targetId);
       if (target) {
         const position = target.getComponent<Position>(ComponentNames.POSITION);
         if (position) {
-          // Smooth follow
-          this._camera.x += (position.x - this._camera.x) * this._camera.smoothFactor;
-          this._camera.y += (position.y - this._camera.y) * this._camera.smoothFactor;
+          // Smooth follow — dt-normalised so behaviour is identical at any frame rate
+          this._camera.x += (position.x - this._camera.x) * dtAlpha;
+          this._camera.y += (position.y - this._camera.y) * dtAlpha;
         }
 
         // Dynamic zoom based on boost state (zoom out when boosting for more visibility)
@@ -117,8 +121,8 @@ export class CameraSystem extends System {
       }
     }
 
-    // Smooth zoom transition
-    this._camera.zoom += (this._camera.targetZoom - this._camera.zoom) * this._camera.smoothFactor;
+    // Smooth zoom transition — also dt-normalised
+    this._camera.zoom += (this._camera.targetZoom - this._camera.zoom) * dtAlpha;
 
     // Update screen shake
     if (!Number.isFinite(this._camera.shakeIntensity) || this._camera.shakeIntensity < 0) {

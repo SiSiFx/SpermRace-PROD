@@ -397,21 +397,7 @@ export function NewGameViewECS({
         setLobbyTick(0);
         const tickInterval = setInterval(() => setLobbyTick(t => t + 1), 1000);
 
-        // First-time players see tutorial cards overlaid on the lobby.
-        // The tutorial promise resolves when they finish or skip — runs concurrent
-        // with game init so it adds zero latency for returning players.
-        const isFirstVisit = (() => { try { return !localStorage.getItem('sr_has_seen_tutorial'); } catch { return false; } })();
-        const tutorialPromise = isFirstVisit
-          ? new Promise<void>(resolve => {
-              setShowTutorial(true);
-              tutorialDoneRef.current = resolve;
-            })
-          : Promise.resolve();
-
-        const lobbyWait = Promise.all([
-          new Promise<void>(resolve => setTimeout(resolve, 2000)),
-          tutorialPromise,
-        ]);
+        const lobbyWait = new Promise<void>(resolve => setTimeout(resolve, 2000));
 
         const [game] = await Promise.all([gamePromise, lobbyWait]);
         clearInterval(tickInterval);
@@ -428,6 +414,16 @@ export function NewGameViewECS({
       }
 
       setSkipMapOverview(skip);
+      // First-visit tutorial: show cards overlaid on the map overview phase.
+      // This collapses lobby → tutorial → map overview → countdown into just
+      // map overview (with cards on top) → countdown — no extra wait phases.
+      if (!skip) {
+        const isFirstVisit = (() => { try { return !localStorage.getItem('sr_has_seen_tutorial'); } catch { return false; } })();
+        if (isFirstVisit) {
+          setShowTutorial(true);
+          tutorialDoneRef.current = () => {};
+        }
+      }
       // Show pre-game sequence — game is initialized and paused, ready for countdown
       setShowPreGame(true);
       // Show controls hint during the countdown so players can read it before they move
@@ -891,16 +887,6 @@ export function NewGameViewECS({
         <PracticeLobbyOverlay botCount={botCount} playerName={playerName} tick={lobbyTick} isFading={lobbyFading} />
       )}
 
-      {/* First-visit tutorial cards — overlaid on lobby, runs concurrent with game init */}
-      {showTutorial && (
-        <TutorialCards onComplete={() => {
-          try { localStorage.setItem('sr_has_seen_tutorial', '1'); } catch {}
-          setShowTutorial(false);
-          tutorialDoneRef.current?.();
-          tutorialDoneRef.current = null;
-        }} />
-      )}
-
       {/* Pre-Game Sequence */}
       {showPreGame && gameRef.current && (
         <PreGameSequence
@@ -909,6 +895,16 @@ export function NewGameViewECS({
           skipToCountdown={skipMapOverview}
           onComplete={handlePreGameComplete}
         />
+      )}
+
+      {/* First-visit tutorial cards — overlaid on map overview phase only.
+          Collapses into one pre-game experience: map overview (cards on top) → countdown ring. */}
+      {showTutorial && showPreGame && (
+        <TutorialCards onComplete={() => {
+          try { localStorage.setItem('sr_has_seen_tutorial', '1'); } catch {}
+          setShowTutorial(false);
+          tutorialDoneRef.current = null;
+        }} />
       )}
 
       <div ref={hostRef} className="ecs-canvas-host" />
