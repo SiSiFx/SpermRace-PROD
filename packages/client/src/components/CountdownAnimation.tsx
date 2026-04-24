@@ -93,6 +93,9 @@ export const CountdownAnimation = memo(function CountdownAnimation({
         </svg>
       )}
 
+      {/* Per-tick radial flash — keyed so animation restarts on each number */}
+      <div key={`flash-${tick}`} className="cd-flash" aria-hidden="true" />
+
       {/* Number — keyed so CSS punch-in restarts on each tick */}
       <div
         key={`num-${tick}`}

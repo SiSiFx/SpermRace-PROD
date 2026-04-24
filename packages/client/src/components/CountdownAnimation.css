@@ -43,7 +43,9 @@
   stroke-width: 5;
   stroke-linecap: round;
   animation: cd-ring-drain 1s linear forwards;
-  filter: drop-shadow(0 0 6px currentColor);
+  filter:
+    drop-shadow(0 0 8px currentColor)
+    drop-shadow(0 0 22px currentColor);
 }
 
 /* Number ──────────────────────────────────────────── */
@@ -77,6 +79,20 @@
 .cd-number.is-go {
   letter-spacing: 0.04em;
   animation: cd-go-burst 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Per-tick flash — keyed div so animation restarts on each number */
+@keyframes cd-flash {
+  0%   { opacity: 0.22; }
+  100% { opacity: 0; }
+}
+
+.cd-flash {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 60% 50% at center, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+  animation: cd-flash 0.55s ease-out both;
+  pointer-events: none;
 }
 
 /* Scanlines ──────────────────────────────────────── */
