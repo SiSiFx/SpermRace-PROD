@@ -25,7 +25,7 @@ type Phase = 'mapOverview' | 'countdown' | 'zoomToPlayer' | 'complete';
 
 // Phase durations in milliseconds
 const PHASE_DURATIONS = {
-  mapOverview: 2500,
+  mapOverview: 4000,
   countdown: 3000,
   zoomToPlayer: 300,
 };
@@ -86,14 +86,13 @@ export function PreGameSequence({
     const engine = game.getEngine();
     const systemManager = engine.getSystemManager();
     const systems = (systemManager as any).systems || [];
-    
-    // Find camera system
+
+    // Find camera and render systems
     let cameraSystem: any = null;
+    let renderSystem: any = null;
     for (const sys of systems) {
-      if (sys.constructor.name === 'CameraSystem') {
-        cameraSystem = sys;
-        break;
-      }
+      if (sys.constructor.name === 'CameraSystem') cameraSystem = sys;
+      if (sys.constructor.name === 'RenderSystem') renderSystem = sys;
     }
 
     if (!cameraSystem) {
@@ -104,11 +103,15 @@ export function PreGameSequence({
     const startPos = cameraSystem.getPosition();
     const startZoom = cameraSystem.getZoom();
     const startTime = performance.now();
+    let lastTime = startTime;
 
     const animate = (currentTime: number) => {
+      const dt = Math.min((currentTime - lastTime) / 1000, 0.05);
+      lastTime = currentTime;
+
       const elapsed = currentTime - startTime;
       const progress = Math.min(1, elapsed / duration);
-      
+
       // Ease out cubic
       const easeProgress = 1 - Math.pow(1 - progress, 3);
 
@@ -116,9 +119,12 @@ export function PreGameSequence({
       const currentY = startPos.y + (targetY - startPos.y) * easeProgress;
       const currentZoom = startZoom + (targetZoom - startZoom) * easeProgress;
 
-      // Update camera without auto-follow
+      // Update camera position and zoom
       cameraSystem.setPosition(currentX, currentY);
       cameraSystem.setZoom(currentZoom);
+      // Drive the render system manually — engine is paused so its loop doesn't tick,
+      // but we still need the canvas to redraw each frame to show the zoom animation.
+      renderSystem?.update(dt);
 
       if (progress < 1) {
         animationFrameRef.current = requestAnimationFrame(animate);
