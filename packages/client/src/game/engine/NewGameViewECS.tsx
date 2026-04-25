@@ -107,61 +107,6 @@ const BOT_NAME_LIST = [
   'Colt', 'Fenn', 'Skye', 'Oryn', 'Blaze', 'Sable', 'Raze', 'Wren',
 ];
 
-function PracticeLobbyOverlay({ botCount, playerName, tick, isFading }: { botCount: number; playerName: string; tick: number; isFading: boolean }) {
-  const totalSlots = botCount + 1;
-  // Show ~1/3 of bots immediately, all bots by tick=1 (after 1 second)
-  const visibleBots = Math.min(botCount, tick === 0 ? Math.ceil(botCount / 3) : botCount);
-
-  return (
-    <div style={{
-      position: 'absolute', inset: 0, zIndex: 100,
-      background: 'rgba(6,8,15,0.95)',
-      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      gap: 0, fontFamily: 'Outfit, sans-serif',
-      opacity: isFading ? 0 : 1,
-      transition: 'opacity 0.35s ease',
-    }}>
-      <div style={{ fontSize: 11, letterSpacing: '0.18em', color: '#c9933d', marginBottom: 12, textTransform: 'uppercase', opacity: 0.8 }}>
-        Practice Lobby
-      </div>
-      <div style={{ fontSize: 28, fontWeight: 900, color: '#f0f0f0', marginBottom: 4 }}>
-        {totalSlots} / {totalSlots}
-      </div>
-      <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', marginBottom: 32, letterSpacing: '0.05em' }}>
-        Room full · Starting soon
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: 240 }}>
-        {/* Human player slot */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          background: 'rgba(201,147,61,0.12)', border: '1px solid rgba(201,147,61,0.3)',
-          borderRadius: 6, padding: '8px 12px',
-        }}>
-          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#22d3ee', flexShrink: 0 }} />
-          <span style={{ color: '#f0f0f0', fontWeight: 700, fontSize: 14 }}>{playerName}</span>
-          <span style={{ marginLeft: 'auto', fontSize: 10, color: '#c9933d', letterSpacing: '0.1em' }}>YOU</span>
-        </div>
-        {/* Bot slots */}
-        {BOT_NAME_LIST.slice(0, botCount).map((name, i) => (
-          <div key={name} style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            background: i < visibleBots ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.01)',
-            border: `1px solid ${i < visibleBots ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.03)'}`,
-            borderRadius: 6, padding: '8px 12px',
-            opacity: i < visibleBots ? 1 : 0.25,
-            transition: 'opacity 0.3s, background 0.3s',
-          }}>
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: i < visibleBots ? '#4ade80' : '#333', flexShrink: 0 }} />
-            <span style={{ color: i < visibleBots ? '#e0e0e0' : '#555', fontWeight: 600, fontSize: 14 }}>
-              {i < visibleBots ? name : '...'}
-            </span>
-            <span style={{ marginLeft: 'auto', fontSize: 10, color: 'rgba(255,255,255,0.25)', letterSpacing: '0.08em' }}>BOT</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 export function NewGameViewECS({
   playerName = 'Player',
@@ -192,12 +137,9 @@ export function NewGameViewECS({
 
   const [gameStarted, setGameStarted] = useState(false);
   const [showPreGame, setShowPreGame] = useState(false);
-  const [showLobby, setShowLobby] = useState(false);
-  const [lobbyTick, setLobbyTick] = useState(0);
   const [showControlsHint, setShowControlsHint] = useState(false);
   const controlsHintShownAtRef = useRef<number>(0);
   const [stickUi, setStickUi] = useState({ active: false, dx: 0, dy: 0, baseX: 0, baseY: 0 });
-  const [lobbyFading, setLobbyFading] = useState(false);
   const [skipMapOverview, setSkipMapOverview] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
   const tutorialDoneRef = useRef<(() => void) | null>(null);
@@ -447,28 +389,7 @@ export function NewGameViewECS({
         return game;
       });
 
-      if (!skip) {
-        // Show lobby while game initializes in background — parallel, so no dead time between
-        // lobby exit and pre-game starting.
-        setShowLobby(true);
-        setLobbyTick(0);
-        const tickInterval = setInterval(() => setLobbyTick(t => t + 1), 1000);
-
-        const lobbyWait = new Promise<void>(resolve => setTimeout(resolve, 2000));
-
-        const [game] = await Promise.all([gamePromise, lobbyWait]);
-        clearInterval(tickInterval);
-
-        // Smooth fade-out before revealing the arena
-        setLobbyFading(true);
-        await new Promise<void>(resolve => setTimeout(resolve, 350));
-        setShowLobby(false);
-        setLobbyFading(false);
-
-        gameRef.current = game;
-      } else {
-        gameRef.current = await gamePromise;
-      }
+      gameRef.current = await gamePromise;
 
       setSkipMapOverview(skip);
       if (!skip) {
@@ -939,11 +860,6 @@ export function NewGameViewECS({
 
   return (
     <div className="ecs-root" data-status={snapshot.status}>
-      {/* Practice Lobby Screen */}
-      {showLobby && (
-        <PracticeLobbyOverlay botCount={botCount} playerName={playerName} tick={lobbyTick} isFading={lobbyFading} />
-      )}
-
       {/* Pre-Game Sequence */}
       {showPreGame && gameRef.current && (
         <PreGameSequence
