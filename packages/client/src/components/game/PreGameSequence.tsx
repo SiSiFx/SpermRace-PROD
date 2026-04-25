@@ -140,34 +140,19 @@ export function PreGameSequence({
   useEffect(() => {
     if (phase !== 'mapOverview') return;
 
-    const engine = game.getEngine();
-    const worldSize = engine.getWorldSize();
-    const centerX = worldSize.width / 2;
-    const centerY = worldSize.height / 2;
-
     // Mark map overview as ready for rendering
     setMapOverviewReady(true);
 
-    // Always hold map overview for the full duration — a timer drives the transition.
-    // Previously animateCamera(onDone) was used, but if CameraSystem isn't accessible
-    // (dynamic system lookup via `(sm as any).systems`) onDone fired immediately,
-    // skipping the overlay before React could render it.
+    // Timer drives the transition — canvas is covered by the opaque overlay anyway.
     const timer = setTimeout(() => {
       setPhase('countdown');
       setShowCountdown(true);
     }, PHASE_DURATIONS.mapOverview);
 
-    // Best-effort camera pan — updates CameraSystem state even while paused.
-    // The canvas won't re-render (engine paused) but state is primed for GO.
-    animateCamera(centerX, centerY, 0.34, PHASE_DURATIONS.mapOverview, () => {});
-
     return () => {
       clearTimeout(timer);
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
     };
-  }, [phase, game, animateCamera]);
+  }, [phase, game]);
 
   // Phase 3: Countdown -> Zoom to Player
   // Resume engine immediately at GO so the player starts moving during the camera zoom-in.
@@ -274,18 +259,6 @@ export function PreGameSequence({
             >
               <h3 className="map-info-title">{totalPlayers} players</h3>
               <p className="map-info-subtitle">Last one alive wins</p>
-            </motion.div>
-
-            {/* Player markers indicator */}
-            <motion.div
-              className="player-markers-hint"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 20 }}
-              transition={{ delay: 0.7, duration: 0.4 }}
-            >
-              <div className="player-marker-example you">You</div>
-              <div className="player-marker-example enemy">Enemies</div>
             </motion.div>
 
             {/* Progress indicator */}

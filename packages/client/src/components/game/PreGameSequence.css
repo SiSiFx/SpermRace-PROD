@@ -19,6 +19,7 @@
   align-items: center;
   justify-content: flex-start;
   padding-top: 3rem;
+  background: rgba(4, 5, 10, 0.97);
 }
 
 /* Arena info card */
@@ -54,93 +55,6 @@
   font-weight: 600;
   letter-spacing: 0.15em;
   text-transform: uppercase;
-}
-
-/* Zone warning */
-.zone-warning {
-  margin-top: 1.5rem;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.75rem 1.25rem;
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  border-radius: 50px;
-  backdrop-filter: blur(10px);
-}
-
-.zone-warning-icon {
-  font-size: 1.25rem;
-  animation: pulseWarning 1.5s ease-in-out infinite;
-}
-
-@keyframes pulseWarning {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.7;
-    transform: scale(1.1);
-  }
-}
-
-.zone-warning-text {
-  font-size: 0.875rem;
-  color: rgba(255, 255, 255, 0.9);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-/* Player markers hint */
-.player-markers-hint {
-  position: absolute;
-  bottom: 3rem;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 1.5rem;
-}
-
-.player-marker-example {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  background: rgba(0, 0, 0, 0.4);
-  border-radius: 50px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  backdrop-filter: blur(10px);
-}
-
-.player-marker-example::before {
-  content: '';
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  box-shadow: 0 0 8px currentColor;
-}
-
-.player-marker-example.you {
-  color: #22d3ee;
-  border: 1px solid rgba(34, 211, 238, 0.3);
-}
-
-.player-marker-example.you::before {
-  background: #22d3ee;
-}
-
-.player-marker-example.enemy {
-  color: #ef4444;
-  border: 1px solid rgba(239, 68, 68, 0.3);
-}
-
-.player-marker-example.enemy::before {
-  background: #ef4444;
 }
 
 /* Map overview progress bar */
@@ -179,28 +93,6 @@
     font-size: 0.75rem;
   }
 
-  .zone-warning {
-    margin-top: 1rem;
-    padding: 0.625rem 1rem;
-  }
-
-  .zone-warning-icon {
-    font-size: 1rem;
-  }
-
-  .zone-warning-text {
-    font-size: 0.75rem;
-  }
-
-  .player-markers-hint {
-    bottom: 2rem;
-    gap: 1rem;
-  }
-
-  .player-marker-example {
-    padding: 0.4rem 0.8rem;
-    font-size: 0.7rem;
-  }
 }
 
 @media (max-width: 380px) {
@@ -210,12 +102,6 @@
 
   .map-info-title {
     font-size: 1.125rem;
-  }
-
-  .player-markers-hint {
-    flex-direction: column;
-    gap: 0.5rem;
-    align-items: center;
   }
 }
 
@@ -236,16 +122,3 @@
   }
 }
 
-/* Animation for zone warning pulse */
-@keyframes zonePulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
-  }
-  50% {
-    box-shadow: 0 0 20px 5px rgba(239, 68, 68, 0.2);
-  }
-}
-
-.zone-warning {
-  animation: zonePulse 2s ease-in-out infinite;
-}
