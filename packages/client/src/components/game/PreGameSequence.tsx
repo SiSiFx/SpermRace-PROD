@@ -140,11 +140,16 @@ export function PreGameSequence({
   useEffect(() => {
     if (phase !== 'mapOverview') return;
 
+    // Freeze the canvas — the overlay fully covers it, no point animating behind it.
+    // Also prevents the player head from bleeding through the overlay.
+    game.getEngine().stopPreviewRender();
+
     // Mark map overview as ready for rendering
     setMapOverviewReady(true);
 
-    // Timer drives the transition — canvas is covered by the opaque overlay anyway.
     const timer = setTimeout(() => {
+      // Restart canvas animation so tails wave during the countdown phase
+      game.getEngine().startPreviewRender();
       setPhase('countdown');
       setShowCountdown(true);
     }, PHASE_DURATIONS.mapOverview);
