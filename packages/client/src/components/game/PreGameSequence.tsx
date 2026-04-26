@@ -137,36 +137,19 @@ export function PreGameSequence({
   }, [game]);
 
   // Phase 1: Map Overview -> Countdown
+  // Canvas is fully hidden behind the opaque overlay — no camera animation needed.
   useEffect(() => {
     if (phase !== 'mapOverview') return;
 
     setMapOverviewReady(true);
 
-    // Zoom out to show arena overview while engine is paused.
-    // animateCamera drives RenderSystem each frame so the canvas stays live.
-    const engine = game.getEngine();
-    const worldSize = engine.getWorldSize();
-    animateCamera(
-      worldSize.width / 2,
-      worldSize.height / 2,
-      0.18,
-      PHASE_DURATIONS.mapOverview,
-    );
-
     const timer = setTimeout(() => {
-      game.getEngine().startPreviewRender();
       setPhase('countdown');
       setShowCountdown(true);
     }, PHASE_DURATIONS.mapOverview);
 
-    return () => {
-      clearTimeout(timer);
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-      }
-    };
-  }, [phase, game, animateCamera]);
+    return () => clearTimeout(timer);
+  }, [phase, game]);
 
   // Phase 3: Countdown -> Zoom to Player
   // Resume engine immediately at GO so the player starts moving during the camera zoom-in.
