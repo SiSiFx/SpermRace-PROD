@@ -19,7 +19,8 @@
   align-items: center;
   justify-content: flex-start;
   padding-top: 3rem;
-  background: rgba(4, 5, 10, 0.97);
+  /* Semi-transparent so the live arena is visible behind the info card */
+  background: rgba(4, 5, 10, 0.78);
 }
 
 /* Arena info card */
