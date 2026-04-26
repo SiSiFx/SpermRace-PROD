@@ -140,15 +140,20 @@ export function PreGameSequence({
   useEffect(() => {
     if (phase !== 'mapOverview') return;
 
-    // Freeze the canvas — the overlay fully covers it, no point animating behind it.
-    // Also prevents the player head from bleeding through the overlay.
-    game.getEngine().stopPreviewRender();
-
-    // Mark map overview as ready for rendering
     setMapOverviewReady(true);
 
+    // Zoom out to show arena overview while engine is paused.
+    // animateCamera drives RenderSystem each frame so the canvas stays live.
+    const engine = game.getEngine();
+    const worldSize = engine.getWorldSize();
+    animateCamera(
+      worldSize.width / 2,
+      worldSize.height / 2,
+      0.18,
+      PHASE_DURATIONS.mapOverview,
+    );
+
     const timer = setTimeout(() => {
-      // Restart canvas animation so tails wave during the countdown phase
       game.getEngine().startPreviewRender();
       setPhase('countdown');
       setShowCountdown(true);
@@ -156,8 +161,12 @@ export function PreGameSequence({
 
     return () => {
       clearTimeout(timer);
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
     };
-  }, [phase, game]);
+  }, [phase, game, animateCamera]);
 
   // Phase 3: Countdown -> Zoom to Player
   // Resume engine immediately at GO so the player starts moving during the camera zoom-in.
