@@ -1,10 +1,11 @@
 /**
  * PreGameSequence - Orchestrates the pre-game experience
  *
- * Phase 1: Map Overview (0.9s) - Quick arena context
- * Phase 2: Countdown (1.8s) - Fast start pulse
+ * Phase 1: Arena overview (2.5s) — camera zooms out to show full arena
+ * Phase 2: Countdown (3s) — camera zooms back in while 3/2/1/GO runs
+ * Phase 3: Punch zoom (220ms) — impact zoom on GO
  *
- * Total: ~3 seconds
+ * Total: ~5.7 seconds
  */
 
 import { useEffect, useState, useCallback, useRef } from 'react';
@@ -25,10 +26,13 @@ type Phase = 'mapOverview' | 'countdown' | 'zoomToPlayer' | 'complete';
 
 // Phase durations in milliseconds
 const PHASE_DURATIONS = {
-  mapOverview: 4000,
+  mapOverview: 2500,
   countdown: 3000,
   zoomToPlayer: 300,
 };
+
+// Zoom level that shows the full arena during overview
+const OVERVIEW_ZOOM = 0.10;
 
 /**
  * Pre-game sequence orchestrator
@@ -136,12 +140,17 @@ export function PreGameSequence({
     animationFrameRef.current = requestAnimationFrame(animate);
   }, [game]);
 
-  // Phase 1: Map Overview -> Countdown
-  // Canvas is fully hidden behind the opaque overlay — no camera animation needed.
+  // Phase 1: Arena overview — zoom out to show the whole arena.
+  // startPreviewRender() is already running (camera.update + render.update each frame),
+  // so simply setting targetZoom is enough — camera smooth factor animates it.
   useEffect(() => {
     if (phase !== 'mapOverview') return;
 
     setMapOverviewReady(true);
+
+    // Zoom out: camera smooth factor (0.18) animates from 0.72 → 0.10 in ~400ms
+    const cam = (game.getEngine().getSystemManager() as any).getSystem?.('camera');
+    cam?.setZoom(OVERVIEW_ZOOM);
 
     const timer = setTimeout(() => {
       setPhase('countdown');
@@ -150,6 +159,14 @@ export function PreGameSequence({
 
     return () => clearTimeout(timer);
   }, [phase, game]);
+
+  // Phase 2: Countdown — zoom back in to player while 3/2/1 runs.
+  // Camera is still following the player entity so it re-centres automatically.
+  useEffect(() => {
+    if (phase !== 'countdown' || skipToCountdown) return;
+    const cam = (game.getEngine().getSystemManager() as any).getSystem?.('camera');
+    cam?.setZoom(getDefaultZoom(window.innerWidth <= 900));
+  }, [phase, game, skipToCountdown]);
 
   // Phase 3: Countdown -> Zoom to Player
   // Resume engine immediately at GO so the player starts moving during the camera zoom-in.
@@ -236,7 +253,7 @@ export function PreGameSequence({
 
   return (
     <div className="pre-game-sequence">
-      {/* Map Overview UI overlay */}
+      {/* Arena overview label — fades in while camera zooms out */}
       <AnimatePresence>
         {phase === 'mapOverview' && mapOverviewReady && (
           <motion.div
@@ -244,29 +261,11 @@ export function PreGameSequence({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, transition: { duration: 0 } }}
-            transition={{ duration: 0.3 }}
+            transition={{ duration: 0.5, delay: 0.4 }}
           >
-            {/* Arena info card */}
-            <motion.div
-              className="map-info-card"
-              initial={{ y: -30, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: -30, opacity: 0 }}
-              transition={{ delay: 0.2, duration: 0.4 }}
-            >
-              <h3 className="map-info-title">{totalPlayers} players</h3>
-              <p className="map-info-subtitle">Last one alive wins</p>
-            </motion.div>
-
-            {/* Progress indicator */}
-            <div className="map-overview-progress">
-              <motion.div
-                className="map-overview-progress-fill"
-                initial={{ width: '0%' }}
-                animate={{ width: '100%' }}
-                transition={{ duration: PHASE_DURATIONS.mapOverview / 1000, ease: 'linear' }}
-              />
-            </div>
+            <p className="map-overview-label">
+              {totalPlayers} players · last one alive wins
+            </p>
           </motion.div>
         )}
       </AnimatePresence>

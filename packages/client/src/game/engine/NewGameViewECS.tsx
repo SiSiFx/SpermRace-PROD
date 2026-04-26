@@ -12,7 +12,6 @@ import type { GameStats, TouchState, ViewSnapshot } from './view/types';
 import { useDeviceMode } from './view/hooks/useDeviceMode';
 import { useKeyboardState } from './view/hooks/useKeyboardState';
 import { PreGameSequence } from '../../components/game/PreGameSequence';
-import { TutorialCards } from '../../components/game/TutorialCards';
 import { DeathScreen } from '../../components/game/DeathScreen';
 import { GameRadar } from './GameRadar';
 import './NewGameViewECS.css';
@@ -141,8 +140,6 @@ export function NewGameViewECS({
   const controlsHintShownAtRef = useRef<number>(0);
   const [stickUi, setStickUi] = useState({ active: false, dx: 0, dy: 0, baseX: 0, baseY: 0 });
   const [skipMapOverview, setSkipMapOverview] = useState(false);
-  const [showTutorial, setShowTutorial] = useState(false);
-  const tutorialDoneRef = useRef<(() => void) | null>(null);
   const [killFeed, setKillFeed] = useState<KillFeedItem[]>([]);
   const [streakBanner, setStreakBanner] = useState<StreakBanner | null>(null);
   const [showToolsPanel] = useState(() => shouldShowToolsPanel());
@@ -392,23 +389,10 @@ export function NewGameViewECS({
       gameRef.current = await gamePromise;
 
       setSkipMapOverview(skip);
-      if (!skip) {
-        // Always show tutorial cards on a frozen canvas before the pre-game sequence.
-        // Engine is paused + preview render stopped so nothing moves behind the cards.
-        // onComplete restarts preview render and mounts PreGameSequence.
-        gameRef.current!.getEngine().stopPreviewRender();
-        setShowTutorial(true);
-        gameRef.current!.resumeAudio().catch(() => {});
-        cleanupRef.current = installAutomationHooks(host, gameRef, mouseRef);
-        return;
-      }
-      // Show pre-game sequence — game is initialized and paused, ready for countdown
+      // Mount pre-game sequence immediately — arena overview then countdown
       setShowPreGame(true);
-      // Show controls hint during the countdown so players can read it before they move
       setShowControlsHint(true);
       controlsHintShownAtRef.current = Date.now();
-      // Resume audio contexts — this is called within a user gesture chain
-      // (user clicked "Play as X"), so browsers will allow audio playback
       gameRef.current!.resumeAudio().catch(() => {});
       cleanupRef.current = installAutomationHooks(host, gameRef, mouseRef);
     } catch (e) {
@@ -868,20 +852,6 @@ export function NewGameViewECS({
           skipToCountdown={skipMapOverview}
           onComplete={handlePreGameComplete}
         />
-      )}
-
-      {/* First-visit tutorial cards — overlaid on map overview phase only.
-          Collapses into one pre-game experience: map overview (cards on top) → countdown ring. */}
-      {showTutorial && (
-        <TutorialCards onComplete={() => {
-          setShowTutorial(false);
-          tutorialDoneRef.current = null;
-          // Canvas was frozen during tutorial — restart preview render then show countdown
-          gameRef.current?.getEngine().startPreviewRender();
-          setShowPreGame(true);
-          setShowControlsHint(true);
-          controlsHintShownAtRef.current = Date.now();
-        }} />
       )}
 
       <div ref={hostRef} className="ecs-canvas-host" />
