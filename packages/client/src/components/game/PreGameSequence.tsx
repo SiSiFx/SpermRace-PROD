@@ -1,11 +1,11 @@
 /**
  * PreGameSequence - Orchestrates the pre-game experience
  *
- * Phase 1: Arena overview (2.5s) — camera zooms out to show full arena
+ * Phase 1: Arena overview (7s) — camera zooms out, tutorial tips cycle, skip button
  * Phase 2: Countdown (3s) — camera zooms back in while 3/2/1/GO runs
  * Phase 3: Punch zoom (220ms) — impact zoom on GO
  *
- * Total: ~5.7 seconds
+ * Total: ~10.5 seconds (or ~3.5s if skipped)
  */
 
 import { useEffect, useState, useCallback, useRef } from 'react';
@@ -26,13 +26,34 @@ type Phase = 'mapOverview' | 'countdown' | 'zoomToPlayer' | 'complete';
 
 // Phase durations in milliseconds
 const PHASE_DURATIONS = {
-  mapOverview: 2500,
+  mapOverview: 7000,
   countdown: 3000,
   zoomToPlayer: 300,
 };
 
-// Zoom level that shows the full arena during overview
-const OVERVIEW_ZOOM = 0.10;
+// Zoom level that shows the full arena during overview — close enough to see all players
+const OVERVIEW_ZOOM = 0.165;
+
+// Tutorial tips shown during the overview
+const TIPS = [
+  {
+    label: '01',
+    headline: 'TRAILS KILL',
+    body: 'Touch any trail — yours or theirs — and you die instantly.',
+  },
+  {
+    label: '02',
+    headline: 'ZONE SHRINKS',
+    body: 'The safe zone closes in. Get caught outside and you\'re dead.',
+  },
+  {
+    label: '03',
+    headline: 'LAST ONE ALIVE',
+    body: 'Outlast everyone. Be the last one swimming to claim the prize.',
+  },
+] as const;
+
+const TIP_DURATION = Math.floor(PHASE_DURATIONS.mapOverview / TIPS.length);
 
 /**
  * Pre-game sequence orchestrator
@@ -47,9 +68,11 @@ export function PreGameSequence({
   const [phase, setPhase] = useState<Phase>(skipToCountdown ? 'countdown' : 'mapOverview');
   const [showCountdown, setShowCountdown] = useState(skipToCountdown);
   const [mapOverviewReady, setMapOverviewReady] = useState(false);
+  const [tipIndex, setTipIndex] = useState(0);
   const playerIdRef = useRef<string | null>(null);
   const initialPlayerPosRef = useRef<{ x: number; y: number } | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const tipIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Get camera system and player info on mount
   useEffect(() => {
@@ -75,6 +98,9 @@ export function PreGameSequence({
     return () => {
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
+      }
+      if (tipIntervalRef.current) {
+        clearInterval(tipIntervalRef.current);
       }
     };
   }, [game]);
@@ -140,7 +166,17 @@ export function PreGameSequence({
     animationFrameRef.current = requestAnimationFrame(animate);
   }, [game]);
 
-  // Phase 1: Arena overview — zoom out to show the whole arena.
+  // Skip the overview and go straight to countdown
+  const handleSkip = useCallback(() => {
+    if (tipIntervalRef.current) {
+      clearInterval(tipIntervalRef.current);
+      tipIntervalRef.current = null;
+    }
+    setPhase('countdown');
+    setShowCountdown(true);
+  }, []);
+
+  // Phase 1: Arena overview — zoom out, cycle tutorial tips
   // startPreviewRender() is already running (camera.update + render.update each frame),
   // so simply setting targetZoom is enough — camera smooth factor animates it.
   useEffect(() => {
@@ -148,16 +184,33 @@ export function PreGameSequence({
 
     setMapOverviewReady(true);
 
-    // Zoom out: camera smooth factor (0.18) animates from 0.72 → 0.10 in ~400ms
+    // Zoom out: camera smooth factor (0.18) animates from 0.72 → 0.165
     const cam = (game.getEngine().getSystemManager() as any).getSystem?.('camera');
     cam?.setZoom(OVERVIEW_ZOOM);
 
+    // Cycle tips
+    let idx = 0;
+    tipIntervalRef.current = setInterval(() => {
+      idx = (idx + 1) % TIPS.length;
+      setTipIndex(idx);
+    }, TIP_DURATION);
+
     const timer = setTimeout(() => {
+      if (tipIntervalRef.current) {
+        clearInterval(tipIntervalRef.current);
+        tipIntervalRef.current = null;
+      }
       setPhase('countdown');
       setShowCountdown(true);
     }, PHASE_DURATIONS.mapOverview);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      if (tipIntervalRef.current) {
+        clearInterval(tipIntervalRef.current);
+        tipIntervalRef.current = null;
+      }
+    };
   }, [phase, game]);
 
   // Phase 2: Countdown — zoom back in to player while 3/2/1 runs.
@@ -253,7 +306,7 @@ export function PreGameSequence({
 
   return (
     <div className="pre-game-sequence">
-      {/* Arena overview label — fades in while camera zooms out */}
+      {/* Arena overview — transparent overlay with cycling tip card + skip button */}
       <AnimatePresence>
         {phase === 'mapOverview' && mapOverviewReady && (
           <motion.div
@@ -261,11 +314,46 @@ export function PreGameSequence({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, transition: { duration: 0 } }}
-            transition={{ duration: 0.5, delay: 0.4 }}
+            transition={{ duration: 0.4, delay: 0.3 }}
           >
-            <p className="map-overview-label">
-              {totalPlayers} players · last one alive wins
-            </p>
+            {/* Player count label */}
+            <p className="map-overview-label">{totalPlayers} players · last one alive wins</p>
+
+            {/* Tutorial tip card */}
+            <div className="overview-tip-wrap">
+              {/* Progress bar spanning full 7s */}
+              <div className="overview-progress-bar">
+                <motion.div
+                  className="overview-progress-fill"
+                  initial={{ width: '0%' }}
+                  animate={{ width: '100%' }}
+                  transition={{ duration: PHASE_DURATIONS.mapOverview / 1000, ease: 'linear' }}
+                />
+              </div>
+
+              {/* Animated tip — slides on tip change */}
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={tipIndex}
+                  className="overview-tip-card"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.25 }}
+                >
+                  <div className="tip-header">
+                    <span className="tip-label">{TIPS[tipIndex].label}</span>
+                    <span className="tip-headline">{TIPS[tipIndex].headline}</span>
+                  </div>
+                  <p className="tip-body">{TIPS[tipIndex].body}</p>
+                </motion.div>
+              </AnimatePresence>
+            </div>
+
+            {/* Skip button */}
+            <button className="overview-skip-btn" onClick={handleSkip}>
+              SKIP →
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
