@@ -311,12 +311,15 @@ export const ABILITY_CONFIG = {
 
   /** Overdrive ability */
   OVERDRIVE: {
-    COOLDOWN_MS: 10000,
-    DURATION_MS: 3000,
+    COOLDOWN_MS: 7000,
+    DURATION_MS: 4000,
     ENERGY_COST: 50,
     SPEED_MULTIPLIER: 2,
-    TRAIL_WIDTH_MULTIPLIER: 3,
-    TRAIL_LIFETIME_BONUS: 3000,
+    TRAIL_WIDTH_MULTIPLIER: 5,
+    TRAIL_LIFETIME_BONUS: 6000,
+    /** Instant wall stamp on activation — points placed backward from player */
+    WALL_POINTS: 50,
+    WALL_SPACING: 8,
   },
 } as const;
 
@@ -382,8 +385,9 @@ export const RENDER_CONFIG = {
   /** Default zoom */
   DEFAULT_ZOOM: 0.72,
 
-  /** Mobile zoom */
-  MOBILE_ZOOM: 0.72,
+  /** Mobile zoom — zoomed out vs PC to compensate for smaller screen.
+   *  Math: 390px / 0.50 = 780px visible ≈ 22% of 3500px arena (matches PC's 22%). */
+  MOBILE_ZOOM: 0.50,
 
   /** Maximum zoom */
   MAX_ZOOM: 2,

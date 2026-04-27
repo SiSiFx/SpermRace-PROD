@@ -15,7 +15,7 @@ import { ComponentNames, createComponentMask } from '../components';
 import type { Entity } from '../core/Entity';
 import type { Player } from '../components/Player';
 import type { SoundSystem } from './SoundSystem';
-import { BOOST_CONFIG, CAR_PHYSICS } from '../config/GameConstants';
+import { BOOST_CONFIG, CAR_PHYSICS, ABILITY_CONFIG, TRAIL_CONFIG } from '../config/GameConstants';
 import type { SpermClass } from '../components/SpermClass';
 
 /**
@@ -87,6 +87,8 @@ export class AbilitySystem extends System {
   private readonly _pendingRequests: AbilityRequest[] = [];
   private readonly _activeEffects: Map<string, AbilityEffect> = new Map();
   private readonly _traps: Map<string, TrapData> = new Map();
+  /** Saved trail state per entity so Overdrive can restore on expiry */
+  private readonly _overdriveSaved: Map<string, { boostedWidth: number; lifetime: number }> = new Map();
 
   // Component masks
   private readonly _abilitiesMask: number;
@@ -215,7 +217,7 @@ export class AbilitySystem extends System {
           case AbilityType.DASH:      sound.playDash();   break;
           case AbilityType.SHIELD:    sound.playShield(); break;
           case AbilityType.TRAP:      sound.playTrap();   break;
-          case AbilityType.OVERDRIVE: sound.playDash();   break; // reuse dash whoosh, louder feel
+          case AbilityType.OVERDRIVE: sound.playOverdrive(); break;
         }
       }
     }
@@ -333,16 +335,52 @@ export class AbilitySystem extends System {
   }
 
   /**
-   * Apply overdrive ability
+   * Apply overdrive ability — fat trail + instant wall stamp behind player.
    */
   private _applyOverdrive(entity: Entity): void {
     const boost = entity.getComponent<Boost>(ComponentNames.BOOST);
+    const trail = entity.getComponent<Trail>(ComponentNames.TRAIL);
+    const position = entity.getComponent<Position>(ComponentNames.POSITION);
+    const velocity = entity.getComponent<Velocity>(ComponentNames.VELOCITY);
+
     if (boost) {
-      // Fat trail + lifetime bonus — the signature visual of Overdrive.
-      // Speed is now handled in PhysicsSystem via abilities.active.has(OVERDRIVE)
-      // so it works without requiring isBoosting (no energy drain).
-      boost.trailWidthMultiplier = 3;
-      boost.trailLifetimeBonus = 3000;
+      boost.trailWidthMultiplier = ABILITY_CONFIG.OVERDRIVE.TRAIL_WIDTH_MULTIPLIER;
+      boost.trailLifetimeBonus = ABILITY_CONFIG.OVERDRIVE.TRAIL_LIFETIME_BONUS;
+    }
+
+    if (trail) {
+      // Save current trail state so we can restore on expiry
+      this._overdriveSaved.set(entity.id, {
+        boostedWidth: trail.boostedWidth,
+        lifetime: trail.lifetime,
+      });
+
+      // Widen trail — future emitted points will use this width
+      trail.boostedWidth = trail.boostedWidth * ABILITY_CONFIG.OVERDRIVE.TRAIL_WIDTH_MULTIPLIER;
+      // Extend trail lifetime so the fat wall persists longer
+      trail.lifetime = TRAIL_CONFIG.LIFETIME_MS + ABILITY_CONFIG.OVERDRIVE.TRAIL_LIFETIME_BONUS;
+
+      // Stamp an instant wall: 50 fat trail points backward from the player.
+      // Points have timestamp=now so they're fully opaque and collide immediately.
+      // They expire naturally with the trail lifetime (~5.5s after Overdrive ends).
+      if (position && velocity) {
+        const now = Date.now();
+        const cfg = ABILITY_CONFIG.OVERDRIVE;
+        const angle = velocity.angle;
+        const w = trail.boostedWidth;
+
+        for (let i = 0; i < cfg.WALL_POINTS; i++) {
+          const dist = i * cfg.WALL_SPACING;
+          trail.points.push({
+            x: position.x - Math.cos(angle) * dist,
+            y: position.y - Math.sin(angle) * dist,
+            timestamp: now,
+            width: w,
+            ownerId: entity.id,
+            isBoosted: true,
+          });
+        }
+      }
     }
   }
 
