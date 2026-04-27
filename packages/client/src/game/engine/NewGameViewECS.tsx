@@ -921,7 +921,7 @@ export function NewGameViewECS({
         </div>
       )}
 
-      {(showPreGame || snapshot.status === 'playing') && showControlsHint && (
+      {snapshot.status === 'playing' && showControlsHint && (
         <div className="ecs-controls-hint">
           {isMobile ? (
             <>
