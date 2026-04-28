@@ -199,7 +199,8 @@ export class PowerupSystem extends System {
    * Get random powerup type
    */
   private _getRandomType(): PowerupType {
-    const types = [PowerupType.ENERGY, PowerupType.ENERGY, PowerupType.SPEED];
+    // SPEED is unimplemented — only ENERGY spawns until it has an effect
+    const types = [PowerupType.ENERGY];
     return types[Math.floor(Math.random() * types.length)];
   }
 

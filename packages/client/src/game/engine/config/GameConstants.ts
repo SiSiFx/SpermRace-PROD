@@ -140,7 +140,7 @@ export const BOOST_CONFIG = {
   CONSUMPTION_RATE: 40,
 
   /** Instant boost energy reward for securing a kill */
-  KILL_REWARD_ENERGY: 55,
+  KILL_REWARD_ENERGY: 30,
 
   /** Boost trail width multiplier */
   TRAIL_WIDTH_MULTIPLIER: 2,
