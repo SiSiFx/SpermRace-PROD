@@ -12,7 +12,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CountdownAnimation } from '../CountdownAnimation';
 import type { Game } from '../../game/engine/Game';
-import { getDefaultZoom } from '../../game/engine/config';
+import { getDefaultZoom, ARENA_CONFIG } from '../../game/engine/config';
 import './PreGameSequence.css';
 
 interface PreGameSequenceProps {
@@ -184,9 +184,13 @@ export function PreGameSequence({
 
     setMapOverviewReady(true);
 
-    // Zoom out: camera smooth factor (0.18) animates from 0.72 → 0.165
+    // Center on arena then zoom out — snap happens during the overlay's 0.3s invisible fade-in
     const cam = (game.getEngine().getSystemManager() as any).getSystem?.('camera');
-    cam?.setZoom(OVERVIEW_ZOOM);
+    const isMob = window.innerWidth <= 900;
+    const cx = (isMob ? ARENA_CONFIG.MOBILE_WIDTH : ARENA_CONFIG.DESKTOP_WIDTH) / 2;
+    const cy = (isMob ? ARENA_CONFIG.MOBILE_HEIGHT : ARENA_CONFIG.DESKTOP_HEIGHT) / 2;
+    cam?.setPosition(cx, cy);   // clears follow target, snaps camera to arena center
+    cam?.setZoom(OVERVIEW_ZOOM); // startPreviewRender() animates zoom each frame
 
     // Cycle tips
     let idx = 0;
@@ -218,6 +222,8 @@ export function PreGameSequence({
   useEffect(() => {
     if (phase !== 'countdown' || skipToCountdown) return;
     const cam = (game.getEngine().getSystemManager() as any).getSystem?.('camera');
+    // Re-enable follow so camera drifts from arena center → player during the 3s countdown
+    if (playerIdRef.current) cam?.setTarget(playerIdRef.current);
     cam?.setZoom(getDefaultZoom(window.innerWidth <= 900));
   }, [phase, game, skipToCountdown]);
 
