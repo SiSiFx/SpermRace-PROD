@@ -14,7 +14,7 @@ export const MATCH_CONFIG = {
   ZONE_START_DELAY_MS: 6000,
 
   /** Zone warning duration before shrinking begins (ms) */
-  ZONE_WARNING_DURATION_MS: 2500,
+  ZONE_WARNING_DURATION_MS: 4000,
 
   /** Zone shrink duration (ms) */
   ZONE_SHRINK_DURATION_MS: 28000,
