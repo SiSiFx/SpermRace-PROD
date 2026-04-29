@@ -1264,3 +1264,90 @@
 .spectator-skip:hover {
   background: rgba(255, 255, 255, 0.18);
 }
+
+/* ── Quick Bot-Join Overlay ──────────────────────────────────────── */
+.quick-join-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 7, 15, 0.92);
+  backdrop-filter: blur(4px);
+  gap: 0;
+}
+
+.quick-join-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: rgba(255, 255, 255, 0.35);
+  margin-bottom: 20px;
+}
+
+.quick-join-roster {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 200px;
+}
+
+.quick-join-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  opacity: 0;
+  transform: translateX(-8px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.quick-join-row.quick-join-visible,
+.quick-join-row.quick-join-you {
+  opacity: 1;
+  transform: none;
+}
+
+.quick-join-you {
+  opacity: 1 !important;
+  transform: none !important;
+}
+
+.quick-join-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  flex-shrink: 0;
+}
+
+.quick-join-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  flex: 1;
+}
+
+.quick-join-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.quick-join-you .quick-join-name {
+  color: #22d3ee;
+}
+
+.quick-join-you .quick-join-tag {
+  color: #22d3ee;
+  opacity: 0.7;
+}
+
+.quick-join-status {
+  margin-top: 24px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.3);
+  letter-spacing: 0.06em;
+}

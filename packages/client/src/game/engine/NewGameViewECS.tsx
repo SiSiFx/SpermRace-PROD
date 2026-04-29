@@ -106,6 +106,43 @@ const BOT_NAME_LIST = [
   'Colt', 'Fenn', 'Skye', 'Oryn', 'Blaze', 'Sable', 'Raze', 'Wren',
 ];
 
+function QuickJoinOverlay({ botCount, playerName }: { botCount: number; playerName: string }) {
+  const [visibleCount, setVisibleCount] = useState(0);
+
+  useEffect(() => {
+    if (visibleCount >= botCount) return;
+    const t = setTimeout(() => setVisibleCount(v => v + 1), 110);
+    return () => clearTimeout(t);
+  }, [visibleCount, botCount]);
+
+  const botNames = BOT_NAME_LIST.slice(0, botCount);
+
+  return (
+    <div className="quick-join-overlay">
+      <div className="quick-join-title">PRACTICE ARENA</div>
+      <div className="quick-join-roster">
+        <div className="quick-join-row quick-join-you">
+          <span className="quick-join-dot" style={{ background: '#22d3ee' }} />
+          <span className="quick-join-name">{playerName}</span>
+          <span className="quick-join-tag">YOU</span>
+        </div>
+        {botNames.map((name, i) => (
+          <div
+            key={name}
+            className={`quick-join-row${i < visibleCount ? ' quick-join-visible' : ''}`}
+          >
+            <span className="quick-join-dot" />
+            <span className="quick-join-name">{name}</span>
+            <span className="quick-join-tag">BOT</span>
+          </div>
+        ))}
+      </div>
+      <div className="quick-join-status">
+        {visibleCount < botCount ? 'Loading bots…' : 'Ready — launching'}
+      </div>
+    </div>
+  );
+}
 
 export function NewGameViewECS({
   playerName = 'Player',
@@ -145,6 +182,7 @@ export function NewGameViewECS({
   const controlsHintShownAtRef = useRef<number>(0);
   const [stickUi, setStickUi] = useState({ active: false, dx: 0, dy: 0, baseX: 0, baseY: 0 });
   const [skipMapOverview, setSkipMapOverview] = useState(false);
+  const [showQuickJoin, setShowQuickJoin] = useState(false);
   const [killFeed, setKillFeed] = useState<KillFeedItem[]>([]);
   const [streakBanner, setStreakBanner] = useState<StreakBanner | null>(null);
   const [showToolsPanel] = useState(() => shouldShowToolsPanel());
@@ -373,9 +411,10 @@ export function NewGameViewECS({
     try {
       host.replaceChildren();
 
+      // Show quick bot-join animation immediately while the game initialises in background
+      if (!skip) setShowQuickJoin(true);
+
       // Start game creation — pause immediately when ready so no frames run before countdown.
-      // The .then() runs as a microtask (before the next RAF), so pause() cancels the RAF
-      // that engine.start() registered before it ever fires.
       const gamePromise = createGame({
         container: host,
         isMobile,
@@ -385,22 +424,28 @@ export function NewGameViewECS({
         enableAbilities,
       }).then(game => {
         game.getEngine().pause();
-        // Animate canvas during countdown — render-only loop (no physics).
-        // Auto-stops when engine.resume() fires at countdown completion.
         game.getEngine().startPreviewRender();
         return game;
       });
 
-      gameRef.current = await gamePromise;
+      // Run game creation in parallel with a minimum display time for the join animation
+      const minDisplay = skip ? 0 : 1200;
+      const [game] = await Promise.all([
+        gamePromise,
+        new Promise<void>(r => setTimeout(r, minDisplay)),
+      ]);
 
-      setSkipMapOverview(skip);
-      // Mount pre-game sequence immediately — arena overview then countdown
+      gameRef.current = game;
+      setShowQuickJoin(false);
+
+      setSkipMapOverview(true); // always skip the 7s arena tour — go straight to countdown
       setShowPreGame(true);
       setShowControlsHint(true);
       controlsHintShownAtRef.current = Date.now();
       gameRef.current!.resumeAudio().catch(() => {});
       cleanupRef.current = installAutomationHooks(host, gameRef, mouseRef);
     } catch (e) {
+      setShowQuickJoin(false);
       onError?.(e as Error);
     }
   }, [isMobile, playerName, playerColor, botCount, enableAbilities, onError]);
@@ -823,6 +868,7 @@ export function NewGameViewECS({
     setShowDeathScreen(false);
     setPendingDeathStats(null);
     setSpectating(false);
+    setShowQuickJoin(false);
     spectatingRef.current = false;
     spectatingStatsRef.current = null;
   };
@@ -900,6 +946,11 @@ export function NewGameViewECS({
 
   return (
     <div className="ecs-root" data-status={snapshot.status}>
+      {/* Quick bot-join animation — shown during game creation */}
+      {showQuickJoin && (
+        <QuickJoinOverlay botCount={botCount} playerName={playerName} />
+      )}
+
       {/* Pre-Game Sequence */}
       {showPreGame && gameRef.current && (
         <PreGameSequence
