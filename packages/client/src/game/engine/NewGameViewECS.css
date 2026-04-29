@@ -1351,3 +1351,48 @@
   color: rgba(255, 255, 255, 0.3);
   letter-spacing: 0.06em;
 }
+
+/* ── Death / Victory instant stamps ────────────────────────────────── */
+.ecs-death-stamp,
+.ecs-victory-stamp {
+  position: absolute;
+  inset: 0;
+  z-index: 55;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.ecs-death-stamp-text,
+.ecs-victory-stamp-text {
+  font-size: clamp(48px, 10vw, 96px);
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  animation: deathStampIn 0.15s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.ecs-death-stamp-text {
+  color: #f87171;
+  text-shadow: 0 0 40px rgba(248, 113, 113, 0.6), 0 0 80px rgba(248, 113, 113, 0.3);
+}
+
+.ecs-death-stamp-by {
+  margin-top: 8px;
+  font-size: clamp(14px, 2.5vw, 18px);
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.06em;
+  animation: deathStampIn 0.15s cubic-bezier(0.22, 1, 0.36, 1) 0.05s both;
+}
+
+.ecs-victory-stamp-text {
+  color: #34d399;
+  text-shadow: 0 0 40px rgba(52, 211, 153, 0.6), 0 0 80px rgba(52, 211, 153, 0.3);
+}
+
+@keyframes deathStampIn {
+  from { opacity: 0; transform: scale(1.4); }
+  to   { opacity: 1; transform: scale(1); }
+}

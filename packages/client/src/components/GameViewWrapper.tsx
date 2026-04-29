@@ -117,6 +117,7 @@ export const GameViewWrapper = memo(function GameViewWrapperComponent({
         playerColor={0x22d3ee}
         botCount={9}
         enableAbilities={flagsRef.current.enableAbilities}
+        enableQuickJoin={!!meIdOverride}
         onGameEnd={handleGameEnd}
         onPlayerDeath={handlePlayerDeath}
         onError={handleError}

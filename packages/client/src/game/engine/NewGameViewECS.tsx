@@ -22,6 +22,8 @@ interface NewGameViewECSProps {
   playerColor?: number;
   botCount?: number;
   enableAbilities?: boolean;
+  /** When true, QuickJoin overlay is shown from first frame (practice). Default true. */
+  enableQuickJoin?: boolean;
   meIdOverride?: string;
   onGameEnd?: (stats: GameStats) => void;
   onPlayerDeath?: (killer: string | null) => void;
@@ -149,6 +151,7 @@ export function NewGameViewECS({
   playerColor = 0x22d3ee,
   botCount = 7,
   enableAbilities = true,
+  enableQuickJoin = true,
   onGameEnd,
   onPlayerDeath,
   onError,
@@ -164,6 +167,9 @@ export function NewGameViewECS({
   // Death screen state (shown in-game instead of jumping to results screen)
   const [showDeathScreen, setShowDeathScreen] = useState(false);
   const [pendingDeathStats, setPendingDeathStats] = useState<GameStats | null>(null);
+  // Instant stamp shown the moment of death (before 650ms card delay)
+  const [showDeathStamp, setShowDeathStamp] = useState(false);
+  const deathStampKillerRef = useRef<string | null>(null);
 
   // Spectator mode — engine keeps running after player death; overlay shown instead of exit
   const [spectating, setSpectating] = useState(false);
@@ -172,6 +178,8 @@ export function NewGameViewECS({
 
   // Win overlay state — shown in-game for 3s before exiting to results
   const [winStats, setWinStats] = useState<GameStats | null>(null);
+  // Instant stamp shown the moment of win (before 900ms overlay delay)
+  const [showVictoryStamp, setShowVictoryStamp] = useState(false);
   const [winCountdown, setWinCountdown] = useState(3);
   const [displayKills, setDisplayKills] = useState(0);
   const [displaySeconds, setDisplaySeconds] = useState(0);
@@ -182,7 +190,7 @@ export function NewGameViewECS({
   const controlsHintShownAtRef = useRef<number>(0);
   const [stickUi, setStickUi] = useState({ active: false, dx: 0, dy: 0, baseX: 0, baseY: 0 });
   const [skipMapOverview, setSkipMapOverview] = useState(false);
-  const [showQuickJoin, setShowQuickJoin] = useState(false);
+  const [showQuickJoin, setShowQuickJoin] = useState(enableQuickJoin);
   const [killFeed, setKillFeed] = useState<KillFeedItem[]>([]);
   const [streakBanner, setStreakBanner] = useState<StreakBanner | null>(null);
   const [showToolsPanel] = useState(() => shouldShowToolsPanel());
@@ -411,8 +419,9 @@ export function NewGameViewECS({
     try {
       host.replaceChildren();
 
-      // Show quick bot-join animation immediately while the game initialises in background
-      if (!skip) setShowQuickJoin(true);
+      // On quick-replay (skip=true): hide the overlay immediately. On first run it's
+      // already visible from mount (enableQuickJoin initializes it to true).
+      if (skip) setShowQuickJoin(false);
 
       // Start game creation — pause immediately when ready so no frames run before countdown.
       const gamePromise = createGame({
@@ -569,8 +578,10 @@ export function NewGameViewECS({
             setPendingDeathStats(stats);
             setTimeout(() => setShowDeathScreen(true), 650);
           } else {
-            // Won — delay 900ms so the final kill explosion plays out before overlay
+            // Won — show instant stamp, then delay 900ms for explosion before overlay
+            setShowVictoryStamp(true);
             setTimeout(() => {
+              setShowVictoryStamp(false);
               setWinStats(stats);
               setWinCountdown(3);
             }, 900);
@@ -784,6 +795,9 @@ export function NewGameViewECS({
           if (status === 'dead') {
             if (!spectatingRef.current) {
               spectatingRef.current = true;
+              // Show instant stamp — visible the same frame as death detection
+              deathStampKillerRef.current = nextSnapshot.killer;
+              setShowDeathStamp(true);
               onPlayerDeath?.(nextSnapshot.killer);
               const deathStats: GameStats = {
                 placement: Math.max(1, nextSnapshot.aliveCount + 1),
@@ -798,7 +812,10 @@ export function NewGameViewECS({
               setPendingDeathStats(deathStats);
               setGameHint(null);
               try { localStorage.setItem('spermrace_played_before', '1'); } catch {}
-              setTimeout(() => setShowDeathScreen(true), 650);
+              setTimeout(() => {
+                setShowDeathStamp(false);
+                setShowDeathScreen(true);
+              }, 650);
             }
             // All others eliminated — auto-exit to results
             if (!endedRef.current && nextSnapshot.aliveCount <= 1) {
@@ -866,8 +883,10 @@ export function NewGameViewECS({
     prevAliveCountRef.current = botCount + 1;
     endedRef.current = false;
     setShowDeathScreen(false);
+    setShowDeathStamp(false);
     setPendingDeathStats(null);
     setSpectating(false);
+    setShowVictoryStamp(false);
     setShowQuickJoin(false);
     spectatingRef.current = false;
     spectatingStatsRef.current = null;
@@ -1117,6 +1136,13 @@ export function NewGameViewECS({
         </div>
       )}
 
+      {/* Victory stamp — appears instantly on win, fades before full overlay */}
+      {showVictoryStamp && (
+        <div className="ecs-victory-stamp">
+          <span className="ecs-victory-stamp-text">VICTORY</span>
+        </div>
+      )}
+
       {/* In-game victory overlay — 3s then auto-exits to results */}
       {winStats && (
         <div className="ecs-win-overlay">
@@ -1163,6 +1189,16 @@ export function NewGameViewECS({
             </div>
           </div>
           <button className="ecs-game-hint-dismiss" onClick={() => setGameHint(null)} aria-label="Dismiss hint">✕</button>
+        </div>
+      )}
+
+      {/* ELIMINATED stamp — appears instantly on death, clears as death card slides in */}
+      {showDeathStamp && (
+        <div className="ecs-death-stamp">
+          <span className="ecs-death-stamp-text">ELIMINATED</span>
+          {deathStampKillerRef.current && (
+            <span className="ecs-death-stamp-by">by {deathStampKillerRef.current}</span>
+          )}
         </div>
       )}
 

@@ -227,3 +227,42 @@
     padding-top: 16px;
   }
 }
+
+/* ============================================================================
+   SCREEN FADE TRANSITIONS (Feature 1)
+   ============================================================================ */
+
+.app-screens {
+  display: contents; /* passthrough — doesn't create a new box or break layout */
+  transition: opacity 0.2s ease;
+}
+
+.app-screens.is-transitioning {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Fallback: if `display: contents` breaks opacity, switch to flex */
+@supports not (display: contents) {
+  .app-screens {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+}
+
+/* ============================================================================
+   TOURNAMENT PRE-GAME COUNTDOWN OVERLAY (Feature 3)
+   ============================================================================ */
+
+.lobby-pregame-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(4, 7, 15, 0.88);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

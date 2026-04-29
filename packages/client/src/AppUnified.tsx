@@ -12,6 +12,7 @@ const GameViewWrapper = lazy(() => import('./components/GameViewWrapper'));
 import { PremiumLandingScreen } from './components/screens/premium/PremiumLandingScreen';
 import { PremiumLobbyScreen } from './components/screens/premium/PremiumLobbyScreen';
 import { PremiumResultsScreen } from './components/screens/premium/PremiumResultsScreen';
+import { CountdownAnimation } from './components/CountdownAnimation';
 import { OrientationWarning } from './OrientationWarning';
 import { useIsMobile } from './hooks/useIsMobile';
 import { Trophy } from 'phosphor-react';
@@ -99,6 +100,21 @@ function AppInner() {
   // Track last selected tier so the upsell CTA reflects the right prize
   const [selectedTier, setSelectedTier] = useState<{ usd: number; prize: string }>({ usd: 5, prize: '$42' });
 
+  // Screen fade transitions (Feature 1)
+  const [transitioning, setTransitioning] = useState(false);
+  const goToScreen = useCallback((next: AppScreen) => {
+    if (transitioning) return;
+    setTransitioning(true);
+    setTimeout(() => {
+      setScreen(next);
+      setTransitioning(false);
+    }, 200);
+  }, [transitioning]);
+
+  // Tournament lobby pre-game countdown overlay (Feature 3)
+  // Captures remaining seconds (once) when lobby countdown hits ≤ 3
+  const [lobbyCountdownDuration, setLobbyCountdownDuration] = useState<number | null>(null);
+
   // Fetch SOL price
   useEffect(() => {
     const fetchPrice = async () => {
@@ -172,10 +188,10 @@ function AppInner() {
 
     const handleKeyPress = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (screen === 'lobby') setScreen('landing');
+        if (screen === 'lobby') goToScreen('landing');
       }
       if (screen === 'landing') {
-        if (e.key === 'p' || e.key === 'P') setScreen('practice-solo');
+        if (e.key === 'p' || e.key === 'P') goToScreen('practice-solo');
       }
     };
 
@@ -191,7 +207,7 @@ function AppInner() {
       if (screen !== 'landing') {
         e.preventDefault();
         window.history.pushState(null, '', window.location.href);
-        setScreen('landing');
+        goToScreen('landing');
       }
     };
 
@@ -199,6 +215,25 @@ function AppInner() {
     window.addEventListener('popstate', handleBack);
     return () => window.removeEventListener('popstate', handleBack);
   }, [isMobile, screen]);
+
+  // Feature 3A — Capture lobby countdown duration once when it hits ≤ 3s
+  useEffect(() => {
+    const remaining = wsState.countdown?.remaining;
+    if (screen === 'lobby' && remaining != null && remaining <= 3 && remaining > 0 && lobbyCountdownDuration === null) {
+      setLobbyCountdownDuration(remaining * 1000);
+    }
+    if (screen !== 'lobby') {
+      setLobbyCountdownDuration(null);
+    }
+  }, [wsState.countdown?.remaining, screen, lobbyCountdownDuration]);
+
+  // Feature 3B — Pre-warm the GameViewWrapper chunk at countdown ≤ 10
+  useEffect(() => {
+    const remaining = wsState.countdown?.remaining ?? Infinity;
+    if (screen === 'lobby' && remaining <= 10) {
+      import('./components/GameViewWrapper');
+    }
+  }, [wsState.countdown?.remaining, screen]);
 
   // Navigation handlers - Practice routes through server lobby (guest mode, no wallet needed)
   const PRACTICE_NAMES = ['Ace', 'Atom', 'Blitz', 'Chrome', 'Dusk', 'Echo', 'Ember', 'Fuse', 'Glitch', 'Hex', 'Ion', 'Jade', 'Lux', 'Mach', 'Nitro'];
@@ -219,7 +254,7 @@ function AppInner() {
       joinedAsPracticeRef.current = false;
       setIsPracticeConnecting(false);
       leave();
-      setScreen('practice-solo');
+      goToScreen('practice-solo');
       return;
     }
     // connectAndJoin for guests returns immediately (fire-and-forget).
@@ -230,7 +265,7 @@ function AppInner() {
         joinedAsPracticeRef.current = false;
         setIsPracticeConnecting(false);
         leave(); // kill the reconnect loop before going offline
-        setScreen('practice-solo');
+        goToScreen('practice-solo');
       }
     }, 4000);
   }, [connectAndJoin, leave]);
@@ -275,66 +310,75 @@ function AppInner() {
         </div>
       )}
 
-      {/* Screens */}
-      {screen === 'landing' && (
-        <PremiumLandingScreen
-          solPrice={solPrice}
-          onPractice={onPractice}
-          onWallet={onWallet}
-          onLeaderboard={openLeaderboard}
-          onHelp={() => setShowHowToPlay(true)}
-          isNewPlayer={isNewPlayer}
-          isPracticeConnecting={isPracticeConnecting}
-        />
-      )}
-
-      {screen === 'practice-solo' && (
-        <Suspense fallback={LoadingFallback}>
-          <Practice
-            onFinish={(stats) => { markPlayed(); setPracticeStats(stats); setScreen('results'); }}
-            onBack={() => setScreen('landing')}
-            onPlayReal={() => { onWallet(selectedTier); }}
-            playRealPrize={selectedTier.prize}
+      {/* Screens — wrapped for 200ms fade on user-triggered navigation */}
+      <div className={`app-screens${transitioning ? ' is-transitioning' : ''}`}>
+        {screen === 'landing' && (
+          <PremiumLandingScreen
+            solPrice={solPrice}
+            onPractice={onPractice}
+            onWallet={onWallet}
+            onLeaderboard={openLeaderboard}
+            onHelp={() => setShowHowToPlay(true)}
+            isNewPlayer={isNewPlayer}
+            isPracticeConnecting={isPracticeConnecting}
           />
-        </Suspense>
-      )}
+        )}
 
-      {screen === 'lobby' && (
-        <PremiumLobbyScreen onBack={() => setScreen('landing')} />
-      )}
+        {screen === 'practice-solo' && (
+          <Suspense fallback={LoadingFallback}>
+            <Practice
+              onFinish={(stats) => { markPlayed(); setPracticeStats(stats); setScreen('results'); }}
+              onBack={() => goToScreen('landing')}
+              onPlayReal={() => { onWallet(selectedTier); }}
+              playRealPrize={selectedTier.prize}
+            />
+          </Suspense>
+        )}
 
-      {screen === 'game' && (
-        <Suspense fallback={LoadingFallback}>
-          <Game
-            onEnd={() => setScreen('results')}
-            onRestart={() => setScreen('game')}
-            isMobile={isMobile}
-            countdown={gameCountdown}
+        {screen === 'lobby' && (
+          <PremiumLobbyScreen onBack={() => goToScreen('landing')} />
+        )}
+
+        {screen === 'game' && (
+          <Suspense fallback={LoadingFallback}>
+            <Game
+              onEnd={() => setScreen('results')}
+              onRestart={() => setScreen('game')}
+              isMobile={isMobile}
+              countdown={gameCountdown}
+            />
+          </Suspense>
+        )}
+
+        {screen === 'results' && (
+          <PremiumResultsScreen
+            onPlayAgain={() => {
+              // leave() resets wsState.phase → 'idle' so the phase effect doesn't
+              // immediately redirect back to 'results' (game-over loop fix)
+              leave();
+              joinedAsPracticeRef.current = false;
+              const hadStats = !!practiceStats;
+              setPracticeStats(null);
+              // Online practice + local practice → back to practice; tournament → landing
+              if (hadStats) goToScreen('practice-solo');
+              else goToScreen('landing');
+            }}
+            onChangeTier={() => {
+              leave();
+              joinedAsPracticeRef.current = false;
+              setPracticeStats(null);
+              goToScreen('landing');
+            }}
+            practiceStats={practiceStats ?? undefined}
           />
-        </Suspense>
-      )}
+        )}
+      </div>
 
-      {screen === 'results' && (
-        <PremiumResultsScreen
-          onPlayAgain={() => {
-            // leave() resets wsState.phase → 'idle' so the phase effect doesn't
-            // immediately redirect back to 'results' (game-over loop fix)
-            leave();
-            joinedAsPracticeRef.current = false;
-            const hadStats = !!practiceStats;
-            setPracticeStats(null);
-            // Online practice + local practice → back to practice; tournament → landing
-            if (hadStats) setScreen('practice-solo');
-            else setScreen('landing');
-          }}
-          onChangeTier={() => {
-            leave();
-            joinedAsPracticeRef.current = false;
-            setPracticeStats(null);
-            setScreen('landing');
-          }}
-          practiceStats={practiceStats ?? undefined}
-        />
+      {/* Tournament pre-game countdown overlay — appears at lobby countdown ≤ 3s */}
+      {lobbyCountdownDuration !== null && (
+        <div className="lobby-pregame-overlay">
+          <CountdownAnimation duration={lobbyCountdownDuration} isVisible={true} />
+        </div>
       )}
 
       {/* Modals */}
