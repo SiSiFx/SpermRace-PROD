@@ -220,6 +220,32 @@
 }
 .landing-stake.is-active .stake-payout { color: rgba(13,11,8,0.65); }
 
+.stake-sol {
+  font-family: 'Outfit', sans-serif;
+  font-size: 7px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  opacity: 0.6;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  margin-top: 1px;
+}
+.landing-stake.is-active .stake-sol { color: rgba(13,11,8,0.5); opacity: 1; }
+
+.entry-modal-sol {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+  opacity: 0.7;
+  margin-top: 2px;
+  letter-spacing: 0.02em;
+}
+
 /* ── CTA ── */
 .landing-cta {
   width: 100%;

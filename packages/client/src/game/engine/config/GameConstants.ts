@@ -341,6 +341,12 @@ export const POWERUP_CONFIG = {
 
   /** Spawn margin from edges */
   SPAWN_MARGIN: 200,
+
+  /** Speed powerup multiplier (65% faster) */
+  SPEED_MULTIPLIER: 1.65,
+
+  /** Speed powerup duration (ms) */
+  SPEED_DURATION_MS: 3500,
 } as const;
 
 /**

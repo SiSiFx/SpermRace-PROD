@@ -128,6 +128,11 @@ export function NewGameViewECS({
   const [showDeathScreen, setShowDeathScreen] = useState(false);
   const [pendingDeathStats, setPendingDeathStats] = useState<GameStats | null>(null);
 
+  // Spectator mode — engine keeps running after player death; overlay shown instead of exit
+  const [spectating, setSpectating] = useState(false);
+  const spectatingRef = useRef(false);
+  const spectatingStatsRef = useRef<GameStats | null>(null);
+
   // Win overlay state — shown in-game for 3s before exiting to results
   const [winStats, setWinStats] = useState<GameStats | null>(null);
   const [winCountdown, setWinCountdown] = useState(3);
@@ -729,6 +734,45 @@ export function NewGameViewECS({
             }
           }
 
+          // Spectator mode: when local player dies, keep engine + RAF running
+          // so bots continue playing. Exit to results when game ends.
+          if (status === 'dead') {
+            if (!spectatingRef.current) {
+              spectatingRef.current = true;
+              onPlayerDeath?.(nextSnapshot.killer);
+              const deathStats: GameStats = {
+                placement: Math.max(1, nextSnapshot.aliveCount + 1),
+                kills: nextSnapshot.kills,
+                duration: nextSnapshot.elapsed * 1000,
+                distance: 0,
+                winner: false,
+                killerName: nextSnapshot.killer,
+                totalPlayers: botCount + 1,
+              };
+              spectatingStatsRef.current = deathStats;
+              setPendingDeathStats(deathStats);
+              setGameHint(null);
+              try { localStorage.setItem('spermrace_played_before', '1'); } catch {}
+              setTimeout(() => setShowDeathScreen(true), 650);
+            }
+            // All others eliminated — auto-exit to results
+            if (!endedRef.current && nextSnapshot.aliveCount <= 1) {
+              endedRef.current = true;
+              setShowDeathScreen(false);
+              setSpectating(false);
+              try { game.getEngine().pause(); } catch {}
+              setTimeout(() => {
+                onGameEnd?.(spectatingStatsRef.current ?? {
+                  placement: 2, kills: 0, duration: 0, distance: 0,
+                  winner: false, killerName: null, totalPlayers: botCount + 1,
+                });
+              }, 800);
+              return;
+            }
+            rafId = window.requestAnimationFrame(tick);
+            return;
+          }
+
           if (status !== 'playing') {
             endGame(nextSnapshot);
             return;
@@ -778,6 +822,9 @@ export function NewGameViewECS({
     endedRef.current = false;
     setShowDeathScreen(false);
     setPendingDeathStats(null);
+    setSpectating(false);
+    spectatingRef.current = false;
+    spectatingStatsRef.current = null;
   };
 
   // Replay: restart game
@@ -796,9 +843,18 @@ export function NewGameViewECS({
     void startGame(true);
   };
 
+  // Spectate: dismiss death screen and show spectator overlay
+  const handleSpectate = () => {
+    setShowDeathScreen(false);
+    setSpectating(true);
+  };
+
   // Leave: exit to results screen / lobby
   const handleLeave = () => {
     setShowDeathScreen(false);
+    setSpectating(false);
+    // Pause engine — may still be running if player was spectating
+    try { gameRef.current?.getEngine().pause(); } catch {}
     if (pendingDeathStats) {
       onGameEnd?.(pendingDeathStats);
     } else {
@@ -1059,7 +1115,7 @@ export function NewGameViewECS({
         </div>
       )}
 
-      {/* In-game death screen — shown on death, player chooses quick replay / change class / leave */}
+      {/* In-game death screen — shown on death, player chooses quick replay / spectate / leave */}
       {showDeathScreen && pendingDeathStats && (
         <DeathScreen
           placement={pendingDeathStats.placement}
@@ -1068,10 +1124,22 @@ export function NewGameViewECS({
           ownTrail={!pendingDeathStats.killerName}
           kills={pendingDeathStats.kills}
           timeSurvived={pendingDeathStats.duration / 1000}
-          canSpectate={false}
+          canSpectate={true}
+          onSpectate={handleSpectate}
           onQuickReplay={handleQuickReplay}
           onLeave={handleLeave}
         />
+      )}
+
+      {/* Spectator overlay — engine still running, watching remaining bots */}
+      {spectating && (
+        <div className="spectator-overlay">
+          <div className="spectator-badge">WATCHING</div>
+          <div className="spectator-alive">{snapshot.aliveCount} alive</div>
+          <button className="spectator-skip" onClick={handleLeave}>
+            Skip to results
+          </button>
+        </div>
       )}
     </div>
   );

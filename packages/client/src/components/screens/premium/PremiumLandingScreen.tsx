@@ -32,18 +32,26 @@ function isFirstVisit(): boolean {
   try { return !localStorage.getItem('sr_has_played'); } catch { return true; }
 }
 
+function toSol(usd: number, solPrice?: number | null): string | null {
+  if (!solPrice || solPrice <= 0 || usd <= 0) return null;
+  return `≈${(usd / solPrice).toFixed(4)} SOL`;
+}
+
 // ── Entry Preview Modal ──────────────────────────────────────────────────────
 function EntryModal({
   tier,
+  solPrice,
   onConfirm,
   onPractice,
   onClose,
 }: {
   tier: Tier;
+  solPrice?: number | null;
   onConfirm: () => void;
   onPractice: () => void;
   onClose: () => void;
 }) {
+  const solEquiv = toSol(tier.usd, solPrice);
   return (
     <div className="entry-modal-backdrop" onClick={onClose} role="dialog" aria-modal="true">
       <div className="entry-modal" onClick={e => e.stopPropagation()}>
@@ -63,6 +71,7 @@ function EntryModal({
         <div className="entry-modal-deal">
           <div className="entry-modal-deal-side">
             <span className="entry-modal-deal-value">{tier.name}</span>
+            {solEquiv && <span className="entry-modal-sol">{solEquiv}</span>}
             <span className="entry-modal-deal-hint">you pay</span>
           </div>
           <svg className="entry-modal-deal-arrow" viewBox="0 0 44 14" fill="none" aria-hidden="true">
@@ -92,6 +101,7 @@ function EntryModal({
 }
 
 export const PremiumLandingScreen = memo(function PremiumLandingScreen({
+  solPrice,
   onPractice,
   onWallet,
   onLeaderboard,
@@ -131,6 +141,7 @@ export const PremiumLandingScreen = memo(function PremiumLandingScreen({
       {modalTier && (
         <EntryModal
           tier={modalTier}
+          solPrice={solPrice}
           onConfirm={handleConfirmEntry}
           onPractice={handlePractice}
           onClose={() => setModalTier(null)}
@@ -160,20 +171,24 @@ export const PremiumLandingScreen = memo(function PremiumLandingScreen({
 
         <div className="landing-card">
           <div className="landing-stakes" role="group" aria-label="Choose your stake">
-            {TIERS.map((t, i) => (
-              <button
-                key={t.name}
-                className={`landing-stake${selected === i ? ' is-active' : ''}${t.recommended ? ' is-hot' : ''}`}
-                onClick={() => setSelected(i)}
-                aria-pressed={selected === i}
-              >
-                <span className="stake-entry">{t.name}</span>
-                {t.prize
-                  ? <span className="stake-payout">win {t.prize}</span>
-                  : <span className="stake-payout">practice</span>
-                }
-              </button>
-            ))}
+            {TIERS.map((t, i) => {
+              const sol = toSol(t.usd, solPrice);
+              return (
+                <button
+                  key={t.name}
+                  className={`landing-stake${selected === i ? ' is-active' : ''}${t.recommended ? ' is-hot' : ''}`}
+                  onClick={() => setSelected(i)}
+                  aria-pressed={selected === i}
+                >
+                  <span className="stake-entry">{t.name}</span>
+                  {t.prize
+                    ? <span className="stake-payout">win {t.prize}</span>
+                    : <span className="stake-payout">practice</span>
+                  }
+                  {sol && <span className="stake-sol">{sol}</span>}
+                </button>
+              );
+            })}
           </div>
 
           <button

@@ -11,6 +11,9 @@ import type { Boost } from '../components/Boost';
 import { refillBoost, setBoostEnergy } from '../components/Boost';
 import type { Health } from '../components/Health';
 import { ComponentNames, createComponentMask } from '../components';
+import type { KillPower } from '../components/KillPower';
+import { createKillPower } from '../components/KillPower';
+import { POWERUP_CONFIG } from '../config/GameConstants';
 import { SpatialGrid } from '../spatial/SpatialGrid';
 import type { Entity } from '../core/Entity';
 import type { Abilities } from '../components/Abilities';
@@ -199,9 +202,7 @@ export class PowerupSystem extends System {
    * Get random powerup type
    */
   private _getRandomType(): PowerupType {
-    // SPEED is unimplemented — only ENERGY spawns until it has an effect
-    const types = [PowerupType.ENERGY];
-    return types[Math.floor(Math.random() * types.length)];
+    return Math.random() < 0.5 ? PowerupType.ENERGY : PowerupType.SPEED;
   }
 
   /**
@@ -259,9 +260,21 @@ export class PowerupSystem extends System {
         }
         break;
 
-      case PowerupType.SPEED:
-        // Temporary speed boost
+      case PowerupType.SPEED: {
+        let kp = entity.getComponent<KillPower>(ComponentNames.KILL_POWER);
+        if (!kp) {
+          kp = createKillPower();
+          entity.addComponent(ComponentNames.KILL_POWER, kp);
+        }
+        const now = Date.now();
+        const expiry = now + POWERUP_CONFIG.SPEED_DURATION_MS;
+        kp.active = true;
+        kp.speedMultiplier = Math.max(kp.speedMultiplier, POWERUP_CONFIG.SPEED_MULTIPLIER);
+        kp.speedExpiresAt = Math.max(kp.speedExpiresAt, expiry);
+        // Ensure growthExpiresAt doesn't prematurely deactivate the component
+        if (kp.growthExpiresAt < expiry) kp.growthExpiresAt = expiry;
         break;
+      }
 
       case PowerupType.OVERDRIVE:
         // Activate overdrive ability

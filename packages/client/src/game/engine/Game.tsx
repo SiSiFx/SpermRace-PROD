@@ -308,12 +308,16 @@ export class Game {
     });
     this._systemManager.addSystem(this._physics, 'physics');
 
-    // Zone system
+    // Zone system — scale start delay by player count so zone pressure
+    // feels appropriate regardless of lobby size (baseline = 10 players).
+    const playerCount = 1 + (this._config.botCount ?? 8);
+    const scaledZoneDelay = Math.round(
+      MATCH_CONFIG.ZONE_START_DELAY_MS * Math.max(0.5, playerCount / 10)
+    );
     this._zone = new ZoneSystem({
       centerX: this._config.worldWidth / 2,
       centerY: this._config.worldHeight / 2,
-      // Game-first pacing: players should engage before zone pressure starts.
-      startDelayMs: MATCH_CONFIG.ZONE_START_DELAY_MS,
+      startDelayMs: scaledZoneDelay,
       warningDurationMs: MATCH_CONFIG.ZONE_WARNING_DURATION_MS,
       shrinkDurationMs: MATCH_CONFIG.ZONE_SHRINK_DURATION_MS,
       minSize: MATCH_CONFIG.ZONE_MIN_SIZE,
