@@ -447,14 +447,15 @@ export function NewGameViewECS({
 
       if (mode === 'practice') {
         // Practice: show full pre-game sequence (map overview → countdown)
+        // Controls hint shown after pre-game completes (handlePreGameComplete)
         setShowPreGame(true);
       } else {
         // Tournament: lobby already showed the 3-2-1 overlay — start immediately
         gameRef.current!.getEngine().resume();
         setGameStarted(true);
+        setShowControlsHint(true);
+        controlsHintShownAtRef.current = Date.now();
       }
-      setShowControlsHint(true);
-      controlsHintShownAtRef.current = Date.now();
       gameRef.current!.resumeAudio().catch(() => {});
       cleanupRef.current = installAutomationHooks(host, gameRef, mouseRef);
     } catch (e) {
@@ -475,6 +476,8 @@ export function NewGameViewECS({
   const handlePreGameComplete = useCallback(() => {
     setShowPreGame(false);
     setGameStarted(true);
+    setShowControlsHint(true);
+    controlsHintShownAtRef.current = Date.now();
     // Resume game engine (no-op if already resumed by PreGameSequence at GO)
     if (gameRef.current) {
       gameRef.current.getEngine().resume();
@@ -703,13 +706,16 @@ export function NewGameViewECS({
             // No else: hasDirection=false tells InputSystem to keep current heading
           }
 
-          game.setInput({
-            targetX,
-            targetY,
-            boost,
-            hasDirection,
-            timestamp: Date.now(),
-          });
+          // Don't feed input to the dead entity during spectate — it would move invisibly
+          if (!spectatingRef.current) {
+            game.setInput({
+              targetX,
+              targetY,
+              boost,
+              hasDirection,
+              timestamp: Date.now(),
+            });
+          }
 
           const combatFeedback = game.getCombatFeedbackSystem();
           if (combatFeedback) {
