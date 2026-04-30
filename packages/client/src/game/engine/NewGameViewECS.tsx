@@ -446,8 +446,7 @@ export function NewGameViewECS({
       setShowQuickJoin(false);
 
       if (mode === 'practice') {
-        // Practice: show in-game 1.8s countdown (map overview already skipped)
-        setSkipMapOverview(true);
+        // Practice: show full pre-game sequence (map overview → countdown)
         setShowPreGame(true);
       } else {
         // Tournament: lobby already showed the 3-2-1 overlay — start immediately
