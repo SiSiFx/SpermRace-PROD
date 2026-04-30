@@ -10,11 +10,7 @@ import { getFeatureFlags } from '../config/featureFlags';
 import { NewGameViewECS } from '../game/engine/NewGameViewECS';
 
 export interface GameViewWrapperProps {
-  /** Override player ID for testing */
-  meIdOverride?: string;
-
-  /** Called when replay is requested */
-  onReplay?: () => void;
+  mode: 'practice' | 'tournament';
 
   /** Called when exit is requested */
   onExit?: () => void;
@@ -33,8 +29,7 @@ export interface GameViewWrapperProps {
  * Memoized to prevent unnecessary re-renders during gameplay
  */
 export const GameViewWrapper = memo(function GameViewWrapperComponent({
-  meIdOverride,
-  onReplay,
+  mode,
   onExit,
   onGameEnd,
   onPlayReal,
@@ -60,15 +55,6 @@ export const GameViewWrapper = memo(function GameViewWrapperComponent({
     }
   }, [onGameEnd]);
 
-  const handlePlayerDeath = useCallback((killer: string | null) => {
-    try {
-      // player death handled internally by NewGameViewECS
-    } catch (error) {
-      console.error('[GameViewWrapper] Error in onPlayerDeath callback:', error);
-    }
-  }, []);
-
-  // Handle game errors
   const handleError = useCallback((error: Error) => {
     console.error('[GameViewWrapper] Game error:', error);
     setGameError(error.message || 'An error occurred in the game');
@@ -113,13 +99,12 @@ export const GameViewWrapper = memo(function GameViewWrapperComponent({
       overflow: 'hidden',
     }}>
       <NewGameViewECS
-        playerName={meIdOverride || 'Player'}
+        playerName="Player"
         playerColor={0x22d3ee}
         botCount={9}
         enableAbilities={flagsRef.current.enableAbilities}
-        enableQuickJoin={!!meIdOverride}
+        mode={mode}
         onGameEnd={handleGameEnd}
-        onPlayerDeath={handlePlayerDeath}
         onError={handleError}
         onExit={onExit}
         onPlayReal={onPlayReal}

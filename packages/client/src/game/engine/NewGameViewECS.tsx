@@ -22,13 +22,11 @@ interface NewGameViewECSProps {
   playerColor?: number;
   botCount?: number;
   enableAbilities?: boolean;
-  /** When true, QuickJoin overlay is shown from first frame (practice). Default true. */
-  enableQuickJoin?: boolean;
-  meIdOverride?: string;
+  /** 'practice' = offline bots + QuickJoin overlay; 'tournament' = WS game, start immediately */
+  mode: 'practice' | 'tournament';
   onGameEnd?: (stats: GameStats) => void;
   onPlayerDeath?: (killer: string | null) => void;
   onError?: (error: Error) => void;
-  onReplay?: () => void;
   onExit?: () => void;
   /** Practice win → jump straight to real-money room */
   onPlayReal?: () => void;
@@ -151,7 +149,7 @@ export function NewGameViewECS({
   playerColor = 0x22d3ee,
   botCount = 7,
   enableAbilities = true,
-  enableQuickJoin = true,
+  mode,
   onGameEnd,
   onPlayerDeath,
   onError,
@@ -190,7 +188,7 @@ export function NewGameViewECS({
   const controlsHintShownAtRef = useRef<number>(0);
   const [stickUi, setStickUi] = useState({ active: false, dx: 0, dy: 0, baseX: 0, baseY: 0 });
   const [skipMapOverview, setSkipMapOverview] = useState(false);
-  const [showQuickJoin, setShowQuickJoin] = useState(enableQuickJoin);
+  const [showQuickJoin, setShowQuickJoin] = useState(mode === 'practice');
   const [killFeed, setKillFeed] = useState<KillFeedItem[]>([]);
   const [streakBanner, setStreakBanner] = useState<StreakBanner | null>(null);
   const [showToolsPanel] = useState(() => shouldShowToolsPanel());
@@ -447,7 +445,7 @@ export function NewGameViewECS({
       gameRef.current = game;
       setShowQuickJoin(false);
 
-      if (enableQuickJoin) {
+      if (mode === 'practice') {
         // Practice: show in-game 1.8s countdown (map overview already skipped)
         setSkipMapOverview(true);
         setShowPreGame(true);
@@ -464,7 +462,7 @@ export function NewGameViewECS({
       setShowQuickJoin(false);
       onError?.(e as Error);
     }
-  }, [isMobile, playerName, playerColor, botCount, enableAbilities, enableQuickJoin, onError]);
+  }, [isMobile, playerName, playerColor, botCount, enableAbilities, mode, onError]);
 
   // Auto-start on mount — no class selection needed
   const hasAutoStarted = useRef(false);

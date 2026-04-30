@@ -25,7 +25,6 @@ export interface PremiumLandingScreenProps {
   onLeaderboard?: () => void;
   onHelp?: () => void;
   isNewPlayer?: boolean;
-  isPracticeConnecting?: boolean;
 }
 
 function isFirstVisit(): boolean {
@@ -105,7 +104,6 @@ export const PremiumLandingScreen = memo(function PremiumLandingScreen({
   onPractice,
   onWallet,
   onLeaderboard,
-  isPracticeConnecting,
 }: PremiumLandingScreenProps) {
   // New visitors default to Free so the first action is always zero-risk.
   // Returning players (sr_has_played set) default to $5 (recommended).
@@ -148,14 +146,6 @@ export const PremiumLandingScreen = memo(function PremiumLandingScreen({
         />
       )}
 
-      {/* Full-screen connecting overlay — shown while finding a practice room */}
-      {isPracticeConnecting && (
-        <div className="landing-connecting-overlay" aria-live="polite">
-          <div className="landing-connecting-spinner" />
-          <p className="landing-connecting-label">Finding a room…</p>
-        </div>
-      )}
-
       <nav className="landing-nav">
         <span className="landing-logo">SpermRace.io</span>
         <button className="landing-nav-link" onClick={onLeaderboard}>
@@ -194,7 +184,6 @@ export const PremiumLandingScreen = memo(function PremiumLandingScreen({
           <button
             className="landing-cta"
             onClick={handlePrimary}
-            disabled={isPracticeConnecting}
           >
             {tier.usd === 0
               ? 'Start practice'
@@ -206,7 +195,6 @@ export const PremiumLandingScreen = memo(function PremiumLandingScreen({
             <button
               className="landing-practice-link"
               onClick={handlePractice}
-              disabled={isPracticeConnecting}
             >
               Try free — no wallet needed
             </button>
