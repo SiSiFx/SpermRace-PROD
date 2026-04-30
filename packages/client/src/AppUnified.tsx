@@ -240,35 +240,11 @@ function AppInner() {
   const screenRef = useRef<AppScreen>('landing');
   screenRef.current = screen;
 
-  const onPractice = useCallback(async () => {
-    // Prevent double-tap: if already connecting, do nothing
-    if (practiceFallbackTimerRef.current) return;
-    // Stop any lingering reconnect loop from a previous failed attempt
+  const onPractice = useCallback(() => {
+    // Skip WS entirely — go straight to offline practice (instant, no lobby wait)
     leave();
-    setIsPracticeConnecting(true);
-    const name = PRACTICE_NAMES[Math.floor(Math.random() * PRACTICE_NAMES.length)];
-    try {
-      joinedAsPracticeRef.current = true;
-      await connectAndJoin({ entryFeeTier: 0, mode: 'practice', guestName: name });
-    } catch {
-      joinedAsPracticeRef.current = false;
-      setIsPracticeConnecting(false);
-      leave();
-      goToScreen('practice-solo');
-      return;
-    }
-    // connectAndJoin for guests returns immediately (fire-and-forget).
-    // Give 4s for the WS handshake; fall back to offline practice if it doesn't connect.
-    practiceFallbackTimerRef.current = window.setTimeout(() => {
-      practiceFallbackTimerRef.current = null;
-      if (screenRef.current === 'landing') {
-        joinedAsPracticeRef.current = false;
-        setIsPracticeConnecting(false);
-        leave(); // kill the reconnect loop before going offline
-        goToScreen('practice-solo');
-      }
-    }, 4000);
-  }, [connectAndJoin, leave]);
+    goToScreen('practice-solo');
+  }, [leave, goToScreen]);
 
   const onWallet = useCallback(async (tier?: { usd: number; prize: string }) => {
     if (tier) setSelectedTier(tier);
@@ -375,10 +351,9 @@ function AppInner() {
       </div>
 
       {/* Tournament pre-game countdown overlay — appears at lobby countdown ≤ 3s */}
+      {/* CountdownAnimation already provides its own position:fixed full-screen backdrop */}
       {lobbyCountdownDuration !== null && (
-        <div className="lobby-pregame-overlay">
-          <CountdownAnimation duration={lobbyCountdownDuration} isVisible={true} />
-        </div>
+        <CountdownAnimation duration={lobbyCountdownDuration} isVisible={true} />
       )}
 
       {/* Modals */}

@@ -447,8 +447,15 @@ export function NewGameViewECS({
       gameRef.current = game;
       setShowQuickJoin(false);
 
-      setSkipMapOverview(true); // always skip the 7s arena tour — go straight to countdown
-      setShowPreGame(true);
+      if (enableQuickJoin) {
+        // Practice: show in-game 1.8s countdown (map overview already skipped)
+        setSkipMapOverview(true);
+        setShowPreGame(true);
+      } else {
+        // Tournament: lobby already showed the 3-2-1 overlay — start immediately
+        gameRef.current!.getEngine().resume();
+        setGameStarted(true);
+      }
       setShowControlsHint(true);
       controlsHintShownAtRef.current = Date.now();
       gameRef.current!.resumeAudio().catch(() => {});
@@ -457,7 +464,7 @@ export function NewGameViewECS({
       setShowQuickJoin(false);
       onError?.(e as Error);
     }
-  }, [isMobile, playerName, playerColor, botCount, enableAbilities, onError]);
+  }, [isMobile, playerName, playerColor, botCount, enableAbilities, enableQuickJoin, onError]);
 
   // Auto-start on mount — no class selection needed
   const hasAutoStarted = useRef(false);

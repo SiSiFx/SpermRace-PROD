@@ -233,23 +233,16 @@
    ============================================================================ */
 
 .app-screens {
-  display: contents; /* passthrough — doesn't create a new box or break layout */
+  /* block + full-size so opacity transition works (display:contents breaks opacity) */
+  display: block;
+  width: 100%;
+  height: 100%;
   transition: opacity 0.2s ease;
 }
 
 .app-screens.is-transitioning {
   opacity: 0;
   pointer-events: none;
-}
-
-/* Fallback: if `display: contents` breaks opacity, switch to flex */
-@supports not (display: contents) {
-  .app-screens {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-height: 0;
-  }
 }
 
 /* ============================================================================
