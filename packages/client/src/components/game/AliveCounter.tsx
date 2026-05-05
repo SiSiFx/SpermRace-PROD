@@ -3,7 +3,7 @@
  * Biological/horror theme with pulsing effects
  */
 
-import React, { memo, useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { useWs } from '../../WsProvider';
 
 interface AliveCounterProps {

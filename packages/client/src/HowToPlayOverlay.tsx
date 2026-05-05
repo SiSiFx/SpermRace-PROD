@@ -17,9 +17,7 @@ interface HowToPlayOverlayProps {
   onClose: () => void;
 }
 
-export function HowToPlayOverlay({ mode, onClose }: HowToPlayOverlayProps) {
-  const isMobile = mode === 'mobile';
-
+export function HowToPlayOverlay({ onClose }: HowToPlayOverlayProps) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();

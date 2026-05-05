@@ -7,7 +7,7 @@
 
 import { CrownSimple, Wallet, CheckCircle, Spinner, WarningCircle, Question, X } from 'phosphor-react';
 import { useWallet } from '../WalletProvider';
-import { useState, useEffect, memo } from 'react';
+import { useState, memo } from 'react';
 import { motion } from 'framer-motion';
 import './WalletScreen.css';
 
@@ -193,7 +193,7 @@ export const WalletScreen = memo(function WalletScreen({ onConnected, onClose, e
                   }
                 }}
               >
-                {walletOptions.map((option, index) => (
+                {walletOptions.map((option) => (
                   <motion.button
                     key={option.name}
                     className="wallet-option"

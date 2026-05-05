@@ -3,7 +3,7 @@
  * Provides smooth screen transitions, loading states, and animations for mobile screens
  */
 
-import { useEffect, useState, useRef, ReactNode } from 'react';
+import { useEffect, useState, useRef, type ReactNode } from 'react';
 import './MobileScreenWrapper.css';
 
 export type ScreenTransition = 'fade' | 'slide-up' | 'slide-down' | 'scale' | 'none';

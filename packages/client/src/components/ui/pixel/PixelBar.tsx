@@ -3,7 +3,7 @@
  * Segmented pixel fill for retro feel
  */
 
-import { forwardRef, HTMLAttributes } from 'react';
+import { forwardRef, type HTMLAttributes } from 'react';
 import { classNames } from '../../../utils/classNames';
 
 export interface PixelBarProps extends HTMLAttributes<HTMLDivElement> {

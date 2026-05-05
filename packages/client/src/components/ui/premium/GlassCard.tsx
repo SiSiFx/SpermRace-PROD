@@ -3,7 +3,7 @@
  * Semi-transparent dark backgrounds with backdrop blur
  */
 
-import { forwardRef, HTMLAttributes } from 'react';
+import { forwardRef, type HTMLAttributes } from 'react';
 import { classNames } from '../../../utils/classNames';
 
 export interface GlassCardProps extends HTMLAttributes<HTMLDivElement> {

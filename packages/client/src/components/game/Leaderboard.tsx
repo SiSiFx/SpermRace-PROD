@@ -54,7 +54,6 @@ export const Leaderboard = memo(function Leaderboard({ entries, totalPlayers }: 
       return a.name.localeCompare(b.name);
     });
 
-    let nextPlacement = 1;
     const withPlacement = sorted.map(entry => {
       if (!entry.isAlive && entry.placement === undefined) {
         entry.placement = totalPlayers - sorted.filter(e => e.isAlive).length;

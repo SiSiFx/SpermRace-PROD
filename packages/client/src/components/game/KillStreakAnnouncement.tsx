@@ -4,7 +4,7 @@
  * Shows in center of screen with animation
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import type { CombatEvent } from '../../game/engine/systems/CombatFeedbackSystem';
 
 /**

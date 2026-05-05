@@ -3,7 +3,7 @@
  * Slide-in animation, glass morphism, icon support
  */
 
-import { forwardRef, HTMLAttributes, ReactNode } from 'react';
+import { forwardRef, type HTMLAttributes, type ReactNode } from 'react';
 import { classNames } from '../../../utils/classNames';
 
 export interface NotificationCardProps extends HTMLAttributes<HTMLDivElement> {

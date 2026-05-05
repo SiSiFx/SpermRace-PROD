@@ -74,7 +74,7 @@ export default function App() {
 
 function AppInner() {
   const isMobile = useIsMobile();
-  const { state: wsState, connectAndJoin, leave } = useWs();
+  const { state: wsState, leave } = useWs();
   const { publicKey, disconnect, connect } = useWallet();
 
   const [screen, setScreen] = useState<AppScreen>(() => getInitialScreen());

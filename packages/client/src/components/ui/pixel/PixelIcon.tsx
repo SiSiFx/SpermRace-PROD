@@ -3,7 +3,7 @@
  * Wraps Phosphor icons with pixel-specific rendering
  */
 
-import { forwardRef, SVGProps } from 'react';
+import { forwardRef, type SVGProps } from 'react';
 import { classNames } from '../../../utils/classNames';
 
 export interface PixelIconProps extends SVGProps<SVGSVGElement> {

@@ -3,7 +3,7 @@
  * Dark background, glowing focus state, clean typography
  */
 
-import { forwardRef, InputHTMLAttributes } from 'react';
+import { forwardRef, type InputHTMLAttributes } from 'react';
 import { classNames } from '../../../utils/classNames';
 
 export interface PremiumInputProps extends InputHTMLAttributes<HTMLInputElement> {

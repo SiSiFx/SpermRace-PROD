@@ -3,7 +3,7 @@
  * Biological theme with organic styling
  */
 
-import React, { useRef, useEffect, memo, useCallback, useMemo } from 'react';
+import React, { useRef, useEffect, memo } from 'react';
 import { useWs } from '../../WsProvider';
 
 interface MiniMapProps {

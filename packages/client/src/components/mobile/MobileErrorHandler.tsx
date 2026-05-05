@@ -3,7 +3,7 @@
  * Graceful error handling with mobile-friendly error states
  */
 
-import { Component, ReactNode } from 'react';
+import { Component, type ReactNode } from 'react';
 import './MobileErrorHandler.css';
 
 export interface ErrorInfo {

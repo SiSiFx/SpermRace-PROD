@@ -3,7 +3,7 @@
  * Glass card with icon, label, and value
  */
 
-import { forwardRef, HTMLAttributes, ReactNode } from 'react';
+import { forwardRef, type HTMLAttributes, type ReactNode } from 'react';
 import { classNames } from '../../../utils/classNames';
 
 export interface StatBadgeProps extends HTMLAttributes<HTMLDivElement> {

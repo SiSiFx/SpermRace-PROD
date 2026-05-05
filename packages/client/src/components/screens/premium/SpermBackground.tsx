@@ -65,7 +65,7 @@ export function SpermBackground() {
     let W = 0, H = 0, dpr = 1;
 
     function resize() {
-      if (!canvas) return;
+      if (!canvas || !ctx) return;
       dpr = Math.min(window.devicePixelRatio || 1, 2);
       W = window.innerWidth;
       H = window.innerHeight;
@@ -140,7 +140,7 @@ export function SpermBackground() {
     }
 
     function draw(now: number) {
-      if (!canvas) return;
+      if (!canvas || !ctx) return;
       ctx.clearRect(0, 0, W, H);
 
       for (const s of entities) {

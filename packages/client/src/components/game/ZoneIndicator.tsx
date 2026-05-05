@@ -3,7 +3,7 @@
  * Shows zone timer, shrink status, and safe zone indicator
  */
 
-import { useEffect, useState, memo, useMemo, useCallback } from 'react';
+import { useEffect, useState, memo, useMemo } from 'react';
 import './ZoneIndicator.css';
 
 export enum ZoneState {

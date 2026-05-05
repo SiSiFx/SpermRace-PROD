@@ -3,7 +3,7 @@
  * Gradient backgrounds, smooth hover animations
  */
 
-import { forwardRef, ButtonHTMLAttributes } from 'react';
+import { forwardRef, type ButtonHTMLAttributes } from 'react';
 import { classNames } from '../../../utils/classNames';
 
 export interface PremiumButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {

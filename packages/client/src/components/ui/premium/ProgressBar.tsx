@@ -3,7 +3,7 @@
  * Smooth animations, glow effects, rounded caps
  */
 
-import { forwardRef, HTMLAttributes } from 'react';
+import { forwardRef, type HTMLAttributes } from 'react';
 import { classNames } from '../../../utils/classNames';
 
 export interface ProgressBarProps extends HTMLAttributes<HTMLDivElement> {

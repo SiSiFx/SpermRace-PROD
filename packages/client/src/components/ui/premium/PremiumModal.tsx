@@ -3,7 +3,7 @@
  * Dark blur backdrop, glass content, smooth animations
  */
 
-import { forwardRef, HTMLAttributes, ReactNode, useEffect } from 'react';
+import { forwardRef, type HTMLAttributes, type ReactNode, useEffect } from 'react';
 import { classNames } from '../../../utils/classNames';
 
 export interface PremiumModalProps extends HTMLAttributes<HTMLDivElement> {

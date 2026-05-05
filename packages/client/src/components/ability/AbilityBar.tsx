@@ -158,7 +158,6 @@ export const AbilityBar = memo(function AbilityBar({
   const getAbilityStyle = useCallback((ability: AbilityType): React.CSSProperties => {
     const config = ABILITIES[ability];
     const cooldown = localCooldowns[ability] ?? 1;
-    const isActive = localActive[ability] ?? false;
 
     return {
       '--ability-color': `#${config.color.toString(16).padStart(6, '0')}`,

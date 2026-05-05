@@ -5,7 +5,6 @@
 
 import { memo } from 'react';
 import { X } from 'phosphor-react';
-import { PixelButton } from '../../ui/pixel';
 import './PixelLeaderboard.css';
 
 export interface PixelLeaderboardEntry {

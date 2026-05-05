@@ -10,11 +10,17 @@ type MagneticButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 const springConfig = { stiffness: 140, damping: 18, mass: 0.35 };
 
+// framer-motion redefines onDragStart/onAnimationStart incompatibly with React's HTML event types
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const MotionBtn = motion.button as any;
+
 export function MagneticButton({
   children,
   className,
   onPointerLeave,
   onPointerMove,
+  // Destructured to avoid type conflict with framer-motion's onAnimationStart
+  onAnimationStart: _onAnimationStart,
   type = 'button',
   ...props
 }: MagneticButtonProps) {
@@ -46,7 +52,7 @@ export function MagneticButton({
   };
 
   return (
-    <motion.button
+    <MotionBtn
       {...props}
       ref={buttonRef}
       type={type}
@@ -58,6 +64,6 @@ export function MagneticButton({
       transition={{ type: 'spring', stiffness: 140, damping: 16 }}
     >
       {children}
-    </motion.button>
+    </MotionBtn>
   );
 }

@@ -62,7 +62,6 @@ export function useAbilities() {
     }
 
     // Set cooldown
-    const now = Date.now();
     setAbilityStates((prev) => ({
       ...prev,
       [ability]: {
@@ -81,7 +80,7 @@ export function useAbilities() {
   /**
    * Update abilities (call each frame)
    */
-  const update = useCallback((dt: number) => {
+  const update = useCallback((_dt: number) => {
     const now = Date.now();
     const elapsed = now - lastUpdateRef.current;
     lastUpdateRef.current = now;
@@ -144,7 +143,6 @@ export function useAbilities() {
       for (const type of Object.keys(serverAbilities)) {
         if (type in ABILITIES) {
           const ability = serverAbilities[type];
-          const config = ABILITIES[type as AbilityType];
           const now = Date.now();
 
           updated[type as AbilityType] = {
