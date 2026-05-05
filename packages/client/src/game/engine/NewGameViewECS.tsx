@@ -445,17 +445,8 @@ export function NewGameViewECS({
       gameRef.current = game;
       setShowQuickJoin(false);
 
-      if (mode === 'practice') {
-        // Practice: show full pre-game sequence (map overview → countdown)
-        // Controls hint shown after pre-game completes (handlePreGameComplete)
-        setShowPreGame(true);
-      } else {
-        // Tournament: lobby already showed the 3-2-1 overlay — start immediately
-        gameRef.current!.getEngine().resume();
-        setGameStarted(true);
-        setShowControlsHint(true);
-        controlsHintShownAtRef.current = Date.now();
-      }
+      // Both modes: show pre-game overview (practice=7s, tournament=4s)
+      setShowPreGame(true);
       gameRef.current!.resumeAudio().catch(() => {});
       cleanupRef.current = installAutomationHooks(host, gameRef, mouseRef);
     } catch (e) {
@@ -986,6 +977,7 @@ export function NewGameViewECS({
           game={gameRef.current}
           totalPlayers={botCount + 1}
           skipToCountdown={skipMapOverview}
+          mode={mode}
           onComplete={handlePreGameComplete}
         />
       )}
