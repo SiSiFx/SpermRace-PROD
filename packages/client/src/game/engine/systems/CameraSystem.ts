@@ -174,6 +174,17 @@ export class CameraSystem extends System {
   }
 
   /**
+   * Immediately set zoom — bypasses smooth interpolation.
+   * Use when driving animation manually (e.g., pre-game pull-back where
+   * CameraSystem.update() is not running and targetZoom would never apply).
+   */
+  setZoomDirect(zoom: number): void {
+    const clamped = Math.max(0.1, Math.min(3, zoom));
+    this._camera.zoom = clamped;
+    this._camera.targetZoom = clamped;
+  }
+
+  /**
    * Get current zoom level
    */
   getZoom(): number {

@@ -9,7 +9,7 @@
   z-index: 100;
 }
 
-/* Arena overview — opaque dark screen that hides canvas entirely.
+/* Arena overview — semi-transparent so the animated canvas pull-back is visible.
    pointer-events: auto so the skip button is clickable. */
 .map-overview-overlay {
   position: fixed;
@@ -20,7 +20,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 3.5rem 1.5rem 2.5rem;
-  background: rgba(4, 5, 10, 0.74);
+  background: rgba(2, 4, 8, 0.18);
   z-index: 10;
 }
 
@@ -34,7 +34,7 @@
   margin: 0;
 }
 
-/* Tip card container — vertically centered */
+/* Tip card container — glass panel so text is readable over the arena */
 .overview-tip-wrap {
   display: flex;
   flex-direction: column;
@@ -42,6 +42,12 @@
   gap: 1rem;
   width: 100%;
   max-width: 440px;
+  background: rgba(4, 5, 10, 0.82);
+  border-radius: 16px;
+  padding: 1.25rem 1.5rem 1rem;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 /* Gold progress bar spanning full overview duration */

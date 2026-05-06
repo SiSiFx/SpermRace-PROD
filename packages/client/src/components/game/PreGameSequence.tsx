@@ -194,7 +194,10 @@ export function PreGameSequence({
       const currentZoom = startZoom + (targetZoom - startZoom) * easeProgress;
 
       cameraSystem.setPosition(currentX, currentY);
-      cameraSystem.setZoom(currentZoom);
+      // setZoomDirect sets both zoom AND targetZoom immediately — needed because
+      // CameraSystem.update() is not running while the engine is paused, so
+      // setZoom() (which only sets targetZoom) would never be applied.
+      (cameraSystem as any).setZoomDirect?.(currentZoom);
       // Drive render manually — engine is paused but canvas must redraw each frame
       renderSystem?.update(dt);
 
