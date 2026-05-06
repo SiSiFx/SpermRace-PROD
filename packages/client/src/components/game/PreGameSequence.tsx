@@ -159,15 +159,10 @@ export function PreGameSequence({
   ) => {
     const engine = game.getEngine();
     const systemManager = engine.getSystemManager();
-    const systems = systemManager.getSystems();
 
-    // Find camera and render systems via public API
-    let cameraSystem: any = null;
-    let renderSystem: any = null;
-    for (const sys of systems) {
-      if (sys.constructor.name === 'CameraSystem') cameraSystem = sys;
-      if (sys.constructor.name === 'RenderSystem') renderSystem = sys;
-    }
+    // Use registered string names — constructor.name is mangled by minifier in prod
+    const cameraSystem: any = systemManager.getSystem('camera');
+    const renderSystem: any = systemManager.getSystem('render');
 
     if (!cameraSystem) {
       onDone?.();
@@ -317,7 +312,7 @@ export function PreGameSequence({
           ctx.globalAlpha = 0.55;
           ctx.stroke();
         } else {
-          // Other player ring — same style for bots and real tournament players
+          // Other player ring — ring + dot only, no name label (avoids collision at overview zoom)
           ctx.beginPath();
           ctx.arc(s.x, s.y, 10 * pulse, 0, Math.PI * 2);
           ctx.strokeStyle = m.colorStr;
@@ -330,12 +325,6 @@ export function PreGameSequence({
           ctx.fillStyle = m.colorStr;
           ctx.globalAlpha = 0.7;
           ctx.fill();
-          // Name label
-          ctx.globalAlpha = 0.55;
-          ctx.fillStyle = m.colorStr;
-          ctx.font = '9px system-ui, sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillText(m.name, s.x, s.y + 20);
         }
       }
       rafId = requestAnimationFrame(draw);
@@ -375,13 +364,8 @@ export function PreGameSequence({
     game.getEngine().resume();
 
     // Play spawn sound immediately at GO
-    const systems = game.getEngine().getSystemManager().getSystems();
-    for (const sys of systems) {
-      if (sys.constructor.name === 'SoundSystem') {
-        (sys as any).playSpawn?.();
-        break;
-      }
-    }
+    const soundSys: any = game.getEngine().getSystemManager().getSystem('sound');
+    soundSys?.playSpawn?.();
   }, [game]);
 
   // Phase 4: Zoom to Player -> Complete
@@ -395,14 +379,7 @@ export function PreGameSequence({
       return;
     }
 
-    const systems = game.getEngine().getSystemManager().getSystems();
-    let cameraSystem: any = null;
-    for (const sys of systems) {
-      if (sys.constructor.name === 'CameraSystem') {
-        cameraSystem = sys;
-        break;
-      }
-    }
+    const cameraSystem: any = game.getEngine().getSystemManager().getSystem('camera');
 
     const focusZoom = getDefaultZoom(window.innerWidth <= 900);
     const punchZoom = focusZoom * 1.28;
@@ -417,13 +394,8 @@ export function PreGameSequence({
       }
 
       // Trigger spawn visual effects
-      const allSystems = game.getEngine().getSystemManager().getSystems();
-      for (const sys of allSystems) {
-        if (sys.constructor.name === 'RenderSystem') {
-          (sys as any).resetSpawnState?.();
-          break;
-        }
-      }
+      const renderSys: any = game.getEngine().getSystemManager().getSystem('render');
+      renderSys?.resetSpawnState?.();
 
       setPhase('complete');
       onComplete();
