@@ -4,6 +4,7 @@
   "description": "SpermRace.io game server - Authoritative multiplayer backend",
   "private": true,
   "type": "module",
+  "files": ["dist"],
   "scripts": {
     "dev": "pnpm --filter shared build && tsc-watch --onSuccess \"node dist/server/src/index.js\"",
     "dev:devnet": "cross-env SOLANA_RPC_ENDPOINT=https://api.devnet.solana.com ENABLE_DEV_BOTS=true DEV_BOTS_TARGET=8 SKIP_ENTRY_FEE=true pnpm dev",

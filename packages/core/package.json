@@ -2,6 +2,7 @@
   "name": "@skidr/core",
   "version": "1.0.0",
   "description": "Core game engine for skidr.io - environment agnostic",
+  "files": ["dist"],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {

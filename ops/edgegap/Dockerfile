@@ -19,8 +19,11 @@ RUN corepack enable
 COPY . .
 
 RUN pnpm install --frozen-lockfile
+RUN pnpm --filter shared build
+RUN pnpm --filter @skidr/core build
 RUN pnpm --filter server build
 RUN pnpm --filter server deploy --prod /out
+RUN test -f /out/dist/server/src/index.js || (echo "ERROR: dist/server/src/index.js missing from deploy output" && exit 1)
 
 
 FROM node:20-bookworm-slim AS runtime
