@@ -289,7 +289,6 @@ export class AbilitySystem extends System {
     // physical heading (angle). Using velocity.angle caused dash to fire in the wrong
     // direction mid-turn — player intent should always win here.
     const dashSpeed = 600;
-    const dashDuration = 0.15; // seconds
     const dashAngle = velocity.targetAngle;
 
     velocity.vx = Math.cos(dashAngle) * dashSpeed;

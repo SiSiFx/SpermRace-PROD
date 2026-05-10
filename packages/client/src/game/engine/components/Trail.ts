@@ -74,13 +74,13 @@ export const TRAIL_COMPONENT = 'Trail';
  * Default trail values
  */
 export const DEFAULT_TRAIL: Omit<Trail, 'points' | 'lastX' | 'lastY' | 'lastEmitTime'> = {
-  maxLength: 500,
-  lifetime: 2000,
-  emitDistance: 15,
-  emitInterval: 40,
+  maxLength: 688,    // TRAIL_CONFIG.MAX_POINTS
+  lifetime: 5500,    // TRAIL_CONFIG.LIFETIME_MS
+  emitDistance: 4,   // TRAIL_CONFIG.EMIT_DISTANCE
+  emitInterval: 12,  // TRAIL_CONFIG.EMIT_INTERVAL_MS
   color: 0xffffff,
-  baseWidth: 2,
-  boostedWidth: 4,
+  baseWidth: 5,      // TRAIL_CONFIG.BASE_WIDTH
+  boostedWidth: 9,   // TRAIL_CONFIG.BOOSTED_WIDTH
   active: true,
 };
 

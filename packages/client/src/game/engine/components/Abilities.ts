@@ -87,8 +87,8 @@ export const ABILITY_CONFIG: Record<AbilityType, Omit<AbilityState, 'ready' | 'c
   },
   [AbilityType.OVERDRIVE]: {
     energyCost: 50,
-    cooldown: 10000,
-    duration: 3000,
+    cooldown: 7000,
+    duration: 4000,
   },
 };
 

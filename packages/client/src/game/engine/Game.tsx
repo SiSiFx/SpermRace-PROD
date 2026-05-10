@@ -45,6 +45,7 @@ import {
   MATCH_CONFIG,
   ARENA_CONFIG,
   SPAWN_CONFIG,
+  POWERUP_CONFIG,
 } from './config';
 import type { Container } from 'pixi.js';
 import { CollisionLayer, CollisionMask } from './components/Collision';
@@ -332,8 +333,14 @@ export class Game {
     });
     this._systemManager.addSystem(this._trails, 'trails');
 
-    // Powerup system
-    this._powerups = new PowerupSystem(spatialGrid);
+    // Powerup system — pass canonical config so hardcoded defaults are never used
+    this._powerups = new PowerupSystem(spatialGrid, {
+      spawnIntervalMs: POWERUP_CONFIG.SPAWN_INTERVAL_MS,
+      maxPowerups: POWERUP_CONFIG.MAX_POWERUPS,
+      energyValue: POWERUP_CONFIG.ENERGY_VALUE,
+      lifetime: POWERUP_CONFIG.LIFETIME_MS,
+      spawnMargin: POWERUP_CONFIG.SPAWN_MARGIN,
+    });
     this._systemManager.addSystem(this._powerups, 'powerups');
 
     // Ability system

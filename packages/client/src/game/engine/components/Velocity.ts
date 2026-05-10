@@ -38,9 +38,9 @@ export const DEFAULT_VELOCITY: Omit<Velocity, 'vx' | 'vy'> = {
   speed: 0,
   angle: 0,
   targetAngle: 0,
-  maxSpeed: 250,
-  acceleration: 220,
-  drag: 0.988,
+  maxSpeed: 500,    // CAR_PHYSICS.BASE_SPEED
+  acceleration: 520, // CAR_PHYSICS.ACCELERATION
+  drag: 0.989,      // CAR_PHYSICS.LONGITUDINAL_DRAG
 };
 
 /**
