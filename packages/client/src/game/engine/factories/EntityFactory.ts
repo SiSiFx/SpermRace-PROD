@@ -192,6 +192,8 @@ export class EntityFactory {
       maxEnergy: BOOST_CONFIG.MAX_ENERGY,
       minEnergy: BOOST_CONFIG.MIN_ENERGY,
       speedMultiplier: BOOST_CONFIG.SPEED_MULTIPLIER,
+      regenRate: BOOST_CONFIG.REGEN_RATE,
+      consumptionRate: BOOST_CONFIG.CONSUMPTION_RATE,
     }));
 
     // Kill Power (temporary buff after kills)
@@ -310,12 +312,14 @@ export class EntityFactory {
       isLocal: false,
     });
 
-    // Boost — same config as player (default createBoost() uses 1.4× from DEFAULT_BOOST, not 1.8× from config)
+    // Boost — explicit config overrides so DEFAULT_BOOST stale values are never used
     bot.addComponent<Boost>(ComponentNames.BOOST, createBoost({
       energy: BOOST_CONFIG.MAX_ENERGY,
       maxEnergy: BOOST_CONFIG.MAX_ENERGY,
       minEnergy: BOOST_CONFIG.MIN_ENERGY,
       speedMultiplier: BOOST_CONFIG.SPEED_MULTIPLIER,
+      regenRate: BOOST_CONFIG.REGEN_RATE,
+      consumptionRate: BOOST_CONFIG.CONSUMPTION_RATE,
     }));
 
     // Kill Power (temporary buff after kills)
