@@ -47,22 +47,23 @@ src/
     NewGameViewECS.css      Game overlay styles (win overlay, controls hint, class selection)
     Game.tsx                ECS engine — registers all systems, spawns entities, game loop
 
-    systems/                15 ECS systems (priority-ordered):
-      InputSystem.ts          Mouse/touch/gamepad → PlayerInput (hasDirection flag prevents drift)
-      PhysicsSystem.ts        Velocity movement, angle interpolation, drift feel
-      CameraSystem.ts         Smooth follow + zoom
-      ZoneSystem.ts           Shrinking arena — warns then kills outside zone
-      TrailSystem.ts          Emits trail points at tail tip, spatial grid collision → kills
-      PowerupSystem.ts        Powerup spawning + collection
-      AbilitySystem.ts        Shield / Dash / Trap / Overdrive cooldowns + sound dispatch
-      CollisionSystem.ts      Car-to-car bouncing + boundary bounce
-      BotAISystem.ts          Bot pathfinding, steering, ability usage
-      DeathEffectSystem.ts    Death particles + effects
-      CombatFeedbackSystem.ts Kill/damage visual feedback
-      SoundSystem.ts          Web Audio API — all sounds (boost, kill, death, zone, abilities)
-      FloatingTextSystem.ts   Damage numbers + kill text
-      SlowMotionSystem.ts     Time-dilation on kills
-      RenderSystem.ts         PixiJS rendering — trails, sperm head, sine-wave tail, HUD
+    systems/                16 ECS systems (priority-ordered, higher priority = runs first):
+      InputSystem.ts          1000  Mouse/touch/gamepad → PlayerInput (hasDirection flag prevents drift)
+      PhysicsSystem.ts         800  Velocity movement, angle interpolation, drift feel
+      CameraSystem.ts          799  Smooth follow + zoom (AFTER physics so it reacts to new positions)
+      AbilitySystem.ts         700  Shield / Dash / Trap / Overdrive cooldowns + sound dispatch
+      TrailSystem.ts           600  Emits trail points at tail tip, spatial grid collision → kills
+      CollisionSystem.ts       500  Car-to-car bouncing + zone boundary kills
+      ZoneSystem.ts            400  Shrinking arena — warns then kills outside zone
+      PowerupSystem.ts         300  Powerup spawning + collection
+      BotAISystem.ts           200  Bot pathfinding, steering, ability usage
+      DeathEffectSystem.ts     199  Death particles + effects
+      SoundSystem.ts           150  Web Audio API — all sounds (boost, kill, death, zone, abilities)
+      SlowMotionSystem.ts      150  Time-dilation on kills
+      RenderSystem.ts          100  PixiJS rendering — trails, sperm head, sine-wave tail, HUD
+      PostProcessingSystem.ts  100  Danger vignette, CRT (desktop only), flash effects
+      CombatFeedbackSystem.ts   50  Kill/damage visual feedback (runs after render)
+      FloatingTextSystem.ts     50  Damage numbers + kill text (runs after render)
 
     factories/
       EntityFactory.ts      Creates player + bot entities with all ECS components
@@ -85,8 +86,14 @@ src/
 
 ## How the game loop works
 
-**System update order (every frame):**
-Input → Physics → Camera → Zone → Trail (collision) → Powerup → Ability → Collision → BotAI → DeathEffect → CombatFeedback → Sound → FloatingText → SlowMotion → Render
+**System update order (every frame, by SystemPriority — higher = runs first):**
+Input (1000) → Physics (800) → Camera (799) → Ability (700) → Trail (600) → Collision (500) → Zone (400) → Powerup (300) → BotAI (200) → DeathEffect (199) → Sound (150) → SlowMotion (150) → Render (100) → PostProcessing (100) → CombatFeedback (50) → FloatingText (50)
+
+Key ordering notes:
+- Camera runs AFTER Physics (not before) — smooth follow reacts to new positions
+- Ability runs BEFORE Trail/Collision — ability state is set before kill detection
+- Zone runs AFTER Collision — car-car bounce is resolved first
+- CombatFeedback/FloatingText run AFTER Render — last in pipeline
 
 **Movement:** `position += velocity * dt`. Heading angle interpolates toward target (drift feel). `hasDirection` flag on PlayerInput prevents angle update when no mouse input, stopping rightward drift.
 
