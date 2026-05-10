@@ -187,7 +187,8 @@ export function NewGameViewECS({
   const [showControlsHint, setShowControlsHint] = useState(false);
   const controlsHintShownAtRef = useRef<number>(0);
   const [stickUi, setStickUi] = useState({ active: false, dx: 0, dy: 0, baseX: 0, baseY: 0 });
-  const [skipMapOverview, setSkipMapOverview] = useState(false);
+  // Overview is never skipped in this flow (quick-replay goes through full pre-game too)
+  const skipMapOverview = false;
   const [showQuickJoin, setShowQuickJoin] = useState(mode === 'practice');
   const [killFeed, setKillFeed] = useState<KillFeedItem[]>([]);
   const [streakBanner, setStreakBanner] = useState<StreakBanner | null>(null);
