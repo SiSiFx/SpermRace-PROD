@@ -659,7 +659,7 @@ export const INPUT_CONFIG = {
     DASH: ['KeyQ'],
     SHIELD: ['KeyE'],
     TRAP: ['KeyF'],
-    OVERDRIVE: ['ShiftLeft', 'ShiftRight'],
+    OVERDRIVE: ['KeyR'],
   },
 
   /** Mouse deadzone */

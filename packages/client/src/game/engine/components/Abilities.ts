@@ -266,5 +266,5 @@ export const ABILITY_KEYBINDINGS: Record<AbilityType, string[]> = {
   [AbilityType.DASH]: ['KeyQ'],
   [AbilityType.SHIELD]: ['KeyE'],
   [AbilityType.TRAP]: ['KeyF'],
-  [AbilityType.OVERDRIVE]: ['ShiftLeft', 'ShiftRight'],
+  [AbilityType.OVERDRIVE]: ['KeyR'],
 };

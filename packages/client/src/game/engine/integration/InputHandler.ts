@@ -7,6 +7,7 @@ import { Game } from '../Game';
 import { ComponentNames } from '../components';
 import type { Position } from '../components/Position';
 import type { Velocity } from '../components/Velocity';
+import { ABILITY_CONFIG } from '../config/GameConstants';
 
 /**
  * Input state
@@ -81,10 +82,10 @@ export class InputHandler {
 
   // Ability cooldown tracking (for UI feedback)
   private readonly _abilities = {
-    dash: { key: 'KeyQ', lastUsed: 0, cooldown: 3000 },
-    shield: { key: 'KeyE', lastUsed: 0, cooldown: 8000 },
-    trap: { key: 'KeyF', lastUsed: 0, cooldown: 5000 },
-    overdrive: { key: 'Shift', lastUsed: 0, cooldown: 10000 },
+    dash:      { key: 'KeyQ', lastUsed: 0, cooldown: ABILITY_CONFIG.DASH.COOLDOWN_MS },
+    shield:    { key: 'KeyE', lastUsed: 0, cooldown: ABILITY_CONFIG.SHIELD.COOLDOWN_MS },
+    trap:      { key: 'KeyF', lastUsed: 0, cooldown: ABILITY_CONFIG.TRAP.COOLDOWN_MS },
+    overdrive: { key: 'KeyR', lastUsed: 0, cooldown: ABILITY_CONFIG.OVERDRIVE.COOLDOWN_MS },
   };
 
   constructor(config: InputHandlerConfig) {
@@ -308,15 +309,12 @@ export class InputHandler {
         }
         break;
 
-      case 'ShiftLeft':
-      case 'ShiftRight':
-        // Overdrive requires Ctrl+Shift or Cmd+Shift
-        if (e.ctrlKey || e.metaKey) {
-          if (this.getAbilityCooldown('overdrive') === 0) {
-            this._abilities.overdrive.lastUsed = now;
-            this._onAbilityActivate?.('overdrive');
-            this._game.activateAbility('overdrive');
-          }
+      case 'KeyR':
+        // Overdrive — R key, matches NewGameViewECS polling loop
+        if (this.getAbilityCooldown('overdrive') === 0) {
+          this._abilities.overdrive.lastUsed = now;
+          this._onAbilityActivate?.('overdrive');
+          this._game.activateAbility('overdrive');
         }
         break;
     }
