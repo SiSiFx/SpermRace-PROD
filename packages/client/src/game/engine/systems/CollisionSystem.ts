@@ -13,7 +13,7 @@ import { killEntity, hasSpawnProtection } from '../components/Health';
 import type { Boost } from '../components/Boost';
 import { SpatialGrid } from '../spatial/SpatialGrid';
 import { ComponentNames, createComponentMask } from '../components';
-import { BODY_COLLISION_CONFIG } from '../config';
+import { BODY_COLLISION_CONFIG, COLLISION_CONFIG, ARENA_CONFIG } from '../config';
 import type { ZoneSystem } from './ZoneSystem';
 import { distanceToSegmentSquared } from '../view/math';
 import type { TrailSystem } from './TrailSystem';
@@ -350,10 +350,10 @@ export class CollisionSystem extends System {
               const dvy = vel1.vy - vel2.vy;
               const dot = dvx * nx + dvy * ny;
 
-              vel1.vx -= dot * nx * 0.8;
-              vel1.vy -= dot * ny * 0.8;
-              vel2.vx += dot * nx * 0.8;
-              vel2.vy += dot * ny * 0.8;
+              vel1.vx -= dot * nx * COLLISION_CONFIG.BOUNCE_COEFFICIENT;
+              vel1.vy -= dot * ny * COLLISION_CONFIG.BOUNCE_COEFFICIENT;
+              vel2.vx += dot * nx * COLLISION_CONFIG.BOUNCE_COEFFICIENT;
+              vel2.vy += dot * ny * COLLISION_CONFIG.BOUNCE_COEFFICIENT;
 
               vel1.speed = Math.sqrt(vel1.vx * vel1.vx + vel1.vy * vel1.vy);
               vel2.speed = Math.sqrt(vel2.vx * vel2.vx + vel2.vy * vel2.vy);
@@ -453,7 +453,7 @@ export class CollisionSystem extends System {
       const dy = position.y - zoneInfo.center.y;
       const distFromCenter = Math.sqrt(dx * dx + dy * dy);
 
-      if (distFromCenter > zoneInfo.currentRadius + 50) {
+      if (distFromCenter > zoneInfo.currentRadius + ARENA_CONFIG.BOUNDARY_MARGIN) {
         // Outside zone with margin - eliminate
         this._collisions.push({
           victimId: car.id,

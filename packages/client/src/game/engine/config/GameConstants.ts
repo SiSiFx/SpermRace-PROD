@@ -239,6 +239,9 @@ export const COLLISION_CONFIG = {
 
   /** Post-bounce grace period (ms) */
   POST_BOUNCE_GRACE_MS: 700,
+
+  /** Elastic bounce coefficient for car-to-car collisions (0 = inelastic, 1 = fully elastic) */
+  BOUNCE_COEFFICIENT: 0.8,
 } as const;
 
 /**
