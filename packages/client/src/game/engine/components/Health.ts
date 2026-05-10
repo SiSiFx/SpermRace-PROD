@@ -3,6 +3,8 @@
  * Tracks entity health and survival state
  */
 
+import { MATCH_CONFIG } from '../config/GameConstants';
+
 /**
  * Entity state enum
  */
@@ -82,7 +84,7 @@ export function createHealth(config?: Partial<Health>): Health {
   const now = Date.now();
   return {
     ...DEFAULT_HEALTH,
-    spawnGraceUntil: now + 1000, // 1 second spawn protection by default
+    spawnGraceUntil: now + MATCH_CONFIG.SPAWN_GRACE_MS,
     respawnTime: 0,
     killerId: null,
     wasAlive: true,
@@ -142,7 +144,7 @@ export function destroyEntity(health: Health): void {
 /**
  * Set entity to alive state
  */
-export function setEntityAlive(health: Health, spawnGraceMs: number = 1000): void {
+export function setEntityAlive(health: Health, spawnGraceMs: number = MATCH_CONFIG.SPAWN_GRACE_MS): void {
   health.state = EntityState.ALIVE;
   health.isAlive = true;
   health.spawnGraceUntil = Date.now() + spawnGraceMs;
@@ -154,7 +156,7 @@ export function setEntityAlive(health: Health, spawnGraceMs: number = 1000): voi
 /**
  * Set entity to spawning state
  */
-export function setEntitySpawning(health: Health, spawnGraceMs: number = 1000): void {
+export function setEntitySpawning(health: Health, spawnGraceMs: number = MATCH_CONFIG.SPAWN_GRACE_MS): void {
   health.state = EntityState.SPAWNING;
   health.isAlive = false;
   health.spawnGraceUntil = Date.now() + spawnGraceMs;

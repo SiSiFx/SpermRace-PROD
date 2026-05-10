@@ -86,7 +86,7 @@ export const COLLISION_DEFAULTS = {
 
   /** Trail collision */
   TRAIL: {
-    radius: 3,
+    radius: 5,  // COLLISION_CONFIG.TRAIL_RADIUS
     layer: CollisionLayer.TRAIL,
     mask: CollisionMask.TRAIL,
     enabled: true,
@@ -96,7 +96,7 @@ export const COLLISION_DEFAULTS = {
 
   /** Powerup collision */
   POWERUP: {
-    radius: 15,
+    radius: 20,  // COLLISION_CONFIG.POWERUP_RADIUS
     layer: CollisionLayer.POWERUP,
     mask: CollisionMask.POWERUP,
     enabled: true,

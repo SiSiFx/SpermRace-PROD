@@ -18,6 +18,7 @@ import type { Entity } from '../core/Entity';
 import type { ZoneSystem } from './ZoneSystem';
 import type { TrailSystem } from './TrailSystem';
 import type { AbilitySystem } from './AbilitySystem';
+import { BOT_AI_TUNING } from '../config/GameConstants';
 
 /**
  * AI behavior state
@@ -111,11 +112,11 @@ export class BotAISystem extends System {
     this._spatialGrid = spatialGrid;
 
     this._config = {
-      reactionDelay: config?.reactionDelay ?? 100,
-      accuracy: config?.accuracy ?? 0.8,
-      aggression: config?.aggression ?? 0.6,
-      abilityUsageChance: config?.abilityUsageChance ?? 0.3,
-      predictionDistance: config?.predictionDistance ?? 200,
+      reactionDelay: config?.reactionDelay ?? BOT_AI_TUNING.REACTION_DELAY_MS,
+      accuracy: config?.accuracy ?? BOT_AI_TUNING.ACCURACY,
+      aggression: config?.aggression ?? BOT_AI_TUNING.AGGRESSION,
+      abilityUsageChance: config?.abilityUsageChance ?? BOT_AI_TUNING.ABILITY_USAGE_CHANCE,
+      predictionDistance: config?.predictionDistance ?? BOT_AI_TUNING.PREDICTION_DISTANCE,
     };
 
     this._botMask = createComponentMask(

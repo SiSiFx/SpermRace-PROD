@@ -21,7 +21,7 @@ import { ComponentNames } from '../components';
 import { CollisionLayer, CollisionMask } from '../components/Collision';
 import { EntityType } from '../components/Player';
 import { EntityState } from '../components/Health';
-import { TRAIL_CONFIG, BOOST_CONFIG, COLLISION_CONFIG, MATCH_CONFIG, CAR_PHYSICS, PLAYER_VISUAL_CONFIG } from '../config';
+import { TRAIL_CONFIG, BOOST_CONFIG, COLLISION_CONFIG, MATCH_CONFIG, CAR_PHYSICS, PLAYER_VISUAL_CONFIG, SPAWN_CONFIG } from '../config';
 
 function getVisibleBodyCollisionRadius(sizeMultiplier: number): number {
   // Keep the gameplay hit circle aligned with the visible sperm head.
@@ -352,7 +352,7 @@ export class EntityFactory {
       return { x, y };
     }
 
-    const margin = 200;
+    const margin = SPAWN_CONFIG.EDGE_PADDING;
     return {
       x: margin + Math.random() * (this._config.worldWidth - margin * 2),
       y: margin + Math.random() * (this._config.worldHeight - margin * 2),
