@@ -11,7 +11,6 @@ import { shouldCollide, circleCollisionTest } from '../components/Collision';
 import type { Health } from '../components/Health';
 import { killEntity, hasSpawnProtection } from '../components/Health';
 import type { Boost } from '../components/Boost';
-import { setBoostEnergy } from '../components/Boost';
 import { SpatialGrid } from '../spatial/SpatialGrid';
 import { ComponentNames, createComponentMask } from '../components';
 import { BODY_COLLISION_CONFIG } from '../config';
@@ -416,9 +415,6 @@ export class CollisionSystem extends System {
             type: 'powerup',
             timestamp: now,
           });
-
-          // Apply powerup effect (restore energy)
-          setBoostEnergy(boost, Math.min(boost.maxEnergy, boost.energy + 30));
 
           // Remove powerup from spatial grid
           // Note: Powerups are managed by PowerupSystem, not as entities in EntityManager

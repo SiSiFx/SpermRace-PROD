@@ -89,8 +89,7 @@ export class PhysicsSystem extends System {
       // Drain / regenerate boost energy each physics tick
       if (boost) updateBoost(boost, fixedDt);
 
-      // Apply boost multiplier
-      const boostMult = boost ? (boost.isBoosting ? boost.speedMultiplier : 1) : 1;
+      // Boost speed is handled inside _updateVelocity via isBoosting + _BOOST_SPEED_RATIO
       const isBoosting = boost ? boost.isBoosting : false;
 
       // Overdrive: Tank ability — speed boost without consuming boost energy.

@@ -30,7 +30,7 @@ import type { PowerupData } from './PowerupSystem';
 import type { Entity } from '../core/Entity';
 import type { ZoneSystem } from './ZoneSystem';
 import type { SpatialGrid } from '../spatial/SpatialGrid';
-import { PLAYER_VISUAL_CONFIG, TRAIL_EFFECTS, MICROSCOPE_PALETTE, MICROSCOPE_VISUALS, MATCH_CONFIG } from '../config/GameConstants';
+import { PLAYER_VISUAL_CONFIG, TRAIL_EFFECTS, MICROSCOPE_PALETTE, MICROSCOPE_VISUALS, MATCH_CONFIG, ABILITY_CONFIG, POWERUP_CONFIG } from '../config/GameConstants';
 import { PostProcessingSystem, createPostProcessingSystem } from './PostProcessingSystem';
 import type { KillPower } from '../components/KillPower';
 import { getKillPowerGrowthMult } from '../components/KillPower';
@@ -2262,7 +2262,7 @@ export class RenderSystem extends System {
     if (!layer) return;
 
     const TRAP_COLOR = 0xffa300; // PICO-8 orange
-    const TRAP_LIFETIME = 8000;
+    const TRAP_LIFETIME = ABILITY_CONFIG.TRAP.LIFETIME_MS;
     const TRAP_RADIUS = 8;
 
     const activeTrapIds = new Set<string>();
@@ -2351,7 +2351,7 @@ export class RenderSystem extends System {
   private _updatePowerupGraphics(powerupGraphics: { container: ContainerType; graphics: GraphicsType }, powerup: PowerupData, now: number): void {
     const { container } = powerupGraphics;
     const age = now - powerup.spawnTime;
-    const lifetime = 15000;
+    const lifetime = POWERUP_CONFIG.LIFETIME_MS;
     const fadeStart = lifetime - 3000;
 
     container.x = powerup.x;

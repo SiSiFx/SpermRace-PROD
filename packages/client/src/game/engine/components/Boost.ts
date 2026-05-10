@@ -42,14 +42,14 @@ export const BOOST_COMPONENT = 'Boost';
  * Default boost values
  */
 export const DEFAULT_BOOST: Omit<Boost, 'energy'> = {
-  maxEnergy: 100,
-  minEnergy: 20,
+  maxEnergy: 100,    // BOOST_CONFIG.MAX_ENERGY
+  minEnergy: 25,     // BOOST_CONFIG.MIN_ENERGY
   isBoosting: false,
-  speedMultiplier: 1.4,
-  regenRate: 15,
-  consumptionRate: 25,
-  trailWidthMultiplier: 2,
-  trailLifetimeBonus: 2000,
+  speedMultiplier: 1.8,  // BOOST_CONFIG.SPEED_MULTIPLIER
+  regenRate: 12,         // BOOST_CONFIG.REGEN_RATE
+  consumptionRate: 40,   // BOOST_CONFIG.CONSUMPTION_RATE
+  trailWidthMultiplier: 2,    // BOOST_CONFIG.TRAIL_WIDTH_MULTIPLIER
+  trailLifetimeBonus: 2000,   // BOOST_CONFIG.TRAIL_LIFETIME_BONUS
 };
 
 /**

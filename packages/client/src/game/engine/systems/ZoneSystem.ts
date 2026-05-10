@@ -8,6 +8,7 @@ import type { Position } from '../components/Position';
 import type { Health } from '../components/Health';
 import { killEntity } from '../components/Health';
 import { ComponentNames, createComponentMask } from '../components';
+import { MATCH_CONFIG } from '../config/GameConstants';
 
 /**
  * Zone state
@@ -73,13 +74,13 @@ export class ZoneSystem extends System {
 
     this._positionHealthMask = createComponentMask(ComponentNames.POSITION, ComponentNames.HEALTH);
 
-    // Default configuration
+    // Default configuration — mirrors MATCH_CONFIG so standalone use is safe
     this._config = {
-      startDelayMs: config?.startDelayMs ?? 2000,
-      warningDurationMs: config?.warningDurationMs ?? 3000,
-      shrinkDurationMs: config?.shrinkDurationMs ?? 30000,
-      minSize: config?.minSize ?? 600,
-      shrinkSpeed: config?.shrinkSpeed ?? 15,
+      startDelayMs: config?.startDelayMs ?? MATCH_CONFIG.ZONE_START_DELAY_MS,
+      warningDurationMs: config?.warningDurationMs ?? MATCH_CONFIG.ZONE_WARNING_DURATION_MS,
+      shrinkDurationMs: config?.shrinkDurationMs ?? MATCH_CONFIG.ZONE_SHRINK_DURATION_MS,
+      minSize: config?.minSize ?? MATCH_CONFIG.ZONE_MIN_SIZE,
+      shrinkSpeed: config?.shrinkSpeed ?? MATCH_CONFIG.ZONE_SHRINK_RATE,
       centerX: config?.centerX ?? 1750,
       centerY: config?.centerY ?? 1250,
     };
