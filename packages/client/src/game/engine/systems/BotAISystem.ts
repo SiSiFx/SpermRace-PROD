@@ -17,6 +17,7 @@ import { ComponentNames, createComponentMask } from '../components';
 import type { Entity } from '../core/Entity';
 import type { ZoneSystem } from './ZoneSystem';
 import type { TrailSystem } from './TrailSystem';
+import type { AbilitySystem } from './AbilitySystem';
 
 /**
  * AI behavior state
@@ -189,7 +190,7 @@ export class BotAISystem extends System {
 
       // Use abilities
       if (abilities && now - aiState.lastAbilityCheck > 500) {
-        this._useAbilities(bot, abilities, boost, position, targets, now);
+        this._useAbilities(bot, abilities, position, targets, now);
         aiState.lastAbilityCheck = now;
       }
     }
@@ -299,7 +300,7 @@ export class BotAISystem extends System {
   ): { x: number; y: number } | null {
     if (!trailSystem) return null;
 
-    const DANGER_DIST = 60; // px — segments inside this range trigger avoidance
+    const DANGER_DIST = 120; // px — at 500px/s and 120ms reaction time, bot needs ~60px lead, 120 gives 2× margin
     const DANGER_DIST_SQ = DANGER_DIST * DANGER_DIST;
 
     let fx = 0;
@@ -419,24 +420,26 @@ export class BotAISystem extends System {
   }
 
   /**
-   * Use abilities
+   * Use abilities — delegates to AbilitySystem so all side-effects fire correctly:
+   *   Shield  → health.shielded = true (collision system respects it)
+   *   Dash    → vx/vy/angle snapped (not just velocity.speed)
+   *   Trap    → _placeTrap() stamps trail points behind bot
+   *   Overdrive → trail widening + wall stamp, proper expiry restore
    */
   private _useAbilities(
     bot: Entity,
     abilities: Abilities,
-    boost: Boost | undefined,
     position: Position,
     targets: Entity[],
     now: number
   ): void {
-    // Shield when fleeing or low health
+    const abilitySystem = this.getEngine()?.getSystemManager()?.getSystem<AbilitySystem>('abilities') ?? null;
+
+    // Shield when nearby threat
     if (Math.random() < this._config.abilityUsageChance) {
       if (isAbilityReady(abilities, AbilityType.SHIELD)) {
         if (this._shouldUseShield(position, targets)) {
-          abilities.shield.ready = false;
-          abilities.shield.cooldownUntil = now + ABILITY_CONFIG[AbilityType.SHIELD].cooldown;
-          abilities.shield.activeUntil = now + ABILITY_CONFIG[AbilityType.SHIELD].duration;
-          abilities.active.add(AbilityType.SHIELD);
+          abilitySystem?.activateAbility(bot.id, AbilityType.SHIELD);
           return;
         }
       }
@@ -446,13 +449,7 @@ export class BotAISystem extends System {
     if (Math.random() < this._config.abilityUsageChance * 0.5) {
       if (isAbilityReady(abilities, AbilityType.DASH)) {
         if (this._shouldUseDash(bot, position, targets)) {
-          abilities.dash.ready = false;
-          abilities.dash.cooldownUntil = now + ABILITY_CONFIG[AbilityType.DASH].cooldown;
-          // Apply dash effect
-          const velocity = bot.getComponent<Velocity>(ComponentNames.VELOCITY);
-          if (velocity) {
-            velocity.speed = 600;
-          }
+          abilitySystem?.activateAbility(bot.id, AbilityType.DASH);
           return;
         }
       }
@@ -461,9 +458,7 @@ export class BotAISystem extends System {
     // Trap when being chased
     if (Math.random() < this._config.abilityUsageChance * 0.3) {
       if (isAbilityReady(abilities, AbilityType.TRAP)) {
-        abilities.trap.ready = false;
-        abilities.trap.cooldownUntil = now + ABILITY_CONFIG[AbilityType.TRAP].cooldown;
-        // Trap is handled by AbilitySystem
+        abilitySystem?.activateAbility(bot.id, AbilityType.TRAP);
         return;
       }
     }
@@ -471,13 +466,7 @@ export class BotAISystem extends System {
     // Overdrive when aggressive
     if (Math.random() < this._config.abilityUsageChance * 0.2) {
       if (isAbilityReady(abilities, AbilityType.OVERDRIVE)) {
-        abilities.overdrive.ready = false;
-        abilities.overdrive.cooldownUntil = now + ABILITY_CONFIG[AbilityType.OVERDRIVE].cooldown;
-        abilities.overdrive.activeUntil = now + ABILITY_CONFIG[AbilityType.OVERDRIVE].duration;
-        abilities.active.add(AbilityType.OVERDRIVE);
-        if (boost) {
-          boost.speedMultiplier = 2;
-        }
+        abilitySystem?.activateAbility(bot.id, AbilityType.OVERDRIVE);
         return;
       }
     }

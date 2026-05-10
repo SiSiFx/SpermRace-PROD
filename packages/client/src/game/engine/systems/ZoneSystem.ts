@@ -84,8 +84,10 @@ export class ZoneSystem extends System {
       centerY: config?.centerY ?? 1250,
     };
 
-    // Start with full arena radius
-    this._currentRadius = Math.max(this._config.centerX, this._config.centerY);
+    // Start with radius large enough to cover ALL arena corners from center.
+    // Math.max(cx, cy) only reaches the nearest axis-aligned edge, leaving
+    // diagonal corners (distance = sqrt(cx²+cy²)) outside the initial zone.
+    this._currentRadius = Math.hypot(this._config.centerX, this._config.centerY);
     this._targetRadius = this._currentRadius;
   }
 
@@ -142,7 +144,7 @@ export class ZoneSystem extends System {
     const progress = Math.min(1, Math.max(0, elapsedInShrink / this._config.shrinkDurationMs));
 
     // Shrink from initial towards target (minSize / 2)
-    const initialRadius = Math.max(this._config.centerX, this._config.centerY);
+    const initialRadius = Math.hypot(this._config.centerX, this._config.centerY);
     const targetRadius = this._config.minSize / 2;
     
     this._currentRadius = initialRadius + (targetRadius - initialRadius) * progress;
@@ -161,7 +163,7 @@ export class ZoneSystem extends System {
    */
   reset(): void {
     this._state = ZoneState.IDLE;
-    this._currentRadius = Math.max(this._config.centerX, this._config.centerY);
+    this._currentRadius = Math.hypot(this._config.centerX, this._config.centerY);
     this._targetRadius = this._currentRadius;
     this._stateStartTime = 0;
     this._elapsedTime = 0; // Reset accumulator
@@ -299,7 +301,7 @@ export class ZoneSystem extends System {
     this._config.centerX = width / 2;
     this._config.centerY = height / 2;
     if (this._state === ZoneState.IDLE) {
-      this._currentRadius = Math.max(width, height) / 2;
+      this._currentRadius = Math.hypot(width / 2, height / 2);
     }
   }
 

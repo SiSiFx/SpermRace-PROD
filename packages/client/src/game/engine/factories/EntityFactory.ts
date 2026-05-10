@@ -310,8 +310,13 @@ export class EntityFactory {
       isLocal: false,
     });
 
-    // Boost
-    bot.addComponent<Boost>(ComponentNames.BOOST, createBoost());
+    // Boost — same config as player (default createBoost() uses 1.4× from DEFAULT_BOOST, not 1.8× from config)
+    bot.addComponent<Boost>(ComponentNames.BOOST, createBoost({
+      energy: BOOST_CONFIG.MAX_ENERGY,
+      maxEnergy: BOOST_CONFIG.MAX_ENERGY,
+      minEnergy: BOOST_CONFIG.MIN_ENERGY,
+      speedMultiplier: BOOST_CONFIG.SPEED_MULTIPLIER,
+    }));
 
     // Kill Power (temporary buff after kills)
     bot.addComponent<KillPower>(ComponentNames.KILL_POWER, createKillPower());

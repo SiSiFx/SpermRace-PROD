@@ -97,12 +97,12 @@ export class PhysicsSystem extends System {
       // Checked directly from abilities.active so it works independently of isBoosting.
       const isOverdriving = abilities ? abilities.active.has(AbilityType.OVERDRIVE) : false;
 
-      // Apply kill power speed burst
+      // Apply kill power speed burst — passed as speedMultiplier so it widens the max-speed cap.
+      // boostMult is NOT passed: boost speed is handled independently via isBoosting+_BOOST_SPEED_RATIO.
       const killPowerMult = killPower ? getKillPowerSpeedMult(killPower, now) : 1.0;
-      const speedMult = boostMult * killPowerMult;
 
       // Update velocity based on target angle
-      this._updateVelocity(velocity, fixedDt, isBoosting, speedMult, isOverdriving);
+      this._updateVelocity(velocity, fixedDt, isBoosting, killPowerMult, isOverdriving);
 
       // Apply velocity to position
       position.x += velocity.vx * fixedDt;
@@ -172,10 +172,11 @@ export class PhysicsSystem extends System {
     velocity.vx = vForwardAfter * headingX - vSideAfter * headingY;
     velocity.vy = vForwardAfter * headingY + vSideAfter * headingX;
 
-    // 3. Clamp to max speed
-    // Overdrive raises the cap to 1.6× base — reaches ~672px/s vs 420px/s normal
+    // 3. Clamp to max speed.
+    // speedMultiplier = killPowerMult (1.0 normally, 1.2 for 2s after a kill).
+    // It widens the cap multiplicatively so kill-reward speed burst actually takes effect.
     const speed = Math.hypot(velocity.vx, velocity.vy);
-    const maxSpeed = velocity.maxSpeed * (isBoosting ? this._BOOST_SPEED_RATIO : isOverdriving ? 1.6 : 1);
+    const maxSpeed = velocity.maxSpeed * speedMultiplier * (isBoosting ? this._BOOST_SPEED_RATIO : isOverdriving ? 1.6 : 1);
     let finalSpeed = speed;
     if (speed > maxSpeed) {
       const ratio = maxSpeed / speed;
@@ -201,34 +202,30 @@ export class PhysicsSystem extends System {
     const minX = margin;
     const minY = margin;
 
-    let hitBoundary = false;
+    // Wall-slide: zero the perpendicular velocity component instead of reversing it.
+    // Reversing caused rapid re-collision at full speed because targetAngle kept pointing
+    // into the wall, driving the sperm back into the boundary every frame (60Hz vibration).
 
     // Check X bounds
     if (position.x < minX) {
       position.x = minX;
-      velocity.vx *= -0.5; // Bounce with damping
-      hitBoundary = true;
+      if (velocity.vx < 0) velocity.vx = 0;
     } else if (position.x > maxX) {
       position.x = maxX;
-      velocity.vx *= -0.5;
-      hitBoundary = true;
+      if (velocity.vx > 0) velocity.vx = 0;
     }
 
     // Check Y bounds
     if (position.y < minY) {
       position.y = minY;
-      velocity.vy *= -0.5;
-      hitBoundary = true;
+      if (velocity.vy < 0) velocity.vy = 0;
     } else if (position.y > maxY) {
       position.y = maxY;
-      velocity.vy *= -0.5;
-      hitBoundary = true;
+      if (velocity.vy > 0) velocity.vy = 0;
     }
 
-    // Update angle if we bounced
-    if (hitBoundary) {
-      velocity.angle = Math.atan2(velocity.vy, velocity.vx);
-    }
+    // Recompute speed after wall clamp (don't redirect angle — let steering continue naturally)
+    velocity.speed = Math.hypot(velocity.vx, velocity.vy);
   }
 
   /**

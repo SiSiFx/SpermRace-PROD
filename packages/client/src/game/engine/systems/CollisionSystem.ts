@@ -447,6 +447,7 @@ export class CollisionSystem extends System {
     for (const car of cars) {
       const position = car.getComponent<Position>(ComponentNames.POSITION);
       const health = car.getComponent<Health>(ComponentNames.HEALTH);
+      const velocity = car.getComponent<Velocity>(ComponentNames.VELOCITY);
 
       if (!position || !health) continue;
       if (!health.isAlive) continue;
@@ -469,12 +470,19 @@ export class CollisionSystem extends System {
 
         killEntity(health, 'zone', false);
       } else if (distFromCenter > zoneInfo.currentRadius) {
-        // In warning zone - push back
-        const pushFactor = (distFromCenter - zoneInfo.currentRadius) / 50;
-        const angle = Math.atan2(dy, dx);
-
-        position.x -= Math.cos(angle) * pushFactor * 2;
-        position.y -= Math.sin(angle) * pushFactor * 2;
+        // In warning zone — zero the outward velocity component so the entity slides
+        // along the zone edge instead of oscillating. Position nudge alone caused
+        // high-speed vibration because velocity kept driving the entity back out.
+        if (velocity) {
+          const outNx = dx / distFromCenter;
+          const outNy = dy / distFromCenter;
+          const outwardSpeed = velocity.vx * outNx + velocity.vy * outNy;
+          if (outwardSpeed > 0) {
+            velocity.vx -= outwardSpeed * outNx;
+            velocity.vy -= outwardSpeed * outNy;
+            velocity.speed = Math.hypot(velocity.vx, velocity.vy);
+          }
+        }
       }
     }
   }

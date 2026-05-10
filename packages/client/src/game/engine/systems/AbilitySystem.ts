@@ -267,6 +267,15 @@ export class AbilitySystem extends System {
           boost.trailWidthMultiplier = BOOST_CONFIG.TRAIL_WIDTH_MULTIPLIER;
           boost.trailLifetimeBonus = BOOST_CONFIG.TRAIL_LIFETIME_BONUS;
         }
+        // Restore trail.boostedWidth and trail.lifetime from saved pre-Overdrive state.
+        // Without this, trail.lifetime stays at 11500ms permanently after first Overdrive use.
+        const trail = entity.getComponent<Trail>(ComponentNames.TRAIL);
+        const saved = this._overdriveSaved.get(entity.id);
+        if (trail && saved) {
+          trail.boostedWidth = saved.boostedWidth;
+          trail.lifetime = saved.lifetime;
+        }
+        this._overdriveSaved.delete(entity.id);
         break;
       }
     }
@@ -276,15 +285,19 @@ export class AbilitySystem extends System {
    * Apply dash ability
    */
   private _applyDash(entity: Entity, position: Position, velocity: Velocity, abilities: Abilities): void {
-    // Instant speed boost in current direction
+    // Dash fires toward where the player is STEERING (targetAngle), not their current
+    // physical heading (angle). Using velocity.angle caused dash to fire in the wrong
+    // direction mid-turn — player intent should always win here.
     const dashSpeed = 600;
     const dashDuration = 0.15; // seconds
+    const dashAngle = velocity.targetAngle;
 
-    velocity.vx = Math.cos(velocity.angle) * dashSpeed;
-    velocity.vy = Math.sin(velocity.angle) * dashSpeed;
+    velocity.vx = Math.cos(dashAngle) * dashSpeed;
+    velocity.vy = Math.sin(dashAngle) * dashSpeed;
+    velocity.angle = dashAngle; // snap heading to match so visual is consistent
 
     // Create visual effect
-    this._createDashEffect(position.x, position.y, velocity.angle, entity.id);
+    this._createDashEffect(position.x, position.y, dashAngle, entity.id);
   }
 
   /**

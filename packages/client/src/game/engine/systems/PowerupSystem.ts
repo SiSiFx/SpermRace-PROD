@@ -12,11 +12,12 @@ import { refillBoost, setBoostEnergy } from '../components/Boost';
 import type { Health } from '../components/Health';
 import { ComponentNames, createComponentMask } from '../components';
 import type { KillPower } from '../components/KillPower';
-import { createKillPower } from '../components/KillPower';
+import { createKillPower, activateKillPower } from '../components/KillPower';
 import { POWERUP_CONFIG } from '../config/GameConstants';
 import { SpatialGrid } from '../spatial/SpatialGrid';
 import type { Entity } from '../core/Entity';
-import type { Abilities } from '../components/Abilities';
+import type { AbilitySystem } from './AbilitySystem';
+import { AbilityType } from '../config/AbilityConfig';
 
 /**
  * Powerup types
@@ -202,7 +203,10 @@ export class PowerupSystem extends System {
    * Get random powerup type
    */
   private _getRandomType(): PowerupType {
-    return Math.random() < 0.5 ? PowerupType.ENERGY : PowerupType.SPEED;
+    const r = Math.random();
+    if (r < 0.45) return PowerupType.ENERGY;
+    if (r < 0.85) return PowerupType.SPEED;
+    return PowerupType.OVERDRIVE; // 15% chance — rare, high-impact
   }
 
   /**
@@ -266,23 +270,25 @@ export class PowerupSystem extends System {
           kp = createKillPower();
           entity.addComponent(ComponentNames.KILL_POWER, kp);
         }
-        const now = Date.now();
-        const expiry = now + POWERUP_CONFIG.SPEED_DURATION_MS;
-        kp.active = true;
+        // Use activateKillPower so glow, stack count, and expiry are all set correctly
+        activateKillPower(kp, Date.now());
+        // Override speed multiplier with the powerup-specific value (may exceed kill reward)
         kp.speedMultiplier = Math.max(kp.speedMultiplier, POWERUP_CONFIG.SPEED_MULTIPLIER);
-        kp.speedExpiresAt = Math.max(kp.speedExpiresAt, expiry);
-        // Ensure growthExpiresAt doesn't prematurely deactivate the component
-        if (kp.growthExpiresAt < expiry) kp.growthExpiresAt = expiry;
+        kp.speedExpiresAt = Math.max(kp.speedExpiresAt, Date.now() + POWERUP_CONFIG.SPEED_DURATION_MS);
         break;
       }
 
-      case PowerupType.OVERDRIVE:
-        // Activate overdrive ability
-        const abilities = entity.getComponent<Abilities>(ComponentNames.ABILITIES);
-        if (abilities) {
-          // Would activate overdrive
+      case PowerupType.OVERDRIVE: {
+        // Delegate to AbilitySystem so all activation side-effects fire (trail widening,
+        // wall stamp, sound). Fill boost to max first so the activation energy gate
+        // always passes — the cost (50) is still deducted from the refilled tank.
+        const abilitySystem = this.getEngine()?.getSystemManager()?.getSystem<AbilitySystem>('abilities');
+        if (abilitySystem) {
+          if (boost) setBoostEnergy(boost, boost.maxEnergy);
+          abilitySystem.activateAbility(entity.id, AbilityType.OVERDRIVE);
         }
         break;
+      }
     }
 
     // Remove from spatial grid

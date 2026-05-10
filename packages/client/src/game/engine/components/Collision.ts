@@ -147,5 +147,5 @@ export function circleCollisionTest(
   const dx = ax - bx;
   const dy = ay - by;
   const combinedRadius = aRadius + bRadius;
-  return dx * dx + dy * dy < combinedRadius * combinedRadius;
+  return dx * dx + dy * dy <= combinedRadius * combinedRadius;
 }
