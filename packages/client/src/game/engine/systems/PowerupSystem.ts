@@ -6,14 +6,13 @@
 import { System, SystemPriority } from '../core/System';
 import type { Position } from '../components/Position';
 import type { Collision } from '../components/Collision';
-import { CollisionLayer } from '../components/Collision';
 import type { Boost } from '../components/Boost';
-import { refillBoost, setBoostEnergy } from '../components/Boost';
+import { setBoostEnergy } from '../components/Boost';
 import type { Health } from '../components/Health';
 import { ComponentNames, createComponentMask } from '../components';
 import type { KillPower } from '../components/KillPower';
 import { createKillPower, activateKillPower } from '../components/KillPower';
-import { POWERUP_CONFIG } from '../config/GameConstants';
+import { POWERUP_CONFIG, COLLISION_CONFIG } from '../config/GameConstants';
 import { SpatialGrid } from '../spatial/SpatialGrid';
 import type { Entity } from '../core/Entity';
 import type { AbilitySystem } from './AbilitySystem';
@@ -108,11 +107,11 @@ export class PowerupSystem extends System {
     this._spatialGrid = spatialGrid;
 
     this._config = {
-      spawnIntervalMs: config?.spawnIntervalMs ?? 2000,
-      maxPowerups: config?.maxPowerups ?? 20,
-      energyValue: config?.energyValue ?? 30,
-      lifetime: config?.lifetime ?? 15000,
-      spawnMargin: config?.spawnMargin ?? 200,
+      spawnIntervalMs: config?.spawnIntervalMs ?? POWERUP_CONFIG.SPAWN_INTERVAL_MS,
+      maxPowerups: config?.maxPowerups ?? POWERUP_CONFIG.MAX_POWERUPS,
+      energyValue: config?.energyValue ?? POWERUP_CONFIG.ENERGY_VALUE,
+      lifetime: config?.lifetime ?? POWERUP_CONFIG.LIFETIME_MS,
+      spawnMargin: config?.spawnMargin ?? POWERUP_CONFIG.SPAWN_MARGIN,
     };
 
     this._collectorMask = createComponentMask(
@@ -196,7 +195,7 @@ export class PowerupSystem extends System {
     this._powerups.set(id, powerup);
 
     // Add to spatial grid
-    this._spatialGrid.addEntity(id, powerup.x, powerup.y, 20);
+    this._spatialGrid.addEntity(id, powerup.x, powerup.y, COLLISION_CONFIG.POWERUP_RADIUS);
   }
 
   /**
@@ -240,7 +239,7 @@ export class PowerupSystem extends System {
         const dy = position.y - powerup.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
-        if (dist < collision.radius + 20) {
+        if (dist < collision.radius + COLLISION_CONFIG.POWERUP_RADIUS) {
           // Collect!
           this._collectPowerup(entity, powerup);
         }
