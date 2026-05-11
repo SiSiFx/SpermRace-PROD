@@ -1084,15 +1084,14 @@ export class RenderSystem extends System {
     const turnDiff = angularDistance(graphics.visualAngle, velocity.targetAngle);
     body.rotation = 0;
 
-    // Draw a short connector into the real trail so the player reads as one tail, not two.
+    // Draw animated flagellum extending from the back of the head.
     this._drawTailConnector(
       tail,
       player.color,
       boost?.isBoosting ?? false,
-      position,
-      graphics.visualAngle,
-      trail,
-      bodySizeMult
+      bodySizeMult,
+      classWiggleSpeed,
+      turnDiff,
     );
 
     // Draw shield ability aura, or spawn grace aura (whichever applies)
@@ -1214,68 +1213,46 @@ export class RenderSystem extends System {
   }
 
   /**
-   * Tail connector is no longer needed — the trail IS the visual tail,
-   * emitting from the back of the head and tapering behind it.
+   * Draw the animated flagellum extending from the back of the head.
+   * Uses PLAYER_VISUAL_CONFIG tail constants for length, segments, amplitude and wave speed.
+   * Drawn in local space — the entity container already handles world rotation.
    */
   private _drawTailConnector(
     tailGraphics: GraphicsType,
     color: number,
     isBoosting: boolean,
-    currentPos: Position,
-    visualAngle: number,
-    trail: Trail | undefined,
-    growthMult: number = 1.0
+    growthMult: number = 1.0,
+    wiggleSpeed: number = 5.6,
+    turnDiff: number = 0,
   ): void {
     tailGraphics.clear();
 
-    const latestPoint = trail?.points[trail.points.length - 1];
-    if (!latestPoint) return;
+    const segments = PLAYER_VISUAL_CONFIG.TAIL_SEGMENTS;
+    const tailLength = (isBoosting
+      ? PLAYER_VISUAL_CONFIG.TAIL_LENGTH * PLAYER_VISUAL_CONFIG.BOOST_TAIL_STRETCH_MAX
+      : PLAYER_VISUAL_CONFIG.TAIL_LENGTH) * growthMult;
 
-    const headBackX = -PLAYER_VISUAL_CONFIG.BODY_RADIUS * PLAYER_VISUAL_CONFIG.BODY_WIDTH_MULT * growthMult;
-    const dx = latestPoint.x - currentPos.x;
-    const dy = latestPoint.y - currentPos.y;
-    const cos = Math.cos(-visualAngle);
-    const sin = Math.sin(-visualAngle);
-    const localX = dx * cos - dy * sin;
-    const localY = dx * sin + dy * cos;
-    const gap = Math.hypot(localX - headBackX, localY);
-
-    if (!Number.isFinite(gap) || gap < 2 || gap > 96) {
-      return;
-    }
-
-    const connectorWidth = Math.max(2.4, latestPoint.width * 0.9);
-
-    // Build a sine-wave wiggle path from head to trail tip (flagellum motion)
-    const WAVE_SEGMENTS = 18;
-    const tailWaveSpeed = isBoosting
-      ? PLAYER_VISUAL_CONFIG.TAIL_WAVE_SPEED_BOOST
-      : PLAYER_VISUAL_CONFIG.TAIL_WAVE_SPEED;
-    const tailAmplitude = isBoosting
+    const amplitude = (isBoosting
       ? PLAYER_VISUAL_CONFIG.TAIL_AMPLITUDE_BOOST
-      : PLAYER_VISUAL_CONFIG.TAIL_AMPLITUDE;
+      : PLAYER_VISUAL_CONFIG.TAIL_AMPLITUDE) * growthMult;
 
-    // Perpendicular axis relative to the connector direction (in local space)
-    const connDx = localX - headBackX;
-    const connDy = localY - 0;
-    const connLen = Math.hypot(connDx, connDy) || 1;
-    const perpX = -connDy / connLen;
-    const perpY = connDx / connLen;
+    // Back edge of the oval head in local space (entity faces +X, tail extends in -X)
+    const headBackX = -PLAYER_VISUAL_CONFIG.BODY_RADIUS * PLAYER_VISUAL_CONFIG.BODY_WIDTH_MULT * growthMult;
 
     const wavePoints: Array<{ x: number; y: number }> = [];
-    for (let i = 0; i <= WAVE_SEGMENTS; i++) {
-      const t = i / WAVE_SEGMENTS;
-      const baseX = headBackX + connDx * t;
-      const baseY = connDy * t;
-      // Amplitude envelope: zero at head, peak at ~60%, gentle taper at tip
-      const envelope = t * Math.pow(1 - t * 0.55, 1.4);
-      const waveAmp = tailAmplitude * envelope * growthMult;
-      const wavePhase = this._time * tailWaveSpeed - t * Math.PI * 3.8;
-      const wave = Math.sin(wavePhase) * waveAmp;
-      wavePoints.push({ x: baseX + perpX * wave, y: baseY + perpY * wave });
+    for (let i = 0; i <= segments; i++) {
+      const t = i / segments;
+      const baseX = headBackX - tailLength * t;
+      // Amplitude envelope: zero at head end, peaks at ~45%, tapers to tip
+      const envelope = t * Math.pow(1 - t * 0.45, 2.0);
+      // Turn-driven bend: builds quadratically toward the tip
+      const bend = turnDiff * PLAYER_VISUAL_CONFIG.TAIL_TURN_BEND * t * t;
+      const phase = this._time * wiggleSpeed - t * Math.PI * 3.8;
+      const wave = Math.sin(phase) * amplitude * envelope + bend;
+      wavePoints.push({ x: baseX, y: wave });
     }
 
-    const drawWavePath = (g: GraphicsType) => {
+    const drawPath = (g: GraphicsType) => {
       if (wavePoints.length < 2) return;
       g.moveTo(wavePoints[0].x, wavePoints[0].y);
       for (let i = 1; i < wavePoints.length; i++) {
@@ -1283,32 +1260,34 @@ export class RenderSystem extends System {
       }
     };
 
-    // Outer glow pass
-    drawWavePath(tailGraphics);
+    const baseWidth = PLAYER_VISUAL_CONFIG.TAIL_BASE_WIDTH * growthMult;
+
+    // Outer glow
+    drawPath(tailGraphics);
     tailGraphics.stroke({
-      width: connectorWidth + (isBoosting ? 4 : 3),
+      width: baseWidth + (isBoosting ? 4 : 3),
       color,
-      alpha: isBoosting ? 0.28 : 0.2,
+      alpha: isBoosting ? 0.28 : 0.18,
       cap: 'round',
       join: 'round',
     });
 
     // Core flagellum
-    drawWavePath(tailGraphics);
+    drawPath(tailGraphics);
     tailGraphics.stroke({
-      width: connectorWidth,
+      width: baseWidth,
       color,
-      alpha: 0.86,
+      alpha: 0.82,
       cap: 'round',
       join: 'round',
     });
 
     // Inner bioluminescent highlight
-    drawWavePath(tailGraphics);
+    drawPath(tailGraphics);
     tailGraphics.stroke({
-      width: Math.max(1, connectorWidth * 0.34),
+      width: Math.max(1, baseWidth * 0.3),
       color: 0xffffff,
-      alpha: 0.26,
+      alpha: 0.22,
       cap: 'round',
       join: 'round',
     });
