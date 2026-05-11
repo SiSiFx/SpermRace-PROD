@@ -44,16 +44,16 @@ export type { SpermClass } from './components/SpermClass';
 export { ComponentNames, createComponentMask } from './components';
 export { createPosition, copyPosition, distance, distanceSquared, POSITION_COMPONENT } from './components/Position';
 export { createVelocity, calculateVelocityComponents, calculateSpeedAndAngle, angularDistance, lerpAngle, VELOCITY_COMPONENT, DEFAULT_VELOCITY } from './components/Velocity';
-export { createCollision, CollisionLayer, COLLISION_COMPONENT, DEFAULT_COLLISION } from './components/Collision';
+export { createCollision, CollisionLayer, COLLISION_COMPONENT } from './components/Collision';
 export { createTrail, addTrailPoint, getTrailAlpha, cleanupExpiredTrailPoints, TRAIL_COMPONENT, DEFAULT_TRAIL } from './components/Trail';
 export { createHealth, killEntity, hasSpawnProtection, EntityState, HEALTH_COMPONENT, DEFAULT_HEALTH } from './components/Health';
-export { createPlayer, EntityType, PLAYER_COMPONENT, DEFAULT_PLAYER } from './components/Player';
+export { createPlayer, EntityType, PLAYER_COMPONENT } from './components/Player';
 export { createBoost, startBoost, stopBoost, refillBoost, setBoostEnergy, BOOST_COMPONENT, DEFAULT_BOOST } from './components/Boost';
-export { createAbilities, ABILITIES_COMPONENT, DEFAULT_ABILITIES } from './components/Abilities';
-export { createRenderable, RenderLayer, RENDERABLE_COMPONENT, DEFAULT_RENDERABLE } from './components/Renderable';
-export { createFood, FOOD_COMPONENT, DEFAULT_FOOD } from './components/Food';
-export { createKillPower, KILL_POWER_COMPONENT, DEFAULT_KILL_POWER } from './components/KillPower';
-export { createSpermClass, SpermClassName, SPERM_CLASS_COMPONENT, DEFAULT_SPERM_CLASS } from './components/SpermClass';
+export { createAbilities, ABILITIES_COMPONENT } from './components/Abilities';
+export { createRenderable, RenderLayer, RENDERABLE_COMPONENT } from './components/Renderable';
+export { createFood, FOOD_COMPONENT } from './components/Food';
+export { createKillPower, KILL_POWER_COMPONENT } from './components/KillPower';
+export { createSpermClass, SPERM_CLASS_COMPONENT } from './components/SpermClass';
 
 // Systems
 export * from './systems';
@@ -63,9 +63,6 @@ export * from './spatial';
 
 // Pooling
 export * from './pooling';
-
-// Network
-export { ClientPrediction, createClientPrediction, type PlayerInput, type PredictedState, ServerReconciliation, createServerReconciliation, type ServerSnapshot, type ServerEntityState } from './network';
 
 // Config
 export { MATCH_CONFIG, CAR_PHYSICS, BOOST_CONFIG, TRAIL_CONFIG, COLLISION_CONFIG, ARENA_CONFIG, ABILITY_CONFIG, POWERUP_CONFIG, NETWORK_CONFIG, RENDER_CONFIG, PERFORMANCE_CONFIG, INPUT_CONFIG, getArenaSize, getTargetFPS, getDefaultZoom } from './config/GameConstants';
@@ -78,7 +75,6 @@ export type { GameConfig } from './Game';
 
 // React Components
 export { NewGameViewECS } from './NewGameViewECS';
-export { NewGameView } from './NewGameView';
 export type { GameStats } from './NewGameViewECS';
 
 // Integration

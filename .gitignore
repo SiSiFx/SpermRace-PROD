@@ -87,3 +87,9 @@ data/
 output/
 packages/client/output/
 .env.backup
+
+# Session tools (local only)
+CONTINUE.md
+overnight.sh
+.playwright-cli/
+repomix.mobile.json

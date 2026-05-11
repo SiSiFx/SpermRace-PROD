@@ -19,14 +19,14 @@ describe('Font Implementation', () => {
 
   describe('Google Fonts Loading', () => {
     it('should have Google Fonts link in document head', () => {
-      const googleFontsLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
+      const googleFontsLinks = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'))
         .filter(link => link.href.includes('fonts.googleapis.com'));
 
       expect(googleFontsLinks.length).toBeGreaterThan(0);
     });
 
     it('should have Orbitron font in Google Fonts URL', () => {
-      const googleFontsLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
+      const googleFontsLinks = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'))
         .filter(link => link.href.includes('fonts.googleapis.com'));
 
       const hasOrbitron = googleFontsLinks.some(link => link.href.includes('Orbitron'));
@@ -34,7 +34,7 @@ describe('Font Implementation', () => {
     });
 
     it('should have Inter font in Google Fonts URL', () => {
-      const googleFontsLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
+      const googleFontsLinks = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'))
         .filter(link => link.href.includes('fonts.googleapis.com'));
 
       const hasInter = googleFontsLinks.some(link => link.href.includes('Inter'));
@@ -291,7 +291,7 @@ describe('Font Implementation', () => {
     });
 
     it('should have appropriate font weights loaded for Inter', () => {
-      const googleFontsLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
+      const googleFontsLinks = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'))
         .filter(link => link.href.includes('fonts.googleapis.com'));
 
       const interLink = googleFontsLinks.find(link => link.href.includes('Inter'));
@@ -306,7 +306,7 @@ describe('Font Implementation', () => {
     });
 
     it('should have appropriate font weights loaded for Orbitron', () => {
-      const googleFontsLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
+      const googleFontsLinks = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'))
         .filter(link => link.href.includes('fonts.googleapis.com'));
 
       const orbitronLink = googleFontsLinks.find(link => link.href.includes('Orbitron'));

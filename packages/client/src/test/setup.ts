@@ -14,7 +14,7 @@ vi.mock('../WalletProviderNew', async () => {
   const WalletProviderNew = ({ children }: { children: React.ReactNode }) =>
     React.createElement(
       adapterReact.ConnectionProvider,
-      { endpoint: 'https://api.devnet.solana.com' },
+      { endpoint: 'https://api.devnet.solana.com' } as any,
       React.createElement(
         adapterReact.WalletProvider,
         { wallets: [], autoConnect: false } as any,
