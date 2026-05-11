@@ -16,7 +16,6 @@ import { ComponentNames, createComponentMask } from '../components';
 import { CameraSystem } from './CameraSystem';
 import { RenderSystem } from './RenderSystem';
 import { CollisionSystem } from './CollisionSystem';
-import type { CollisionResult } from './CollisionSystem';
 import { FloatingTextSystem } from './FloatingTextSystem';
 import type { SlowMotionSystem } from './SlowMotionSystem';
 
@@ -73,7 +72,6 @@ export class DeathEffectSystem extends System {
   private readonly _camera: CameraSystem | null = null;
   /** @internal Allow Game to set renderer after creation */
   public _renderer: RenderSystem | null = null;
-  private readonly _collision: CollisionSystem | null = null;
   private readonly _floatingText: FloatingTextSystem | null = null;
 
   // Track entity states to detect deaths
@@ -102,7 +100,6 @@ export class DeathEffectSystem extends System {
 
     this._camera = cameraSystem;
     this._renderer = renderSystem;
-    this._collision = collisionSystem;
     this._audioManager = audioManager;
     this._floatingText = floatingTextSystem;
 
@@ -116,7 +113,7 @@ export class DeathEffectSystem extends System {
   /**
    * Update and check for deaths
    */
-  update(dt: number): void {
+  update(_dt: number): void {
     const entities = this.entityManager.queryByMask(this._mask);
 
     for (const entity of entities) {
@@ -155,20 +152,12 @@ export class DeathEffectSystem extends System {
    * Handle entity death
    */
   private _handleDeath(
-    entityId: string,
+    _entityId: string,
     x: number,
     y: number,
     color: number,
     killerId: string | null
   ): void {
-    // Determine death type
-    let deathType: 'trail' | 'zone' | 'trap' | 'car' = 'trail';
-    if (killerId === 'zone') {
-      deathType = 'zone';
-    } else if (killerId === 'trap') {
-      deathType = 'trap';
-    }
-
     // Trigger death burst particles
     if (this._renderer) {
       this._renderer.spawnDeathBurst(x, y, color);
@@ -259,7 +248,7 @@ export class DeathEffectSystem extends System {
   /**
    * Handle entity spawn
    */
-  private _handleSpawn(entityId: string, x: number, y: number, color: number): void {
+  private _handleSpawn(_entityId: string, x: number, y: number, color: number): void {
     // Trigger spawn effect
     if (this._renderer) {
       this._renderer.spawnSpawnEffect(x, y, color);
@@ -367,7 +356,7 @@ export class DeathEffectSystem extends System {
   /**
    * Get death event listener (for external integration)
    */
-  onDeath(callback: (event: DeathEvent) => void): void {
+  onDeath(_callback: (event: DeathEvent) => void): void {
     // This would be used by UI systems to show death screens, etc.
     // Store callback and call it in _handleDeath
   }
@@ -415,18 +404,6 @@ export class DeathEffectSystem extends System {
           return { id: entity.id, x: position.x, y: position.y, color: player.color };
         }
       }
-    }
-    return null;
-  }
-
-  /**
-   * Find the local player entity
-   */
-  private _findLocalPlayer(): any {
-    const entities = this.entityManager.queryByMask(this._mask);
-    for (const entity of entities) {
-      const player = entity.getComponent<any>(ComponentNames.PLAYER);
-      if (player?.isLocal) return entity;
     }
     return null;
   }

@@ -28,12 +28,8 @@ import type {
   Position,
   Velocity,
   Collision,
-  Trail,
   Health,
-  Abilities,
   Player,
-  Boost,
-  Renderable,
 } from './components';
 import { ComponentNames } from './components';
 import { getAbilityProgress } from './components/Abilities';
@@ -46,7 +42,6 @@ import {
   SPAWN_CONFIG,
   POWERUP_CONFIG,
 } from './config';
-import { CollisionLayer, CollisionMask } from './components/Collision';
 import { EntityFactory, type EntityFactoryConfig, type CreatePlayerOptions } from './factories';
 import type { Position as PositionComponent } from './components/Position';
 import { SpermClassType } from './components/SpermClass';

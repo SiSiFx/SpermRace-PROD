@@ -6,7 +6,6 @@
 import { System, SystemPriority } from '../core/System';
 import type { Position } from '../components/Position';
 import type { Velocity } from '../components/Velocity';
-import type { Collision } from '../components/Collision';
 import type { Boost } from '../components/Boost';
 import { updateBoost } from '../components/Boost';
 import type { KillPower } from '../components/KillPower';
@@ -41,7 +40,6 @@ export class PhysicsSystem extends System {
   public readonly priority = SystemPriority.PHYSICS;
 
   private readonly _config: PhysicsConfig;
-  private readonly _positionMask: number;
   private readonly _velocityMask: number;
   private readonly _LATERAL_DRAG = CAR_PHYSICS.LATERAL_DRAG;
   private readonly _BOOST_SPEED_RATIO = CAR_PHYSICS.BOOST_SPEED / CAR_PHYSICS.BASE_SPEED;
@@ -57,7 +55,6 @@ export class PhysicsSystem extends System {
     };
 
     // Build component masks
-    this._positionMask = createComponentMask(ComponentNames.POSITION);
     this._velocityMask = createComponentMask(ComponentNames.POSITION, ComponentNames.VELOCITY);
   }
 
@@ -191,7 +188,7 @@ export class PhysicsSystem extends System {
    * Handle boundary collision
    */
   private _handleBoundary(
-    entity: any,
+    _entity: any,
     position: Position,
     velocity: Velocity
   ): void {

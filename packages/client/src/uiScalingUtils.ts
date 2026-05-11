@@ -43,7 +43,7 @@ export function responsiveFontSize(
   minSize: number,
   maxSize: number,
   minViewport: number = 2.5,
-  maxViewport: number = 5
+  _maxViewport: number = 5
 ): string {
   return `clamp(${minSize}px, ${minViewport}vw, ${maxSize}px)`;
 }

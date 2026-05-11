@@ -199,7 +199,7 @@ export function activateAbility(
  * Update abilities (call each frame)
  * Returns set of abilities that expired this frame
  */
-export function updateAbilities(abilities: Abilities, dt: number): Set<AbilityType> {
+export function updateAbilities(abilities: Abilities, _dt: number): Set<AbilityType> {
   const now = Date.now();
   const expired: AbilityType[] = [];
 
@@ -231,7 +231,6 @@ export function updateAbilities(abilities: Abilities, dt: number): Set<AbilityTy
  * Reset all abilities (for respawn)
  */
 export function resetAbilities(abilities: Abilities): void {
-  const now = Date.now();
   for (const type of Object.values(AbilityType)) {
     const state = abilities[type];
     state.ready = true;

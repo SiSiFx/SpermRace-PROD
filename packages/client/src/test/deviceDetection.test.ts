@@ -8,11 +8,12 @@ import {
   getPerformanceTier,
   isHighPerformanceMobile,
   getPerformanceSettings,
-  getDeviceType
+  // getDeviceType is imported for type-checking only
+  getDeviceType as _getDeviceType
 } from '../deviceDetection';
 
 // Mock navigator
-const mockNavigator = {
+const _mockNavigator = {
   userAgent: '',
   hardwareConcurrency: 4,
   deviceMemory: 4,

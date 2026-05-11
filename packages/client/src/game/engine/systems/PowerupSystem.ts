@@ -125,7 +125,7 @@ export class PowerupSystem extends System {
   /**
    * Update powerups and check collections
    */
-  update(dt: number): void {
+  update(_dt: number): void {
     const now = Date.now();
 
     // Spawn new powerups
@@ -230,7 +230,7 @@ export class PowerupSystem extends System {
         collision.radius + 30
       );
 
-      for (const [powerupId, powerupData] of nearby) {
+      for (const [powerupId] of nearby) {
         const powerup = this._powerups.get(powerupId);
         if (!powerup || powerup.collected) continue;
 
@@ -344,16 +344,9 @@ export class PowerupSystem extends System {
   /**
    * Set arena size
    */
-  setArenaSize(width: number, height: number): void {
+  setArenaSize(_width: number, _height: number): void {
     // Powerup positions will respect new arena size on next spawn
   }
-}
-
-/**
- * Import helpers
- */
-function _setBoostEnergyWrapper(boost: Boost, energy: number): void {
-  setBoostEnergy(boost, energy);
 }
 
 /**

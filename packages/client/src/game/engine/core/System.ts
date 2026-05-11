@@ -1,4 +1,4 @@
-import { EntityManager, getEntityManager, setEntityManager } from './EntityManager';
+import { EntityManager, getEntityManager } from './EntityManager';
 
 /**
  * Game engine interface

@@ -177,7 +177,7 @@ export class GraphicsPool {
    */
   clear(): void {
     // Destroy all tracked objects before clearing
-    for (const [obj, data] of this._allObjects) {
+    for (const [obj] of this._allObjects) {
       try {
         obj.destroy({ children: true });
       } catch {

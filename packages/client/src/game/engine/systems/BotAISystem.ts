@@ -8,7 +8,7 @@ import type { Position } from '../components/Position';
 import type { Velocity } from '../components/Velocity';
 import type { Health } from '../components/Health';
 import type { Abilities } from '../components/Abilities';
-import { isAbilityReady, AbilityType, ABILITY_CONFIG } from '../components/Abilities';
+import { isAbilityReady, AbilityType } from '../components/Abilities';
 import type { Boost } from '../components/Boost';
 import type { Player } from '../components/Player';
 import { EntityType } from '../components/Player';
@@ -432,7 +432,7 @@ export class BotAISystem extends System {
     abilities: Abilities,
     position: Position,
     targets: Entity[],
-    now: number
+    _now: number
   ): void {
     const abilitySystem = this.getEngine()?.getSystemManager()?.getSystem<AbilitySystem>('abilities') ?? null;
 

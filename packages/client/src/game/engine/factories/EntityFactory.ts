@@ -4,7 +4,7 @@
  */
 
 import { EntityManager } from '../core/EntityManager';
-import type { Position, Velocity, Collision, Trail, Health, Player, Boost, Abilities, Renderable, SpermClass } from '../components';
+import type { Position, Velocity, Collision, Trail, Health, Player, Boost, Abilities, SpermClass } from '../components';
 import type { KillPower } from '../components/KillPower';
 import {
   createVelocity,
@@ -423,7 +423,7 @@ export function createTrailPointEntity(
   y: number,
   ownerId: string,
   width: number,
-  lifetime: number
+  _lifetime: number
 ): string {
   const point = entityManager.createEntity(`trail_${ownerId}_${Date.now()}_${Math.random()}`);
 

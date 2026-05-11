@@ -7,15 +7,13 @@ import { System, SystemPriority } from '../core/System';
 import type { Position } from '../components/Position';
 import type { Velocity } from '../components/Velocity';
 import { angularDistance } from '../components/Velocity';
-import type { Renderable } from '../components/Renderable';
 import { RenderLayer } from '../components/Renderable';
 import type { Trail } from '../components/Trail';
 import type { TrailPoint } from '../components/Trail';
 import { getTrailAlpha } from '../components/Trail';
 import type { Player } from '../components/Player';
-import { EntityType } from '../components/Player';
 import type { Health } from '../components/Health';
-import { EntityState, hasSpawnProtection, getSpawnProtectionRemaining } from '../components/Health';
+import { hasSpawnProtection, getSpawnProtectionRemaining } from '../components/Health';
 import type { Boost } from '../components/Boost';
 import type { Abilities } from '../components/Abilities';
 import { AbilityType } from '../components/Abilities';
@@ -30,37 +28,13 @@ import type { PowerupData } from './PowerupSystem';
 import type { Entity } from '../core/Entity';
 import type { ZoneSystem } from './ZoneSystem';
 import type { SpatialGrid } from '../spatial/SpatialGrid';
-import { PLAYER_VISUAL_CONFIG, TRAIL_EFFECTS, MICROSCOPE_PALETTE, MICROSCOPE_VISUALS, MATCH_CONFIG, ABILITY_CONFIG, POWERUP_CONFIG } from '../config/GameConstants';
+import { PLAYER_VISUAL_CONFIG, MICROSCOPE_PALETTE, MATCH_CONFIG, ABILITY_CONFIG, POWERUP_CONFIG } from '../config/GameConstants';
 import { PostProcessingSystem, createPostProcessingSystem } from './PostProcessingSystem';
 import type { KillPower } from '../components/KillPower';
 import { getKillPowerGrowthMult } from '../components/KillPower';
 import type { SpermClass } from '../components/SpermClass';
-import { SpermClassType } from '../components/SpermClass';
 import type { TrailSystem } from './TrailSystem';
 import type { AbilitySystem } from './AbilitySystem';
-
-/**
- * Sperm car visual configuration
- */
-interface CarVisualConfig {
-  /** Body radius */
-  bodyRadius: number;
-
-  /** Tail length */
-  tailLength: number;
-
-  /** Tail segments */
-  tailSegments: number;
-
-  /** Tail amplitude */
-  tailAmplitude: number;
-
-  /** Tail wave speed */
-  tailWaveSpeed: number;
-
-  /** Body color */
-  color: number;
-}
 
 /**
  * Render system configuration
@@ -216,8 +190,6 @@ export class RenderSystem extends System {
 
   // Zone change-detection — only redraw when something actually changes
   private _zoneLastState: string = '';
-  private _zoneLastRadius: number = -1;
-  private _zoneLastPulseBucket: number = -1;
 
   // Trap alpha-bucket caching — avoid 60fps redraws when alpha is unchanged
   private readonly _trapAlphaBuckets: Map<string, number> = new Map();
@@ -520,7 +492,7 @@ export class RenderSystem extends System {
   /**
    * Update turbulence effects when players are close
    */
-  private _updateTurbulence(dt: number): void {
+  private _updateTurbulence(_dt: number): void {
     // Limit spawn rate to avoid particle flooding
     if (Math.random() > 0.3) return;
 
@@ -943,7 +915,7 @@ export class RenderSystem extends System {
   /**
    * Create car graphics
    */
-  private _createCarGraphics(entity: Entity, player: Player): EntityGraphics {
+  private _createCarGraphics(_entity: Entity, player: Player): EntityGraphics {
     const container = new Container();
 
     // Tail (wiggly sperm tail)
@@ -1018,7 +990,7 @@ export class RenderSystem extends System {
     abilities: Abilities | undefined,
     killPower: KillPower | undefined,
     spermClass: SpermClass | undefined,
-    trail: Trail | undefined,
+    _trail: Trail | undefined,
     now: number
   ): boolean {
     const { container, body, tail, shield, glow, nameplate } = graphics;
@@ -1201,21 +1173,6 @@ export class RenderSystem extends System {
   }
 
   /**
-   * Helper: Darken a color by a factor (0-1)
-   */
-  private _darkenColor(color: number, factor: number): number {
-    const r = (color >> 16) & 0xff;
-    const g = (color >> 8) & 0xff;
-    const b = color & 0xff;
-
-    const darkR = Math.floor(r * (1 - factor));
-    const darkG = Math.floor(g * (1 - factor));
-    const darkB = Math.floor(b * (1 - factor));
-
-    return (darkR << 16) | (darkG << 8) | darkB;
-  }
-
-  /**
    * Draw the animated flagellum extending from the back of the head.
    * Uses PLAYER_VISUAL_CONFIG tail constants for length, segments, amplitude and wave speed.
    * Drawn in local space — the entity container already handles world rotation.
@@ -1291,38 +1248,6 @@ export class RenderSystem extends System {
       width: Math.max(1, baseWidth * 0.3),
       color: 0xffffff,
       alpha: 0.22,
-      cap: 'round',
-      join: 'round',
-    });
-  }
-
-  /**
-   * Draw one smooth trail segment with quadratic midpoint interpolation.
-   */
-  private _drawSmoothTrailSegment(
-    g: GraphicsType,
-    points: Array<{ x: number; y: number }>,
-    width: number,
-    color: number,
-    alpha: number
-  ): void {
-    if (points.length < 2) return;
-    g.moveTo(points[0].x, points[0].y);
-    if (points.length === 2) {
-      g.lineTo(points[1].x, points[1].y);
-    } else {
-      for (let i = 1; i < points.length - 1; i++) {
-        const mx = (points[i].x + points[i + 1].x) * 0.5;
-        const my = (points[i].y + points[i + 1].y) * 0.5;
-        g.quadraticCurveTo(points[i].x, points[i].y, mx, my);
-      }
-      const last = points[points.length - 1];
-      g.lineTo(last.x, last.y);
-    }
-    g.stroke({
-      width,
-      color,
-      alpha,
       cap: 'round',
       join: 'round',
     });
@@ -2487,7 +2412,7 @@ export class RenderSystem extends System {
     this._spawnRing = null;
 
     // Clean up all graphics
-    for (const [entityId, graphics] of this._entityGraphics) {
+    for (const [_entityId, graphics] of this._entityGraphics) {
       if (graphics.nameplate && graphics.nameplate.parentNode) {
         graphics.nameplate.parentNode.removeChild(graphics.nameplate);
       }

@@ -68,7 +68,6 @@ interface JoystickState {
 export class InputHandler {
   private readonly _game: Game;
   private readonly _canvas: HTMLCanvasElement;
-  private readonly _container: HTMLElement;
   private readonly _onInputChange: (input: InputState) => void;
   private readonly _onAbilityActivate: ((ability: string) => void) | undefined;
 
@@ -91,7 +90,6 @@ export class InputHandler {
   constructor(config: InputHandlerConfig) {
     this._game = config.game;
     this._canvas = config.canvas;
-    this._container = config.container;
     this._onInputChange = config.onInputChange ?? (() => {});
     this._onAbilityActivate = config.onAbilityActivate;
 

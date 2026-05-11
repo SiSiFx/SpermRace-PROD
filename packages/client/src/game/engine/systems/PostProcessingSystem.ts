@@ -346,7 +346,7 @@ export class PostProcessingSystem extends System {
   /**
    * Trigger screen shake effect (vignette intensity boost + aberration)
    */
-  triggerScreenShake(intensity: number, duration: number = 0.3): void {
+  triggerScreenShake(intensity: number, _duration: number = 0.3): void {
     // Add temporary aberration spike
     this._shakeAberration = intensity * 0.005;
   }

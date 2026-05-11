@@ -95,7 +95,7 @@ export class InputSystem extends System {
   /**
    * Update input processing
    */
-  update(dt: number): void {
+  update(_dt: number): void {
     if (!this._state.currentInput) return;
 
     if (this.isInputStale()) {

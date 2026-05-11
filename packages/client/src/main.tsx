@@ -1,4 +1,3 @@
-import React from 'react';
 import { createRoot } from 'react-dom/client';
 console.log('[BUILD] SpermRace wallet refactor bundle loaded');
 import { Buffer } from 'buffer';

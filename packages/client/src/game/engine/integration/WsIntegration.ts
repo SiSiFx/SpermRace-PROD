@@ -69,7 +69,6 @@ export class WsIntegration {
   private _localPlayerId: string | null = null;
   private _remotePlayers: Map<string, RemotePlayer> = new Map();
   private _lastInputState: { targetX: number; targetY: number } | null = null;
-  private _inputSequence: number = 0;
 
   // Trail sync optimization
   private _trailSyncBuffer: Map<string, Array<{ x: number; y: number; timestamp: number }>> = new Map();
@@ -101,9 +100,6 @@ export class WsIntegration {
    * Process server game state
    */
   processGameState(state: ServerGameState): void {
-    const engine = this._game.getEngine();
-    const entityManager = engine.getEntityManager();
-
     // Process each player
     for (const serverPlayer of state.players) {
       const isLocal = serverPlayer.id === this._localPlayerId;
@@ -200,9 +196,6 @@ export class WsIntegration {
    * Create remote player entity
    */
   private _createRemotePlayer(serverPlayer: ServerPlayerState): RemotePlayer {
-    const engine = this._game.getEngine();
-    const entityManager = engine.getEntityManager();
-
     // We create a lightweight entity for remote players
     // The actual rendering is handled by the existing code
 
@@ -228,7 +221,7 @@ export class WsIntegration {
   private _cleanupDisconnectedPlayers(serverPlayers: ServerPlayerState[]): void {
     const serverIds = new Set(serverPlayers.map(p => p.id));
 
-    for (const [id, remote] of this._remotePlayers) {
+    for (const [id] of this._remotePlayers) {
       if (!serverIds.has(id)) {
         this._remotePlayers.delete(id);
       }
@@ -312,7 +305,6 @@ export class WsIntegration {
     this._remotePlayers.clear();
     this._trailSyncBuffer.clear();
     this._lastInputState = null;
-    this._inputSequence = 0;
   }
 }
 

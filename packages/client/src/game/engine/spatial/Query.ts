@@ -257,7 +257,7 @@ export class Query {
     direction: number,
     coneAngle: number,
     maxDistance: number,
-    options?: QueryOptions
+    _options?: QueryOptions
   ): QueryResult[] {
     const candidates = this.findNearby(originX, originY, maxDistance);
     const results: QueryResult[] = [];

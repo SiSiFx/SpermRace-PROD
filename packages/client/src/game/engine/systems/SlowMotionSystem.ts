@@ -11,9 +11,7 @@ import { System, SystemPriority } from '../core/System';
 export class SlowMotionSystem extends System {
   public readonly priority = SystemPriority.EFFECTS;
 
-  private _targetScale: number = 1.0;
   private _duration: number = 0;
-  private _elapsed: number = 0;
   private _active: boolean = false;
 
   constructor() {
@@ -23,7 +21,7 @@ export class SlowMotionSystem extends System {
   /**
    * Update time scale
    */
-  update(dt: number): void {
+  update(_dt: number): void {
     if (!this._active) return;
 
     // We use unscaled dt here? No, 'dt' passed to update() IS scaled by GameEngine!
@@ -51,7 +49,6 @@ export class SlowMotionSystem extends System {
     if (!engine) return;
 
     this._active = true;
-    this._targetScale = scale;
     this._duration = Date.now() + durationMs;
     
     engine.setTimeScale?.(scale);
@@ -65,7 +62,6 @@ export class SlowMotionSystem extends System {
     if (!engine) return;
 
     this._active = false;
-    this._targetScale = 1.0;
     engine.setTimeScale?.(1.0);
   }
 }
