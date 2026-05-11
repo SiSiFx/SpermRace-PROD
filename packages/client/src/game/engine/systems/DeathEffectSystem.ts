@@ -92,7 +92,7 @@ export class DeathEffectSystem extends System {
   constructor(
     cameraSystem: CameraSystem | null = null,
     renderSystem: RenderSystem | null = null,
-    collisionSystem: CollisionSystem | null = null,
+    _collisionSystem: CollisionSystem | null = null,
     audioManager: any = null,
     floatingTextSystem: FloatingTextSystem | null = null
   ) {

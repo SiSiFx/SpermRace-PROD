@@ -12,13 +12,6 @@ import {
   getDeviceType as _getDeviceType
 } from '../deviceDetection';
 
-// Mock navigator
-const _mockNavigator = {
-  userAgent: '',
-  hardwareConcurrency: 4,
-  deviceMemory: 4,
-  maxTouchPoints: 0
-};
 
 describe('deviceDetection', () => {
   // Store original navigator values

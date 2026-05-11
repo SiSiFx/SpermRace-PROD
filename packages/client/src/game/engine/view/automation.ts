@@ -9,6 +9,7 @@ export function installAutomationHooks(host: HTMLDivElement, gameRef: GameRef, m
   const previousRenderToText = w.render_game_to_text;
   const previousAdvanceTime = w.advanceTime;
   const previousGetGameDebugInfo = w.get_game_debug_info;
+  const previousSteerToWorldPos = w.steer_to_world_pos;
 
   const canvas = host.querySelector('canvas') as HTMLCanvasElement | null;
   const onMouseMove = (e: MouseEvent) => {
@@ -46,6 +47,18 @@ export function installAutomationHooks(host: HTMLDivElement, gameRef: GameRef, m
     return active.getEngine().getDebugInfo();
   };
 
+  // Direct world-space mouse target — bypasses DOM events and camera math.
+  // Call window.steer_to_world_pos(x, y) to aim the player at a world coordinate
+  // without firing mousemove events on the canvas.
+  w.steer_to_world_pos = (worldX: number, worldY: number) => {
+    const active = gameRef.current;
+    if (!active) return;
+    const renderSystem = active.getRenderSystem();
+    if (!renderSystem) return;
+    const screenPos = renderSystem.worldToScreen(worldX, worldY);
+    mouseRef.current = { x: screenPos.x, y: screenPos.y, active: true };
+  };
+
   return () => {
     if (canvas) {
       canvas.removeEventListener('mousemove', onMouseMove);
@@ -53,5 +66,6 @@ export function installAutomationHooks(host: HTMLDivElement, gameRef: GameRef, m
     w.render_game_to_text = previousRenderToText;
     w.advanceTime = previousAdvanceTime;
     w.get_game_debug_info = previousGetGameDebugInfo;
+    w.steer_to_world_pos = previousSteerToWorldPos;
   };
 }
