@@ -15,8 +15,7 @@ import { ComponentNames, createComponentMask } from '../components';
 import type { Entity } from '../core/Entity';
 import type { Player } from '../components/Player';
 import type { SoundSystem } from './SoundSystem';
-import { BOOST_CONFIG, CAR_PHYSICS, ABILITY_CONFIG, TRAIL_CONFIG } from '../config/GameConstants';
-import type { SpermClass } from '../components/SpermClass';
+import { BOOST_CONFIG, ABILITY_CONFIG, TRAIL_CONFIG } from '../config/GameConstants';
 
 /**
  * Ability activation request
@@ -92,18 +91,11 @@ export class AbilitySystem extends System {
 
   // Component masks
   private readonly _abilitiesMask: number;
-  private readonly _fullCarMask: number;
 
   constructor() {
     super(SystemPriority.ABILITIES);
 
     this._abilitiesMask = createComponentMask(ComponentNames.ABILITIES);
-    this._fullCarMask = createComponentMask(
-      ComponentNames.POSITION,
-      ComponentNames.VELOCITY,
-      ComponentNames.BOOST,
-      ComponentNames.ABILITIES
-    );
   }
 
   /**
@@ -123,9 +115,6 @@ export class AbilitySystem extends System {
 
     for (const entity of entities) {
       const abilities = entity.getComponent<Abilities>(ComponentNames.ABILITIES);
-      const boost = entity.getComponent<Boost>(ComponentNames.BOOST);
-      const velocity = entity.getComponent<Velocity>(ComponentNames.VELOCITY);
-      const trail = entity.getComponent<Trail>(ComponentNames.TRAIL);
 
       if (!abilities) continue;
 
@@ -284,7 +273,7 @@ export class AbilitySystem extends System {
   /**
    * Apply dash ability
    */
-  private _applyDash(entity: Entity, position: Position, velocity: Velocity, abilities: Abilities): void {
+  private _applyDash(entity: Entity, position: Position, velocity: Velocity, _abilities: Abilities): void {
     // Dash fires toward where the player is STEERING (targetAngle), not their current
     // physical heading (angle). Using velocity.angle caused dash to fire in the wrong
     // direction mid-turn — player intent should always win here.
@@ -399,9 +388,8 @@ export class AbilitySystem extends System {
   /**
    * Apply continuous active effects
    */
-  private _applyActiveEffect(entity: Entity, type: AbilityType, dt: number): void {
-    // Most effects are applied on activation
-    // This is for continuous effects (if any)
+  private _applyActiveEffect(_entity: Entity, _type: AbilityType, _dt: number): void {
+    // Most effects are applied on activation — no continuous effects currently
   }
 
   /**
@@ -469,7 +457,7 @@ export class AbilitySystem extends System {
   /**
    * Create trap visual effect
    */
-  private _createTrapEffect(trailPoints: Array<{ x: number; y: number }>, ownerId: string): void {
+  private _createTrapEffect(_trailPoints: Array<{ x: number; y: number }>, _ownerId: string): void {
     // Visual effect handled by render system
   }
 

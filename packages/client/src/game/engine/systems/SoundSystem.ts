@@ -683,6 +683,45 @@ export class SoundSystem extends System {
   }
 
   /**
+   * Play overdrive activation — heavy low pulse + distorted swell
+   * Overdrive doubles trail width for 3s, so the sound should feel like a power surge.
+   */
+  playOverdrive(): void {
+    const ctx = this._audioContext;
+    const master = this._masterGain;
+    if (!ctx || !master) return;
+    const t = ctx.currentTime;
+
+    // Low power-surge pulse
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = 'sawtooth';
+    osc1.frequency.setValueAtTime(60, t);
+    osc1.frequency.exponentialRampToValueAtTime(120, t + 0.12);
+    gain1.gain.setValueAtTime(0.0, t);
+    gain1.gain.linearRampToValueAtTime(0.32, t + 0.06);
+    gain1.gain.exponentialRampToValueAtTime(0.01, t + 0.35);
+    osc1.connect(gain1);
+    gain1.connect(master);
+    osc1.start(t);
+    osc1.stop(t + 0.35);
+
+    // High harmonic swell — signals "mode change"
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'square';
+    osc2.frequency.setValueAtTime(240, t + 0.05);
+    osc2.frequency.exponentialRampToValueAtTime(480, t + 0.22);
+    gain2.gain.setValueAtTime(0.0, t + 0.05);
+    gain2.gain.linearRampToValueAtTime(0.14, t + 0.10);
+    gain2.gain.exponentialRampToValueAtTime(0.01, t + 0.40);
+    osc2.connect(gain2);
+    gain2.connect(master);
+    osc2.start(t + 0.05);
+    osc2.stop(t + 0.40);
+  }
+
+  /**
    * Play spawn materialisation — low thud + ascending triangle tone
    * Called once at GO to signal the player's arrival in the arena.
    */

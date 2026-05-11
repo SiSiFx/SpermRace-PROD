@@ -179,8 +179,6 @@ export function NewGameViewECS({
   // Instant stamp shown the moment of win (before 900ms overlay delay)
   const [showVictoryStamp, setShowVictoryStamp] = useState(false);
   const [winCountdown, setWinCountdown] = useState(3);
-  const [displayKills, setDisplayKills] = useState(0);
-  const [displaySeconds, setDisplaySeconds] = useState(0);
 
   const [gameStarted, setGameStarted] = useState(false);
   const [showPreGame, setShowPreGame] = useState(false);
@@ -245,24 +243,6 @@ export function NewGameViewECS({
     return createComponentMask(ComponentNames.PLAYER, ComponentNames.HEALTH);
   }, []);
 
-  // Win overlay derived values
-  const displayTime = useMemo(() => {
-    const m = Math.floor(displaySeconds / 60);
-    const s = displaySeconds % 60;
-    return `${m}:${String(s).padStart(2, '0')}`;
-  }, [displaySeconds]);
-
-  const winSubLine = useMemo(() => {
-    if (!winStats) return '';
-    const { kills, duration, totalPlayers } = winStats;
-    const secs = Math.floor(duration / 1000);
-    const mins = Math.floor(secs / 60);
-    const rem = secs % 60;
-    if (kills >= 5) return `${kills} cells eliminated. You were the predator.`;
-    if (kills === 0 && secs >= 240) return 'No kills. Pure evasion. Still the last one breathing.';
-    const n = totalPlayers - 1;
-    return `Outlasted ${n} opponent${n !== 1 ? 's' : ''} over ${mins}m ${rem}s.`;
-  }, [winStats]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -293,41 +273,6 @@ export function NewGameViewECS({
     return () => window.clearTimeout(t);
   }, [winStats, winCountdown, onGameEnd]);
 
-  // Win overlay: count-up animation for stats
-  useEffect(() => {
-    if (!winStats) return;
-    setDisplayKills(0);
-    setDisplaySeconds(0);
-    const kills = winStats.kills;
-    const totalSeconds = Math.floor(winStats.duration / 1000);
-    const delayMs = 300;
-    const killsMs = 400;
-    const secsMs = 800;
-    const start = performance.now();
-    let killsDone = false;
-    let secsDone = false;
-    let raf: number;
-    const tick = (now: number) => {
-      const elapsed = now - start - delayMs;
-      if (elapsed >= 0) {
-        if (!killsDone) {
-          const t = Math.min(1, elapsed / killsMs);
-          const eased = 1 - Math.pow(1 - t, 4);
-          setDisplayKills(Math.round(kills * eased));
-          if (t >= 1) killsDone = true;
-        }
-        if (!secsDone) {
-          const t = Math.min(1, elapsed / secsMs);
-          const eased = 1 - Math.pow(1 - t, 4);
-          setDisplaySeconds(Math.round(totalSeconds * eased));
-          if (t >= 1) secsDone = true;
-        }
-      }
-      if (!killsDone || !secsDone) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [winStats]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -797,6 +742,8 @@ export function NewGameViewECS({
           if (status === 'dead') {
             if (!spectatingRef.current) {
               spectatingRef.current = true;
+              // Switch camera to follow the nearest alive bot immediately
+              game.spectateNearest();
               // Show instant stamp — visible the same frame as death detection
               deathStampKillerRef.current = nextSnapshot.killer;
               setShowDeathStamp(true);
@@ -894,14 +841,6 @@ export function NewGameViewECS({
     spectatingStatsRef.current = null;
   };
 
-  // Replay: restart game
-  const handleReplay = () => {
-    resetPlayState();
-    setGameStarted(false);
-    setSession((v) => v + 1);
-    void startGame(true);
-  };
-
   // Quick replay: same class, skip showcase + map overview, just countdown
   const handleQuickReplay = () => {
     resetPlayState();
@@ -986,7 +925,7 @@ export function NewGameViewECS({
       <div ref={hostRef} className="ecs-canvas-host" />
 
       {/* Dominant alive counter — centered at top */}
-      {snapshot.status === 'playing' && (
+      {(snapshot.status === 'playing' || spectating) && (
         <div className="ecs-alive-dominant-wrap">
           <div className={`ecs-alive-dominant${snapshot.aliveCount <= 3 ? ' danger' : ''}`}>
             <span className="ecs-alive-kicker">{snapshot.aliveCount <= 3 ? 'Final Duel' : 'Alive'}</span>
@@ -1008,7 +947,7 @@ export function NewGameViewECS({
       )}
 
       {/* Zone phase pill */}
-      {snapshot.status === 'playing' && !(snapshot.zonePhase === 'idle' && snapshot.timeUntilShrink <= 0) && (
+      {(snapshot.status === 'playing' || spectating) && !(snapshot.zonePhase === 'idle' && snapshot.timeUntilShrink <= 0) && (
         <div className={`ecs-zone-pill is-${snapshot.zonePhase}`}>
           {snapshot.zonePhase === 'idle'
             ? `ZONE: ${snapshot.timeUntilShrink}s`
@@ -1024,7 +963,7 @@ export function NewGameViewECS({
       )}
 
       {/* Radar */}
-      {snapshot.status === 'playing' && gameRef.current && (
+      {(snapshot.status === 'playing' || spectating) && gameRef.current && (
         <GameRadar game={gameRef.current} playerMask={playerHealthMask} />
       )}
 
@@ -1033,7 +972,7 @@ export function NewGameViewECS({
         <div className="ecs-spawn-shield">SPAWNING — PROTECTED</div>
       )}
 
-      {snapshot.status === 'playing' && killFeed.length > 0 && (
+      {(snapshot.status === 'playing' || spectating) && killFeed.length > 0 && (
         <div className="ecs-kill-feed" aria-live="polite">
           {killFeed.map((entry) => (
             <div key={entry.id} className={`ecs-kill-feed-item is-${entry.emphasis}`}>
@@ -1043,7 +982,7 @@ export function NewGameViewECS({
         </div>
       )}
 
-      {snapshot.status === 'playing' && streakBanner && (
+      {(snapshot.status === 'playing' || spectating) && streakBanner && (
         <div className="ecs-streak-banner" style={{ ['--streak-color' as any]: streakBanner.color }}>
           <strong>{streakBanner.label}</strong>
           <span>{streakBanner.killerName}</span>

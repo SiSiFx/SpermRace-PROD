@@ -7,5 +7,29 @@
       "Bash(pnpm dev:server:*)"
     ],
     "deny": []
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /home/sisi/projects/spermrace-clean/.claude/hooks/session-end.sh"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /home/sisi/projects/spermrace-clean/.claude/hooks/session-start.sh"
+          }
+        ]
+      }
+    ]
   }
 }

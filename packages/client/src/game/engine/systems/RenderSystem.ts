@@ -193,9 +193,13 @@ export class RenderSystem extends System {
   private readonly _trapGraphics: Map<string, GraphicsType> = new Map();
 
   // Component masks
-  private readonly _renderableMask: number;
   private readonly _carMask: number;
   private readonly _trailMask: number;
+
+  // Pre-allocated tail wave point buffers — reused every frame to avoid GC pressure.
+  // Size 64 covers TAIL_SEGMENTS (42) + 1 with room to spare.
+  private readonly _tailXBuf = new Float32Array(64);
+  private readonly _tailYBuf = new Float32Array(64);
 
   // Current time for animations
   private _time: number = 0;
@@ -233,7 +237,6 @@ export class RenderSystem extends System {
     this._camera = config.cameraSystem;
 
     // Initialize component masks
-    this._renderableMask = createComponentMask(ComponentNames.RENDERABLE);
     this._carMask = createComponentMask(
       ComponentNames.POSITION,
       ComponentNames.VELOCITY,
@@ -1239,8 +1242,8 @@ export class RenderSystem extends System {
     // Back edge of the oval head in local space (entity faces +X, tail extends in -X)
     const headBackX = -PLAYER_VISUAL_CONFIG.BODY_RADIUS * PLAYER_VISUAL_CONFIG.BODY_WIDTH_MULT * growthMult;
 
-    const wavePoints: Array<{ x: number; y: number }> = [];
-    for (let i = 0; i <= segments; i++) {
+    const count = segments + 1;
+    for (let i = 0; i < count; i++) {
       const t = i / segments;
       const baseX = headBackX - tailLength * t;
       // Amplitude envelope: zero at head end, peaks at ~45%, tapers to tip
@@ -1248,15 +1251,15 @@ export class RenderSystem extends System {
       // Turn-driven bend: builds quadratically toward the tip
       const bend = turnDiff * PLAYER_VISUAL_CONFIG.TAIL_TURN_BEND * t * t;
       const phase = this._time * wiggleSpeed - t * Math.PI * 3.8;
-      const wave = Math.sin(phase) * amplitude * envelope + bend;
-      wavePoints.push({ x: baseX, y: wave });
+      this._tailXBuf[i] = baseX;
+      this._tailYBuf[i] = Math.sin(phase) * amplitude * envelope + bend;
     }
 
     const drawPath = (g: GraphicsType) => {
-      if (wavePoints.length < 2) return;
-      g.moveTo(wavePoints[0].x, wavePoints[0].y);
-      for (let i = 1; i < wavePoints.length; i++) {
-        g.lineTo(wavePoints[i].x, wavePoints[i].y);
+      if (count < 2) return;
+      g.moveTo(this._tailXBuf[0], this._tailYBuf[0]);
+      for (let i = 1; i < count; i++) {
+        g.lineTo(this._tailXBuf[i], this._tailYBuf[i]);
       }
     };
 
@@ -1311,11 +1314,7 @@ export class RenderSystem extends System {
       for (let i = 1; i < points.length - 1; i++) {
         const mx = (points[i].x + points[i + 1].x) * 0.5;
         const my = (points[i].y + points[i + 1].y) * 0.5;
-        if (typeof (g as unknown as { quadraticCurveTo?: Function }).quadraticCurveTo === 'function') {
-          (g as unknown as { quadraticCurveTo: Function }).quadraticCurveTo(points[i].x, points[i].y, mx, my);
-        } else {
-          g.lineTo(points[i].x, points[i].y);
-        }
+        g.quadraticCurveTo(points[i].x, points[i].y, mx, my);
       }
       const last = points[points.length - 1];
       g.lineTo(last.x, last.y);

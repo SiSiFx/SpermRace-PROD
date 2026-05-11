@@ -1152,7 +1152,7 @@ lobbyManager.onLobbyCountdown = (lobby, remaining, startAtMs) => {
 };
 
 lobbyManager.onLobbyRefund = async (lobby: Lobby, playerId: string, _calculatedLamports: number) => {
-  if (playerId.startsWith('Guest_') || playerId.startsWith('PLAYER_')) { console.log(`[REFUND] Skipping refund for guest/local player ${playerId}`); return; }
+  if (playerId.startsWith('guest-') || playerId.startsWith('PLAYER_')) { console.log(`[REFUND] Skipping refund for guest/local player ${playerId}`); return; }
   // Use ACTUAL amount paid, not recalculated amount
   const actualLamportsPaid = expectedLamportsByPlayerId.get(playerId) || _calculatedLamports;
 

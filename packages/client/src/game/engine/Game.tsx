@@ -5,7 +5,7 @@
  */
 
 import * as PIXI from 'pixi.js';
-import { GameEngine, GameState } from './core/GameEngine';
+import { GameEngine } from './core/GameEngine';
 import { EntityManager } from './core/EntityManager';
 import { SystemManager } from './core/System';
 import { PhysicsSystem } from './systems/PhysicsSystem';
@@ -36,7 +36,6 @@ import type {
   Renderable,
 } from './components';
 import { ComponentNames } from './components';
-import { EntityType } from './components/Player';
 import { getAbilityProgress } from './components/Abilities';
 import {
   getDefaultZoom,
@@ -47,7 +46,6 @@ import {
   SPAWN_CONFIG,
   POWERUP_CONFIG,
 } from './config';
-import type { Container } from 'pixi.js';
 import { CollisionLayer, CollisionMask } from './components/Collision';
 import { EntityFactory, type EntityFactoryConfig, type CreatePlayerOptions } from './factories';
 import type { Position as PositionComponent } from './components/Position';
@@ -122,7 +120,6 @@ export class Game {
   // Entity IDs
   private _playerId: string | null = null;
   private readonly _botIds: string[] = [];
-  private _playerSpawn: { x: number; y: number } | null = null;
 
   // State
   private _initialized = false;
@@ -490,7 +487,6 @@ export class Game {
       const position = player.getComponent<PositionComponent>(ComponentNames.POSITION);
       const collision = player.getComponent<Collision>(ComponentNames.COLLISION);
       if (position) {
-        this._playerSpawn = { x: position.x, y: position.y };
         this._engine.getSpatialGrid().addEntity(
           playerId,
           position.x,
@@ -800,6 +796,24 @@ export class Game {
 
   getSoundSystem(): SoundSystem | null {
     return this._sound ?? null;
+  }
+
+  /**
+   * Switch camera to follow the nearest alive entity after local player dies.
+   * Called once when spectate mode begins. Zooms out slightly for better overview.
+   */
+  spectateNearest(): void {
+    for (const botId of this._botIds) {
+      const entity = this._entityManager.getEntity(botId);
+      if (!entity) continue;
+      const health = entity.getComponent<Health>(ComponentNames.HEALTH);
+      if (health?.isAlive) {
+        this._camera.setTarget(botId);
+        // Zoom out 20% from current level so spectator sees more of the arena
+        this._camera.setZoom(this._camera.getZoom() * 0.8);
+        return;
+      }
+    }
   }
 
   /** Resume audio context — call this inside a user gesture */

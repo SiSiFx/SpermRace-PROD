@@ -309,18 +309,19 @@ export class SmartContractService {
     }
     const tx = new Transaction().add(...instructions);
     tx.feePayer = this.prizePoolKeypair.publicKey;
-    const { blockhash } = await this.connection.getLatestBlockhash('finalized');
-    tx.recentBlockhash = blockhash;
-    // Retry/backoff send
+    // Retry with a fresh blockhash on every attempt — reusing a stale blockhash causes
+    // permanent failure once the original expires (~90s on mainnet).
     let attempt = 0;
     let lastErr: any;
-    while (attempt < 3) {
+    while (attempt < 5) {
       try {
+        const { blockhash } = await this.connection.getLatestBlockhash('finalized');
+        tx.recentBlockhash = blockhash;
         const sig = await sendAndConfirmTransaction(this.connection, tx, [this.prizePoolKeypair]);
         return sig;
       } catch (e) {
         lastErr = e;
-        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+        await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
         attempt++;
       }
     }
