@@ -160,6 +160,15 @@ export function NewGameViewECS({
   const [session, setSession] = useState(0);
   const isMobile = useDeviceMode(900);
   const [snapshot, setSnapshot] = useState<ViewSnapshot>(() => createInitialSnapshot(botCount));
+
+  // Stable refs for callbacks — updated each render so the game loop never needs
+  // these in its dependency array (avoids destroying the game when parent re-renders)
+  const onGameEndRef = useRef(onGameEnd);
+  const onPlayerDeathRef = useRef(onPlayerDeath);
+  const onErrorRef = useRef(onError);
+  onGameEndRef.current = onGameEnd;
+  onPlayerDeathRef.current = onPlayerDeath;
+  onErrorRef.current = onError;
   const [spawnProtected, setSpawnProtected] = useState(false);
 
   // Death screen state (shown in-game instead of jumping to results screen)
@@ -268,10 +277,10 @@ export function NewGameViewECS({
   // Win overlay: count down then exit to results
   useEffect(() => {
     if (!winStats) return;
-    if (winCountdown <= 0) { onGameEnd?.(winStats); return; }
+    if (winCountdown <= 0) { onGameEndRef.current?.(winStats); return; }
     const t = window.setTimeout(() => setWinCountdown(c => c - 1), 1000);
     return () => window.clearTimeout(t);
-  }, [winStats, winCountdown, onGameEnd]);
+  }, [winStats, winCountdown]);
 
 
   useEffect(() => {
@@ -427,10 +436,10 @@ export function NewGameViewECS({
 
     // Don't start gameplay loop until pre-game sequence completes
     if (!gameStarted) return;
-    
+
     // Don't start if we're still in pre-game
     if (showPreGame) return;
-    
+
     // Game should already be created by auto-start
     const game = gameRef.current;
     if (!game) return;
@@ -518,7 +527,7 @@ export function NewGameViewECS({
 
           if (finalSnapshot.status === 'dead') {
             // Show in-game death screen — delay so death explosion plays first
-            onPlayerDeath?.(finalSnapshot.killer);
+            onPlayerDeathRef.current?.(finalSnapshot.killer);
             setPendingDeathStats(stats);
             setTimeout(() => setShowDeathScreen(true), 650);
           } else {
@@ -747,7 +756,7 @@ export function NewGameViewECS({
               // Show instant stamp — visible the same frame as death detection
               deathStampKillerRef.current = nextSnapshot.killer;
               setShowDeathStamp(true);
-              onPlayerDeath?.(nextSnapshot.killer);
+              onPlayerDeathRef.current?.(nextSnapshot.killer);
               const deathStats: GameStats = {
                 placement: Math.max(1, nextSnapshot.aliveCount + 1),
                 kills: nextSnapshot.kills,
@@ -773,7 +782,7 @@ export function NewGameViewECS({
               setSpectating(false);
               try { game.getEngine().pause(); } catch {}
               setTimeout(() => {
-                onGameEnd?.(spectatingStatsRef.current ?? {
+                onGameEndRef.current?.(spectatingStatsRef.current ?? {
                   placement: 2, kills: 0, duration: 0, distance: 0,
                   winner: false, killerName: null, totalPlayers: botCount + 1,
                 });
@@ -798,7 +807,7 @@ export function NewGameViewECS({
           window.cancelAnimationFrame(rafId);
         };
       } catch (e) {
-        if (!cancelled) onError?.(e as Error);
+        if (!cancelled) onErrorRef.current?.(e as Error);
       }
     };
 
@@ -813,7 +822,7 @@ export function NewGameViewECS({
       void safeDestroy(gameRef.current);
       gameRef.current = null;
     };
-  }, [session, isMobile, playerName, playerColor, botCount, enableAbilities, onGameEnd, onPlayerDeath, onError, playerHealthMask, gameStarted, showPreGame]);
+  }, [session, isMobile, playerName, playerColor, botCount, enableAbilities, playerHealthMask, gameStarted, showPreGame]);
 
   const summary = useMemo(() => {
     return getViewSummary(snapshot);
@@ -862,7 +871,7 @@ export function NewGameViewECS({
     // Pause engine — may still be running if player was spectating
     try { gameRef.current?.getEngine().pause(); } catch {}
     if (pendingDeathStats) {
-      onGameEnd?.(pendingDeathStats);
+      onGameEndRef.current?.(pendingDeathStats);
     } else {
       onExit?.();
     }
@@ -1109,7 +1118,7 @@ export function NewGameViewECS({
             )}
             <button
               className="ecs-win-continue"
-              onClick={() => onGameEnd?.(winStats)}
+              onClick={() => onGameEndRef.current?.(winStats)}
             >
               {onPlayReal ? `SKIP · ${winCountdown}` : `CONTINUE · ${winCountdown}`}
             </button>
